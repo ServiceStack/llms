@@ -404,20 +404,21 @@ def config_str(key):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='llms')
-    parser.add_argument('--config',      default=None, help='Path to config file', metavar='FILE')
-    parser.add_argument('-m', '--model', default=None, help='Model to use')
-    parser.add_argument('--logprefix',   default="",   help='Prefix used in log messages', metavar='PREFIX')
-    parser.add_argument('--verbose',     action='store_true', help='Verbose output')
-    parser.add_argument('--raw',         action='store_true', help='Return raw AI JSON response')
+    parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
+    parser.add_argument('-m', '--model',  default=None, help='Model to use')
+    parser.add_argument('--logprefix',    default="",   help='Prefix used in log messages', metavar='PREFIX')
+    parser.add_argument('--verbose',      action='store_true', help='Verbose output')
+    parser.add_argument('--raw',          action='store_true', help='Return raw AI JSON response')
 
-    parser.add_argument('--chat',        default=None, help='OpenAI Chat Completion Request to send')
+    parser.add_argument('--chat',         default=None, help='OpenAI Chat Completion Request to send', metavar='REQUEST')
+    parser.add_argument('-s', '--system', default=None, help='System prompt to use for chat completion', metavar='PROMPT')
 
-    parser.add_argument('--list',        action='store_true', help='Show list of enabled providers and their models (alias ls)')
+    parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls)')
 
-    parser.add_argument('--serve',       default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
+    parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
-    parser.add_argument('--agent',       default=None, help='Start agent to subscribe and answer Gateway requests')
-    parser.add_argument('--device',      default="",   help='Unique Device ID for agent')
+    parser.add_argument('--agent',        default=None, help='Start agent to subscribe and answer Gateway requests')
+    parser.add_argument('--device',       default="",   help='Unique Device ID for agent')
 
     g_args, extra_args = parser.parse_known_args()
     if g_args.verbose:
@@ -552,6 +553,9 @@ if __name__ == "__main__":
                 with open (chat_path, "r") as f:
                     chat_json = f.read()
                     chat = json.loads(chat_json)
+
+            if g_args.system is not None:
+                chat['messages'].insert(0, {'role': 'system', 'content': g_args.system})
 
             if len(extra_args) > 0:
                 prompt = ' '.join(extra_args)
