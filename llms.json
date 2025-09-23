@@ -1,0 +1,248 @@
+{
+    "defaults": {
+        "headers": {
+            "Content-Type": "application/json",
+            "User-Agent": "servicestack-llms/1.0"
+        },
+        "text": {
+            "model": "kimi-k2",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": ""
+                }
+            ]
+        }
+    },
+    "providers": {
+        "openrouter_free": {
+            "type": "OpenAiProvider",
+            "base_url": "https://openrouter.ai/api",
+            "api_key": "$OPENROUTER_FREE_API_KEY",
+            "models": {
+                "llama4:109b": "meta-llama/llama-4-scout:free",
+                "llama4:400b": "meta-llama/llama-4-maverick:free",
+                "deepseek-v3.1:671b": "deepseek/deepseek-chat-v3.1:free",
+                "deepseek-r1:671b": "deepseek/deepseek-r1-0528:free",
+                "gemini-2.0-flash": "google/gemini-2.0-flash-exp:free",
+                "glm-4.5-air": "z-ai/glm-4.5-air:free",
+                "grok-4-fast": "x-ai/grok-4-fast:free",
+                "mai-ds-r1": "microsoft/mai-ds-r1:free",
+                "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct:free",
+                "kimi-k2": "moonshotai/kimi-k2:free",
+                "nemotron-nano:9b": "nvidia/nemotron-nano-9b-v2:free",
+                "deepseek-r1-distill-llama:70b": "deepseek/deepseek-r1-distill-llama-70b:free",
+                "gpt-oss:20b": "openai/gpt-oss-20b:free",
+                "mistral-small3.2:24b": "mistralai/mistral-small-3.2-24b-instruct:free",
+                "mistral-nemo:12b": "mistralai/mistral-nemo:free",
+                "devstral-small": "mistralai/devstral-small-2505:free",
+                "venice-uncensored:24b": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+                "llama3.3:8b": "meta-llama/llama-3.3-8b-instruct:free",
+                "llama3.1:405b": "meta-llama/llama-3.1-405b-instruct:free",
+                "kimi-dev:72b": "moonshotai/kimi-dev-72b:free",
+                "gemma3:27b": "google/gemma-3-27b-it:free",
+                "qwen3-coder": "qwen/qwen3-coder:free",
+                "qwen3:235b": "qwen/qwen3-235b-a22b:free",
+                "qwen3:30b": "qwen/qwen3-30b-a3b:free",
+                "qwen3:8b": "qwen/qwen3-8b:free",
+                "qwen3:4b": "qwen/qwen3-4b:free",
+                "qwen2.5vl:72b": "qwen/qwen2.5-vl-72b-instruct:free",
+                "qwen2.5vl:32b": "qwen/qwen2.5-vl-32b-instruct:free",
+                "qwen-2.5:72b": "qwen/qwen-2.5-72b-instruct:free",
+                "hunyuan-a13b": "tencent/hunyuan-a13b-instruct:free"
+            }
+        },
+        "groq": {
+            "type": "OpenAiProvider",
+            "base_url": "https://api.groq.com/openai",
+            "api_key": "$GROQ_API_KEY",
+            "models": {
+                "allam-2-7b": "allam-2-7b",
+                "gemma2:9b": "gemma2-9b-it",
+                "compound": "groq/compound",
+                "compound-mini": "groq/compound-mini",
+                "llama3.1:8b": "llama-3.1-8b-instant",
+                "llama3.3:70b": "llama-3.3-70b-versatile",
+                "llama4:109b": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama4:400b": "meta-llama/llama-4-maverick-17b-128e-instruct",
+                "llama-guard-4:12b": "meta-llama/llama-guard-4-12b",
+                "llama-prompt-guard2:22m": "meta-llama/llama-prompt-guard-2-22m",
+                "llama-prompt-guard2:86m": "meta-llama/llama-prompt-guard-2-86m",
+                "kimi-k2": "moonshotai/kimi-k2-instruct-0905",
+                "gpt-oss:120b": "openai/gpt-oss-120b",
+                "gpt-oss:20b": "openai/gpt-oss-20b",
+                "qwen3:32b": "qwen/qwen3-32b"
+            }
+        },
+        "google_free": {
+            "type": "GoogleProvider",
+            "api_key": "$GOOGLE_FREE_API_KEY",
+            "models": {
+                "gemini-2.5-pro": "gemini-2.5-pro",
+                "gemini-2.5-flash": "gemini-2.5-flash",
+                "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
+            },
+            "safety_settings": [
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_ONLY_HIGH"
+                }
+            ]
+        },
+        "codestral": {
+            "type": "OpenAiProvider",
+            "base_url": "https://codestral.mistral.ai",
+            "api_key": "$CODESTRAL_API_KEY",
+            "models": {
+                "codestral:22b": "codestral-latest"
+            }
+        },
+        "ollama": {
+            "type": "OllamaProvider",
+            "base_url": "http://localhost:11434",
+            "models": {
+                "qwen2.5vl:7b": "qwen2.5vl:7b"
+            },
+            "all_models": false
+        },
+        "openrouter": {
+            "type": "OpenAiProvider",
+            "base_url": "https://openrouter.ai/api",
+            "api_key": "$OPENROUTER_API_KEY",
+            "models": {
+                "llama3.1:70b": "meta-llama/llama-3.1-405b-instruct",
+                "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct",
+                "phi-4:14b": "microsoft/phi-4",
+                "codestral:22b": "mistralai/codestral-2508",
+                "mistral-nemo:12b": "mistralai/mistral-nemo",
+                "mixtral:8x22b": "mistralai/mixtral-8x22b-instruct",
+                "mistral-small3.2:24b": "mistralai/mistral-small-3.2-24b-instruct",
+                "nova-micro": "amazon/nova-micro-v1",
+                "nova-lite": "amazon/nova-lite-v1",
+                "nova-pro": "amazon/nova-pro-v1",
+                "gpt-5": "openai/gpt-5",
+                "gpt-5-chat": "openai/gpt-5-chat",
+                "gpt-5-mini": "openai/gpt-5-mini",
+                "gpt-5-nano": "openai/gpt-5-nano",
+                "gpt-oss-120b": "openai/gpt-oss-120b",
+                "gpt-oss-20b": "openai/gpt-oss-20b",
+                "gpt-4o": "openai/gpt-4o",
+                "gpt-4o-mini": "openai/gpt-4o-mini",
+                "gpt-4.1": "openai/gpt-4.1",
+                "gpt-4.1-mini": "openai/gpt-4.1-mini",
+                "gpt-4.1-nano": "openai/gpt-4.1-nano",
+                "o4-mini": "openai/o4-mini",
+                "o4-mini-high": "openai/o4-mini-high",
+                "grok-4":"x-ai/grok-4",
+                "grok-4-fast": "x-ai/grok-4-fast",
+                "grok-code-fast-1": "x-ai/grok-code-fast-1",
+                "glm-4.5v": "z-ai/glm-4.5v",
+                "glm-4.5": "z-ai/glm-4.5",
+                "glm-4.5-air": "z-ai/glm-4.5-air",
+                "kimi-k2": "moonshotai/kimi-k2",
+                "deepseek-v3.1:671b": "deepseek/deepseek-chat",
+                "deepseek-chat-v3.1:671b": "deepseek/deepseek-chat-v3.1:free",
+                "deepseek-r1:671b":"deepseek/deepseek-r1",
+                "qwen3:8b": "qwen/qwen3-8b:free",
+                "qwen3:30b": "qwen/qwen3-30b-a3b",
+                "qwen3:32b": "qwen/qwen3-32b",
+                "qwen3:235b": "qwen/qwen3-235b-a22b",
+                "qwen3-coder": "qwen/qwen3-coder",
+                "qwen3-coder:30b": "qwen/qwen3-coder-30b-a3b-instruct",
+                "llama4:109b": "meta-llama/llama-4-scout",
+                "llama4:400b": "meta-llama/llama-4-maverick"
+            }
+        },
+        "google": {
+            "type": "GoogleProvider",
+            "api_key": "$GOOGLE_API_KEY",
+            "models": {
+                "gemini-2.5-pro": "gemini-2.5-pro",
+                "gemini-2.5-flash": "gemini-2.5-flash",
+                "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
+            },
+            "safety_settings": [
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_ONLY_HIGH"
+                }
+            ]
+        },
+        "anthropic": {
+            "type": "OpenAiProvider",
+            "base_url": "https://api.anthropic.com",
+            "api_key": "$ANTHROPIC_API_KEY",
+            "models": {
+                "claude-opus-4-1": "claude-opus-4-1",
+                "claude-opus-4": "claude-opus-4",
+                "claude-sonnet-4-0": "claude-sonnet-4-0",
+                "claude-3-7-sonnet": "claude-3-7-sonnet-latest",
+                "claude-3-5-haiku": "claude-3-5-haiku-latest",
+                "claude-3-haiku": "claude-3-haiku-20240307"
+            }
+        },
+        "openai": {
+            "type": "OpenAiProvider",
+            "base_url": "https://api.anthropic.com",
+            "api_key": "$OPENAI_API_KEY",
+            "models": {
+            }
+        },
+        "mistral": {
+            "type": "OpenAiProvider",
+            "base_url": "https://api.mistral.ai",
+            "api_key": "$MISTRAL_API_KEY",
+            "models": {
+                "mistral-medium": "mistral-medium-latest",
+                "magistral-medium": "magistral-medium-latest",
+                "devstral-medium": "devstral-medium-2507",
+                "codestral:22b": "codestral-latest",
+                "mistral-ocr": "mistral-ocr-latest",
+                "voxtral-mini": "voxtral-mini-latest",
+                "mistral-small3.2:24b": "mistral-small-latest",
+                "magistral-small": "magistral-small-latest",
+                "devstral-small": "devstral-small-2507",
+                "voxtral-small": "voxtral-small-latest",
+                "mistral-large:123b": "mistral-large-latest",
+                "pixtral-large:124b": "pixtral-large-latest",
+                "pixtral:12b": "pixtral-12b",
+                "mistral-nemo:12b": "mistral-nemo",
+                "mistral-saba": "mistral-saba-latest",
+                "mistral:7b": "open-mistral-7b",
+                "mixtral:8x7b": "open-mixtral-8x7b",
+                "mixtral:8x22b": "open-mixtral-8x22b",
+                "ministral:8b":"ministral-3b-latest",
+                "ministral:3b":"ministral-3b-latest"
+            }
+        }
+    },
+    "agents": {
+        "ubixar": {
+            "type": "ComfyGateway",
+            "base_url": "https://amd.raptor-elver.ts.net",
+            "api_key": "$UBIXAR_API_KEY",
+            "models": [
+                "llama4:109b",
+                "llama4:400b",
+                "deepseek-v3.1:671b",
+                "codestral:22b",
+                "llama3.3:70b",
+                "kimi-k2",
+                "glm-4.5-air",
+                "gpt-oss-120b",
+                "gpt-oss-20b",
+                "mai-ds-r1",
+                "qwen3:30b",
+                "qwen3:235b",
+                "qwen3-coder",
+                "qwen2.5vl:7b",
+                "qwen2.5vl:32b",
+                "qwen2.5vl:72b",
+                "gemma3:27b",
+                "gemini-2.5-pro",
+                "gemini-2.5-flash",
+                "gemini-2.5-flash-lite"
+            ]
+        }
+    }
+}
