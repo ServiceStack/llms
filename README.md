@@ -1,9 +1,9 @@
 # ServiceStack LLMs
 
-A lightweight CLI tool and OpenAI-compatible server for querying across multiple Large Language Model (LLM) providers through a single simple interface.
+A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
 
-Mix and match local models with models from different API providers to best fit for your needs. Requests are automatically routed to available providers that supports the requested model in definition order. Define
-free/cheapest/local providers first to save on costs.
+Mix and match local models with models from different API providers to best fit for your needs. Requests are automatically routed to available providers that supports the requested model (in defined order). Define
+free/cheapest/local providers first to save on costs, any failures are automatically retried on the next available provider.
 
 ## Features
 
@@ -15,7 +15,7 @@ free/cheapest/local providers first to save on costs.
 - **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
 - **Image Support**: Process images through vision-capable models
 - **Auto-Discovery**: Automatically discover available Ollama models
-- **Unified Models**: Define custom model names that map to provider-specific names
+- **Unified Models**: Define custom model names that map to different provider-specific names
 
 ## Installation
 
@@ -65,8 +65,11 @@ export ANTHROPIC_API_KEY="..."
 Enable the providers you want to use:
 
 ```bash
+# Enable providers with free models and free tiers
 llms --enable openrouter_free google_free groq
-llms --enable openrouter anthropic google
+
+# Enable paid providers
+llms --enable openrouter anthropic google openai mistral
 ```
 
 ### 4. Start Chatting
@@ -81,7 +84,7 @@ The configuration file (`llms.json`) defines available providers, models, and de
 
 ### Defaults
 - `headers`: Common HTTP headers for all requests
-- `text`: Default chat completion request structure for text prompts
+- `text`: Default chat completion request template for text prompts
 
 ### Providers
 
@@ -101,7 +104,7 @@ Each provider configuration includes:
 llms "Explain quantum computing"
 
 # With specific model
-llms -m gpt-4o "Write a Python function to sort a list"
+llms -m gemini-2.5-pro "Write a Python function to sort a list"
 
 # With system prompt
 llms -s "You are a helpful coding assistant" "How do I reverse a string in Python?"
@@ -345,10 +348,16 @@ Example: If both OpenAI and OpenRouter support `gpt-4o`, the request will first 
     "openai": {
       "enabled": true,
       "type": "OpenAiProvider",
-      "base_url": "https://api.openai.com",
-      "api_key": "$OPENAI_API_KEY",
+      "base_url": "https://api.groq.com/openai",
+      "api_key": "$GROQ_API_KEY",
       "models": {
-        "gpt-4o-mini": "gpt-4o-mini"
+        "llama3.3:70b": "llama-3.3-70b-versatile",
+        "llama4:109b": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "llama4:400b": "meta-llama/llama-4-maverick-17b-128e-instruct",
+        "kimi-k2": "moonshotai/kimi-k2-instruct-0905",
+        "gpt-oss:120b": "openai/gpt-oss-120b",
+        "gpt-oss:20b": "openai/gpt-oss-20b",
+        "qwen3:32b": "qwen/qwen3-32b"
       }
     }
   }
@@ -359,20 +368,28 @@ Example: If both OpenAI and OpenRouter support `gpt-4o`, the request will first 
 
 ```json
 {
-  "providers": {
-    "openai": {
-      "enabled": true,
-      "type": "OpenAiProvider",
-      "base_url": "https://api.openai.com",
-      "api_key": "$OPENAI_API_KEY",
-      "models": {"gpt-4o": "gpt-4o"}
+"providers": {
+    "openrouter": {
+      "enabled": true, 
+        "type": "OpenAiProvider",
+        "base_url": "https://openrouter.ai/api",
+        "api_key": "$OPENROUTER_API_KEY",
+        "models": {
+            "grok-4": "x-ai/grok-4",
+            "glm-4.5-air": "z-ai/glm-4.5-air",
+            "kimi-k2": "moonshotai/kimi-k2",
+            "deepseek-v3.1:671b": "deepseek/deepseek-chat",
+            "llama4:400b": "meta-llama/llama-4-maverick"
+        }
     },
     "anthropic": {
       "enabled": true, 
       "type": "OpenAiProvider",
       "base_url": "https://api.anthropic.com",
       "api_key": "$ANTHROPIC_API_KEY",
-      "models": {"claude-3-5-sonnet": "claude-3-5-sonnet-latest"}
+      "models": {
+        "claude-sonnet-4-0": "claude-sonnet-4-0"
+      }
     },
     "ollama": {
       "enabled": true,
@@ -405,7 +422,7 @@ llms --config ./my-config.json
 llms --list
 
 # Enable providers
-llms --enable openai anthropic
+llms --enable google anthropic
 ```
 
 **API key issues**
