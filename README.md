@@ -19,6 +19,14 @@ free/cheapest/local providers first to save on costs, any failures are automatic
 
 ## Installation
 
+### Option 1: Install from PyPI (Recommended)
+
+```bash
+pip install lapi
+```
+
+### Option 2: Download directly
+
 1. Download `llms.py`
 
 ```bash

@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lapi"
+version = "1.0.1"
+description = "A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers"
+readme = "README.md"
+license = "BSD-3-Clause"
+authors = [
+    {name = "ServiceStack", email = "team@servicestack.net"}
+]
+maintainers = [
+    {name = "ServiceStack", email = "team@servicestack.net"}
+]
+keywords = ["llm", "ai", "openai", "anthropic", "google", "gemini", "groq", "mistral", "ollama", "cli", "server", "chat", "completion"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+    "Environment :: Console",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "aiohttp",
+]
+
+[project.urls]
+Homepage = "https://github.com/ServiceStack/llms"
+Documentation = "https://github.com/ServiceStack/llms#readme"
+Repository = "https://github.com/ServiceStack/llms"
+"Bug Reports" = "https://github.com/ServiceStack/llms/issues"
+
+[project.scripts]
+llms = "llms:main"
+
+[tool.setuptools]
+py-modules = ["llms"]
+
+[tool.setuptools.package-data]
+"*" = ["llms.json", "README.md", "LICENSE", "requirements.txt"]

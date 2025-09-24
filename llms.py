@@ -55,14 +55,14 @@ image_exts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
 async def process_chat(chat):
     if not chat:
         raise Exception("No chat provided")
-    if not 'stream' in chat:
+    if 'stream' not in chat:
         chat['stream'] = False
-    if not 'messages' in chat:
+    if 'messages' not in chat:
         return chat
 
     async with aiohttp.ClientSession() as session:
         for message in chat['messages']:
-            if not 'content' in message:
+            if 'content' not in message:
                 continue
 
             if isinstance(message['content'], list):
@@ -70,7 +70,7 @@ async def process_chat(chat):
                     if not ('type' in item and item['type'] == 'image_url' and 'image_url' in item):
                         continue
                     image_url = item['image_url']
-                    if not 'url' in image_url:
+                    if 'url' not in image_url:
                         continue
                     url = image_url['url']
                     if url.startswith('http'):
@@ -213,7 +213,7 @@ class GoogleProvider(OpenAiProvider):
                         for item in message['content']:
                             if ('type' in item and item['type'] == 'image_url' and 'image_url' in item):
                                 image_url = item['image_url']
-                                if not 'url' in image_url:
+                                if 'url' not in image_url:
                                     continue
                                 url = image_url['url']
                                 if not url.startswith('data:'):
@@ -630,7 +630,7 @@ if __name__ == "__main__":
                 if arg in all_providers:
                     enable_providers.append(arg)
         for provider in enable_providers:
-            if not provider in g_config['providers']:
+            if provider not in g_config['providers']:
                 print(f"Provider {provider} not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
                 exit(1)
@@ -655,7 +655,7 @@ if __name__ == "__main__":
                 if arg in all_providers:
                     disable_providers.append(arg)
         for provider in disable_providers:
-            if not provider in g_config['providers']:
+            if provider not in g_config['providers']:
                 print(f"Provider {provider} not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
                 exit(1)
