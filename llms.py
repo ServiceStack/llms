@@ -116,6 +116,9 @@ class OpenAiProvider:
     def test(cls, base_url=None, api_key=None, models={}, **kwargs):
         return base_url is not None and api_key is not None and len(models) > 0
 
+    async def load(self):
+        pass
+
     async def chat(self, chat):
         model = chat['model']
         if model in self.models:
@@ -136,6 +139,10 @@ class OllamaProvider(OpenAiProvider):
     def __init__(self, base_url, models, all_models=False, **kwargs):
         super().__init__(base_url=base_url, models=models, **kwargs)
         self.all_models = all_models
+
+    async def load(self):
+        if self.all_models:
+            await self.load_models(default_models=self.models)
 
     async def get_models(self):
         ret = {}
@@ -163,8 +170,8 @@ class OllamaProvider(OpenAiProvider):
             self.models = {**default_models, **self.models}
 
     @classmethod
-    def test(cls, base_url=None, models={}, **kwargs):
-        return base_url is not None and len(models) > 0
+    def test(cls, base_url=None, models={}, all_models=False, **kwargs):
+        return base_url is not None and (len(models) > 0 or all_models)
 
 class GoogleOpenAiProvider(OpenAiProvider):
     def __init__(self, api_key, models, **kwargs):
@@ -443,20 +450,20 @@ def init_llms(config):
 
         if provider_type == 'OpenAiProvider' and OpenAiProvider.test(**constructor_kwargs):
             g_handlers[name] = OpenAiProvider(**constructor_kwargs)
-        elif provider_type == 'OllamaProvider':
-            provider = OllamaProvider(**constructor_kwargs)
-            if provider.all_models:
-                default_models = 'models' in definition and definition['models'] or None
-                asyncio.run(provider.load_models(default_models=default_models))
-                constructor_kwargs['models'] = provider.models
-            if OllamaProvider.test(**constructor_kwargs):
-                g_handlers[name] = provider
+        elif provider_type == 'OllamaProvider' and OllamaProvider.test(**constructor_kwargs):
+            g_handlers[name] = OllamaProvider(**constructor_kwargs)
         elif provider_type == 'GoogleProvider' and GoogleProvider.test(**constructor_kwargs):
             g_handlers[name] = GoogleProvider(**constructor_kwargs)
         elif provider_type == 'GoogleOpenAiProvider' and GoogleOpenAiProvider.test(**constructor_kwargs):
             g_handlers[name] = GoogleOpenAiProvider(**constructor_kwargs)
 
     return g_handlers
+
+async def load_llms():
+    global g_handlers
+    _log("Loading providers...")
+    for name, provider in g_handlers.items():
+        await provider.load()
 
 def save_config(config):
     global g_config
@@ -574,6 +581,7 @@ if __name__ == "__main__":
     with open(g_config_path, "r") as f:
         config_json = f.read()
         init_llms(json.loads(config_json))
+        asyncio.run(load_llms())
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")
