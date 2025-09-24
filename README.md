@@ -117,9 +117,9 @@ llms --image https://example.com/photo.png "Describe this photo"
 llms "Explain quantum computing" --raw
 ```
 
-### Chat from File
+### Using a Chat Template
 
-By default llms uses the `defaults/text` chat completion request defined in `llms.json`. 
+By default llms uses the `defaults/text` chat completion request defined in [llms.json](llms.json). 
 
 You can instead use a custom chat completion request with `--chat`, e.g:
 
@@ -208,6 +208,16 @@ Example of `image-request.json`:
 - **Data URIs**: Base64-encoded images (`data:image/png;base64,...`)
 
 Images are automatically processed and converted to base64 data URIs before being sent to the model.
+
+### Vision-Capable Models
+
+Popular models that support image analysis:
+- **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4.1
+- **Anthropic**: Claude Sonnet 4.0, Claude Opus 4.1
+- **Google**: Gemini 2.5 Pro, Gemini Flash
+- **Ollama**: qwen2.5vl, llava
+
+Images are automatically downloaded and converted to base64 data URIs.
 
 ### Configuration Management
 
@@ -397,56 +407,6 @@ llms --enable openrouter
 export MISTRAL_API_KEY="your-key"
 llms --enable mistral
 ```
-
-## Image Support
-
-Send images to vision-capable models using either the CLI `--image` option or JSON format:
-
-### CLI Usage
-
-```bash
-# Analyze a local image
-llms --image photo.jpg "What's in this image?"
-
-# Use a vision model specifically
-llms -m gemini-2.5-pro --image chart.png "Analyze this data visualization"
-
-# Remote image URL
-llms --image https://example.com/diagram.png "Explain this diagram"
-```
-
-### JSON Format (for --chat option)
-
-```json
-{
-  "model": "qwen2.5vl",
-  "messages": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "What's in this image?"},
-        {
-          "type": "image_url",
-          "image_url": {
-            "url": "https://example.com/image.jpg"
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Vision-Capable Models
-
-Popular models that support image analysis:
-- **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4.1
-- **Anthropic**: Claude Sonnet 4.0, Claude Opus 4.1
-- **Google**: Gemini 2.5 Pro, Gemini Flash
-- **Ollama**: qwen2.5vl, llava, bakllava
-- **OpenRouter**: Various vision models from multiple providers
-
-Images are automatically downloaded and converted to base64 data URIs.
 
 ## Model Routing
 
