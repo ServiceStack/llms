@@ -4,7 +4,7 @@ Lightweight CLI and OpenAI-compatible server for querying multiple Large Languag
 
 Configure additional providers and models in [llms.json](llms.json)
  - Mix and match local models with models from different API providers
- - Requests are automatically routed to available providers that supports the requested model (in defined order)
+ - Requests automatically routed to available providers that supports the requested model (in defined order)
  - Define free/cheapest/local providers first to save on costs
  - Any failures are automatically retried on the next available provider
 
