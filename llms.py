@@ -15,6 +15,7 @@ import traceback
 import aiohttp
 from aiohttp import web
 
+VERSION = 1
 g_config_path = None
 g_config = None
 g_handlers = {}
@@ -194,7 +195,7 @@ class GoogleProvider(OpenAiProvider):
         if model in self.models:
             chat['model'] = self.models[model]
 
-        chat = process_chat(chat)
+        chat = await process_chat(chat)
         generationConfig = {}
 
         # Filter out system messages and convert to proper Gemini format
@@ -214,13 +215,15 @@ class GoogleProvider(OpenAiProvider):
                                 if not 'url' in image_url:
                                     continue
                                 url = image_url['url']
-                                if url.startswith('http'):
+                                if not url.startswith('data:'):
                                     raise(Exception("Image was not downloaded: " + url))
-                                mimetype = "image/png" #TODO extract from datauri
+                                # Extract mime type from data uri
+                                mimetype = url.split(';',1)[0].split(':',1)[1] if ';' in url else "image/png"
+                                base64Data = url.split(',',1)[1]
                                 parts.append({
                                     "inline_data": {
                                         "mime_type": mimetype,
-                                        "data": url
+                                        "data": base64Data
                                     }
                                 })
                             elif 'text' in item:
@@ -499,7 +502,7 @@ def print_status():
         print("Disabled: None")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='llms')
+    parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
     parser.add_argument('-m', '--model',  default=None, help='Model to use')
     parser.add_argument('--logprefix',    default="",   help='Prefix used in log messages', metavar='PREFIX')

@@ -109,6 +109,10 @@ llms -m gemini-2.5-pro "Write a Python function to sort a list"
 # With system prompt
 llms -s "You are a helpful coding assistant" "How do I reverse a string in Python?"
 
+# With image (vision models)
+llms --image image.jpg "What's in this image?"
+llms --image https://example.com/photo.png "Describe this photo"
+
 # Display full JSON Response
 llms "Explain quantum computing" --raw
 ```
@@ -143,6 +147,67 @@ Example `request.json`:
   "max_tokens": 150
 }
 ```
+
+### Image Requests
+
+Send images to vision-capable models using the `--image` option:
+
+```bash
+# Use defaults/image Chat Template (Describe the key features of the input image)
+llms --image ./screenshot.png
+
+# Local image file
+llms --image ./screenshot.png "What's in this image?"
+
+# Remote image URL
+llms --image https://example.org/photo.jpg "Describe this photo"
+
+# Data URI
+llms --image "data:image/png;base64,$(base64 -w 0 image.png)" "Describe this image"
+
+# With specific model (Vision models only)
+llms -m gemini-2.5-flash --image chart.png "Analyze this chart"
+
+# Combined with system prompt
+llms -s "You are a data analyst" --image graph.png "What trends do you see?"
+
+# With custom chat template
+llms --chat image-request.json --image photo.jpg
+```
+
+Example of `image-request.json`:
+
+```json
+{
+    "model": "qwen2.5vl",
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": ""
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": "Caption this image"
+                }
+            ]
+        }
+    ]
+}
+```
+
+**Supported image formats**: PNG, WEBP, JPG, JPEG, GIF, BMP, TIFF, ICO
+
+**Image sources**:
+- **Local files**: Absolute paths (`/path/to/image.jpg`) or relative paths (`./image.png`, `../image.jpg`)
+- **Remote URLs**: HTTP/HTTPS URLs are automatically downloaded
+- **Data URIs**: Base64-encoded images (`data:image/png;base64,...`)
+
+Images are automatically processed and converted to base64 data URIs before being sent to the model.
 
 ### Configuration Management
 
@@ -335,14 +400,29 @@ llms --enable mistral
 
 ## Image Support
 
-Send images to vision-capable models:
+Send images to vision-capable models using either the CLI `--image` option or JSON format:
+
+### CLI Usage
+
+```bash
+# Analyze a local image
+llms --image photo.jpg "What's in this image?"
+
+# Use a vision model specifically
+llms -m gemini-2.5-pro --image chart.png "Analyze this data visualization"
+
+# Remote image URL
+llms --image https://example.com/diagram.png "Explain this diagram"
+```
+
+### JSON Format (for --chat option)
 
 ```json
 {
   "model": "qwen2.5vl",
   "messages": [
     {
-      "role": "user", 
+      "role": "user",
       "content": [
         {"type": "text", "text": "What's in this image?"},
         {
@@ -356,6 +436,15 @@ Send images to vision-capable models:
   ]
 }
 ```
+
+### Vision-Capable Models
+
+Popular models that support image analysis:
+- **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4.1
+- **Anthropic**: Claude Sonnet 4.0, Claude Opus 4.1
+- **Google**: Gemini 2.5 Pro, Gemini Flash
+- **Ollama**: qwen2.5vl, llava, bakllava
+- **OpenRouter**: Various vision models from multiple providers
 
 Images are automatically downloaded and converted to base64 data URIs.
 
@@ -452,13 +541,13 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 ## Usage
 
-Run `llms` without arguments to see the help:
+Run `llms` without arguments to see the help screen:
 
     usage: llms.py [-h] [--config FILE] [-m MODEL] [--logprefix PREFIX] [--verbose] [--raw] [--chat REQUEST]
-                [-s PROMPT] [--list] [--serve PORT] [--init] [--enable PROVIDER] [--disable PROVIDER]
-                [--default MODEL] [--update]
+                [-s PROMPT] [--image IMAGE] [--list] [--serve PORT] [--init] [--enable PROVIDER]
+                [--disable PROVIDER] [--default MODEL] [--update]
 
-    llms
+    llms v1
 
     options:
     -h, --help            show this help message and exit
@@ -471,6 +560,7 @@ Run `llms` without arguments to see the help:
     --chat REQUEST        OpenAI Chat Completion Request to send
     -s PROMPT, --system PROMPT
                             System prompt to use for chat completion
+    --image IMAGE         Image prompt to use in chat completion
     --list                Show list of enabled providers and their models (alias ls provider?)
     --serve PORT          Port to start an OpenAI Chat compatible server on
     --init                Create a default llms.json
