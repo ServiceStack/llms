@@ -7,7 +7,7 @@ free/cheapest/local providers first to save on costs, any failures are automatic
 
 ## Features
 
-- **Lightweight**: Single Python file with single `aiohttp` dependency
+- **Lightweight**: Single [llms.py](llms.py) Python file with single `aiohttp` dependency
 - **Multi-Provider Support**: OpenAI, Anthropic, Google (Gemini), Groq, Mistral, Ollama, OpenRouter, and more
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Configuration Management**: Easy provider enable/disable and configuration management
@@ -24,7 +24,7 @@ free/cheapest/local providers first to save on costs, any failures are automatic
 ```bash
 curl -O https://raw.githubusercontent.com/ServiceStack/llms/main/llms.py
 chmod +x llms.py
-cp llms.py ~/.local/bin/llms
+mv llms.py ~/.local/bin/llms
 ```
 
 2. Install single dependency:
@@ -137,7 +137,7 @@ Example `request.json`:
   "model": "kimi-k2",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user",   "content": "Hello!"}
+    {"role": "user",   "content": ""}
   ],
   "temperature": 0.7,
   "max_tokens": 150
@@ -156,7 +156,7 @@ llms ls ollama
 llms ls google anthropic
 
 # Enable providers
-llms --enable openai
+llms --enable openrouter
 llms --enable anthropic google_free groq
 
 # Disable providers
@@ -165,7 +165,6 @@ llms --disable openai anthropic
 
 # Set default model
 llms --default grok-4
-llms --default claude-sonnet-4-0
 
 # Update to latest version
 llms --update
@@ -177,14 +176,14 @@ llms --update
 # Use custom config file
 llms --config /path/to/config.json "Hello"
 
-# Enable verbose logging
-llms --verbose "Tell me a joke"
-
 # Get raw JSON response
 llms --raw "What is 2+2?"
 
+# Enable verbose logging
+llms --verbose "Tell me a joke"
+
 # Custom log prefix
-llms --logprefix "[DEBUG] " "Hello world"
+llms --verbose --logprefix "[DEBUG] " "Hello world"
 
 # Set default model (updates config file)
 llms --default grok-4

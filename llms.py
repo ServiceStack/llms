@@ -49,6 +49,8 @@ def chat_summary(chat):
                             item['image_url']['url'] = prefix + f",({len(url) - len(prefix)})"
     return json.dumps(clone, indent=2)
 
+image_exts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
+
 async def process_chat(chat):
     if not chat:
         raise Exception("No chat provided")
@@ -69,18 +71,30 @@ async def process_chat(chat):
                     if not 'url' in image_url:
                         continue
                     url = image_url['url']
-                    if not url.startswith('http'):
-                        continue
-                    _log(f"Downloading image: {url}")
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                        response.raise_for_status()
-                        content = await response.read()
-                        # get mimetype from response headers
-                        mimetype = "image/png"
-                        if 'Content-Type' in response.headers:
-                            mimetype = response.headers['Content-Type']
-                        # convert to data uri
-                        image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                    if url.startswith('http'):
+                        _log(f"Downloading image: {url}")
+                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
+                            response.raise_for_status()
+                            content = await response.read()
+                            # get mimetype from response headers
+                            mimetype = "image/png"
+                            if 'Content-Type' in response.headers:
+                                mimetype = response.headers['Content-Type']
+                            # convert to data uri
+                            image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                    elif url.startswith('/') or url.startswith('.'):
+                        _log(f"Reading image: {url}")
+                        with open(url, "rb") as f:
+                            content = f.read()
+                            ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'png'
+                            # get mimetype from file extension
+                            mimetype = f"image/{ext}" if ext in image_exts else "image/png"
+                            # convert to data uri
+                            image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                    elif url.startswith('data:'):
+                        pass
+                    else:
+                        raise Exception(f"Invalid image url: {url}")
     return chat
 
 class OpenAiProvider:
@@ -180,6 +194,7 @@ class GoogleProvider(OpenAiProvider):
         if model in self.models:
             chat['model'] = self.models[model]
 
+        chat = process_chat(chat)
         generationConfig = {}
 
         # Filter out system messages and convert to proper Gemini format
@@ -199,26 +214,15 @@ class GoogleProvider(OpenAiProvider):
                                 if not 'url' in image_url:
                                     continue
                                 url = image_url['url']
-                                if not url.startswith('http'):
-                                    continue
-                                _log(f"Downloading image: {url}")
-                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                                    response.raise_for_status()
-                                    content = await response.read()
-                                    # get mimetype from response headers
-                                    mimetype = "image/png"
-                                    if 'Content-Type' in response.headers:
-                                        mimetype = response.headers['Content-Type']
-                                        if ';' in mimetype:
-                                            mimetype = mimetype.split(';')[0]
-                                        if not mimetype.startswith('image/'):
-                                            mimetype = "image/png"
-                                    parts.append({
-                                        "inline_data": {
-                                            "mime_type": mimetype,
-                                            "data": base64.b64encode(content).decode('utf-8')
-                                        }
-                                    })
+                                if url.startswith('http'):
+                                    raise(Exception("Image was not downloaded: " + url))
+                                mimetype = "image/png" #TODO extract from datauri
+                                parts.append({
+                                    "inline_data": {
+                                        "mime_type": mimetype,
+                                        "data": url
+                                    }
+                                })
                             elif 'text' in item:
                                 text = item['text']
                                 parts.append({"text": text})
@@ -357,9 +361,36 @@ async def chat_completion(chat):
     # If we get here, all providers failed
     raise first_exception
 
-async def cli_chat(chat, raw=False):
+async def cli_chat(chat, image=None, raw=False):
     if g_default_model:
         chat['model'] = g_default_model
+
+    if image is not None:
+        # process_chat downloads the image, just adding the reference here
+        first_message = chat['messages'][0]
+        image_content = {
+            "type": "image_url",
+            "image_url": {
+                "url": image
+            }
+        }
+        if 'content' in first_message:
+            if isinstance(first_message['content'], list):
+                image_url = None
+                for item in first_message['content']:
+                    if 'image_url' in item:
+                        image_url = item['image_url']
+                # If no image_url, add one
+                if image_url is None:
+                    first_message['content'].insert(0,image_content)
+                else:
+                    image_url['url'] = image
+            else:
+                first_message['content'] = [
+                    image_content,
+                    { "type": "text", "text": first_message['content'] }
+                ]
+
     if g_verbose:
         printdump(chat)
     response = await chat_completion(chat)
@@ -477,6 +508,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--chat',         default=None, help='OpenAI Chat Completion Request to send', metavar='REQUEST')
     parser.add_argument('-s', '--system', default=None, help='System prompt to use for chat completion', metavar='PROMPT')
+    parser.add_argument('--image',        default=None, help='Image prompt to use in chat completion', metavar='IMAGE')
 
     parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
 
@@ -647,9 +679,11 @@ if __name__ == "__main__":
         print(f"{__file__} updated")
         exit(0)
 
-    if cli_args.chat is not None or len(extra_args) > 0:
+    if cli_args.chat is not None or cli_args.image is not None or len(extra_args) > 0:
         try:
             chat = g_config['defaults']['text']
+            if cli_args.image is not None:
+                chat = g_config['defaults']['image']
             if cli_args.chat is not None:
                 chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
@@ -672,7 +706,8 @@ if __name__ == "__main__":
                     last_msg['content'] = prompt
                 else:
                     chat['messages'].append({'role': 'user', 'content': prompt})
-            asyncio.run(cli_chat(chat, raw=cli_args.raw))
+
+            asyncio.run(cli_chat(chat, image=cli_args.image, raw=cli_args.raw))
             exit(0)
         except Exception as e:
             print(f"{cli_args.logprefix}Error: {e}")
