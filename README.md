@@ -1,14 +1,17 @@
 # ServiceStack LLMs
 
-A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
+Lightweight CLI and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
 
-Mix and match local models with models from different API providers to best fit for your needs. Requests are automatically routed to available providers that supports the requested model (in defined order). Define
-free/cheapest/local providers first to save on costs, any failures are automatically retried on the next available provider.
+Configure additional providers and models in [llms.json](llms.json)
+ - Mix and match local models with models from different API providers
+ - Requests are automatically routed to available providers that supports the requested model (in defined order)
+ - Define free/cheapest/local providers first to save on costs
+ - Any failures are automatically retried on the next available provider
 
 ## Features
 
 - **Lightweight**: Single [llms.py](llms.py) Python file with single `aiohttp` dependency
-- **Multi-Provider Support**: OpenAI, Anthropic, Google (Gemini), Groq, Mistral, Ollama, OpenRouter, and more
+- **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, Groq, OpenAI, Mistral, and more
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Configuration Management**: Easy provider enable/disable and configuration management
 - **CLI Interface**: Simple command-line interface for quick interactions
@@ -227,6 +230,31 @@ Popular models that support image analysis:
 
 Images are automatically downloaded and converted to base64 data URIs.
 
+## Server Mode
+
+Run as an OpenAI-compatible HTTP server:
+
+```bash
+# Start server on port 8000
+llms --serve 8000
+```
+
+The server exposes a single endpoint:
+- `POST /v1/chat/completions` - OpenAI-compatible chat completions
+
+Example client usage:
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2",
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
 ### Configuration Management
 
 ```bash
@@ -248,8 +276,20 @@ llms --disable openai anthropic
 
 # Set default model
 llms --default grok-4
+```
 
-# Update to latest version
+### Update
+
+1. Installed from PyPI
+
+```bash
+pip install lapi --upgrade
+```
+
+2. Using Direct Download
+
+```bash
+# Update to latest version (Downloads latest llms.py)
 llms --update
 ```
 
@@ -317,31 +357,6 @@ Pipe Markdown output to [glow](https://github.com/charmbracelet/glow) to beautif
 
 ```bash
 llms "Explain quantum computing" | glow
-```
-
-## Server Mode
-
-Run as an OpenAI-compatible HTTP server:
-
-```bash
-# Start server on port 8000
-llms --serve 8000
-```
-
-The server exposes a single endpoint:
-- `POST /v1/chat/completions` - OpenAI-compatible chat completions
-
-Example client usage:
-
-```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "kimi-k2",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
 ```
 
 ## Supported Providers
