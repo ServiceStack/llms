@@ -437,6 +437,18 @@ async def save_default_config(config_path):
                 f.write(config_json)
             g_config = json.loads(config_json)
 
+async def update_llms():
+    """
+    Update llms.py and llms.json from https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.py
+    """
+    url = "https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.py"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            llms_py = await resp.text()
+            with open(__file__, "w") as f:
+                f.write(llms_py)
+
 def print_status():
     enabled = list(g_handlers.keys())
     disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
@@ -467,9 +479,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
+    parser.add_argument('--init',         action='store_true', help='Create a default llms.json')
     parser.add_argument('--enable',       default=None, help='Enable a provider', metavar='PROVIDER')
     parser.add_argument('--disable',      default=None, help='Disable a provider', metavar='PROVIDER')
-    parser.add_argument('--init',         action='store_true', help='Create a default llms.json')
+    parser.add_argument('--default',      default=None, help='Configure the default model to use', metavar='MODEL')
+    parser.add_argument('--update',         action='store_true', help='Update to latest version')
 
     cli_args, extra_args = parser.parse_known_args()
     if cli_args.verbose:
@@ -478,7 +492,7 @@ if __name__ == "__main__":
     if cli_args.model:
         g_default_model = cli_args.model
     if cli_args.logprefix:
-        g_logger_prefix = cli_args.logprefix
+        g_logprefix = cli_args.logprefix
 
     if cli_args.config is not None:
         g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
@@ -611,13 +625,31 @@ if __name__ == "__main__":
         print_status()
         exit(0)
 
+    if cli_args.default is not None:
+        default_model = cli_args.default
+        all_models = get_models()
+        if default_model not in all_models:
+            print(f"Model {default_model} not found")
+            print(f"Available models: {', '.join(all_models)}")
+            exit(1)
+        default_text = g_config['defaults']['text']
+        default_text['model'] = default_model
+        save_config(g_config)
+        print(f"\nDefault model set to: {default_model}")
+        exit(0)
+
+    if cli_args.update:
+        asyncio.run(update_llms())
+        print(f"{__file__} updated")
+        exit(0)
+
     if cli_args.chat is not None or len(extra_args) > 0:
         try:
             chat = g_config['defaults']['text']
             if cli_args.chat is not None:
                 chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
-                    _log(f"Chat file not found: {chat_path}")
+                    print(f"Chat request template not found: {chat_path}")
                     exit(1)
                 _log(f"Using chat: {chat_path}")
 
