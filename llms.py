@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
+# Docs: https://github.com/ServiceStack/llms
+
 import os
 import time
 import json
