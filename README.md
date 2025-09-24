@@ -165,7 +165,7 @@ llms --image https://example.org/photo.jpg "Describe this photo"
 # Data URI
 llms --image "data:image/png;base64,$(base64 -w 0 image.png)" "Describe this image"
 
-# With specific model (Vision models only)
+# With a specific vision model
 llms -m gemini-2.5-flash --image chart.png "Analyze this chart"
 
 # Combined with system prompt

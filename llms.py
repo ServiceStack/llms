@@ -64,6 +64,7 @@ async def process_chat(chat):
         for message in chat['messages']:
             if not 'content' in message:
                 continue
+
             if isinstance(message['content'], list):
                 for item in message['content']:
                     if not ('type' in item and item['type'] == 'image_url' and 'image_url' in item):
@@ -370,7 +371,11 @@ async def cli_chat(chat, image=None, raw=False):
 
     if image is not None:
         # process_chat downloads the image, just adding the reference here
-        first_message = chat['messages'][0]
+        first_message = None
+        for message in chat['messages']:
+            if message['role'] == 'user':
+                first_message = message
+                break
         image_content = {
             "type": "image_url",
             "image_url": {
