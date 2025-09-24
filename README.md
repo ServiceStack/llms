@@ -19,7 +19,7 @@ free/cheapest/local providers first to save on costs, any failures are automatic
 
 ## Installation
 
-### Option 1: Install from PyPI (Recommended)
+### Option 1: Install from PyPI
 
 ```bash
 pip install lapi
@@ -27,7 +27,7 @@ pip install lapi
 
 ### Option 2: Download directly
 
-1. Download `llms.py`
+1. Download [llms.py](llms.py)
 
 ```bash
 curl -O https://raw.githubusercontent.com/ServiceStack/llms/main/llms.py
