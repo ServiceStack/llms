@@ -8,19 +8,20 @@ import asyncio
 import subprocess
 import base64
 import traceback
-import uuid
 
 import aiohttp
 from aiohttp import web
 
-g_args = None
 g_config = None
 g_handlers = {}
+g_verbose = False
+g_logprefix=""
+g_default_model=""
 
 def _log(message):
     """Helper method for logging from the global polling task."""
-    if g_args.verbose:
-        print(f"{g_args.logprefix}{message}", flush=True)
+    if g_verbose:
+        print(f"{g_logprefix}{message}", flush=True)
 
 def printdump(obj):
     args = obj.__dict__ if hasattr(obj, '__dict__') else obj
@@ -240,7 +241,7 @@ class GoogleProvider(OpenAiProvider):
             gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
 
             _log(f"gemini_chat: {gemini_chat_url}")
-            if g_args.verbose:
+            if g_verbose:
                 print(json.dumps(gemini_chat))
 
             if self.curl:
@@ -305,55 +306,6 @@ class GoogleProvider(OpenAiProvider):
                 }
             return response
 
-class ComfyGateway:
-    def __init__(self, base_url, api_key, models, **kwargs):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.models = models or get_models()
-        self.headers = kwargs['headers'] if 'headers' in kwargs else {
-            "Content-Type": "application/json",
-        }
-        if api_key is not None:
-            self.headers["Authorization"] = f"Bearer {api_key}"
-
-    async def start(self):
-        retry_secs = 5
-        device = g_args.device if g_args.device else uuid.uuid4().hex
-        models_str = ','.join(self.models)
-        url = f"{self.base_url}/api/GetChatCompletionTask?device={device}&models={models_str}"
-        _log(f"headers: {json.dumps(self.headers, indent=2)}")
-
-        async with aiohttp.ClientSession() as session:
-            while True:
-                try:
-                    _log(f"Polling for chat requests: GET {url}")
-                    async with session.get(url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=60)) as task_res:
-                        task_res.raise_for_status()
-                        chat_request = await task_res.json() if task_res.status == 200 else None # Ignore Empty 204 Responses
-                        if chat_request:
-                            _log(f"Chat request: {json.dumps(chat_request, indent=2)}")
-                            metadata = chat_request['metadata'] or {}
-                            reply_to = metadata['replyTo']
-                            del metadata['replyTo']
-                            if len(metadata) == 0:
-                                del chat_request['metadata']
-                            response = await exec_chat(chat_request)
-                            _log(f"Complete chat request: POST {reply_to}")
-                            _log(json.dumps(response, indent=2))
-                            async with session.post(reply_to, headers=self.headers, json=response, timeout=aiohttp.ClientTimeout(total=60)) as response_res:
-                                response_res.raise_for_status()
-                        else:
-                            _log("No chat request, waiting 5s...")
-                            await asyncio.sleep(5)
-                        retry_secs = 5
-                except Exception as e:
-                    _log(f"Error: {e}")
-                    traceback.print_exc()
-                    _log(f"Waiting {retry_secs}s before retrying...")
-                    await asyncio.sleep(retry_secs)
-                    if retry_secs < 5 * 60:
-                        retry_secs += 5
-
 def get_models():
     ret = []
     for provider in g_handlers.values():
@@ -363,7 +315,7 @@ def get_models():
     ret.sort()
     return ret
 
-async def exec_chat(chat):
+async def chat_completion(chat):
     model = chat['model']
     # get first provider that has the model
     candidate_providers = [name for name, provider in g_handlers.items() if model in provider.models]
@@ -386,13 +338,13 @@ async def exec_chat(chat):
     # If we get here, all providers failed
     raise first_exception
 
-async def cli_chat(chat, g_args):
-    if g_args.model is not None:
-        chat['model'] = g_args.model
-    if g_args.verbose:
+async def cli_chat(chat, raw=False):
+    if g_default_model:
+        chat['model'] = g_default_model
+    if g_verbose:
         printdump(chat)
-    response = await exec_chat(chat)
-    if g_args.raw:
+    response = await chat_completion(chat)
+    if raw:
         print(json.dumps(response, indent=2))
         exit(0)
     else:
@@ -401,6 +353,48 @@ async def cli_chat(chat, g_args):
 
 def config_str(key):
     return key in g_config and g_config[key] or None
+
+def init_llms(config):
+    global g_config
+
+    g_config = config
+    # iterate over config and replace $ENV with env value
+    for key, value in g_config.items():
+        if isinstance(value, str) and value.startswith("$"):
+            g_config[key] = os.environ.get(value[1:], "")
+
+    if g_verbose:
+        printdump(g_config)
+    providers = g_config['providers']
+
+    for name, definition in providers.items():
+        provider_type = definition['type']
+
+        # Replace API keys with environment variables if they start with $
+        if 'api_key' in definition:
+            value = definition['api_key']
+            if isinstance(value, str) and value.startswith("$"):
+                definition['api_key'] = os.environ.get(value[1:], "")
+
+        # Create a copy of definition without the 'type' key for constructor kwargs
+        constructor_kwargs = {k: v for k, v in definition.items() if k != 'type'}
+        constructor_kwargs['headers'] = g_config['defaults']['headers'].copy()
+
+        if provider_type == 'OpenAiProvider' and OpenAiProvider.test(**constructor_kwargs):
+            g_handlers[name] = OpenAiProvider(**constructor_kwargs)
+        elif provider_type == 'OllamaProvider' and OllamaProvider.test(**constructor_kwargs):
+            provider = OllamaProvider(**constructor_kwargs)
+            # Initialize models if all_models was requested
+            if hasattr(provider, '_all_models') and provider._all_models:
+                asyncio.run(provider.initialize_models())
+            g_handlers[name] = provider
+        elif provider_type == 'GoogleProvider' and GoogleProvider.test(**constructor_kwargs):
+            g_handlers[name] = GoogleProvider(**constructor_kwargs)
+        elif provider_type == 'GoogleOpenAiProvider' and GoogleOpenAiProvider.test(**constructor_kwargs):
+            g_handlers[name] = GoogleOpenAiProvider(**constructor_kwargs)
+
+    return g_handlers
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='llms')
@@ -417,17 +411,19 @@ if __name__ == "__main__":
 
     parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
-    parser.add_argument('--agent',        default=None, help='Start agent to subscribe and answer Gateway requests')
-    parser.add_argument('--device',       default="",   help='Unique Device ID for agent')
+    cli_args, extra_args = parser.parse_known_args()
+    if cli_args.verbose:
+        g_verbose = True
+        printdump(cli_args)
+    if cli_args.model:
+        g_default_model = cli_args.model
+    if cli_args.logprefix:
+        g_logger_prefix = cli_args.logprefix
 
-    g_args, extra_args = parser.parse_known_args()
-    if g_args.verbose:
-        printdump(g_args)
+    if cli_args.config is not None:
+        full_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
 
-    if g_args.config is not None:
-        full_config_path = os.path.join(os.path.dirname(__file__), g_args.config)
-
-    config_path = g_args.config
+    config_path = cli_args.config
     if config_path:
         full_config_path = os.path.join(os.path.dirname(__file__), config_path)
     else:
@@ -447,42 +443,7 @@ if __name__ == "__main__":
     # read contents
     with open(full_config_path, "r") as f:
         config_json = f.read()
-        g_config = json.loads(config_json)
-
-        # iterate over config and replace $ENV with env value
-        for key, value in g_config.items():
-            if isinstance(value, str) and value.startswith("$"):
-                g_config[key] = os.environ.get(value[1:], "")
-
-        if g_args.verbose:
-            printdump(g_config)
-        providers = g_config['providers']
-
-        for name, definition in providers.items():
-            provider_type = definition['type']
-
-            # Replace API keys with environment variables if they start with $
-            if 'api_key' in definition:
-                value = definition['api_key']
-                if isinstance(value, str) and value.startswith("$"):
-                    definition['api_key'] = os.environ.get(value[1:], "")
-
-            # Create a copy of definition without the 'type' key for constructor kwargs
-            constructor_kwargs = {k: v for k, v in definition.items() if k != 'type'}
-            constructor_kwargs['headers'] = g_config['defaults']['headers'].copy()
-
-            if provider_type == 'OpenAiProvider' and OpenAiProvider.test(**constructor_kwargs):
-                g_handlers[name] = OpenAiProvider(**constructor_kwargs)
-            elif provider_type == 'OllamaProvider' and OllamaProvider.test(**constructor_kwargs):
-                provider = OllamaProvider(**constructor_kwargs)
-                # Initialize models if all_models was requested
-                if hasattr(provider, '_all_models') and provider._all_models:
-                    asyncio.run(provider.initialize_models())
-                g_handlers[name] = provider
-            elif provider_type == 'GoogleProvider' and GoogleProvider.test(**constructor_kwargs):
-                g_handlers[name] = GoogleProvider(**constructor_kwargs)
-            elif provider_type == 'GoogleOpenAiProvider' and GoogleOpenAiProvider.test(**constructor_kwargs):
-                g_handlers[name] = GoogleOpenAiProvider(**constructor_kwargs)
+        init_llms(json.loads(config_json))
 
     # print names
     _log(f"enabled providers: {g_handlers.keys()}")
@@ -490,9 +451,9 @@ if __name__ == "__main__":
     if len(extra_args) > 0:
         arg = extra_args[0]
         if arg == 'ls':
-            g_args.list = True
+            cli_args.list = True
 
-    if g_args.list:
+    if cli_args.list:
         # Show list of enabled providers and their models
         for name, provider in g_handlers.items():
             print(f"{name}:")
@@ -500,13 +461,13 @@ if __name__ == "__main__":
                 print(f"  {model}")
         exit(0)
 
-    if g_args.serve is not None:
-        port = int(g_args.serve)
+    if cli_args.serve is not None:
+        port = int(cli_args.serve)
 
         async def chat_handler(request):
             try:
                 chat = await request.json()
-                response = await exec_chat(chat)
+                response = await chat_completion(chat)
                 return web.json_response(response)
             except Exception as e:
                 return web.json_response({"error": str(e)}, status=500)
@@ -518,33 +479,11 @@ if __name__ == "__main__":
         web.run_app(app, host='0.0.0.0', port=port)
         exit(0)
 
-    if g_args.agent is not None:
-        for name, definition in g_config['agents'].items():
-            if name == g_args.agent:
-                agent_type = definition['type']
-                if agent_type == 'ComfyGateway':
-
-                    if 'api_key' in definition:
-                        value = definition['api_key']
-                        if isinstance(value, str) and value.startswith("$"):
-                            definition['api_key'] = os.environ.get(value[1:], "")
-
-                    # Create a copy of definition without the 'type' key for constructor kwargs
-                    constructor_kwargs = {k: v for k, v in definition.items() if k != 'type'}
-                    constructor_kwargs['headers'] = g_config['defaults']['headers'].copy()
-
-                    agent = ComfyGateway(**constructor_kwargs)
-                    asyncio.run(agent.start())
-                _log(f"Unsupported agent type: {agent_type}")
-                exit(1)
-        _log(f"Agent not found: {g_args.agent}")
-        exit(1)
-
-    if g_args.chat is not None or len(extra_args) > 0:
+    if cli_args.chat is not None or len(extra_args) > 0:
         try:
             chat = g_config['defaults']['text']
-            if g_args.chat is not None:
-                chat_path = os.path.join(os.path.dirname(__file__), g_args.chat)
+            if cli_args.chat is not None:
+                chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
                     _log(f"Chat file not found: {chat_path}")
                     exit(1)
@@ -554,8 +493,8 @@ if __name__ == "__main__":
                     chat_json = f.read()
                     chat = json.loads(chat_json)
 
-            if g_args.system is not None:
-                chat['messages'].insert(0, {'role': 'system', 'content': g_args.system})
+            if cli_args.system is not None:
+                chat['messages'].insert(0, {'role': 'system', 'content': cli_args.system})
 
             if len(extra_args) > 0:
                 prompt = ' '.join(extra_args)
@@ -565,11 +504,11 @@ if __name__ == "__main__":
                     last_msg['content'] = prompt
                 else:
                     chat['messages'].append({'role': 'user', 'content': prompt})
-            asyncio.run(cli_chat(chat, g_args))
+            asyncio.run(cli_chat(chat, raw=cli_args.raw))
             exit(0)
         except Exception as e:
-            print(f"{g_args.logprefix}Error: {e}")
-            if g_args.verbose:
+            print(f"{cli_args.logprefix}Error: {e}")
+            if cli_args.verbose:
                 traceback.print_exc()
             exit(1)
 
