@@ -134,7 +134,7 @@ Example `request.json`:
 
 ```json
 {
-  "model": "gpt-4o",
+  "model": "kimi-k2",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user",   "content": "Hello!"}
@@ -187,7 +187,7 @@ llms --raw "What is 2+2?"
 llms --logprefix "[DEBUG] " "Hello world"
 
 # Set default model (updates config file)
-llms --default gpt-4o-mini
+llms --default grok-4
 
 # Update llms.py to latest version
 llms --update
@@ -198,8 +198,8 @@ llms --update
 The `--default MODEL` option allows you to set the default model used for all chat completions. This updates the `defaults.text.model` field in your configuration file:
 
 ```bash
-# Set default model to GPT-4o
-llms --default gpt-4o
+# Set default model to gpt-oss
+llms --default gpt-oss:120b
 
 # Set default model to Claude Sonnet
 llms --default claude-sonnet-4-0
@@ -255,7 +255,7 @@ Example client usage:
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
+    "model": "kimi-k2",
     "messages": [
       {"role": "user", "content": "Hello!"}
     ]
@@ -340,7 +340,7 @@ Send images to vision-capable models:
 
 ```json
 {
-  "model": "gpt-4o",
+  "model": "qwen2.5vl",
   "messages": [
     {
       "role": "user", 
@@ -364,7 +364,7 @@ Images are automatically downloaded and converted to base64 data URIs.
 
 The tool automatically routes requests to the first available provider that supports the requested model. If a provider fails, it tries the next available provider with that model.
 
-Example: If both OpenAI and OpenRouter support `gpt-4o`, the request will first try OpenAI, then fall back to OpenRouter if OpenAI fails.
+Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first try OpenRouter (free), then fall back to Groq than OpenRouter (Paid) if requests fails.
 
 ## Environment Variables
 
@@ -389,7 +389,7 @@ Example: If both OpenAI and OpenRouter support `gpt-4o`, the request will first 
   "defaults": {
     "headers": {"Content-Type": "application/json"},
     "text": {
-      "model": "gpt-4o-mini",
+      "model": "kimi-k2",
       "messages": [{"role": "user", "content": ""}]
     }
   },
