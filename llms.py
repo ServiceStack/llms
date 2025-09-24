@@ -483,7 +483,7 @@ if __name__ == "__main__":
     parser.add_argument('--enable',       default=None, help='Enable a provider', metavar='PROVIDER')
     parser.add_argument('--disable',      default=None, help='Disable a provider', metavar='PROVIDER')
     parser.add_argument('--default',      default=None, help='Configure the default model to use', metavar='MODEL')
-    parser.add_argument('--update',         action='store_true', help='Update to latest version')
+    parser.add_argument('--update',       action='store_true', help='Update to latest version')
 
     cli_args, extra_args = parser.parse_known_args()
     if cli_args.verbose:
@@ -638,6 +638,7 @@ if __name__ == "__main__":
         print(f"\nDefault model set to: {default_model}")
         exit(0)
 
+    #TEST
     if cli_args.update:
         asyncio.run(update_llms())
         print(f"{__file__} updated")
