@@ -27,6 +27,24 @@ def printdump(obj):
     args = obj.__dict__ if hasattr(obj, '__dict__') else obj
     print(json.dumps(args, indent=2))
 
+def print_chat(chat):
+    _log(f"Chat: {chat_summary(chat)}")
+
+def chat_summary(chat):
+    """Summarize chat completion request for logging."""
+    # replace image_url.url with <image>
+    clone = json.loads(json.dumps(chat))
+    for message in clone['messages']:
+        if 'content' in message:
+            if isinstance(message['content'], list):
+                for item in message['content']:
+                    if 'image_url' in item:
+                        if 'url' in item['image_url']:
+                            url = item['image_url']['url']
+                            prefix = url.split(',', 1)[0]
+                            item['image_url']['url'] = prefix + f",({len(url) - len(prefix)})"
+    return json.dumps(clone, indent=2)
+
 async def process_chat(chat):
     if not chat:
         raise Exception("No chat provided")
@@ -59,7 +77,6 @@ async def process_chat(chat):
                             mimetype = response.headers['Content-Type']
                         # convert to data uri
                         image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-    _log(f"process_chat: {json.dumps(chat, indent=2)}")
     return chat
 
 class OpenAiProvider:
@@ -88,6 +105,7 @@ class OpenAiProvider:
         #     f.write(json.dumps(chat, indent=2))
 
         chat = await process_chat(chat)
+        print_chat(chat)
         async with aiohttp.ClientSession() as session:
             async with session.post(self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)) as response:
                 response.raise_for_status()
@@ -97,13 +115,7 @@ class OpenAiProvider:
 class OllamaProvider(OpenAiProvider):
     def __init__(self, base_url, models, all_models=False, **kwargs):
         super().__init__(base_url=base_url, models=models, **kwargs)
-        if all_models:
-            # Note: get_models is now async, so we'll need to handle this differently
-            # For now, we'll initialize with empty models and populate them later
-            self.models = {}
-            self._all_models = True
-        else:
-            self._all_models = False
+        self.all_models = all_models
 
     async def get_models(self):
         ret = {}
@@ -122,10 +134,12 @@ class OllamaProvider(OpenAiProvider):
             # return empty dict if ollama is not available
         return ret
 
-    async def initialize_models(self):
-        """Initialize models if all_models was requested"""
-        if self._all_models:
+    async def load_models(self, default_models):
+        """Load models if all_models was requested"""
+        if self.all_models:
             self.models = await self.get_models()
+        if default_models:
+            self.models = {**default_models, **self.models}
 
     @classmethod
     def test(cls, base_url=None, models={}, **kwargs):
@@ -363,12 +377,14 @@ def init_llms(config):
         if isinstance(value, str) and value.startswith("$"):
             g_config[key] = os.environ.get(value[1:], "")
 
-    if g_verbose:
-        printdump(g_config)
+    # if g_verbose:
+    #     printdump(g_config)
     providers = g_config['providers']
 
     for name, definition in providers.items():
         provider_type = definition['type']
+        if 'enabled' in definition and not definition['enabled']:
+            continue
 
         # Replace API keys with environment variables if they start with $
         if 'api_key' in definition:
@@ -377,16 +393,16 @@ def init_llms(config):
                 definition['api_key'] = os.environ.get(value[1:], "")
 
         # Create a copy of definition without the 'type' key for constructor kwargs
-        constructor_kwargs = {k: v for k, v in definition.items() if k != 'type'}
+        constructor_kwargs = {k: v for k, v in definition.items() if k != 'type' and k != 'enabled'}
         constructor_kwargs['headers'] = g_config['defaults']['headers'].copy()
 
         if provider_type == 'OpenAiProvider' and OpenAiProvider.test(**constructor_kwargs):
             g_handlers[name] = OpenAiProvider(**constructor_kwargs)
         elif provider_type == 'OllamaProvider' and OllamaProvider.test(**constructor_kwargs):
             provider = OllamaProvider(**constructor_kwargs)
-            # Initialize models if all_models was requested
-            if hasattr(provider, '_all_models') and provider._all_models:
-                asyncio.run(provider.initialize_models())
+            if provider.all_models:
+                default_models = 'models' in definition and definition['models'] or None
+                asyncio.run(provider.load_models(default_models=default_models))
             g_handlers[name] = provider
         elif provider_type == 'GoogleProvider' and GoogleProvider.test(**constructor_kwargs):
             g_handlers[name] = GoogleProvider(**constructor_kwargs)
@@ -395,6 +411,11 @@ def init_llms(config):
 
     return g_handlers
 
+def save_config(config):
+    global g_config
+    g_config = config
+    with open(full_config_path, "w") as f:
+        json.dump(g_config, f, indent=4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='llms')
@@ -411,10 +432,14 @@ if __name__ == "__main__":
 
     parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
+    parser.add_argument('--enable',       default=None, help='Enable a provider', metavar='PROVIDER')
+    parser.add_argument('--disable',      default=None, help='Disable a provider', metavar='PROVIDER')
+    parser.add_argument('--init',         action='store_true', help='Create a default llms.json', metavar='PROVIDER')
+
     cli_args, extra_args = parser.parse_known_args()
     if cli_args.verbose:
         g_verbose = True
-        printdump(cli_args)
+        # printdump(cli_args)
     if cli_args.model:
         g_default_model = cli_args.model
     if cli_args.logprefix:
@@ -446,7 +471,7 @@ if __name__ == "__main__":
         init_llms(json.loads(config_json))
 
     # print names
-    _log(f"enabled providers: {g_handlers.keys()}")
+    _log(f"enabled providers: {', '.join(g_handlers.keys())}")
 
     if len(extra_args) > 0:
         arg = extra_args[0]
@@ -455,10 +480,20 @@ if __name__ == "__main__":
 
     if cli_args.list:
         # Show list of enabled providers and their models
+        enabled = []
         for name, provider in g_handlers.items():
             print(f"{name}:")
+            enabled.append(name)
             for model in provider.models:
                 print(f"  {model}")
+
+        disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
+
+        enabled.sort()
+        disabled.sort()
+        print(f"\nEnabled: {', '.join(enabled)}")
+        if len(disabled) > 0:
+            print(f"Disabled: {', '.join(disabled)}")
         exit(0)
 
     if cli_args.serve is not None:
@@ -475,9 +510,35 @@ if __name__ == "__main__":
         app = web.Application()
         app.router.add_post('/v1/chat/completions', chat_handler)
 
-        _log(f"Starting server on port {port}...")
+        print(f"Starting server on port {port}...")
         web.run_app(app, host='0.0.0.0', port=port)
         exit(0)
+
+    if cli_args.enable is not None:
+        provider = cli_args.enable
+        if not provider in g_config['providers']:
+            print(f"Provider {provider} not found")
+            print(f"Available providers: {', '.join(g_config['providers'].keys())}")
+            exit(1)
+        if provider in g_config['providers']:
+            g_config['providers'][provider]['enabled'] = True
+            save_config(g_config)
+            print(f"Enabled provider {provider}:")
+            printdump(g_config['providers'][provider])
+            exit(0)
+
+    if cli_args.disable is not None:
+        provider = cli_args.disable
+        if not provider in g_config['providers']:
+            print(f"Provider {provider} not found")
+            print(f"Available providers: {', '.join(g_config['providers'].keys())}")
+            exit(1)
+        if provider in g_config['providers']:
+            g_config['providers'][provider]['enabled'] = False
+            save_config(g_config)
+            print(f"Disabled provider {provider}")
+            printdump(g_config['providers'][provider])
+            exit(0)
 
     if cli_args.chat is not None or len(extra_args) > 0:
         try:
@@ -487,7 +548,7 @@ if __name__ == "__main__":
                 if not os.path.exists(chat_path):
                     _log(f"Chat file not found: {chat_path}")
                     exit(1)
-                _log(f"chat_path: {chat_path}")
+                _log(f"Using chat: {chat_path}")
 
                 with open (chat_path, "r") as f:
                     chat_json = f.read()

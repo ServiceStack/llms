@@ -16,10 +16,12 @@
     },
     "providers": {
         "openrouter_free": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://openrouter.ai/api",
             "api_key": "$OPENROUTER_FREE_API_KEY",
             "models": {
+                "qwen2.5vl": "qwen/qwen2.5-vl-32b-instruct:free",
                 "llama4:109b": "meta-llama/llama-4-scout:free",
                 "llama4:400b": "meta-llama/llama-4-maverick:free",
                 "deepseek-v3.1:671b": "deepseek/deepseek-chat-v3.1:free",
@@ -53,6 +55,7 @@
             }
         },
         "groq": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.groq.com/openai",
             "api_key": "$GROQ_API_KEY",
@@ -75,6 +78,7 @@
             }
         },
         "google_free": {
+            "enabled": false,
             "type": "GoogleProvider",
             "api_key": "$GOOGLE_FREE_API_KEY",
             "models": {
@@ -90,6 +94,7 @@
             ]
         },
         "codestral": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://codestral.mistral.ai",
             "api_key": "$CODESTRAL_API_KEY",
@@ -98,14 +103,15 @@
             }
         },
         "ollama": {
+            "enabled": false,
             "type": "OllamaProvider",
             "base_url": "http://localhost:11434",
             "models": {
-                "qwen2.5vl:7b": "qwen2.5vl:7b"
             },
-            "all_models": false
+            "all_models": true
         },
         "openrouter": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://openrouter.ai/api",
             "api_key": "$OPENROUTER_API_KEY",
@@ -133,7 +139,7 @@
                 "gpt-4.1-nano": "openai/gpt-4.1-nano",
                 "o4-mini": "openai/o4-mini",
                 "o4-mini-high": "openai/o4-mini-high",
-                "grok-4":"x-ai/grok-4",
+                "grok-4": "x-ai/grok-4",
                 "grok-4-fast": "x-ai/grok-4-fast",
                 "grok-code-fast-1": "x-ai/grok-code-fast-1",
                 "glm-4.5v": "z-ai/glm-4.5v",
@@ -142,7 +148,7 @@
                 "kimi-k2": "moonshotai/kimi-k2",
                 "deepseek-v3.1:671b": "deepseek/deepseek-chat",
                 "deepseek-chat-v3.1:671b": "deepseek/deepseek-chat-v3.1:free",
-                "deepseek-r1:671b":"deepseek/deepseek-r1",
+                "deepseek-r1:671b": "deepseek/deepseek-r1",
                 "qwen3:8b": "qwen/qwen3-8b:free",
                 "qwen3:30b": "qwen/qwen3-30b-a3b",
                 "qwen3:32b": "qwen/qwen3-32b",
@@ -154,6 +160,7 @@
             }
         },
         "google": {
+            "enabled": false,
             "type": "GoogleProvider",
             "api_key": "$GOOGLE_API_KEY",
             "models": {
@@ -169,6 +176,7 @@
             ]
         },
         "anthropic": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.anthropic.com",
             "api_key": "$ANTHROPIC_API_KEY",
@@ -182,13 +190,14 @@
             }
         },
         "openai": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.anthropic.com",
             "api_key": "$OPENAI_API_KEY",
-            "models": {
-            }
+            "models": {}
         },
         "mistral": {
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.mistral.ai",
             "api_key": "$MISTRAL_API_KEY",
@@ -211,38 +220,9 @@
                 "mistral:7b": "open-mistral-7b",
                 "mixtral:8x7b": "open-mixtral-8x7b",
                 "mixtral:8x22b": "open-mixtral-8x22b",
-                "ministral:8b":"ministral-3b-latest",
-                "ministral:3b":"ministral-3b-latest"
+                "ministral:8b": "ministral-3b-latest",
+                "ministral:3b": "ministral-3b-latest"
             }
-        }
-    },
-    "agents": {
-        "ubixar": {
-            "type": "ComfyGateway",
-            "base_url": "https://amd.raptor-elver.ts.net",
-            "api_key": "$UBIXAR_API_KEY",
-            "models": [
-                "llama4:109b",
-                "llama4:400b",
-                "deepseek-v3.1:671b",
-                "codestral:22b",
-                "llama3.3:70b",
-                "kimi-k2",
-                "glm-4.5-air",
-                "gpt-oss-120b",
-                "gpt-oss-20b",
-                "mai-ds-r1",
-                "qwen3:30b",
-                "qwen3:235b",
-                "qwen3-coder",
-                "qwen2.5vl:7b",
-                "qwen2.5vl:32b",
-                "qwen2.5vl:72b",
-                "gemma3:27b",
-                "gemini-2.5-pro",
-                "gemini-2.5-flash",
-                "gemini-2.5-flash-lite"
-            ]
         }
     }
 }
