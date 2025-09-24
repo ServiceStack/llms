@@ -1,0 +1,464 @@
+# ServiceStack LLMs
+
+A lightweight CLI tool and OpenAI-compatible server for querying across multiple Large Language Model (LLM) providers through a single simple interface.
+
+Mix and match local models with models from different API providers to best fit for your needs. Requests are automatically routed to available providers that supports the requested model in definition order. Define
+free/cheapest/local providers first to save on costs.
+
+## Features
+
+- **Lightweight**: Single Python file with single `aiohttp` dependency
+- **Multi-Provider Support**: OpenAI, Anthropic, Google (Gemini), Groq, Mistral, Ollama, OpenRouter, and more
+- **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
+- **Configuration Management**: Easy provider enable/disable and configuration management
+- **CLI Interface**: Simple command-line interface for quick interactions
+- **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
+- **Image Support**: Process images through vision-capable models
+- **Auto-Discovery**: Automatically discover available Ollama models
+- **Unified Models**: Define custom model names that map to provider-specific names
+
+## Installation
+
+1. Download `llms.py`
+
+```bash
+curl -O https://raw.githubusercontent.com/ServiceStack/llms/main/llms.py
+chmod +x llms.py
+cp llms.py ~/.local/bin/llms
+```
+
+2. Install single dependency:
+
+```bash
+pip install aiohttp
+```
+
+## Quick Start
+
+### 1. Initialize Configuration
+
+Create a default configuration file:
+
+```bash
+llms --init
+```
+
+This saves the latest [llms.json](llms.json) configuration to `~/.llms/llms.json`.
+
+Modify `~/.llms/llms.json` to enable providers, add required API keys, additional models or any custom
+OpenAI-compatible providers.
+
+### 2. Set API Keys
+
+Set environment variables for the providers you want to use:
+
+```bash
+export OPENROUTER_API_KEY="..."
+export GROQ_API_KEY="..."
+export GOOGLE_API_KEY="..."
+export ANTHROPIC_API_KEY="..."
+# ... etc
+```
+
+### 3. Enable Providers
+
+Enable the providers you want to use:
+
+```bash
+llms --enable openrouter_free google_free groq
+llms --enable openrouter anthropic google
+```
+
+### 4. Start Chatting
+
+```bash
+llms "What is the capital of France?"
+```
+
+## Configuration
+
+The configuration file (`llms.json`) defines available providers, models, and default settings. Key sections:
+
+### Defaults
+- `headers`: Common HTTP headers for all requests
+- `text`: Default chat completion request structure for text prompts
+
+### Providers
+
+Each provider configuration includes:
+- `enabled`: Whether the provider is active
+- `type`: Provider class (OpenAiProvider, GoogleProvider, etc.)
+- `api_key`: API key (supports environment variables with `$VAR_NAME`)
+- `base_url`: API endpoint URL
+- `models`: Model name mappings (local name → provider name)
+
+## Command Line Usage
+
+### Basic Chat
+
+```bash
+# Simple question
+llms "Explain quantum computing"
+
+# With specific model
+llms -m gpt-4o "Write a Python function to sort a list"
+
+# With system prompt
+llms -s "You are a helpful coding assistant" "How do I reverse a string in Python?"
+
+# Display full JSON Response
+llms "Explain quantum computing" --raw
+```
+
+### Chat from File
+
+By default llms uses the `defaults/text` chat completion request defined in `llms.json`. 
+
+You can instead use a custom chat completion request with `--chat`, e.g:
+
+```bash
+# Load chat completion request from JSON file
+llms --chat request.json
+
+# Override user message
+llms --chat request.json "New user message"
+
+# Override model
+llms -m kimi-k2 --chat request.json
+```
+
+Example `request.json`:
+
+```json
+{
+  "model": "gpt-4o",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user",   "content": "Hello!"}
+  ],
+  "temperature": 0.7,
+  "max_tokens": 150
+}
+```
+
+### Configuration Management
+
+```bash
+# List enabled providers and models
+llms --list
+llms ls
+
+# List specific providers
+llms ls ollama
+llms ls google anthropic
+
+# Enable providers
+llms --enable openai
+llms --enable anthropic google_free groq
+
+# Disable providers  
+llms --disable ollama
+llms --disable openai anthropic
+```
+
+### Advanced Options
+
+```bash
+# Use custom config file
+llms --config /path/to/config.json "Hello"
+
+# Enable verbose logging
+llms --verbose "Tell me a joke"
+
+# Get raw JSON response
+llms --raw "What is 2+2?"
+
+# Custom log prefix
+llms --logprefix "[DEBUG] " "Hello world"
+```
+
+### Beautiful rendered Markdown
+
+Pipe Markdown output to [glow](https://github.com/charmbracelet/glow) to beautifully render it in the terminal:
+
+```bash
+llms "Explain quantum computing" | glow
+```
+
+## Server Mode
+
+Run as an OpenAI-compatible HTTP server:
+
+```bash
+# Start server on port 8000
+llms --serve 8000
+```
+
+The server exposes a single endpoint:
+- `POST /v1/chat/completions` - OpenAI-compatible chat completions
+
+Example client usage:
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
+## Supported Providers
+
+### OpenAI
+- **Type**: `OpenAiProvider`
+- **Models**: GPT-4o, GPT-4o-mini, GPT-4.1, O4-mini, etc.
+- **Features**: Text, images, function calling
+
+```bash
+export OPENAI_API_KEY="your-key"
+llms --enable openai
+```
+
+### Anthropic (Claude)
+- **Type**: `OpenAiProvider` 
+- **Models**: Claude Opus 4.1, Sonnet 4.0, Haiku 3.5, etc.
+- **Features**: Text, images, large context windows
+
+```bash
+export ANTHROPIC_API_KEY="your-key"
+llms --enable anthropic
+```
+
+### Google Gemini
+- **Type**: `GoogleProvider`
+- **Models**: Gemini 2.5 Pro, Flash, Flash-Lite
+- **Features**: Text, images, safety settings
+
+```bash
+export GOOGLE_API_KEY="your-key"
+llms --enable google_free
+```
+
+### Groq
+- **Type**: `OpenAiProvider`
+- **Models**: Llama 3.3, Gemma 2, Kimi K2, etc.
+- **Features**: Fast inference, competitive pricing
+
+```bash
+export GROQ_API_KEY="your-key" 
+llms --enable groq
+```
+
+### Ollama (Local)
+- **Type**: `OllamaProvider`
+- **Models**: Auto-discovered from local Ollama installation
+- **Features**: Local inference, privacy, no API costs
+
+```bash
+# Ollama must be running locally
+llms --enable ollama
+```
+
+### OpenRouter
+- **Type**: `OpenAiProvider`
+- **Models**: 100+ models from various providers
+- **Features**: Access to latest models, free tier available
+
+```bash
+export OPENROUTER_API_KEY="your-key"
+llms --enable openrouter
+```
+
+### Mistral
+- **Type**: `OpenAiProvider`
+- **Models**: Mistral Large, Codestral, Pixtral, etc.
+- **Features**: Code generation, multilingual
+
+```bash
+export MISTRAL_API_KEY="your-key"
+llms --enable mistral
+```
+
+## Image Support
+
+Send images to vision-capable models:
+
+```json
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "user", 
+      "content": [
+        {"type": "text", "text": "What's in this image?"},
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://example.com/image.jpg"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Images are automatically downloaded and converted to base64 data URIs.
+
+## Model Routing
+
+The tool automatically routes requests to the first available provider that supports the requested model. If a provider fails, it tries the next available provider with that model.
+
+Example: If both OpenAI and OpenRouter support `gpt-4o`, the request will first try OpenAI, then fall back to OpenRouter if OpenAI fails.
+
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `LLMS_CONFIG_PATH`        | Custom config file path | `/path/to/llms.json` |
+| `OPENAI_API_KEY`          | OpenAI API key | `sk-...` |
+| `ANTHROPIC_API_KEY`       | Anthropic API key | `sk-ant-...` |
+| `GOOGLE_API_KEY`          | Google API key | `AIza...` |
+| `GROQ_API_KEY`            | Groq API key | `gsk_...` |
+| `MISTRAL_API_KEY`         | Mistral API key | `...` |
+| `OPENROUTER_API_KEY`      | OpenRouter API key | `sk-or-...` |
+| `OPENROUTER_FREE_API_KEY` | OpenRouter free tier key | `sk-or-...` |
+| `CODESTRAL_API_KEY`       | Codestral API key | `...` |
+
+## Configuration Examples
+
+### Minimal Configuration
+
+```json
+{
+  "defaults": {
+    "headers": {"Content-Type": "application/json"},
+    "text": {
+      "model": "gpt-4o-mini",
+      "messages": [{"role": "user", "content": ""}]
+    }
+  },
+  "providers": {
+    "openai": {
+      "enabled": true,
+      "type": "OpenAiProvider",
+      "base_url": "https://api.openai.com",
+      "api_key": "$OPENAI_API_KEY",
+      "models": {
+        "gpt-4o-mini": "gpt-4o-mini"
+      }
+    }
+  }
+}
+```
+
+### Multi-Provider Setup
+
+```json
+{
+  "providers": {
+    "openai": {
+      "enabled": true,
+      "type": "OpenAiProvider",
+      "base_url": "https://api.openai.com",
+      "api_key": "$OPENAI_API_KEY",
+      "models": {"gpt-4o": "gpt-4o"}
+    },
+    "anthropic": {
+      "enabled": true, 
+      "type": "OpenAiProvider",
+      "base_url": "https://api.anthropic.com",
+      "api_key": "$ANTHROPIC_API_KEY",
+      "models": {"claude-3-5-sonnet": "claude-3-5-sonnet-latest"}
+    },
+    "ollama": {
+      "enabled": true,
+      "type": "OllamaProvider", 
+      "base_url": "http://localhost:11434",
+      "models": {},
+      "all_models": true
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Config file not found**
+```bash
+# Initialize default config
+llms --init
+
+# Or specify custom path
+llms --config ./my-config.json
+```
+
+**No providers enabled**
+
+```bash
+# Check status
+llms --list
+
+# Enable providers
+llms --enable openai anthropic
+```
+
+**API key issues**
+```bash
+# Check environment variables
+echo $ANTHROPIC_API_KEY
+
+# Enable verbose logging
+llms --verbose "test"
+```
+
+**Model not found**
+
+```bash
+# List available models
+llms --list
+
+# Check provider configuration
+llms ls openrouter
+```
+
+### Debug Mode
+
+Enable verbose logging to see detailed request/response information:
+
+```bash
+llms --verbose --logprefix "[DEBUG] " "Hello"
+```
+
+This shows:
+- Enabled providers
+- Model routing decisions
+- HTTP request details
+- Error messages with stack traces
+
+## Development
+
+### Project Structure
+
+- `llms.py` - Main script with CLI and server functionality
+- `llms.json` - Default configuration file
+- `requirements.txt` - Python dependencies
+
+### Provider Classes
+
+- `OpenAiProvider` - Generic OpenAI-compatible provider
+- `OllamaProvider` - Ollama-specific provider with model auto-discovery
+- `GoogleProvider` - Google Gemini with native API format
+- `GoogleOpenAiProvider` - Google Gemini via OpenAI-compatible endpoint
+
+### Adding New Providers
+
+1. Create a provider class inheriting from `OpenAiProvider`
+2. Implement provider-specific authentication and formatting
+3. Add provider configuration to `llms.json`
+4. Update initialization logic in `init_llms()`
