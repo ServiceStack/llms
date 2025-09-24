@@ -12,6 +12,7 @@ import traceback
 import aiohttp
 from aiohttp import web
 
+g_config_path = None
 g_config = None
 g_handlers = {}
 g_verbose = False
@@ -129,6 +130,7 @@ class OllamaProvider(OpenAiProvider):
                         if name.endswith(":latest"):
                             name = name[:-7]
                         ret[name] = name
+                    _log(f"Loaded Ollama models: {ret}")
         except Exception as e:
             _log(f"Error getting Ollama models: {e}")
             # return empty dict if ollama is not available
@@ -381,7 +383,8 @@ def init_llms(config):
     #     printdump(g_config)
     providers = g_config['providers']
 
-    for name, definition in providers.items():
+    for name, orig in providers.items():
+        definition = orig.copy()
         provider_type = definition['type']
         if 'enabled' in definition and not definition['enabled']:
             continue
@@ -398,12 +401,14 @@ def init_llms(config):
 
         if provider_type == 'OpenAiProvider' and OpenAiProvider.test(**constructor_kwargs):
             g_handlers[name] = OpenAiProvider(**constructor_kwargs)
-        elif provider_type == 'OllamaProvider' and OllamaProvider.test(**constructor_kwargs):
+        elif provider_type == 'OllamaProvider':
             provider = OllamaProvider(**constructor_kwargs)
             if provider.all_models:
                 default_models = 'models' in definition and definition['models'] or None
                 asyncio.run(provider.load_models(default_models=default_models))
-            g_handlers[name] = provider
+                constructor_kwargs['models'] = provider.models
+            if OllamaProvider.test(**constructor_kwargs):
+                g_handlers[name] = provider
         elif provider_type == 'GoogleProvider' and GoogleProvider.test(**constructor_kwargs):
             g_handlers[name] = GoogleProvider(**constructor_kwargs)
         elif provider_type == 'GoogleOpenAiProvider' and GoogleOpenAiProvider.test(**constructor_kwargs):
@@ -414,8 +419,38 @@ def init_llms(config):
 def save_config(config):
     global g_config
     g_config = config
-    with open(full_config_path, "w") as f:
+    with open(g_config_path, "w") as f:
         json.dump(g_config, f, indent=4)
+
+async def save_default_config(config_path):
+    """
+    Download default config from https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.json using asyncio
+    """
+    global g_config
+    url = "https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.json"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            config_json = await resp.text()
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w") as f:
+                f.write(config_json)
+            g_config = json.loads(config_json)
+
+def print_status():
+    enabled = list(g_handlers.keys())
+    disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
+
+    enabled.sort()
+    disabled.sort()
+    if len(enabled) > 0:
+        print(f"\nEnabled: {', '.join(enabled)}")
+    else:
+        print("\nEnabled: None")
+    if len(disabled) > 0:
+        print(f"Disabled: {', '.join(disabled)}")
+    else:
+        print("Disabled: None")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='llms')
@@ -428,13 +463,13 @@ if __name__ == "__main__":
     parser.add_argument('--chat',         default=None, help='OpenAI Chat Completion Request to send', metavar='REQUEST')
     parser.add_argument('-s', '--system', default=None, help='System prompt to use for chat completion', metavar='PROMPT')
 
-    parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls)')
+    parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
 
     parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
     parser.add_argument('--enable',       default=None, help='Enable a provider', metavar='PROVIDER')
     parser.add_argument('--disable',      default=None, help='Disable a provider', metavar='PROVIDER')
-    parser.add_argument('--init',         action='store_true', help='Create a default llms.json', metavar='PROVIDER')
+    parser.add_argument('--init',         action='store_true', help='Create a default llms.json')
 
     cli_args, extra_args = parser.parse_known_args()
     if cli_args.verbose:
@@ -446,54 +481,66 @@ if __name__ == "__main__":
         g_logger_prefix = cli_args.logprefix
 
     if cli_args.config is not None:
-        full_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
+        g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
 
     config_path = cli_args.config
     if config_path:
-        full_config_path = os.path.join(os.path.dirname(__file__), config_path)
+        g_config_path = os.path.join(os.path.dirname(__file__), config_path)
     else:
+        home_config_path = f"{os.environ.get('HOME')}/.llms/llms.json"
         check_paths = [
             "./llms.json",
-            "../../user/comfy_agent/llms.json",
+            home_config_path,
         ]
+        if os.environ.get("LLMS_CONFIG_PATH"):
+            check_paths.insert(0, os.environ.get("LLMS_CONFIG_PATH"))
+
         for check_path in check_paths:
-            full_config_path = os.path.join(os.path.dirname(__file__), check_path)
-            if os.path.exists(full_config_path):
+            g_config_path = os.path.join(os.path.dirname(__file__), check_path)
+            if os.path.exists(g_config_path):
                 break
 
-    if not os.path.exists(full_config_path):
-        _log("Config file not found. Usage --config <path>")
+    if cli_args.init:
+        if os.path.exists(g_config_path):
+            print(f"llms.json already exists at {g_config_path}")
+            exit(1)
+        save_config_path = g_config_path or home_config_path
+        asyncio.run(save_default_config(save_config_path))
+        print(f"Created default config at {save_config_path}")
+        exit(0)
+
+    if not os.path.exists(g_config_path):
+        print("Config file not found. Usage --config <path>")
         exit(1)
 
     # read contents
-    with open(full_config_path, "r") as f:
+    with open(g_config_path, "r") as f:
         config_json = f.read()
         init_llms(json.loads(config_json))
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")
 
+    filter_list = []
     if len(extra_args) > 0:
         arg = extra_args[0]
         if arg == 'ls':
             cli_args.list = True
+            if len(extra_args) > 1:
+                filter_list = extra_args[1:]
 
     if cli_args.list:
         # Show list of enabled providers and their models
         enabled = []
         for name, provider in g_handlers.items():
+            if len(filter_list) > 0 and name not in filter_list:
+                continue
             print(f"{name}:")
             enabled.append(name)
             for model in provider.models:
                 print(f"  {model}")
 
-        disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
-
-        enabled.sort()
-        disabled.sort()
-        print(f"\nEnabled: {', '.join(enabled)}")
-        if len(disabled) > 0:
-            print(f"Disabled: {', '.join(disabled)}")
+        print_status()
         exit(0)
 
     if cli_args.serve is not None:
@@ -515,30 +562,54 @@ if __name__ == "__main__":
         exit(0)
 
     if cli_args.enable is not None:
-        provider = cli_args.enable
-        if not provider in g_config['providers']:
-            print(f"Provider {provider} not found")
-            print(f"Available providers: {', '.join(g_config['providers'].keys())}")
-            exit(1)
-        if provider in g_config['providers']:
-            g_config['providers'][provider]['enabled'] = True
-            save_config(g_config)
-            print(f"Enabled provider {provider}:")
-            printdump(g_config['providers'][provider])
-            exit(0)
+        if cli_args.enable.endswith(','):
+            cli_args.enable = cli_args.enable[:-1].strip()
+        enable_providers = [cli_args.enable]
+        all_providers = g_config['providers'].keys()
+        if len(extra_args) > 0:
+            for arg in extra_args:
+                if arg.endswith(','):
+                    arg = arg[:-1].strip()
+                if arg in all_providers:
+                    enable_providers.append(arg)
+        for provider in enable_providers:
+            if not provider in g_config['providers']:
+                print(f"Provider {provider} not found")
+                print(f"Available providers: {', '.join(g_config['providers'].keys())}")
+                exit(1)
+            if provider in g_config['providers']:
+                g_config['providers'][provider]['enabled'] = True
+                save_config(g_config)
+                init_llms(g_config)
+                print(f"\nEnabled provider {provider}:")
+                printdump(g_config['providers'][provider])
+        print_status()
+        exit(0)
 
     if cli_args.disable is not None:
-        provider = cli_args.disable
-        if not provider in g_config['providers']:
-            print(f"Provider {provider} not found")
-            print(f"Available providers: {', '.join(g_config['providers'].keys())}")
-            exit(1)
-        if provider in g_config['providers']:
-            g_config['providers'][provider]['enabled'] = False
-            save_config(g_config)
-            print(f"Disabled provider {provider}")
-            printdump(g_config['providers'][provider])
-            exit(0)
+        if cli_args.disable.endswith(','):
+            cli_args.disable = cli_args.disable[:-1].strip()
+        disable_providers = [cli_args.disable]
+        all_providers = g_config['providers'].keys()
+        if len(extra_args) > 0:
+            for arg in extra_args:
+                if arg.endswith(','):
+                    arg = arg[:-1].strip()
+                if arg in all_providers:
+                    disable_providers.append(arg)
+        for provider in disable_providers:
+            if not provider in g_config['providers']:
+                print(f"Provider {provider} not found")
+                print(f"Available providers: {', '.join(g_config['providers'].keys())}")
+                exit(1)
+            if provider in g_config['providers']:
+                g_config['providers'][provider]['enabled'] = False
+                save_config(g_config)
+                init_llms(g_config)
+                print(f"\nDisabled provider {provider}")
+                printdump(g_config['providers'][provider])
+        print_status()
+        exit(0)
 
     if cli_args.chat is not None or len(extra_args) > 0:
         try:
