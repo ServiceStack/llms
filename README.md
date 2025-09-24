@@ -159,9 +159,16 @@ llms ls google anthropic
 llms --enable openai
 llms --enable anthropic google_free groq
 
-# Disable providers  
+# Disable providers
 llms --disable ollama
 llms --disable openai anthropic
+
+# Set default model
+llms --default grok-4
+llms --default claude-sonnet-4-0
+
+# Update to latest version
+llms --update
 ```
 
 ### Advanced Options
@@ -178,7 +185,49 @@ llms --raw "What is 2+2?"
 
 # Custom log prefix
 llms --logprefix "[DEBUG] " "Hello world"
+
+# Set default model (updates config file)
+llms --default gpt-4o-mini
+
+# Update llms.py to latest version
+llms --update
 ```
+
+### Default Model Configuration
+
+The `--default MODEL` option allows you to set the default model used for all chat completions. This updates the `defaults.text.model` field in your configuration file:
+
+```bash
+# Set default model to GPT-4o
+llms --default gpt-4o
+
+# Set default model to Claude Sonnet
+llms --default claude-sonnet-4-0
+
+# The model must be available in your enabled providers
+llms --default gemini-2.5-pro
+```
+
+When you set a default model:
+- The configuration file (`~/.llms/llms.json`) is automatically updated
+- The specified model becomes the default for all future chat requests
+- The model must exist in your currently enabled providers
+- You can still override the default using `-m MODEL` for individual requests
+
+### Updating llms.py
+
+The `--update` option downloads and installs the latest version of `llms.py` from the GitHub repository:
+
+```bash
+# Update to latest version
+llms --update
+```
+
+This command:
+- Downloads the latest `llms.py` from `https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.py`
+- Overwrites your current `llms.py` file with the latest version
+- Preserves your existing configuration file (`llms.json`)
+- Requires an internet connection to download the update
 
 ### Beautiful rendered Markdown
 
@@ -402,6 +451,35 @@ Example: If both OpenAI and OpenRouter support `gpt-4o`, the request will first 
 }
 ```
 
+## Usage
+
+Run `llms` without arguments to see the help:
+
+    usage: llms.py [-h] [--config FILE] [-m MODEL] [--logprefix PREFIX] [--verbose] [--raw] [--chat REQUEST]
+                [-s PROMPT] [--list] [--serve PORT] [--init] [--enable PROVIDER] [--disable PROVIDER]
+                [--default MODEL] [--update]
+
+    llms
+
+    options:
+    -h, --help            show this help message and exit
+    --config FILE         Path to config file
+    -m MODEL, --model MODEL
+                            Model to use
+    --logprefix PREFIX    Prefix used in log messages
+    --verbose             Verbose output
+    --raw                 Return raw AI JSON response
+    --chat REQUEST        OpenAI Chat Completion Request to send
+    -s PROMPT, --system PROMPT
+                            System prompt to use for chat completion
+    --list                Show list of enabled providers and their models (alias ls provider?)
+    --serve PORT          Port to start an OpenAI Chat compatible server on
+    --init                Create a default llms.json
+    --enable PROVIDER     Enable a provider
+    --disable PROVIDER    Disable a provider
+    --default MODEL       Configure the default model to use
+    --update              Update to latest version
+
 ## Troubleshooting
 
 ### Common Issues
@@ -479,3 +557,7 @@ This shows:
 2. Implement provider-specific authentication and formatting
 3. Add provider configuration to `llms.json`
 4. Update initialization logic in `init_llms()`
+
+## Contributing
+
+Contributions are welcome! Please submit a PR to add support for any missing OpenAI-compatible providers.
