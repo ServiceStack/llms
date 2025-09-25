@@ -595,23 +595,25 @@ def main():
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
     parser.add_argument('-m', '--model',  default=None, help='Model to use')
-    parser.add_argument('--logprefix',    default="",   help='Prefix used in log messages', metavar='PREFIX')
-    parser.add_argument('--verbose',      action='store_true', help='Verbose output')
-    parser.add_argument('--raw',          action='store_true', help='Return raw AI JSON response')
 
     parser.add_argument('--chat',         default=None, help='OpenAI Chat Completion Request to send', metavar='REQUEST')
     parser.add_argument('-s', '--system', default=None, help='System prompt to use for chat completion', metavar='PROMPT')
     parser.add_argument('--image',        default=None, help='Image input to use in chat completion')
     parser.add_argument('--audio',        default=None, help='Audio input to use in chat completion')
+    parser.add_argument('--raw',          action='store_true', help='Return raw AI JSON response')
 
     parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
 
     parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
-    parser.add_argument('--init',         action='store_true', help='Create a default llms.json')
     parser.add_argument('--enable',       default=None, help='Enable a provider', metavar='PROVIDER')
     parser.add_argument('--disable',      default=None, help='Disable a provider', metavar='PROVIDER')
     parser.add_argument('--default',      default=None, help='Configure the default model to use', metavar='MODEL')
+
+    parser.add_argument('--init',         action='store_true', help='Create a default llms.json')
+
+    parser.add_argument('--logprefix',    default="",   help='Prefix used in log messages', metavar='PREFIX')
+    parser.add_argument('--verbose',      action='store_true', help='Verbose output')
     parser.add_argument('--update',       action='store_true', help='Update to latest version')
 
     cli_args, extra_args = parser.parse_known_args()
