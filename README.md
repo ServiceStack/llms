@@ -586,21 +586,21 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 ```json
 {
-"providers": {
+  "providers": {
     "openrouter": {
-        "enabled": false,
-        "type": "OpenAiProvider",
-        "base_url": "https://openrouter.ai/api",
-        "api_key": "$OPENROUTER_API_KEY",
-        "models": {
-            "grok-4": "x-ai/grok-4",
-            "glm-4.5-air": "z-ai/glm-4.5-air",
-            "kimi-k2": "moonshotai/kimi-k2",
-            "deepseek-v3.1:671b": "deepseek/deepseek-chat",
-            "llama4:400b": "meta-llama/llama-4-maverick"
-        }
+      "enabled": false,
+      "type": "OpenAiProvider",
+      "base_url": "https://openrouter.ai/api",
+      "api_key": "$OPENROUTER_API_KEY",
+      "models": {
+        "grok-4": "x-ai/grok-4",
+        "glm-4.5-air": "z-ai/glm-4.5-air",
+        "kimi-k2": "moonshotai/kimi-k2",
+        "deepseek-v3.1:671b": "deepseek/deepseek-chat",
+        "llama4:400b": "meta-llama/llama-4-maverick"
+      }
     },
-  "anthropic": {
+    "anthropic": {
       "enabled": false,
       "type": "OpenAiProvider",
       "base_url": "https://api.anthropic.com",
@@ -610,11 +610,11 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
       }
     },
     "ollama": {
-        "enabled": false,
-        "type": "OllamaProvider",
-        "base_url": "http://localhost:11434",
-        "models": {},
-        "all_models": true
+      "enabled": false,
+      "type": "OllamaProvider",
+      "base_url": "http://localhost:11434",
+      "models": {},
+      "all_models": true
     }
   }
 }
