@@ -57,7 +57,7 @@
     },
     "providers": {
         "openrouter_free": {
-            "enabled": false,
+            "enabled": true,
             "type": "OpenAiProvider",
             "base_url": "https://openrouter.ai/api",
             "api_key": "$OPENROUTER_FREE_API_KEY",
@@ -119,7 +119,7 @@
             }
         },
         "google_free": {
-            "enabled": false,
+            "enabled": true,
             "type": "GoogleProvider",
             "api_key": "$GOOGLE_FREE_API_KEY",
             "models": {
@@ -135,7 +135,7 @@
             ]
         },
         "codestral": {
-            "enabled": false,
+            "enabled": true,
             "type": "OpenAiProvider",
             "base_url": "https://codestral.mistral.ai",
             "api_key": "$CODESTRAL_API_KEY",
@@ -200,7 +200,7 @@
             }
         },
         "google": {
-            "enabled": true,
+            "enabled": false,
             "type": "GoogleProvider",
             "api_key": "$GOOGLE_API_KEY",
             "models": {
@@ -216,7 +216,7 @@
             ]
         },
         "anthropic": {
-            "enabled": true,
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.anthropic.com",
             "api_key": "$ANTHROPIC_API_KEY",
@@ -230,7 +230,7 @@
             }
         },
         "openai": {
-            "enabled": true,
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.openai.com",
             "api_key": "$OPENAI_API_KEY",
@@ -275,12 +275,11 @@
                 "davinci-002": "davinci-002",
                 "gpt-4": "gpt-4",
                 "tts-1": "tts-1",
-                "gpt-3.5-turbo": "gpt-3.5-turbo",
-                "whisper-1": "whisper-1"
+                "gpt-3.5-turbo": "gpt-3.5-turbo"
             }
         },
         "grok": {
-            "enabled": true,
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://api.x.ai",
             "api_key": "$GROK_API_KEY",
@@ -295,7 +294,7 @@
             }
         },
         "qwen": {
-            "enabled": true,
+            "enabled": false,
             "type": "OpenAiProvider",
             "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode",
             "api_key": "$DASHSCOPE_API_KEY",
