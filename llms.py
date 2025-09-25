@@ -15,7 +15,7 @@ import traceback
 import aiohttp
 from aiohttp import web
 
-VERSION = 1
+VERSION = "1.0.3"
 g_config_path = None
 g_config = None
 g_handlers = {}
