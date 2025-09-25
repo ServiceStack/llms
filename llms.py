@@ -768,7 +768,6 @@ def main():
         print(f"\nDefault model set to: {default_model}")
         exit(0)
 
-    #TEST
     if cli_args.update:
         asyncio.run(update_llms())
         print(f"{__file__} updated")
