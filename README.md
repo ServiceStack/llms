@@ -257,7 +257,7 @@ llms -m gpt-4o-audio-preview --audio interview.mp3 "Extract the main topics"
 llms -m gemini-2.5-flash --audio interview.mp3 "Extract the main topics"
 
 # Combined with system prompt
-llms -s "You're a transcription specialist" --audio lecture.mp3 "Provide a detailed transcript"
+llms -s "You're a transcription specialist" --audio talk.mp3 "Provide a detailed transcript"
 
 # With custom chat template
 llms --chat audio-request.json --audio speech.wav
