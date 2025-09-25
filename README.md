@@ -625,11 +625,11 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 Run `llms` without arguments to see the help screen:
 
-    usage: llms.py [-h] [--config FILE] [-m MODEL] [--chat REQUEST] [-s PROMPT] [--image IMAGE] [--audio AUDIO] [--raw] [--list]
-                  [--serve PORT] [--enable PROVIDER] [--disable PROVIDER] [--default MODEL] [--init] [--logprefix PREFIX]
-                  [--verbose] [--update]
+    usage: llms.py [-h] [--config FILE] [-m MODEL] [--chat REQUEST] [-s PROMPT] [--image IMAGE] [--audio AUDIO]
+                  [--raw] [--list] [--serve PORT] [--enable PROVIDER] [--disable PROVIDER] [--default MODEL]
+                  [--init] [--logprefix PREFIX] [--verbose] [--update]
 
-    llms v1
+    llms
 
     options:
       -h, --help            show this help message and exit
