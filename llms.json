@@ -12,6 +12,47 @@
                     "content": ""
                 }
             ]
+        },
+        "image": {
+            "model": "qwen2.5vl",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": ""
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Describe the key features of the input image"
+                        }
+                    ]
+                }
+            ]
+        },
+        "audio": {
+            "model": "gpt-4o-audio-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": "",
+                                "format": "mp3"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Please transcribe and summarize this audio file"
+                        }
+                    ]
+                }
+            ]
         }
     },
     "providers": {

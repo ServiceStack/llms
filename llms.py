@@ -48,9 +48,14 @@ def chat_summary(chat):
                             url = item['image_url']['url']
                             prefix = url.split(',', 1)[0]
                             item['image_url']['url'] = prefix + f",({len(url) - len(prefix)})"
+                    elif 'input_audio' in item:
+                        if 'data' in item['input_audio']:
+                            data = item['input_audio']['data']
+                            item['input_audio']['data'] = f"({len(data)})"
     return json.dumps(clone, indent=2)
 
 image_exts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
+audio_exts = 'mp3,wav,ogg,flac,m4a,opus,webm'.split(',')
 
 async def process_chat(chat):
     if not chat:
@@ -67,36 +72,64 @@ async def process_chat(chat):
 
             if isinstance(message['content'], list):
                 for item in message['content']:
-                    if not ('type' in item and item['type'] == 'image_url' and 'image_url' in item):
+                    if 'type' not in item:
                         continue
-                    image_url = item['image_url']
-                    if 'url' not in image_url:
-                        continue
-                    url = image_url['url']
-                    if url.startswith('http'):
-                        _log(f"Downloading image: {url}")
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                            response.raise_for_status()
-                            content = await response.read()
-                            # get mimetype from response headers
-                            mimetype = "image/png"
-                            if 'Content-Type' in response.headers:
-                                mimetype = response.headers['Content-Type']
-                            # convert to data uri
-                            image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                    elif url.startswith('/') or url.startswith('.'):
-                        _log(f"Reading image: {url}")
-                        with open(url, "rb") as f:
-                            content = f.read()
-                            ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'png'
-                            # get mimetype from file extension
-                            mimetype = f"image/{ext}" if ext in image_exts else "image/png"
-                            # convert to data uri
-                            image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                    elif url.startswith('data:'):
-                        pass
-                    else:
-                        raise Exception(f"Invalid image url: {url}")
+                    if item['type'] == 'image_url' and 'image_url' in item:
+                        image_url = item['image_url']
+                        if 'url' in image_url:
+                            url = image_url['url']
+                            if url.startswith('http'):
+                                _log(f"Downloading image: {url}")
+                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
+                                    response.raise_for_status()
+                                    content = await response.read()
+                                    # get mimetype from response headers
+                                    mimetype = "image/png"
+                                    if 'Content-Type' in response.headers:
+                                        mimetype = response.headers['Content-Type']
+                                    # convert to data uri
+                                    image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                            elif url.startswith('/') or url.startswith('.'):
+                                _log(f"Reading image: {url}")
+                                with open(url, "rb") as f:
+                                    content = f.read()
+                                    ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'png'
+                                    # get mimetype from file extension
+                                    mimetype = f"image/{ext}" if ext in image_exts else "image/png"
+                                    # convert to data uri
+                                    image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                            elif url.startswith('data:'):
+                                pass
+                            else:
+                                raise Exception(f"Invalid image: {url}")
+                    elif item['type'] == 'input_audio' and 'input_audio' in item:
+                        input_audio = item['input_audio']
+                        if 'data' in input_audio:
+                            url = input_audio['data']
+                            if url.startswith('http'):
+                                _log(f"Downloading audio: {url}")
+                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
+                                    response.raise_for_status()
+                                    content = await response.read()
+                                    # get mimetype from response headers
+                                    mimetype = "audio/mpeg"
+                                    if 'Content-Type' in response.headers:
+                                        mimetype = response.headers['Content-Type']
+                                    # convert to base64
+                                    input_audio['data'] = base64.b64encode(content).decode('utf-8')
+                                    input_audio['format'] = mimetype.split('/')[1]
+                            elif url.startswith('/') or url.startswith('.'):
+                                _log(f"Reading audio: {url}")
+                                with open(url, "rb") as f:
+                                    content = f.read()
+                                    ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'mp3'
+                                    # get mimetype from file extension
+                                    mimetype = f"audio/{ext}" if ext in audio_exts else "audio/mp3"
+                                    # convert to base64
+                                    input_audio['data'] = base64.b64encode(content).decode('utf-8')
+                                    input_audio['format'] = mimetype.split('/')[1]
+                            else:
+                                raise Exception(f"Invalid audio: {url}")
     return chat
 
 class OpenAiProvider:
@@ -218,23 +251,37 @@ class GoogleProvider(OpenAiProvider):
                     if isinstance(message['content'], list):
                         parts = []
                         for item in message['content']:
-                            if ('type' in item and item['type'] == 'image_url' and 'image_url' in item):
-                                image_url = item['image_url']
-                                if 'url' not in image_url:
-                                    continue
-                                url = image_url['url']
-                                if not url.startswith('data:'):
-                                    raise(Exception("Image was not downloaded: " + url))
-                                # Extract mime type from data uri
-                                mimetype = url.split(';',1)[0].split(':',1)[1] if ';' in url else "image/png"
-                                base64Data = url.split(',',1)[1]
-                                parts.append({
-                                    "inline_data": {
-                                        "mime_type": mimetype,
-                                        "data": base64Data
-                                    }
-                                })
-                            elif 'text' in item:
+                            if 'type' in item:
+                                if item['type'] == 'image_url' and 'image_url' in item:
+                                    image_url = item['image_url']
+                                    if 'url' not in image_url:
+                                        continue
+                                    url = image_url['url']
+                                    if not url.startswith('data:'):
+                                        raise(Exception("Image was not downloaded: " + url))
+                                    # Extract mime type from data uri
+                                    mimetype = url.split(';',1)[0].split(':',1)[1] if ';' in url else "image/png"
+                                    base64Data = url.split(',',1)[1]
+                                    parts.append({
+                                        "inline_data": {
+                                            "mime_type": mimetype,
+                                            "data": base64Data
+                                        }
+                                    })
+                                elif item['type'] == 'input_audio' and 'input_audio' in item:
+                                    input_audio = item['input_audio']
+                                    if 'data' not in input_audio:
+                                        continue
+                                    data = input_audio['data']
+                                    format = input_audio['format']
+                                    mimetype = f"audio/{format}"
+                                    parts.append({
+                                        "inline_data": {
+                                            "mime_type": mimetype,
+                                            "data": data
+                                        }
+                                    })
+                            if 'text' in item:
                                 text = item['text']
                                 parts.append({"text": text})
                         if len(parts) > 0:
@@ -372,12 +419,12 @@ async def chat_completion(chat):
     # If we get here, all providers failed
     raise first_exception
 
-async def cli_chat(chat, image=None, raw=False):
+async def cli_chat(chat, image=None, audio=None, raw=False):
     if g_default_model:
         chat['model'] = g_default_model
 
+    # process_chat downloads the image, just adding the reference here
     if image is not None:
-        # process_chat downloads the image, just adding the reference here
         first_message = None
         for message in chat['messages']:
             if message['role'] == 'user':
@@ -403,6 +450,35 @@ async def cli_chat(chat, image=None, raw=False):
             else:
                 first_message['content'] = [
                     image_content,
+                    { "type": "text", "text": first_message['content'] }
+                ]
+    if audio is not None:
+        first_message = None
+        for message in chat['messages']:
+            if message['role'] == 'user':
+                first_message = message
+                break
+        audio_content = {
+            "type": "input_audio",
+            "input_audio": {
+                "data": audio,
+                "format": "mp3"
+            }
+        }
+        if 'content' in first_message:
+            if isinstance(first_message['content'], list):
+                input_audio = None
+                for item in first_message['content']:
+                    if 'input_audio' in item:
+                        input_audio = item['input_audio']
+                # If no input_audio, add one
+                if input_audio is None:
+                    first_message['content'].insert(0,audio_content)
+                else:
+                    input_audio['data'] = audio
+            else:
+                first_message['content'] = [
+                    audio_content,
                     { "type": "text", "text": first_message['content'] }
                 ]
 
@@ -523,7 +599,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--chat',         default=None, help='OpenAI Chat Completion Request to send', metavar='REQUEST')
     parser.add_argument('-s', '--system', default=None, help='System prompt to use for chat completion', metavar='PROMPT')
-    parser.add_argument('--image',        default=None, help='Image prompt to use in chat completion', metavar='IMAGE')
+    parser.add_argument('--image',        default=None, help='Image input to use in chat completion')
+    parser.add_argument('--audio',        default=None, help='Audio input to use in chat completion')
 
     parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
 
@@ -695,11 +772,13 @@ if __name__ == "__main__":
         print(f"{__file__} updated")
         exit(0)
 
-    if cli_args.chat is not None or cli_args.image is not None or len(extra_args) > 0:
+    if cli_args.chat is not None or cli_args.image is not None or cli_args.audio is not None or len(extra_args) > 0:
         try:
             chat = g_config['defaults']['text']
             if cli_args.image is not None:
                 chat = g_config['defaults']['image']
+            elif cli_args.audio is not None:
+                chat = g_config['defaults']['audio']
             if cli_args.chat is not None:
                 chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
@@ -723,7 +802,7 @@ if __name__ == "__main__":
                 else:
                     chat['messages'].append({'role': 'user', 'content': prompt})
 
-            asyncio.run(cli_chat(chat, image=cli_args.image, raw=cli_args.raw))
+            asyncio.run(cli_chat(chat, image=cli_args.image, audio=cli_args.audio, raw=cli_args.raw))
             exit(0)
         except Exception as e:
             print(f"{cli_args.logprefix}Error: {e}")
