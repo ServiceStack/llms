@@ -624,9 +624,9 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 Run `llms` without arguments to see the help screen:
 
-    usage: llms [-h] [--config FILE] [-m MODEL] [--logprefix PREFIX] [--verbose] [--raw] [--chat REQUEST]
-                [-s PROMPT] [--image IMAGE] [--audio AUDIO] [--list] [--serve PORT] [--init] [--enable PROVIDER]
-                [--disable PROVIDER] [--default MODEL] [--update]
+    usage: llms.py [-h] [--config FILE] [-m MODEL] [--chat REQUEST] [-s PROMPT] [--image IMAGE] [--audio AUDIO] [--raw] [--list]
+                  [--serve PORT] [--enable PROVIDER] [--disable PROVIDER] [--default MODEL] [--init] [--logprefix PREFIX]
+                  [--verbose] [--update]
 
     llms v1
 
@@ -635,20 +635,20 @@ Run `llms` without arguments to see the help screen:
       --config FILE         Path to config file
       -m MODEL, --model MODEL
                             Model to use
-      --logprefix PREFIX    Prefix used in log messages
-      --verbose             Verbose output
-      --raw                 Return raw AI JSON response
       --chat REQUEST        OpenAI Chat Completion Request to send
       -s PROMPT, --system PROMPT
                             System prompt to use for chat completion
       --image IMAGE         Image input to use in chat completion
       --audio AUDIO         Audio input to use in chat completion
+      --raw                 Return raw AI JSON response
       --list                Show list of enabled providers and their models (alias ls provider?)
       --serve PORT          Port to start an OpenAI Chat compatible server on
-      --init                Create a default llms.json
       --enable PROVIDER     Enable a provider
       --disable PROVIDER    Disable a provider
       --default MODEL       Configure the default model to use
+      --init                Create a default llms.json
+      --logprefix PREFIX    Prefix used in log messages
+      --verbose             Verbose output
       --update              Update to latest version
 
 ## Troubleshooting
