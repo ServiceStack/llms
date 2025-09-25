@@ -563,7 +563,7 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
     }
   },
   "providers": {
-    "openai": {
+    "groq": {
       "enabled": true,
       "type": "OpenAiProvider",
       "base_url": "https://api.groq.com/openai",
@@ -588,7 +588,7 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 {
 "providers": {
     "openrouter": {
-      "enabled": true, 
+        "enabled": false,
         "type": "OpenAiProvider",
         "base_url": "https://openrouter.ai/api",
         "api_key": "$OPENROUTER_API_KEY",
@@ -600,8 +600,8 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
             "llama4:400b": "meta-llama/llama-4-maverick"
         }
     },
-    "anthropic": {
-      "enabled": true, 
+  "anthropic": {
+      "enabled": false,
       "type": "OpenAiProvider",
       "base_url": "https://api.anthropic.com",
       "api_key": "$ANTHROPIC_API_KEY",
@@ -610,11 +610,11 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
       }
     },
     "ollama": {
-      "enabled": true,
-      "type": "OllamaProvider", 
-      "base_url": "http://localhost:11434",
-      "models": {},
-      "all_models": true
+        "enabled": false,
+        "type": "OllamaProvider",
+        "base_url": "http://localhost:11434",
+        "models": {},
+        "all_models": true
     }
   }
 }
