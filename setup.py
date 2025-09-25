@@ -14,7 +14,7 @@ with open(os.path.join(this_directory, 'requirements.txt'), encoding='utf-8') as
 
 setup(
     name='lapi',
-    version='1.0.1',
+    version='1.0.2',
     author='ServiceStack',
     author_email='team@servicestack.net',
     description='A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers',
