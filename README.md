@@ -11,14 +11,16 @@ Configure additional providers and models in [llms.json](llms.json)
 ## Features
 
 - **Lightweight**: Single [llms.py](llms.py) Python file with single `aiohttp` dependency
-- **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, Groq, OpenAI, Mistral, and more
+- **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Mistral
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Configuration Management**: Easy provider enable/disable and configuration management
 - **CLI Interface**: Simple command-line interface for quick interactions
 - **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
 - **Image Support**: Process images through vision-capable models
+- **Audio Support**: Process audio through audio-capable models
 - **Auto-Discovery**: Automatically discover available Ollama models
 - **Unified Models**: Define custom model names that map to different provider-specific names
+- **Multi-Model Support**: Support for over 160+ different LLMs
 
 ## Installation
 
@@ -229,6 +231,74 @@ Popular models that support image analysis:
 - **Ollama**: qwen2.5vl, llava
 
 Images are automatically downloaded and converted to base64 data URIs.
+
+### Audio Requests
+
+Send audio files to audio-capable models using the `--audio` option:
+
+```bash
+# Use defaults/audio Chat Template (Transcribe the audio)
+llms --audio ./recording.mp3
+
+# Local audio file
+llms --audio ./meeting.wav "Summarize this meeting recording"
+
+# Remote audio URL
+llms --audio https://example.org/podcast.mp3 "What are the key points discussed?"
+
+# With a specific audio model
+llms -m gpt-4o-audio-preview --audio interview.mp3 "Extract the main topics"
+llms -m gemini-2.5-flash --audio interview.mp3 "Extract the main topics"
+
+# Combined with system prompt
+llms -s "You are a transcription specialist" --audio lecture.mp3 "Provide a detailed transcript"
+
+# With custom chat template
+llms --chat audio-request.json --audio speech.wav
+```
+
+Example of `audio-request.json`:
+
+```json
+{
+    "model": "gpt-4o-audio-preview",
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": "",
+                        "format": "mp3"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": "Please transcribe this audio"
+                }
+            ]
+        }
+    ]
+}
+```
+
+**Supported audio formats**: MP3, WAV
+
+**Audio sources**:
+- **Local files**: Absolute paths (`/path/to/audio.mp3`) or relative paths (`./audio.wav`, `../recording.m4a`)
+- **Remote URLs**: HTTP/HTTPS URLs are automatically downloaded
+- **Base64 Data**: Base64-encoded audio
+
+Audio files are automatically processed and converted to base64 data before being sent to the model.
+
+### Audio-Capable Models
+
+Popular models that support audio processing:
+- **OpenAI**: gpt-4o-audio-preview
+- **Google**: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite
+
+Audio files are automatically downloaded and converted to base64 data URIs with appropriate format detection.
 
 ## Server Mode
 
