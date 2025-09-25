@@ -589,7 +589,9 @@ def print_status():
     else:
         print("Disabled: None")
 
-if __name__ == "__main__":
+def main():
+    global g_verbose, g_default_model, g_logprefix, g_config_path
+
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
     parser.add_argument('-m', '--model',  default=None, help='Model to use')
@@ -812,3 +814,7 @@ if __name__ == "__main__":
 
     # show usage from ArgumentParser
     parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
