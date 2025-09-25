@@ -81,6 +81,8 @@ def main():
         print("\nPackage uploaded to PyPI!")
         print("You can install with:")
         print("pip install lapi")
+        print("\nUpgrade with:")
+        print("pip install lapi --upgrade")
     else:
         print("\nPackage built successfully!")
         print("Files created in dist/:")
