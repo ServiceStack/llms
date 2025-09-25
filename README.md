@@ -18,6 +18,7 @@ Configure additional providers and models in [llms.json](llms.json)
 - **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
 - **Image Support**: Process images through vision-capable models
 - **Audio Support**: Process audio through audio-capable models
+- **Custom Chat Templates**: Configurable chat completion request templates for different modalities
 - **Auto-Discovery**: Automatically discover available Ollama models
 - **Unified Models**: Define custom model names that map to different provider-specific names
 - **Multi-Model Support**: Support for over 160+ different LLMs

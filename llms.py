@@ -655,7 +655,7 @@ def main():
         exit(0)
 
     if not os.path.exists(g_config_path):
-        print("Config file not found. Usage --config <path>")
+        print("Config file not found. Create one with --init or use --config <path>")
         exit(1)
 
     # read contents
