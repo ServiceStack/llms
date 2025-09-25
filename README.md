@@ -70,6 +70,8 @@ export OPENROUTER_API_KEY="..."
 export GROQ_API_KEY="..."
 export GOOGLE_API_KEY="..."
 export ANTHROPIC_API_KEY="..."
+export GROK_API_KEY="..."
+export DASHSCOPE_API_KEY="..."
 # ... etc
 ```
 
@@ -82,7 +84,7 @@ Enable the providers you want to use:
 llms --enable openrouter_free google_free groq
 
 # Enable paid providers
-llms --enable openrouter anthropic google openai mistral
+llms --enable openrouter anthropic google openai mistral grok qwen
 ```
 
 ### 4. Start Chatting
@@ -118,6 +120,8 @@ llms "Explain quantum computing"
 
 # With specific model
 llms -m gemini-2.5-pro "Write a Python function to sort a list"
+llms -m grok-4 "Explain this code with humor"
+llms -m qwen3-max "Translate this to Chinese"
 
 # With system prompt
 llms -s "You are a helpful coding assistant" "How do I reverse a string in Python?"
@@ -180,6 +184,7 @@ llms --image "data:image/png;base64,$(base64 -w 0 image.png)" "Describe this ima
 
 # With a specific vision model
 llms -m gemini-2.5-flash --image chart.png "Analyze this chart"
+llms -m qwen2.5vl --image document.jpg "Extract text from this document"
 
 # Combined with system prompt
 llms -s "You are a data analyst" --image graph.png "What trends do you see?"
@@ -228,6 +233,7 @@ Popular models that support image analysis:
 - **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4.1
 - **Anthropic**: Claude Sonnet 4.0, Claude Opus 4.1
 - **Google**: Gemini 2.5 Pro, Gemini Flash
+- **Qwen**: Qwen2.5-VL, Qwen3-VL, QVQ-max
 - **Ollama**: qwen2.5vl, llava
 
 Images are automatically downloaded and converted to base64 data URIs.
@@ -433,7 +439,7 @@ llms "Explain quantum computing" | glow
 
 ### OpenAI
 - **Type**: `OpenAiProvider`
-- **Models**: GPT-4o, GPT-4o-mini, GPT-4.1, O4-mini, etc.
+- **Models**: GPT-5, GPT-5 Codex, GPT-4o, GPT-4o-mini, o3, etc.
 - **Features**: Text, images, function calling
 
 ```bash
@@ -501,6 +507,26 @@ export MISTRAL_API_KEY="your-key"
 llms --enable mistral
 ```
 
+### Grok (X.AI)
+- **Type**: `OpenAiProvider`
+- **Models**: Grok-4, Grok-3, Grok-3-mini, Grok-code-fast-1, etc.
+- **Features**: Real-time information, humor, uncensored responses
+
+```bash
+export GROK_API_KEY="your-key"
+llms --enable grok
+```
+
+### Qwen (Alibaba Cloud)
+- **Type**: `OpenAiProvider`
+- **Models**: Qwen3-max, Qwen-max, Qwen-plus, Qwen2.5-VL, QwQ-plus, etc.
+- **Features**: Multilingual, vision models, coding, reasoning, audio processing
+
+```bash
+export DASHSCOPE_API_KEY="your-key"
+llms --enable qwen
+```
+
 ## Model Routing
 
 The tool automatically routes requests to the first available provider that supports the requested model. If a provider fails, it tries the next available provider with that model.
@@ -520,6 +546,8 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 | `OPENROUTER_API_KEY`      | OpenRouter API key | `sk-or-...` |
 | `OPENROUTER_FREE_API_KEY` | OpenRouter free tier key | `sk-or-...` |
 | `CODESTRAL_API_KEY`       | Codestral API key | `...` |
+| `GROK_API_KEY`            | Grok (X.AI) API key | `xai-...` |
+| `DASHSCOPE_API_KEY`       | Qwen (Alibaba Cloud) API key | `sk-...` |
 
 ## Configuration Examples
 
