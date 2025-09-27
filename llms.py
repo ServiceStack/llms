@@ -18,6 +18,7 @@ from aiohttp import web
 
 VERSION = "1.0.3"
 g_config_path = None
+g_ui_path = None
 g_config = None
 g_handlers = {}
 g_verbose = False
@@ -667,32 +668,30 @@ def save_config(config):
     with open(g_config_path, "w") as f:
         json.dump(g_config, f, indent=4)
 
-async def save_default_config(config_path):
-    """
-    Download default config from https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.json using asyncio
-    """
-    global g_config
-    url = "https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.json"
+def github_url(filename):
+    return f"https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/{filename}"
+
+async def save_text(url, save_path):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
-            resp.raise_for_status()
-            config_json = await resp.text()
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w") as f:
-                f.write(config_json)
-            g_config = json.loads(config_json)
+            text = await resp.text()
+            if resp.status >= 400:
+                raise HTTPError(resp.status, reason=resp.reason, body=text, headers=dict(resp.headers))
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, "w") as f:
+                f.write(text)
+            return text
+
+async def save_default_config(config_path):
+    global g_config
+    config_json = await save_text(github_url("llms.json"), config_path)
+    g_config = json.loads(config_json)
 
 async def update_llms():
     """
-    Update llms.py and llms.json from https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.py
-    """
-    url = "https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.py"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            resp.raise_for_status()
-            llms_py = await resp.text()
-            with open(__file__, "w") as f:
-                f.write(llms_py)
+    Update llms.py from GitHub
+    """    
+    await save_text(github_url("llms.py"), __file__)
 
 def provider_status():
     enabled = list(g_handlers.keys())
@@ -712,8 +711,36 @@ def print_status():
     else:
         print("Disabled: None")
 
+def home_llms_path(filename):
+    return f"{os.environ.get('HOME')}/.llms/{filename}"
+
+def get_config_path():
+    home_config_path = home_llms_path("llms.json")
+    check_paths = [
+        "./llms.json",
+        home_config_path,
+    ]
+    if os.environ.get("LLMS_CONFIG_PATH"):
+        check_paths.insert(0, os.environ.get("LLMS_CONFIG_PATH"))
+
+    for check_path in check_paths:
+        g_config_path = os.path.join(os.path.dirname(__file__), check_path)
+        if os.path.exists(g_config_path):
+            return g_config_path
+    return None
+
+def get_ui_path():
+    ui_paths = [
+        home_llms_path("ui.json"),
+        "ui.json"
+    ]
+    for ui_path in ui_paths:
+        if os.path.exists(ui_path):
+            return ui_path
+    return None
+
 def main():
-    global g_verbose, g_default_model, g_logprefix, g_config_path
+    global g_verbose, g_default_model, g_logprefix, g_config_path, g_ui_path
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
@@ -752,30 +779,23 @@ def main():
     if cli_args.config is not None:
         g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
 
-    config_path = cli_args.config
-    if config_path:
-        g_config_path = os.path.join(os.path.dirname(__file__), config_path)
-    else:
-        home_config_path = f"{os.environ.get('HOME')}/.llms/llms.json"
-        check_paths = [
-            "./llms.json",
-            home_config_path,
-        ]
-        if os.environ.get("LLMS_CONFIG_PATH"):
-            check_paths.insert(0, os.environ.get("LLMS_CONFIG_PATH"))
-
-        for check_path in check_paths:
-            g_config_path = os.path.join(os.path.dirname(__file__), check_path)
-            if os.path.exists(g_config_path):
-                break
+    g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config) if cli_args.config else get_config_path()
+    g_ui_path = get_ui_path()
 
     if cli_args.init:
-        if os.path.exists(g_config_path):
-            print(f"llms.json already exists at {g_config_path}")
-            exit(1)
-        save_config_path = g_config_path or home_config_path
-        asyncio.run(save_default_config(save_config_path))
-        print(f"Created default config at {save_config_path}")
+        home_config_path = home_llms_path("llms.json")
+        if os.path.exists(home_config_path):
+            print(f"llms.json already exists at {home_config_path}")
+        else:
+            asyncio.run(save_default_config(home_config_path))
+            print(f"Created default config at {home_config_path}")
+
+        home_ui_path = home_llms_path("ui.json")
+        if os.path.exists(home_ui_path):
+            print(f"ui.json already exists at {home_ui_path}")
+        else:
+            asyncio.run(save_text(github_url("ui.json"), home_ui_path))
+            print(f"Created default ui config at {home_ui_path}")
         exit(0)
 
     if not os.path.exists(g_config_path):
