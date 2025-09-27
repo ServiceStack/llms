@@ -375,9 +375,9 @@ Files are automatically downloaded (for URLs) and converted to base64 data URIs 
 Popular multi-modal models that support file (PDF) inputs:
 - OpenAI: gpt-5, gpt-5-mini, gpt-4o, gpt-4o-mini
 - Google: gemini-flash-latest, gemini-2.5-flash-lite
-- Grok: grok-4-fast
-- Qwen: qwen2.5vl
-- Others: deepseek-v3.1:671b, glm-4.5-air, mai-ds-r1, llama3.3:70b, mistral-small3.2:24b
+- Grok: grok-4-fast (OpenRouter)
+- Qwen: qwen2.5vl, qwen3-max, qwen3-vl:235b, qwen3-coder, qwen3-coder-flash (OpenRouter)
+- Others: kimi-k2, glm-4.5-air, deepseek-v3.1:671b, llama4:400b, llama3.3:70b, mai-ds-r1, nemotron-nano:9b
 
 ## Server Mode
 

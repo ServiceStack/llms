@@ -607,7 +607,7 @@ async def cli_chat(chat, image=None, audio=None, file=None, raw=False):
         # Connection issues
         print(f"Connection error: {e}")
         exit(1)
-    except aiohttp.ClientTimeout as e:
+    except asyncio.TimeoutError as e:
         # Timeout
         print(f"Timeout error: {e}")
         exit(1)
