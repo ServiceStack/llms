@@ -155,7 +155,11 @@
                     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
                     "threshold": "BLOCK_ONLY_HIGH"
                 }
-            ]
+            ],
+            "thinking_config": {
+                "thinkingBudget": 1024,
+                "includeThoughts": true
+            }
         },
         "codestral": {
             "enabled": true,
@@ -245,7 +249,11 @@
                     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
                     "threshold": "BLOCK_ONLY_HIGH"
                 }
-            ]
+            ],
+            "thinking_config": {
+                "thinkingBudget": 1024,
+                "includeThoughts": true
+            }
         },
         "anthropic": {
             "enabled": false,

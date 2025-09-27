@@ -278,9 +278,10 @@ class GoogleOpenAiProvider(OpenAiProvider):
         return api_key is not None and len(models) > 0
 
 class GoogleProvider(OpenAiProvider):
-    def __init__(self, models, api_key, safety_settings=None, curl=False, **kwargs):
+    def __init__(self, models, api_key, safety_settings=None, thinking_config=None, curl=False, **kwargs):
         super().__init__(base_url="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
         self.safety_settings = safety_settings
+        self.thinking_config = thinking_config
         self.curl = curl
         self.headers = kwargs['headers'] if 'headers' in kwargs else {
             "Content-Type": "application/json",
@@ -393,6 +394,12 @@ class GoogleProvider(OpenAiProvider):
                 generationConfig['topP'] = chat['top_p']
             if 'top_logprobs' in chat:
                 generationConfig['topK'] = chat['top_logprobs']
+
+            if 'thinkingConfig' in chat:
+                generationConfig['thinkingConfig'] = chat['thinkingConfig']
+            elif self.thinking_config:
+                generationConfig['thinkingConfig'] = self.thinking_config
+
             if len(generationConfig) > 0:
                 gemini_chat['generationConfig'] = generationConfig
 
@@ -400,8 +407,7 @@ class GoogleProvider(OpenAiProvider):
             gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
 
             _log(f"gemini_chat: {gemini_chat_url}")
-            if g_verbose:
-                print(json.dumps(gemini_chat))
+            _log(f"google request:\n{json.dumps(gemini_chat, indent=2)}")
 
             if self.curl:
                 curl_args = [
@@ -419,6 +425,7 @@ class GoogleProvider(OpenAiProvider):
             else:
                 async with session.post(gemini_chat_url, headers=self.headers, data=json.dumps(gemini_chat), timeout=aiohttp.ClientTimeout(total=120)) as res:
                     obj = await response_json(res)
+                    _log(f"google response:\n{json.dumps(obj, indent=2)}")
 
             response = {
                 "id": f"chatcmpl-{started_at}",
@@ -427,7 +434,6 @@ class GoogleProvider(OpenAiProvider):
             }
             choices = []
             i = 0
-            _log(json.dumps(obj))
             if 'error' in obj:
                 _log(f"Error: {obj['error']}")
                 raise Exception(obj['error']['message'])
@@ -438,21 +444,30 @@ class GoogleProvider(OpenAiProvider):
 
                 # Safely extract content from all text parts
                 content = ""
+                reasoning = ""
                 if 'content' in candidate and 'parts' in candidate['content']:
                     text_parts = []
+                    reasoning_parts = []
                     for part in candidate['content']['parts']:
                         if 'text' in part:
-                            text_parts.append(part['text'])
+                            if 'thought' in part and part['thought']:
+                                reasoning_parts.append(part['text'])
+                            else:
+                                text_parts.append(part['text'])
                     content = ' '.join(text_parts)
+                    reasoning = ' '.join(reasoning_parts)
 
-                choices.append({
+                choice = {
                     "index": i,
                     "finish_reason": candidate.get('finishReason', 'stop'),
                     "message": {
                         "role": role,
-                        "content": content
+                        "content": content,
                     },
-                })
+                }
+                if reasoning:
+                    choice['message']['reasoning'] = reasoning
+                choices.append(choice)
                 i += 1
             response['choices'] = choices
             if 'usageMetadata' in obj:
