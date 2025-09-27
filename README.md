@@ -1,4 +1,4 @@
-# ServiceStack LLMs
+# llms.py
 
 Lightweight CLI and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
 
