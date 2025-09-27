@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import subprocess
 import base64
+import mimetypes
 import traceback
 
 import aiohttp
@@ -52,10 +53,35 @@ def chat_summary(chat):
                         if 'data' in item['input_audio']:
                             data = item['input_audio']['data']
                             item['input_audio']['data'] = f"({len(data)})"
+                    elif 'file' in item:
+                        if 'file_data' in item['file']:
+                            data = item['file']['file_data']
+                            item['file']['file_data'] = f"({len(data)})"
     return json.dumps(clone, indent=2)
 
 image_exts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
 audio_exts = 'mp3,wav,ogg,flac,m4a,opus,webm'.split(',')
+
+def is_file_path(path):
+    # macOs max path is 1023
+    return path and len(path) < 1024 and os.path.exists(path)
+
+def is_url(url):
+    return url and (url.startswith('http://') or url.startswith('https://'))
+
+def get_filename(file):
+    return file.rsplit('/',1)[1] if '/' in file else 'file'
+
+def is_base_64(data):
+    try:
+        base64.b64decode(data)
+        return True
+    except Exception:
+        return False
+
+def get_file_mime_type(filename):
+    mime_type, _ = mimetypes.guess_type(filename)
+    return mime_type or "application/octet-stream"
 
 async def process_chat(chat):
     if not chat:
@@ -78,24 +104,24 @@ async def process_chat(chat):
                         image_url = item['image_url']
                         if 'url' in image_url:
                             url = image_url['url']
-                            if url.startswith('http'):
+                            if is_url(url):
                                 _log(f"Downloading image: {url}")
                                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
                                     response.raise_for_status()
                                     content = await response.read()
                                     # get mimetype from response headers
-                                    mimetype = "image/png"
+                                    mimetype = get_file_mime_type(get_filename(url))
                                     if 'Content-Type' in response.headers:
                                         mimetype = response.headers['Content-Type']
                                     # convert to data uri
                                     image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                            elif url.startswith('/') or url.startswith('.'):
+                            elif is_file_path(url):
                                 _log(f"Reading image: {url}")
                                 with open(url, "rb") as f:
                                     content = f.read()
                                     ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'png'
                                     # get mimetype from file extension
-                                    mimetype = f"image/{ext}" if ext in image_exts else "image/png"
+                                    mimetype = get_file_mime_type(get_filename(url))
                                     # convert to data uri
                                     image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             elif url.startswith('data:'):
@@ -106,31 +132,69 @@ async def process_chat(chat):
                         input_audio = item['input_audio']
                         if 'data' in input_audio:
                             url = input_audio['data']
-                            if url.startswith('http'):
+                            mimetype = get_file_mime_type(get_filename(url))
+                            if is_url(url):
                                 _log(f"Downloading audio: {url}")
                                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
                                     response.raise_for_status()
                                     content = await response.read()
                                     # get mimetype from response headers
-                                    mimetype = "audio/mpeg"
                                     if 'Content-Type' in response.headers:
                                         mimetype = response.headers['Content-Type']
                                     # convert to base64
                                     input_audio['data'] = base64.b64encode(content).decode('utf-8')
-                                    input_audio['format'] = mimetype.split('/')[1]
-                            elif url.startswith('/') or url.startswith('.'):
+                                    input_audio['format'] = mimetype.rsplit('/',1)[1]
+                            elif is_file_path(url):
                                 _log(f"Reading audio: {url}")
                                 with open(url, "rb") as f:
                                     content = f.read()
-                                    ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'mp3'
-                                    # get mimetype from file extension
-                                    mimetype = f"audio/{ext}" if ext in audio_exts else "audio/mp3"
                                     # convert to base64
                                     input_audio['data'] = base64.b64encode(content).decode('utf-8')
-                                    input_audio['format'] = mimetype.split('/')[1]
+                                    input_audio['format'] = mimetype.rsplit('/',1)[1]
+                            elif is_base_64(url):
+                                pass # use base64 data as-is
                             else:
                                 raise Exception(f"Invalid audio: {url}")
+                    elif item['type'] == 'file' and 'file' in item:
+                        file = item['file']
+                        if 'file_data' in file:
+                            url = file['file_data']
+                            mimetype = get_file_mime_type(get_filename(url))
+                            if is_url(url):
+                                _log(f"Downloading file: {url}")
+                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
+                                    response.raise_for_status()
+                                    content = await response.read()
+                                    file['filename'] = get_filename(url)
+                                    file['file_data'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                            elif is_file_path(url):
+                                _log(f"Reading file: {url}")
+                                with open(url, "rb") as f:
+                                    content = f.read()
+                                    file['filename'] = get_filename(url)
+                                    file['file_data'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                            elif is_base_64(url):
+                                file['filename'] = 'file'
+                                pass # use base64 data as-is
+                            else:
+                                raise Exception(f"Invalid file: {url}")
     return chat
+
+class HTTPError(Exception):
+    def __init__(self, status, reason, body, headers=None):
+        self.status = status
+        self.reason = reason
+        self.body = body
+        self.headers = headers
+        super().__init__(f"HTTP {status} {reason}")
+
+async def response_json(response):
+    text = await response.text()
+    if response.status >= 400:
+        raise HTTPError(response.status, reason=response.reason, body=text, headers=dict(response.headers))
+    response.raise_for_status()
+    body = json.loads(text)
+    return body
 
 class OpenAiProvider:
     def __init__(self, base_url, api_key=None, models={}, **kwargs):
@@ -164,9 +228,7 @@ class OpenAiProvider:
         print_chat(chat)
         async with aiohttp.ClientSession() as session:
             async with session.post(self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)) as response:
-                response.raise_for_status()
-                body = await response.json()
-                return body
+                return await response_json(response)
 
 class OllamaProvider(OpenAiProvider):
     def __init__(self, base_url, models, all_models=False, **kwargs):
@@ -182,8 +244,7 @@ class OllamaProvider(OpenAiProvider):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{self.base_url}/api/tags", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                    response.raise_for_status()
-                    data = await response.json()
+                    data = await response_json(response)
                     for model in data.get('models', []):
                         name = model['model']
                         if name.endswith(":latest"):
@@ -281,6 +342,22 @@ class GoogleProvider(OpenAiProvider):
                                             "data": data
                                         }
                                     })
+                                elif item['type'] == 'file' and 'file' in item:
+                                    file = item['file']
+                                    if 'file_data' not in file:
+                                        continue
+                                    data = file['file_data']
+                                    if not data.startswith('data:'):
+                                        raise(Exception("File was not downloaded: " + data))
+                                    # Extract mime type from data uri
+                                    mimetype = data.split(';',1)[0].split(':',1)[1] if ';' in data else "application/octet-stream"
+                                    base64Data = data.split(',',1)[1]
+                                    parts.append({
+                                        "inline_data": {
+                                            "mime_type": mimetype,
+                                            "data": base64Data
+                                        }
+                                    })
                             if 'text' in item:
                                 text = item['text']
                                 parts.append({"text": text})
@@ -340,8 +417,7 @@ class GoogleProvider(OpenAiProvider):
                     raise Exception(f"Error executing curl: {e}")
             else:
                 async with session.post(gemini_chat_url, headers=self.headers, data=json.dumps(gemini_chat), timeout=aiohttp.ClientTimeout(total=120)) as res:
-                    res.raise_for_status()
-                    obj = await res.json()
+                    obj = await response_json(res)
 
             response = {
                 "id": f"chatcmpl-{started_at}",
@@ -419,7 +495,7 @@ async def chat_completion(chat):
     # If we get here, all providers failed
     raise first_exception
 
-async def cli_chat(chat, image=None, audio=None, raw=False):
+async def cli_chat(chat, image=None, audio=None, file=None, raw=False):
     if g_default_model:
         chat['model'] = g_default_model
 
@@ -481,16 +557,60 @@ async def cli_chat(chat, image=None, audio=None, raw=False):
                     audio_content,
                     { "type": "text", "text": first_message['content'] }
                 ]
+    if file is not None:
+        first_message = None
+        for message in chat['messages']:
+            if message['role'] == 'user':
+                first_message = message
+                break
+        file_content = {
+            "type": "file",
+            "file": {
+                "filename": get_filename(file),
+                "file_data": file
+            }
+        }
+        if 'content' in first_message:
+            if isinstance(first_message['content'], list):
+                file_data = None
+                for item in first_message['content']:
+                    if 'file' in item:
+                        file_data = item['file']
+                # If no file_data, add one
+                if file_data is None:
+                    first_message['content'].insert(0,file_content)
+                else:
+                    file_data['filename'] = get_filename(file)
+                    file_data['file_data'] = file
+            else:
+                first_message['content'] = [
+                    file_content,
+                    { "type": "text", "text": first_message['content'] }
+                ]
 
     if g_verbose:
         printdump(chat)
-    response = await chat_completion(chat)
-    if raw:
-        print(json.dumps(response, indent=2))
-        exit(0)
-    else:
-        answer = response['choices'][0]['message']['content']
-        print(answer)
+
+    try:
+        response = await chat_completion(chat)
+        if raw:
+            print(json.dumps(response, indent=2))
+            exit(0)
+        else:
+            answer = response['choices'][0]['message']['content']
+            print(answer)
+    except HTTPError as e:
+        # HTTP error (4xx, 5xx)
+        print(f"{e}:\n{e.body}")
+        exit(1)
+    except aiohttp.ClientConnectionError as e:
+        # Connection issues
+        print(f"Connection error: {e}")
+        exit(1)
+    except aiohttp.ClientTimeout as e:
+        # Timeout
+        print(f"Timeout error: {e}")
+        exit(1)
 
 def config_str(key):
     return key in g_config and g_config[key] or None
@@ -574,12 +694,15 @@ async def update_llms():
             with open(__file__, "w") as f:
                 f.write(llms_py)
 
-def print_status():
+def provider_status():
     enabled = list(g_handlers.keys())
     disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
-
     enabled.sort()
     disabled.sort()
+    return enabled, disabled
+
+def print_status():
+    enabled, disabled = provider_status()
     if len(enabled) > 0:
         print(f"\nEnabled: {', '.join(enabled)}")
     else:
@@ -600,6 +723,7 @@ def main():
     parser.add_argument('-s', '--system', default=None, help='System prompt to use for chat completion', metavar='PROMPT')
     parser.add_argument('--image',        default=None, help='Image input to use in chat completion')
     parser.add_argument('--audio',        default=None, help='Audio input to use in chat completion')
+    parser.add_argument('--file',         default=None, help='File input to use in chat completion')
     parser.add_argument('--raw',          action='store_true', help='Return raw AI JSON response')
 
     parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
@@ -775,13 +899,15 @@ def main():
         print(f"{__file__} updated")
         exit(0)
 
-    if cli_args.chat is not None or cli_args.image is not None or cli_args.audio is not None or len(extra_args) > 0:
+    if cli_args.chat is not None or cli_args.image is not None or cli_args.audio is not None or cli_args.file is not None or len(extra_args) > 0:
         try:
             chat = g_config['defaults']['text']
             if cli_args.image is not None:
                 chat = g_config['defaults']['image']
             elif cli_args.audio is not None:
                 chat = g_config['defaults']['audio']
+            elif cli_args.file is not None:
+                chat = g_config['defaults']['file']
             if cli_args.chat is not None:
                 chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
@@ -805,7 +931,7 @@ def main():
                 else:
                     chat['messages'].append({'role': 'user', 'content': prompt})
 
-            asyncio.run(cli_chat(chat, image=cli_args.image, audio=cli_args.audio, raw=cli_args.raw))
+            asyncio.run(cli_chat(chat, image=cli_args.image, audio=cli_args.audio, file=cli_args.file, raw=cli_args.raw))
             exit(0)
         except Exception as e:
             print(f"{cli_args.logprefix}Error: {e}")
