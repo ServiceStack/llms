@@ -28,7 +28,7 @@ Configure additional providers and models in [llms.json](llms.json)
 ### Option 1: Install from PyPI
 
 ```bash
-pip install lapi
+pip install llms-py
 ```
 
 ### Option 2: Download directly
@@ -360,7 +360,7 @@ llms --default grok-4
 1. Installed from PyPI
 
 ```bash
-pip install lapi --upgrade
+pip install llms-py --upgrade
 ```
 
 2. Using Direct Download
@@ -623,11 +623,11 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 ## Usage
 
-Run `llms` without arguments to see the help screen:
+    Run `llms` without arguments to see the help screen:
 
     usage: llms.py [-h] [--config FILE] [-m MODEL] [--chat REQUEST] [-s PROMPT] [--image IMAGE] [--audio AUDIO]
-                  [--raw] [--list] [--serve PORT] [--enable PROVIDER] [--disable PROVIDER] [--default MODEL]
-                  [--init] [--logprefix PREFIX] [--verbose] [--update]
+                  [--file FILE] [--raw] [--list] [--serve PORT] [--enable PROVIDER] [--disable PROVIDER]
+                  [--default MODEL] [--init] [--logprefix PREFIX] [--verbose] [--update]
 
     llms
 
@@ -641,6 +641,7 @@ Run `llms` without arguments to see the help screen:
                             System prompt to use for chat completion
       --image IMAGE         Image input to use in chat completion
       --audio AUDIO         Audio input to use in chat completion
+      --file FILE           File input to use in chat completion
       --raw                 Return raw AI JSON response
       --list                Show list of enabled providers and their models (alias ls provider?)
       --serve PORT          Port to start an OpenAI Chat compatible server on

@@ -13,7 +13,7 @@ with open(os.path.join(this_directory, 'requirements.txt'), encoding='utf-8') as
     requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
 setup(
-    name='lapi',
+    name='llms-py',
     version='1.0.3',
     author='ServiceStack',
     author_email='team@servicestack.net',

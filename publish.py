@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to help publish the lapi package to PyPI.
+Script to help publish the llms-py package to PyPI.
 
 Usage:
     python publish.py --test    # Upload to TestPyPI
@@ -56,7 +56,7 @@ def check_dependencies():
         sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Publish lapi package to PyPI")
+    parser = argparse.ArgumentParser(description="Publish llms-py package to PyPI")
     parser.add_argument("--test", action="store_true", help="Upload to TestPyPI")
     parser.add_argument("--prod", action="store_true", help="Upload to PyPI")
     parser.add_argument("--build", action="store_true", help="Just build the package")
@@ -75,14 +75,14 @@ def main():
         upload_to_testpypi()
         print("\nPackage uploaded to TestPyPI!")
         print("You can test install with:")
-        print("pip install --index-url https://test.pypi.org/simple/ lapi")
+        print("pip install --index-url https://test.pypi.org/simple/ llms-py")
     elif args.prod:
         upload_to_pypi()
         print("\nPackage uploaded to PyPI!")
         print("You can install with:")
-        print("pip install lapi")
+        print("pip install llms-py")
         print("\nUpgrade with:")
-        print("pip install lapi --upgrade")
+        print("pip install llms-py --upgrade")
     else:
         print("\nPackage built successfully!")
         print("Files created in dist/:")

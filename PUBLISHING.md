@@ -1,6 +1,6 @@
-# Publishing lapi to PyPI
+# Publishing llms-py to PyPI
 
-This document explains how to publish the `lapi` package to PyPI.
+This document explains how to publish the `llms-py` package to PyPI.
 
 ## Prerequisites
 
@@ -59,7 +59,7 @@ python -m venv test_env
 source test_env/bin/activate  # On Windows: test_env\Scripts\activate
 
 # Install from TestPyPI
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ lapi
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ llms-py
 
 # Test the installation
 llms --help
@@ -83,7 +83,7 @@ python publish.py --prod
 
 ```bash
 # Test installation from PyPI
-pip install lapi
+pip install llms-py
 llms --help
 ```
 
@@ -114,7 +114,7 @@ The package creates a console script entry point:
 - Command: `llms`
 - Function: `llms:main`
 
-This allows users to run `lapi` directly from the command line after installation.
+This allows users to run `llms-py` directly from the command line after installation.
 
 ## Files Included in Distribution
 
@@ -128,7 +128,7 @@ This allows users to run `lapi` directly from the command line after installatio
 
 ### Common Issues
 
-1. **Package name already exists**: The name "lapi" should be available, but if not, you'll need to choose a different name.
+1. **Package name already exists**: The name "llms-py" should be available, but if not, you'll need to choose a different name.
 
 2. **Authentication errors**: Make sure your API tokens are correct and have the right permissions.
 
@@ -140,7 +140,7 @@ This allows users to run `lapi` directly from the command line after installatio
 
 ```bash
 # Check package contents
-python -m tarfile -l dist/lapi-*.tar.gz
+python -m tarfile -l dist/llms-py-*.tar.gz
 
 # Validate package
 python -m twine check dist/*
@@ -148,7 +148,7 @@ python -m twine check dist/*
 # Test installation in isolated environment
 python -m venv test_install
 source test_install/bin/activate
-pip install dist/lapi-*.whl
+pip install dist/llms-py-*.whl
 llms --help
 deactivate
 rm -rf test_install

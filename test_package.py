@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple test script to verify the lapi package works correctly.
+Simple test script to verify the llms-py package works correctly.
 """
 
 import subprocess

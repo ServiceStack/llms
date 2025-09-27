@@ -3,7 +3,7 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lapi"
+name = "llms-py"
 version = "1.0.3"
 description = "A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers"
 readme = "README.md"
