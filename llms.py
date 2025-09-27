@@ -227,6 +227,8 @@ class OpenAiProvider:
 
         chat = await process_chat(chat)
         print_chat(chat)
+        _log(f"POST {self.chat_url}")
+        _log(chat_summary(chat))
         async with aiohttp.ClientSession() as session:
             async with session.post(self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)) as response:
                 return await response_json(response)
@@ -244,6 +246,7 @@ class OllamaProvider(OpenAiProvider):
         ret = {}
         try:
             async with aiohttp.ClientSession() as session:
+                _log(f"GET {self.base_url}/api/tags")
                 async with session.get(f"{self.base_url}/api/tags", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)) as response:
                     data = await response_json(response)
                     for model in data.get('models', []):
@@ -406,8 +409,8 @@ class GoogleProvider(OpenAiProvider):
             started_at = int(time.time() * 1000)
             gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
 
-            _log(f"gemini_chat: {gemini_chat_url}")
-            _log(f"google request:\n{json.dumps(gemini_chat, indent=2)}")
+            _log(f"POST {gemini_chat_url}")
+            _log(json.dumps(gemini_chat, indent=2))
 
             if self.curl:
                 curl_args = [
@@ -850,6 +853,8 @@ def main():
 
     if cli_args.serve is not None:
         port = int(cli_args.serve)
+
+        app = web.Application()
 
         async def chat_handler(request):
             try:
