@@ -137,7 +137,7 @@ llms "Explain quantum computing" --raw
 
 ### Using a Chat Template
 
-By default llms uses the `defaults/text` chat completion request defined in [llms.json](llms.json). 
+By default llms uses the `defaults/text` chat completion request defined in [llms.json](llms.json).
 
 You can instead use a custom chat completion request with `--chat`, e.g:
 
@@ -307,6 +307,78 @@ Popular models that support audio processing:
 
 Audio files are automatically downloaded and converted to base64 data URIs with appropriate format detection.
 
+### File Requests
+
+Send documents (e.g. PDFs) to file-capable models using the `--file` option:
+
+```bash
+# Use defaults/file Chat Template (Summarize the document)
+llms --file ./docs/handbook.pdf
+
+# Local PDF file
+llms --file ./docs/policy.pdf "Summarize the key changes"
+
+# Remote PDF URL
+llms --file https://example.org/whitepaper.pdf "What are the main findings?"
+
+# With specific file-capable models
+llms -m gpt-5               --file ./policy.pdf   "Summarize the key changes"
+llms -m gemini-flash-latest --file ./report.pdf   "Extract action items"
+llms -m qwen2.5vl           --file ./manual.pdf   "List key sections and their purpose"
+
+# Combined with system prompt
+llms -s "You're a compliance analyst" --file ./policy.pdf "Identify compliance risks"
+
+# With custom chat template
+llms --chat file-request.json --file ./docs/handbook.pdf
+```
+
+Example of `file-request.json`:
+
+```json
+{
+  "model": "gpt-5",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "file",
+          "file": {
+            "filename": "",
+            "file_data": ""
+          }
+        },
+        {
+          "type": "text",
+          "text": "Please summarize this document"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Supported file formats**: PDF
+
+Other document types may work depending on the model/provider.
+
+**File sources**:
+- **Local files**: Absolute paths (`/path/to/file.pdf`) or relative paths (`./file.pdf`, `../file.pdf`)
+- **Remote URLs**: HTTP/HTTPS URLs are automatically downloaded
+- **Base64/Data URIs**: Inline `data:application/pdf;base64,...` is supported
+
+Files are automatically downloaded (for URLs) and converted to base64 data URIs before being sent to the model.
+
+### File-Capable Models
+
+Popular multi-modal models that support file (PDF) inputs:
+- OpenAI: gpt-5, gpt-5-mini, gpt-4o, gpt-4o-mini
+- Google: gemini-flash-latest, gemini-2.5-flash-lite
+- Grok: grok-4-fast
+- Qwen: qwen2.5vl
+- Others: deepseek-v3.1:671b, glm-4.5-air, mai-ds-r1, llama3.3:70b, mistral-small3.2:24b
+
 ## Server Mode
 
 Run as an OpenAI-compatible HTTP server:
@@ -449,7 +521,7 @@ llms --enable openai
 ```
 
 ### Anthropic (Claude)
-- **Type**: `OpenAiProvider` 
+- **Type**: `OpenAiProvider`
 - **Models**: Claude Opus 4.1, Sonnet 4.0, Haiku 3.5, etc.
 - **Features**: Text, images, large context windows
 
@@ -474,7 +546,7 @@ llms --enable google_free
 - **Features**: Fast inference, competitive pricing
 
 ```bash
-export GROQ_API_KEY="your-key" 
+export GROQ_API_KEY="your-key"
 llms --enable groq
 ```
 
