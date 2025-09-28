@@ -636,9 +636,10 @@ def config_str(key):
     return key in g_config and g_config[key] or None
 
 def init_llms(config):
-    global g_config
+    global g_config, g_handlers
 
     g_config = config
+    g_handlers = {}
     # iterate over config and replace $ENV with env value
     for key, value in g_config.items():
         if isinstance(value, str) and value.startswith("$"):
@@ -686,6 +687,7 @@ def save_config(config):
     g_config = config
     with open(g_config_path, "w") as f:
         json.dump(g_config, f, indent=4)
+        _log(f"Saved config to {g_config_path}")
 
 def github_url(filename):
     return f"https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/{filename}"
@@ -743,7 +745,7 @@ def get_config_path():
         check_paths.insert(0, os.environ.get("LLMS_CONFIG_PATH"))
 
     for check_path in check_paths:
-        g_config_path = os.path.join(os.path.dirname(__file__), check_path)
+        g_config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), check_path))
         if os.path.exists(g_config_path):
             return g_config_path
     return None
@@ -757,6 +759,28 @@ def get_ui_path():
         if os.path.exists(ui_path):
             return ui_path
     return None
+
+def enable_provider(provider):
+    msg = None
+    provider_config = g_config['providers'][provider]
+    provider_config['enabled'] = True
+    if 'api_key' in provider_config:
+        api_key = provider_config['api_key']
+        if isinstance(api_key, str):
+            if api_key.startswith("$"):
+                if not os.environ.get(api_key[1:], ""):
+                    msg = f"WARNING: {provider} requires missing API Key in Environment Variable {api_key}"
+            else:
+                msg = f"WARNING: {provider} is not configured with an API Key"
+    save_config(g_config)
+    init_llms(g_config)
+    return provider_config, msg
+
+def disable_provider(provider):
+    provider_config = g_config['providers'][provider]
+    provider_config['enabled'] = False
+    save_config(g_config)
+    init_llms(g_config)
 
 def main():
     global g_verbose, g_default_model, g_logprefix, g_config_path, g_ui_path
@@ -877,24 +901,29 @@ def main():
             cli_args.enable = cli_args.enable[:-1].strip()
         enable_providers = [cli_args.enable]
         all_providers = g_config['providers'].keys()
+        msgs = []
         if len(extra_args) > 0:
             for arg in extra_args:
                 if arg.endswith(','):
                     arg = arg[:-1].strip()
                 if arg in all_providers:
                     enable_providers.append(arg)
+
         for provider in enable_providers:
             if provider not in g_config['providers']:
                 print(f"Provider {provider} not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
                 exit(1)
             if provider in g_config['providers']:
-                g_config['providers'][provider]['enabled'] = True
-                save_config(g_config)
-                init_llms(g_config)
+                provider_config, msg = enable_provider(provider)
                 print(f"\nEnabled provider {provider}:")
-                printdump(g_config['providers'][provider])
+                printdump(provider_config)
+                if msg:
+                    msgs.append(msg)
+
         print_status()
+        if len(msgs) > 0:
+            print("\n" + "\n".join(msgs))
         exit(0)
 
     if cli_args.disable is not None:
@@ -908,17 +937,15 @@ def main():
                     arg = arg[:-1].strip()
                 if arg in all_providers:
                     disable_providers.append(arg)
+
         for provider in disable_providers:
             if provider not in g_config['providers']:
                 print(f"Provider {provider} not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
                 exit(1)
-            if provider in g_config['providers']:
-                g_config['providers'][provider]['enabled'] = False
-                save_config(g_config)
-                init_llms(g_config)
-                print(f"\nDisabled provider {provider}")
-                printdump(g_config['providers'][provider])
+            disable_provider(provider)
+            print(f"\nDisabled provider {provider}")
+
         print_status()
         exit(0)
 
