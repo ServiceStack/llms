@@ -226,7 +226,6 @@ class OpenAiProvider:
         #     f.write(json.dumps(chat, indent=2))
 
         chat = await process_chat(chat)
-        print_chat(chat)
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
         async with aiohttp.ClientSession() as session:
@@ -368,11 +367,13 @@ class GoogleProvider(OpenAiProvider):
                                 parts.append({"text": text})
                         if len(parts) > 0:
                             contents.append({
+                                "role": message['role'] if 'role' in message and message['role'] == 'user' else 'model',
                                 "parts": parts
                             })
                     else:
                         content = message['content']
                         contents.append({
+                                "role": message['role'] if 'role' in message and message['role'] == 'user' else 'model',
                             "parts": [{"text": content}]
                         })
 
