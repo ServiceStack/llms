@@ -1,0 +1,64 @@
+<html>
+    <head>
+        <title>llms.py</title>
+        <link rel="stylesheet" href="/ui/typography.css">
+        <link rel="stylesheet" href="/ui/app.css">
+        <link rel="icon" type="image/svg" href="/ui/fav.svg">
+    </head>
+    <script type="importmap">
+    {
+        "imports": {
+            "vue": "/ui/lib/vue.min.mjs",
+            "vue-router": "/ui/lib/vue-router.min.mjs",
+            "@servicestack/client": "/ui/lib/servicestack-client.min.mjs",
+            "@servicestack/vue": "/ui/lib/servicestack-vue.min.mjs",
+            "highlight.mjs": "/ui/lib/highlight.min.mjs"
+        }
+    }
+    </script>    
+    <body>
+        <div id="app"></div>
+    </body>
+    <script type="module">
+        import { createApp, defineAsyncComponent } from 'vue'
+        import { createWebHistory, createRouter } from "vue-router"
+        import ServiceStackVue from "@servicestack/vue"
+        import { useThreadStore } from '/ui/threadStore.mjs'
+        import App from '/ui/App.mjs'
+
+        async function init() {
+            // Load models and prompts
+            const { initDB } = useThreadStore()
+            const [_, configRes, modelsRes] = await Promise.all([
+                await initDB(),
+                fetch('/ui.json'),
+                fetch('/models'),
+            ])
+            const config = await configRes.json()
+            const models = await modelsRes.json()
+            return { config, models }
+        }
+
+        const { config, models } = await init()
+        const MainComponent = defineAsyncComponent(() => import('/ui/Main.mjs'))
+        const RecentsComponent = defineAsyncComponent(() => import('/ui/Recents.mjs'))
+
+        const routes = [
+            { path: '/', component: MainComponent },
+            { path: '/c/:id', component: MainComponent },
+            { path: '/recents', component: RecentsComponent  },
+            { path: '/:fallback(.*)*', component: MainComponent }
+        ]
+        const router = createRouter({
+            history: createWebHistory(),
+            routes,
+        })
+        const app = createApp(App, { config, models })
+        app.use(router)
+        app.use(ServiceStackVue)
+        app.provide('config', config)
+        app.provide('models', models)
+
+        app.mount('#app')
+    </script>
+</html>

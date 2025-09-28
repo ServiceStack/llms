@@ -888,9 +888,77 @@ def main():
                 return web.json_response(response)
             except Exception as e:
                 return web.json_response({"error": str(e)}, status=500)
-
-        app = web.Application()
         app.router.add_post('/v1/chat/completions', chat_handler)
+
+        async def models_handler(request):
+            return web.json_response(get_models())
+        app.router.add_get('/models', models_handler)
+
+        async def status_handler(request):
+            enabled, disabled = provider_status()
+            return web.json_response({
+                "all": list(g_config['providers'].keys()),
+                "enabled": enabled,
+                "disabled": disabled,
+            })
+        app.router.add_get('/status', status_handler)
+
+        async def provider_handler(request):
+            provider = request.match_info.get('provider', "")
+            data = await request.json()
+            msg = None
+            if provider:                
+                if data.get('enable', False):
+                    provider_config, msg = enable_provider(provider)
+                    _log(f"Enabled provider {provider}")
+                    await load_llms()
+                elif data.get('disable', False):
+                    disable_provider(provider)
+                    _log(f"Disabled provider {provider}")
+            enabled, disabled = provider_status()
+            return web.json_response({
+                "enabled": enabled,
+                "disabled": disabled,
+                "feedback": msg or "",
+            })
+        app.router.add_post('/providers/{provider}', provider_handler)
+
+        # Serve static files from ui/ directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ui_path = os.path.join(script_dir, 'ui')
+        if os.path.exists(ui_path):
+            app.router.add_static('/ui/', ui_path, name='ui')
+
+        async def not_found_handler(request):
+            return web.Response(text="404: Not Found", status=404)
+        app.router.add_get('/favicon.ico', not_found_handler)
+
+        # Serve index.html from root
+        index_path = os.path.join(script_dir, 'index.html')
+        if os.path.exists(index_path):
+            async def index_handler(request):
+                return web.FileResponse(index_path)
+            app.router.add_get('/', index_handler)
+
+            # Serve index.html as fallback route (SPA routing)
+            async def fallback_route_handler(request):
+                return web.FileResponse(index_path)
+            app.router.add_route('*', '/{tail:.*}', fallback_route_handler)
+        
+        if os.path.exists(g_ui_path):
+            async def ui_json_handler(request):
+                with open(g_ui_path, "r") as f:
+                    ui = json.load(f)
+                    if 'defaults' not in ui:
+                        ui['defaults'] = g_config['defaults']
+                    enabled, disabled = provider_status()
+                    ui['status'] = {
+                        "all": list(g_config['providers'].keys()),
+                        "enabled": enabled, 
+                        "disabled": disabled 
+                    }
+                    return web.json_response(ui)
+            app.router.add_get('/ui.json', ui_json_handler)
 
         print(f"Starting server on port {port}...")
         web.run_app(app, host='0.0.0.0', port=port)
