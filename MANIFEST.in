@@ -2,3 +2,6 @@ include README.md
 include LICENSE
 include requirements.txt
 include llms.json
+include index.html
+include ui.json
+recursive-include ui *
