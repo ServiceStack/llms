@@ -23,6 +23,14 @@ Configure additional providers and models in [llms.json](llms.json)
 - **Unified Models**: Define custom model names that map to different provider-specific names
 - **Multi-Model Support**: Support for over 160+ different LLMs
 
+## llms.py UI
+
+Simple ChatGPT-like UI to access ALL Your LLMs, Locally or Remotely!
+
+[![llms.py UI](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
+
+Read the [Introductory Blog Post](https://servicestack.net/posts/llms-py-ui).
+
 ## Installation
 
 ### Option 1: Install from PyPI
