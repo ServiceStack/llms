@@ -274,11 +274,25 @@ export default {
 
                             <!-- Message bubble -->
                             <div
-                                class="message rounded-lg px-4 py-3"
+                                class="message rounded-lg px-4 py-3 relative group"
                                 :class="message.role === 'user'
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-gray-100 text-gray-900 border border-gray-200'"
                             >
+                                <!-- Copy button in top right corner -->
+                                <button
+                                    type="button"
+                                    @click="copyMessageContent(message)"
+                                    class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded hover:bg-black/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    :class="message.role === 'user' ? 'text-white/70 hover:text-white hover:bg-white/20' : 'text-gray-500 hover:text-gray-700'"
+                                    title="Copy message content"
+                                >
+                                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                                    </svg>
+                                </button>
+
                                 <div
                                     v-if="message.role === 'assistant'"
                                     v-html="renderMarkdown(message.content)"
@@ -612,6 +626,23 @@ export default {
         }
         const formatReasoning = (r) => typeof r === 'string' ? r : JSON.stringify(r, null, 2)
 
+        // Copy message content to clipboard
+        const copyMessageContent = async (message) => {
+            try {
+                await navigator.clipboard.writeText(message.content)
+                // Could add a toast notification here if desired
+            } catch (err) {
+                console.error('Failed to copy message content:', err)
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea')
+                textArea.value = message.content
+                document.body.appendChild(textArea)
+                textArea.select()
+                document.execCommand('copy')
+                document.body.removeChild(textArea)
+            }
+        }
+
         onMounted(() => {
             setTimeout(addCopyButtons, 1)
         })
@@ -636,6 +667,7 @@ export default {
             isReasoningExpanded,
             toggleReasoning,
             formatReasoning,
+            copyMessageContent,
             configUpdated,
             exportThreads,
             isExporting,
