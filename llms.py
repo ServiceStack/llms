@@ -66,6 +66,16 @@ def chat_summary(chat):
                             item['file']['file_data'] = f"({len(data)})"
     return json.dumps(clone, indent=2)
 
+def gemini_chat_summary(gemini_chat):
+    """Summarize Gemini chat completion request for logging. Replace inline_data with size of content only"""
+    clone = json.loads(json.dumps(gemini_chat))
+    for content in clone['contents']:
+        for part in content['parts']:
+            if 'inline_data' in part:
+                data = part['inline_data']['data']
+                part['inline_data']['data'] = f"({len(data)})"
+    return json.dumps(clone, indent=2)
+
 image_exts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
 audio_exts = 'mp3,wav,ogg,flac,m4a,opus,webm'.split(',')
 
@@ -417,7 +427,7 @@ class GoogleProvider(OpenAiProvider):
             gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
 
             _log(f"POST {gemini_chat_url}")
-            _log(json.dumps(gemini_chat, indent=2))
+            _log(gemini_chat_summary(gemini_chat))
 
             if self.curl:
                 curl_args = [
