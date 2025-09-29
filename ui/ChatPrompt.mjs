@@ -146,12 +146,14 @@ export default {
             // allow re-selecting the same file
             if (fileInput.value) fileInput.value.value = ''
 
-            if (hasImage()) {
-                messageText.value = getTextContent(config.defaults.image)
-            } else if (hasAudio()) {
-                messageText.value = getTextContent(config.defaults.audio)
-            } else {
-                messageText.value = getTextContent(config.defaults.file)
+            if (!messageText.value.trim()) {
+                if (hasImage()) {
+                    messageText.value = getTextContent(config.defaults.image)
+                } else if (hasAudio()) {
+                    messageText.value = getTextContent(config.defaults.audio)
+                } else {
+                    messageText.value = getTextContent(config.defaults.file)
+                }
             }
         }
         const removeAttachment = (i) => {
