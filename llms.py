@@ -12,11 +12,17 @@ import subprocess
 import base64
 import mimetypes
 import traceback
+import sys
+import site
 
 import aiohttp
 from aiohttp import web
 
-VERSION = "1.0.3"
+from pathlib import Path
+from importlib import resources   # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
+
+VERSION = "2.0.5"
+_ROOT = None
 g_config_path = None
 g_ui_path = None
 g_config = None
@@ -782,8 +788,117 @@ def disable_provider(provider):
     save_config(g_config)
     init_llms(g_config)
 
+def resolve_root():
+    # Try to find the resource root directory
+    # When installed as a package, static files may be in different locations
+
+    # Method 1: Try importlib.resources for package data (Python 3.9+)
+    try:
+        try:
+            # Try to access the package resources
+            pkg_files = resources.files("llms")
+            # Check if ui directory exists in package resources
+            if hasattr(pkg_files, 'is_dir') and (pkg_files / "ui").is_dir():
+                _log(f"RESOURCE ROOT (package): {pkg_files}")
+                return pkg_files
+        except (FileNotFoundError, AttributeError, TypeError):
+            # Package doesn't have the resources, try other methods
+            pass
+    except ImportError:
+        # importlib.resources not available (Python < 3.9)
+        pass
+
+    # Method 2: Try to find data files in sys.prefix (where data_files are installed)
+    # Get all possible installation directories
+    possible_roots = [
+        Path(sys.prefix),  # Standard installation
+        Path(sys.prefix) / "share",  # Some distributions
+        Path(sys.base_prefix),  # Virtual environments
+        Path(sys.base_prefix) / "share",
+    ]
+
+    # Add site-packages directories
+    for site_dir in site.getsitepackages():
+        possible_roots.extend([
+            Path(site_dir),
+            Path(site_dir).parent,
+            Path(site_dir).parent / "share",
+        ])
+
+    # Add user site directory
+    try:
+        user_site = site.getusersitepackages()
+        if user_site:
+            possible_roots.extend([
+                Path(user_site),
+                Path(user_site).parent,
+                Path(user_site).parent / "share",
+            ])
+    except AttributeError:
+        pass
+
+    for root in possible_roots:
+        try:
+            if root.exists() and (root / "index.html").exists() and (root / "ui").is_dir():
+                _log(f"RESOURCE ROOT (data files): {root}")
+                return root
+        except (OSError, PermissionError):
+            continue
+
+    # Method 3: Development mode - look relative to this file
+    # __file__ is *this* module; look in same directory first, then parent
+    dev_roots = [
+        Path(__file__).resolve().parent,  # Same directory as llms.py
+        Path(__file__).resolve().parent.parent,  # Parent directory (repo root)
+    ]
+
+    for root in dev_roots:
+        try:
+            if (root / "index.html").exists() and (root / "ui").is_dir():
+                _log(f"RESOURCE ROOT (development): {root}")
+                return root
+        except (OSError, PermissionError):
+            continue
+
+    # Fallback: use the directory containing this file
+    from_file = Path(__file__).resolve().parent
+    _log(f"RESOURCE ROOT (fallback): {from_file}")
+    return from_file
+
+def resource_exists(resource_path):
+    # Check if resource files exist (handle both Path and Traversable objects)
+    try:
+        if hasattr(resource_path, 'is_file'):
+            return resource_path.is_file()
+        else:
+            return os.path.exists(resource_path)
+    except (OSError, AttributeError):
+        pass
+
+def read_resource_text(resource_path):
+    if hasattr(resource_path, 'read_text'):
+        return resource_path.read_text()
+    else:
+        with open(resource_path, "r") as f:
+            return f.read()
+
+def read_resource_file_bytes(resource_file):
+    try:
+        if hasattr(_ROOT, 'joinpath'):
+            # importlib.resources Traversable
+            index_resource = _ROOT.joinpath(resource_file)
+            if index_resource.is_file():
+                return index_resource.read_bytes()
+        else:
+            # Regular Path object
+            index_path = _ROOT / resource_file
+            if index_path.exists():
+                return index_path.read_bytes()
+    except (OSError, PermissionError, AttributeError) as e:
+        _log(f"Error reading resource bytes: {e}")
+
 def main():
-    global g_verbose, g_default_model, g_logprefix, g_config_path, g_ui_path
+    global _ROOT, g_verbose, g_default_model, g_logprefix, g_config_path, g_ui_path
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
@@ -806,6 +921,7 @@ def main():
 
     parser.add_argument('--init',         action='store_true', help='Create a default llms.json')
 
+    parser.add_argument('--root',         default=None, help='Change root directory for UI files', metavar='PATH')
     parser.add_argument('--logprefix',    default="",   help='Prefix used in log messages', metavar='PREFIX')
     parser.add_argument('--verbose',      action='store_true', help='Verbose output')
     parser.add_argument('--update',       action='store_true', help='Update to latest version')
@@ -822,18 +938,29 @@ def main():
     if cli_args.config is not None:
         g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
 
+    _ROOT = resolve_root()
+    if cli_args.root:
+        _ROOT = Path(cli_args.root)
+
+    if not _ROOT:
+        print("Resource root not found")
+        exit(1)
+
     g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config) if cli_args.config else get_config_path()
     g_ui_path = get_ui_path()
 
+    home_config_path = home_llms_path("llms.json")
+    resource_config_path = _ROOT / "llms.json"
+    home_ui_path = home_llms_path("ui.json")
+    resource_ui_path = _ROOT / "ui.json"
+
     if cli_args.init:
-        home_config_path = home_llms_path("llms.json")
         if os.path.exists(home_config_path):
             print(f"llms.json already exists at {home_config_path}")
         else:
             asyncio.run(save_default_config(home_config_path))
             print(f"Created default config at {home_config_path}")
 
-        home_ui_path = home_llms_path("ui.json")
         if os.path.exists(home_ui_path):
             print(f"ui.json already exists at {home_ui_path}")
         else:
@@ -841,9 +968,37 @@ def main():
             print(f"Created default ui config at {home_ui_path}")
         exit(0)
 
-    if not os.path.exists(g_config_path):
-        print("Config file not found. Create one with --init or use --config <path>")
-        exit(1)
+    if not g_config_path or not os.path.exists(g_config_path):
+        # copy llms.json and ui.json to llms_home
+ 
+        if not os.path.exists(home_config_path) and resource_exists(resource_config_path):
+            llms_home = os.path.dirname(home_config_path)
+            os.makedirs(llms_home, exist_ok=True)
+
+            # Read config from resource (handle both Path and Traversable objects)
+            try:
+                config_json = read_resource_text(resource_config_path)
+                with open(home_config_path, "w") as f:
+                    f.write(config_json)
+                    _log(f"Created default config at {home_config_path}")
+            except (OSError, AttributeError) as e:
+                _log(f"Error reading resource config: {e}")
+
+            # Read UI config from resource
+            if not os.path.exists(home_ui_path) and resource_exists(resource_ui_path):
+                try:
+                    ui_json = read_resource_text(resource_ui_path)
+                    with open(home_ui_path, "w") as f:
+                        f.write(ui_json)
+                        _log(f"Created default ui config at {home_ui_path}")
+                except (OSError, AttributeError) as e:
+                    _log(f"Error reading resource ui config: {e}")
+
+            # Update g_config_path to point to the copied file
+            g_config_path = home_config_path
+        else:
+            print("Config file not found. Create one with --init or use --config <path>")
+            exit(1)
 
     # read contents
     with open(g_config_path, "r") as f:
@@ -923,27 +1078,51 @@ def main():
             })
         app.router.add_post('/providers/{provider}', provider_handler)
 
-        # Serve static files from ui/ directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        ui_path = os.path.join(script_dir, 'ui')
-        if os.path.exists(ui_path):
-            app.router.add_static('/ui/', ui_path, name='ui')
+        async def ui_static(request: web.Request) -> web.Response:
+            path = Path(request.match_info["path"])
+
+            try:
+                # Handle both Path objects and importlib.resources Traversable objects
+                if hasattr(_ROOT, 'joinpath'):
+                    # importlib.resources Traversable
+                    resource = _ROOT.joinpath("ui").joinpath(str(path))
+                    if not resource.is_file():
+                        raise web.HTTPNotFound
+                    content = resource.read_bytes()
+                else:
+                    # Regular Path object
+                    resource = _ROOT / "ui" / path
+                    if not resource.is_file():
+                        raise web.HTTPNotFound
+                    try:
+                        resource.relative_to(Path(_ROOT))  # basic directory-traversal guard
+                    except ValueError:
+                        raise web.HTTPBadRequest(text="Invalid path")
+                    content = resource.read_bytes()
+
+                content_type, _ = mimetypes.guess_type(str(path))
+                if content_type is None:
+                    content_type = "application/octet-stream"
+                return web.Response(body=content, content_type=content_type)
+            except (OSError, PermissionError, AttributeError):
+                raise web.HTTPNotFound
+
+        app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
 
         async def not_found_handler(request):
             return web.Response(text="404: Not Found", status=404)
         app.router.add_get('/favicon.ico', not_found_handler)
 
         # Serve index.html from root
-        index_path = os.path.join(script_dir, 'index.html')
-        if os.path.exists(index_path):
-            async def index_handler(request):
-                return web.FileResponse(index_path)
-            app.router.add_get('/', index_handler)
+        async def index_handler(request):
+            index_content = read_resource_file_bytes("index.html")
+            if index_content is None:
+                raise web.HTTPNotFound
+            return web.Response(body=index_content, content_type='text/html')
+        app.router.add_get('/', index_handler)
 
-            # Serve index.html as fallback route (SPA routing)
-            async def fallback_route_handler(request):
-                return web.FileResponse(index_path)
-            app.router.add_route('*', '/{tail:.*}', fallback_route_handler)
+        # Serve index.html as fallback route (SPA routing)
+        app.router.add_route('*', '/{tail:.*}', index_handler)
         
         if os.path.exists(g_ui_path):
             async def ui_json_handler(request):
