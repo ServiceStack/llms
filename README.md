@@ -11,7 +11,7 @@ Configure additional providers and models in [llms.json](llms.json)
 ## Features
 
 - **Lightweight**: Single [llms.py](llms.py) Python file with single `aiohttp` dependency
-- **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Mistral
+- **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Z.ai, Mistral
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Configuration Management**: Easy provider enable/disable and configuration management
 - **CLI Interface**: Simple command-line interface for quick interactions
@@ -548,6 +548,26 @@ export GOOGLE_API_KEY="your-key"
 llms --enable google_free
 ```
 
+### OpenRouter
+- **Type**: `OpenAiProvider`
+- **Models**: 100+ models from various providers
+- **Features**: Access to latest models, free tier available
+
+```bash
+export OPENROUTER_API_KEY="your-key"
+llms --enable openrouter
+```
+
+### Grok (X.AI)
+- **Type**: `OpenAiProvider`
+- **Models**: Grok-4, Grok-3, Grok-3-mini, Grok-code-fast-1, etc.
+- **Features**: Real-time information, humor, uncensored responses
+
+```bash
+export GROK_API_KEY="your-key"
+llms --enable grok
+```
+
 ### Groq
 - **Type**: `OpenAiProvider`
 - **Models**: Llama 3.3, Gemma 2, Kimi K2, etc.
@@ -568,14 +588,24 @@ llms --enable groq
 llms --enable ollama
 ```
 
-### OpenRouter
+### Qwen (Alibaba Cloud)
 - **Type**: `OpenAiProvider`
-- **Models**: 100+ models from various providers
-- **Features**: Access to latest models, free tier available
+- **Models**: Qwen3-max, Qwen-max, Qwen-plus, Qwen2.5-VL, QwQ-plus, etc.
+- **Features**: Multilingual, vision models, coding, reasoning, audio processing
 
 ```bash
-export OPENROUTER_API_KEY="your-key"
-llms --enable openrouter
+export DASHSCOPE_API_KEY="your-key"
+llms --enable qwen
+```
+
+### Z.ai
+- **Type**: `OpenAiProvider`
+- **Models**: GLM-4.6, GLM-4.5, GLM-4.5-air, GLM-4.5-x, GLM-4.5-airx, GLM-4.5-flash, GLM-4:32b
+- **Features**: Advanced language models with strong reasoning capabilities
+
+```bash
+export ZAI_API_KEY="your-key"
+llms --enable z.ai
 ```
 
 ### Mistral
@@ -588,26 +618,6 @@ export MISTRAL_API_KEY="your-key"
 llms --enable mistral
 ```
 
-### Grok (X.AI)
-- **Type**: `OpenAiProvider`
-- **Models**: Grok-4, Grok-3, Grok-3-mini, Grok-code-fast-1, etc.
-- **Features**: Real-time information, humor, uncensored responses
-
-```bash
-export GROK_API_KEY="your-key"
-llms --enable grok
-```
-
-### Qwen (Alibaba Cloud)
-- **Type**: `OpenAiProvider`
-- **Models**: Qwen3-max, Qwen-max, Qwen-plus, Qwen2.5-VL, QwQ-plus, etc.
-- **Features**: Multilingual, vision models, coding, reasoning, audio processing
-
-```bash
-export DASHSCOPE_API_KEY="your-key"
-llms --enable qwen
-```
-
 ## Model Routing
 
 The tool automatically routes requests to the first available provider that supports the requested model. If a provider fails, it tries the next available provider with that model.
@@ -618,17 +628,18 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `LLMS_CONFIG_PATH`        | Custom config file path | `/path/to/llms.json` |
 | `OPENAI_API_KEY`          | OpenAI API key | `sk-...` |
 | `ANTHROPIC_API_KEY`       | Anthropic API key | `sk-ant-...` |
 | `GOOGLE_API_KEY`          | Google API key | `AIza...` |
+| `GOOGLE_FREE_API_KEY`     | Google FREE API key | `AIza...` |
 | `GROQ_API_KEY`            | Groq API key | `gsk_...` |
-| `MISTRAL_API_KEY`         | Mistral API key | `...` |
 | `OPENROUTER_API_KEY`      | OpenRouter API key | `sk-or-...` |
-| `OPENROUTER_FREE_API_KEY` | OpenRouter free tier key | `sk-or-...` |
+| `OPENROUTER_FREE_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
 | `CODESTRAL_API_KEY`       | Codestral API key | `...` |
 | `GROK_API_KEY`            | Grok (X.AI) API key | `xai-...` |
 | `DASHSCOPE_API_KEY`       | Qwen (Alibaba Cloud) API key | `sk-...` |
+| `ZAI_API_KEY`             | Z.ai API key | `sk-...` |
+| `MISTRAL_API_KEY`         | Mistral API key | `...` |
 
 ## Configuration Examples
 
