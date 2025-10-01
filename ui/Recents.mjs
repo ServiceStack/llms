@@ -1,5 +1,5 @@
-import { ref, computed, onMounted, watch, inject } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, watch, inject } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useThreadStore } from './threadStore.mjs'
 import { renderMarkdown } from './markdown.mjs'
 
@@ -169,7 +169,36 @@ export default {
         </div>
     `,
     setup() {
+        const router = useRouter()
+        const route = useRoute()
         const q = ref('')
+
+        // Initialize search query from URL parameter
+        onMounted(() => {
+            const urlQuery = route.query.q || ''
+            q.value = urlQuery
+        })
+
+        // Watch for changes in the search input and update URL
+        watch(q, (newQuery) => {
+            const currentQuery = route.query.q || ''
+            if (newQuery !== currentQuery) {
+                // Update URL without triggering navigation
+                router.replace({
+                    path: route.path,
+                    query: newQuery ? { q: newQuery } : {}
+                })
+            }
+        })
+
+        // Watch for URL changes (browser back/forward) and update search input
+        watch(() => route.query.q, (newQuery) => {
+            const urlQuery = newQuery || ''
+            if (q.value !== urlQuery) {
+                q.value = urlQuery
+            }
+        })
+
         return {
             q,
         }
