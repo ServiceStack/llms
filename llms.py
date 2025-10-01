@@ -219,7 +219,13 @@ class OpenAiProvider:
         self.api_key = api_key
         self.models = models
 
-        self.chat_url = f"{base_url}/v1/chat/completions"
+        # check if base_url ends with /v{\d} to handle providers with different versions (e.g. z.ai uses /v4)
+        last_segment = base_url.rsplit('/',1)[1]
+        if last_segment.startswith('v') and last_segment[1:].isdigit():
+            self.chat_url = f"{base_url}/chat/completions"
+        else:
+            self.chat_url = f"{base_url}/v1/chat/completions"
+
         self.headers = kwargs['headers'] if 'headers' in kwargs else {
             "Content-Type": "application/json",
         }

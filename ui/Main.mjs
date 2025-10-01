@@ -20,7 +20,7 @@ const ProviderStatus = {
                     <span class="text-red-700">{{(config.status.disabled||[]).length}}</span>
                 </div>
             </button>
-            <div v-if="showPopover" ref="popoverRef" class="absolute right-0 mt-2 w-72 max-h-112 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg z-10">
+            <div v-if="showPopover" ref="popoverRef" class="absolute right-0 mt-2 w-72 max-h-116 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg z-10">
                 <div class="divide-y divide-gray-100">
                     <div v-for="p in allProviders" :key="p" class="flex items-center justify-between px-3 py-2">
                         <label :for="'chk_' + p" class="cursor-pointer text-sm text-gray-900 truncate mr-2" :title="p">{{ p }}</label>
