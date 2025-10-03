@@ -518,6 +518,42 @@ llms "Explain quantum computing" | glow
 
 ## Supported Providers
 
+Any OpenAI-compatible providers and their models can be added by configuring them in [llms.json](./llms.json). By default only AI Providers with free tiers are enabled which will only be "available" if their API Key is set. 
+
+You can view the list or available providers and their models, and which providers are enabled or disabled with:
+
+```bash
+llms ls
+```
+
+They can be enabled/disabled in your `llms.json` file or with:
+
+```bash
+llms --enable <provider>
+llms --disable <provider>
+```
+
+For a provider to be available, they also require their API Key configured in either your Environment Variables
+or directly in your `llms.json`.
+
+### Environment Variables
+
+| Provider        | Variable                  | Description         | Example |
+|-----------------|---------------------------|---------------------|---------|
+| openrouter_free | `OPENROUTER_FREE_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
+| groq            | `GROQ_API_KEY`            | Groq API key        | `gsk_...` |
+| google_free     | `GOOGLE_FREE_API_KEY`     | Google FREE API key | `AIza...` |
+| codestral       | `CODESTRAL_API_KEY`       | Codestral API key   | `...` |
+| ollama          | N/A                       | No API key required | |
+| openrouter      | `OPENROUTER_API_KEY`      | OpenRouter API key  | `sk-or-...` |
+| google          | `GOOGLE_API_KEY`          | Google API key      | `AIza...` |
+| anthropic       | `ANTHROPIC_API_KEY`       | Anthropic API key   | `sk-ant-...` |
+| openai          | `OPENAI_API_KEY`          | OpenAI API key      | `sk-...` |
+| grok            | `GROK_API_KEY`            | Grok (X.AI) API key | `xai-...` |
+| qwen            | `DASHSCOPE_API_KEY`       | Qwen (Alibaba) API key | `sk-...` |
+| z.ai            | `ZAI_API_KEY`             | Z.ai API key        | `sk-...` |
+| mistral         | `MISTRAL_API_KEY`         | Mistral API key     | `...` |
+
 ### OpenAI
 - **Type**: `OpenAiProvider`
 - **Models**: GPT-5, GPT-5 Codex, GPT-4o, GPT-4o-mini, o3, etc.
@@ -618,28 +654,21 @@ export MISTRAL_API_KEY="your-key"
 llms --enable mistral
 ```
 
+### Codestral
+- **Type**: `OpenAiProvider`
+- **Models**: Codestral
+- **Features**: Code generation
+
+```bash
+export CODESTRAL_API_KEY="your-key"
+llms --enable codestral
+```
+
 ## Model Routing
 
 The tool automatically routes requests to the first available provider that supports the requested model. If a provider fails, it tries the next available provider with that model.
 
 Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first try OpenRouter (free), then fall back to Groq than OpenRouter (Paid) if requests fails.
-
-## Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `OPENAI_API_KEY`          | OpenAI API key | `sk-...` |
-| `ANTHROPIC_API_KEY`       | Anthropic API key | `sk-ant-...` |
-| `GOOGLE_API_KEY`          | Google API key | `AIza...` |
-| `GOOGLE_FREE_API_KEY`     | Google FREE API key | `AIza...` |
-| `GROQ_API_KEY`            | Groq API key | `gsk_...` |
-| `OPENROUTER_API_KEY`      | OpenRouter API key | `sk-or-...` |
-| `OPENROUTER_FREE_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
-| `CODESTRAL_API_KEY`       | Codestral API key | `...` |
-| `GROK_API_KEY`            | Grok (X.AI) API key | `xai-...` |
-| `DASHSCOPE_API_KEY`       | Qwen (Alibaba Cloud) API key | `sk-...` |
-| `ZAI_API_KEY`             | Z.ai API key | `sk-...` |
-| `MISTRAL_API_KEY`         | Mistral API key | `...` |
 
 ## Configuration Examples
 
