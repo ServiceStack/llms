@@ -520,7 +520,7 @@ llms "Explain quantum computing" | glow
 
 Any OpenAI-compatible providers and their models can be added by configuring them in [llms.json](./llms.json). By default only AI Providers with free tiers are enabled which will only be "available" if their API Key is set. 
 
-You can view the list or available providers and their models, and which providers are enabled or disabled with:
+You can list the available providers, their models and which are enabled or disabled with:
 
 ```bash
 llms ls
