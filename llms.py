@@ -14,6 +14,7 @@ import mimetypes
 import traceback
 import sys
 import site
+from urllib.parse import parse_qs
 
 import aiohttp
 from aiohttp import web
@@ -89,6 +90,60 @@ def is_url(url):
 
 def get_filename(file):
     return file.rsplit('/',1)[1] if '/' in file else 'file'
+
+def parse_args_params(args_str):
+    """Parse URL-encoded parameters and return a dictionary."""
+    if not args_str:
+        return {}
+
+    # Parse the URL-encoded string
+    parsed = parse_qs(args_str, keep_blank_values=True)
+
+    # Convert to simple dict with single values (not lists)
+    result = {}
+    for key, values in parsed.items():
+        if len(values) == 1:
+            value = values[0]
+            # Try to convert to appropriate types
+            if value.lower() == 'true':
+                result[key] = True
+            elif value.lower() == 'false':
+                result[key] = False
+            elif value.isdigit():
+                result[key] = int(value)
+            else:
+                try:
+                    # Try to parse as float
+                    result[key] = float(value)
+                except ValueError:
+                    # Keep as string
+                    result[key] = value
+        else:
+            # Multiple values, keep as list
+            result[key] = values
+
+    return result
+
+def apply_args_to_chat(chat, args_params):
+    """Apply parsed arguments to the chat request."""
+    if not args_params:
+        return chat
+
+    # Apply each parameter to the chat request
+    for key, value in args_params.items():
+        if isinstance(value, str):
+            if key == 'stop':
+                if ',' in value:
+                    value = value.split(',')
+            elif key == 'max_completion_tokens' or key == 'max_tokens' or key == 'n' or key == 'seed' or key == 'top_logprobs':
+                value = int(value)
+            elif key == 'temperature' or key == 'top_p' or key == 'frequency_penalty' or key == 'presence_penalty':
+                value = float(value)
+            elif key == 'store' or key == 'logprobs' or key == 'enable_thinking' or key == 'parallel_tool_calls' or key == 'stream':
+                value = bool(value)
+        chat[key] = value
+
+    return chat
 
 def is_base_64(data):
     try:
@@ -191,8 +246,9 @@ async def process_chat(chat):
                                     content = f.read()
                                     file['filename'] = get_filename(url)
                                     file['file_data'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                            elif is_base_64(url):
-                                file['filename'] = 'file'
+                            elif url.startswith('data:'):
+                                if 'filename' not in file:
+                                    file['filename'] = 'file' 
                                 pass # use base64 data as-is
                             else:
                                 raise Exception(f"Invalid file: {url}")
@@ -233,6 +289,25 @@ class OpenAiProvider:
         if api_key is not None:
             self.headers["Authorization"] = f"Bearer {api_key}"
 
+        self.frequency_penalty = float(kwargs['frequency_penalty']) if 'frequency_penalty' in kwargs else None
+        self.max_completion_tokens = int(kwargs['max_completion_tokens']) if 'max_completion_tokens' in kwargs else None
+        self.n = int(kwargs['n']) if 'n' in kwargs else None
+        self.parallel_tool_calls = bool(kwargs['parallel_tool_calls']) if 'parallel_tool_calls' in kwargs else None
+        self.presence_penalty = float(kwargs['presence_penalty']) if 'presence_penalty' in kwargs else None
+        self.prompt_cache_key = kwargs['prompt_cache_key'] if 'prompt_cache_key' in kwargs else None
+        self.reasoning_effort = kwargs['reasoning_effort'] if 'reasoning_effort' in kwargs else None
+        self.safety_identifier = kwargs['safety_identifier'] if 'safety_identifier' in kwargs else None        
+        self.seed = int(kwargs['seed']) if 'seed' in kwargs else None
+        self.service_tier = kwargs['service_tier'] if 'service_tier' in kwargs else None
+        self.stop = kwargs['stop'] if 'stop' in kwargs else None
+        self.store = bool(kwargs['store']) if 'store' in kwargs else None
+        self.temperature = float(kwargs['temperature']) if 'temperature' in kwargs else None
+        self.top_logprobs = int(kwargs['top_logprobs']) if 'top_logprobs' in kwargs else None
+        self.top_p = float(kwargs['top_p']) if 'top_p' in kwargs else None
+        self.verbosity = kwargs['verbosity'] if 'verbosity' in kwargs else None
+        self.stream = bool(kwargs['stream']) if 'stream' in kwargs else None
+        self.enable_thinking = bool(kwargs['enable_thinking']) if 'enable_thinking' in kwargs else None
+
     @classmethod
     def test(cls, base_url=None, api_key=None, models={}, **kwargs):
         return base_url is not None and api_key is not None and len(models) > 0
@@ -247,6 +322,41 @@ class OpenAiProvider:
 
         # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
         #     f.write(json.dumps(chat, indent=2))
+
+        if self.frequency_penalty is not None:
+            chat['frequency_penalty'] = self.frequency_penalty
+        if self.max_completion_tokens is not None:
+            chat['max_completion_tokens'] = self.max_completion_tokens
+        if self.n is not None:
+            chat['n'] = self.n
+        if self.parallel_tool_calls is not None:
+            chat['parallel_tool_calls'] = self.parallel_tool_calls
+        if self.presence_penalty is not None:
+            chat['presence_penalty'] = self.presence_penalty
+        if self.prompt_cache_key is not None:
+            chat['prompt_cache_key'] = self.prompt_cache_key
+        if self.reasoning_effort is not None:
+            chat['reasoning_effort'] = self.reasoning_effort
+        if self.safety_identifier is not None:
+            chat['safety_identifier'] = self.safety_identifier
+        if self.seed is not None:
+            chat['seed'] = self.seed
+        if self.service_tier is not None:
+            chat['service_tier'] = self.service_tier
+        if self.stop is not None:
+            chat['stop'] = self.stop
+        if self.store is not None:
+            chat['store'] = self.store
+        if self.temperature is not None:
+            chat['temperature'] = self.temperature
+        if self.top_logprobs is not None:
+            chat['top_logprobs'] = self.top_logprobs
+        if self.top_p is not None:
+            chat['top_p'] = self.top_p
+        if self.verbosity is not None:
+            chat['verbosity'] = self.verbosity
+        if self.enable_thinking is not None:
+            chat['enable_thinking'] = self.enable_thinking
 
         chat = await process_chat(chat)
         _log(f"POST {self.chat_url}")
@@ -538,9 +648,13 @@ async def chat_completion(chat):
     # If we get here, all providers failed
     raise first_exception
 
-async def cli_chat(chat, image=None, audio=None, file=None, raw=False):
+async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False):
     if g_default_model:
         chat['model'] = g_default_model
+
+    # Apply args parameters to chat request
+    if args:
+        chat = apply_args_to_chat(chat, args)
 
     # process_chat downloads the image, just adding the reference here
     if image is not None:
@@ -926,6 +1040,7 @@ def main():
     parser.add_argument('--image',        default=None, help='Image input to use in chat completion')
     parser.add_argument('--audio',        default=None, help='Audio input to use in chat completion')
     parser.add_argument('--file',         default=None, help='File input to use in chat completion')
+    parser.add_argument('--args',         default=None, help='URL-encoded parameters to add to chat request (e.g. "temperature=0.7&seed=111")', metavar='PARAMS')
     parser.add_argument('--raw',          action='store_true', help='Return raw AI JSON response')
 
     parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
@@ -1266,7 +1381,12 @@ def main():
                 else:
                     chat['messages'].append({'role': 'user', 'content': prompt})
 
-            asyncio.run(cli_chat(chat, image=cli_args.image, audio=cli_args.audio, file=cli_args.file, raw=cli_args.raw))
+            # Parse args parameters if provided
+            args = None
+            if cli_args.args is not None:
+                args = parse_args_params(cli_args.args)
+
+            asyncio.run(cli_chat(chat, image=cli_args.image, audio=cli_args.audio, file=cli_args.file, args=args, raw=cli_args.raw))
             exit(0)
         except Exception as e:
             print(f"{cli_args.logprefix}Error: {e}")

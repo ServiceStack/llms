@@ -470,7 +470,52 @@ llms --default grok-4
 
 # Update llms.py to latest version
 llms --update
+
+# Pass custom parameters to chat request (URL-encoded)
+llms --args "temperature=0.7&seed=111" "What is 2+2?"
+
+# Multiple parameters with different types
+llms --args "temperature=0.5&max_completion_tokens=50" "Tell me a joke"
+
+# URL-encoded special characters (stop sequences)
+llms --args "stop=Two,Words" "Count to 5"
+
+# Combine with other options
+llms --system "You are helpful" --args "temperature=0.3" --raw "Hello"
 ```
+
+#### Custom Parameters with `--args`
+
+The `--args` option allows you to pass URL-encoded parameters to customize the chat request sent to LLM providers:
+
+**Parameter Types:**
+- **Floats**: `temperature=0.7`, `frequency_penalty=0.2`
+- **Integers**: `max_completion_tokens=100`
+- **Booleans**: `store=true`, `verbose=false`, `logprobs=true`
+- **Strings**: `stop=one`
+- **Lists**: `stop=two,words`
+
+**Common Parameters:**
+- `temperature`: Controls randomness (0.0 to 2.0)
+- `max_completion_tokens`: Maximum tokens in response
+- `seed`: For reproducible outputs
+- `top_p`: Nucleus sampling parameter
+- `stop`: Stop sequences (URL-encode special chars)
+- `store`: Whether or not to store the output
+- `frequency_penalty`: Penalize new tokens based on frequency
+- `presence_penalty`: Penalize new tokens based on presence
+- `logprobs`: Include log probabilities in response
+- `parallel_tool_calls`: Enable parallel tool calls
+- `prompt_cache_key`: Cache key for prompt
+- `reasoning_effort`: Reasoning effort (low, medium, high, *minimal, *none, *default)
+- `safety_identifier`: A string that uniquely identifies each user
+- `seed`: For reproducible outputs
+- `service_tier`: Service tier (free, standard, premium, *default)
+- `top_logprobs`: Number of top logprobs to return
+- `top_p`: Nucleus sampling parameter
+- `verbosity`: Verbosity level (0, 1, 2, 3, *default)
+- `enable_thinking`: Enable thinking mode (Qwen)
+- `stream`: Enable streaming responses
 
 ### Default Model Configuration
 
