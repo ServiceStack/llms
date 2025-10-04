@@ -1256,9 +1256,12 @@ def main():
             if len(extra_args) > 0:
                 prompt = ' '.join(extra_args)
                 # replace content of last message if exists, else add
-                last_msg = chat['messages'][-1]
-                if last_msg['role'] == 'user':
-                    last_msg['content'] = prompt
+                last_msg = chat['messages'][-1] if 'messages' in chat else None
+                if last_msg and last_msg['role'] == 'user':
+                    if isinstance(last_msg['content'], list):
+                        last_msg['content'][-1]['text'] = prompt
+                    else:
+                        last_msg['content'] = prompt
                 else:
                     chat['messages'].append({'role': 'user', 'content': prompt})
 

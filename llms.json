@@ -9,7 +9,12 @@
             "messages": [
                 {
                     "role": "user",
-                    "content": ""
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": ""
+                        }
+                    ]
                 }
             ]
         },
