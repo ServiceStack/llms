@@ -31,7 +31,7 @@
             const { initDB } = useThreadStore()
             const [_, configRes, modelsRes] = await Promise.all([
                 await initDB(),
-                fetch('/ui.json'),
+                fetch('/config'),
                 fetch('/models'),
             ])
             const config = await configRes.json()

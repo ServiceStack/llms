@@ -1257,7 +1257,7 @@ def main():
         app.router.add_route('*', '/{tail:.*}', index_handler)
         
         if os.path.exists(g_ui_path):
-            async def ui_json_handler(request):
+            async def ui_config_handler(request):
                 with open(g_ui_path, "r") as f:
                     ui = json.load(f)
                     if 'defaults' not in ui:
@@ -1269,7 +1269,7 @@ def main():
                         "disabled": disabled 
                     }
                     return web.json_response(ui)
-            app.router.add_get('/ui.json', ui_json_handler)
+            app.router.add_get('/config', ui_config_handler)
 
         print(f"Starting server on port {port}...")
         web.run_app(app, host='0.0.0.0', port=port)

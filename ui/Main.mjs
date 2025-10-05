@@ -65,7 +65,7 @@ const ProviderStatus = {
 
                 try {
                     const [configRes, modelsRes] = await Promise.all([
-                        fetch('/ui.json'),
+                        fetch('/config'),
                         fetch('/models'),
                     ])
                     const newConfig = await configRes.json()
