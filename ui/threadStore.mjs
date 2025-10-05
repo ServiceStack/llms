@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { openDB } from './lib/idb.min.mjs'
+import { openDB } from 'idb'
 import { nextId } from './utils.mjs'
 
 // Thread store for managing chat threads with IndexedDB

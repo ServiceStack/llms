@@ -1,5 +1,5 @@
-import { Marked } from "./lib/marked.min.mjs"
-import hljs from "./lib/highlight.min.mjs"
+import { Marked } from "marked"
+import hljs from "highlight.js"
 
 export const marked = (() => {
     const ret = new Marked(
