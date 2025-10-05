@@ -64,8 +64,8 @@ def chat_summary(chat):
                     elif 'file' in item:
                         if 'file_data' in item['file']:
                             data = item['file']['file_data']
-                            prefix = url.split(',', 1)[0]
-                            item['file']['file_data'] = prefix + f",({len(url) - len(prefix)})"
+                            prefix = data.split(',', 1)[0]
+                            item['file']['file_data'] = prefix + f",({len(data) - len(prefix)})"
     return json.dumps(clone, indent=2)
 
 def gemini_chat_summary(gemini_chat):
