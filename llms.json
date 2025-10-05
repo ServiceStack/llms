@@ -95,7 +95,6 @@
                 "deepseek-r1:671b": "deepseek/deepseek-r1-0528:free",
                 "gemini-2.0-flash": "google/gemini-2.0-flash-exp:free",
                 "glm-4.5-air": "z-ai/glm-4.5-air:free",
-                "grok-4-fast": "x-ai/grok-4-fast:free",
                 "mai-ds-r1": "microsoft/mai-ds-r1:free",
                 "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct:free",
                 "nemotron-nano:9b": "nvidia/nemotron-nano-9b-v2:free",
