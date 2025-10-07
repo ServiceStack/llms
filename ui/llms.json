@@ -173,7 +173,7 @@
             }
         },
         "ollama": {
-            "enabled": true,
+            "enabled": false,
             "type": "OllamaProvider",
             "base_url": "http://localhost:11434",
             "models": {},

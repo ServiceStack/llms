@@ -1,66 +1,80 @@
 <html>
-    <head>
-        <title>llms.py</title>
-        <link rel="stylesheet" href="/ui/typography.css">
-        <link rel="stylesheet" href="/ui/app.css">
-        <link rel="icon" type="image/svg" href="/ui/fav.svg">
-    </head>
-    <script type="importmap">
+<head>
+    <title>llms.py</title>
+    <link rel="stylesheet" href="/ui/typography.css">
+    <link rel="stylesheet" href="/ui/app.css">
+    <link rel="icon" type="image/svg" href="/ui/fav.svg">
+    <style>
+        [type='button'],button[type='submit']{cursor:pointer}
+        [type='checkbox'].switch:checked:hover, 
+        [type='checkbox'].switch:checked:focus,
+        [type='checkbox'].switch:checked,
+        [type='checkbox'].switch:focus,
+        [type='checkbox'].switch
+        {
+            border: none; 
+            background: none;
+            outline: none;
+            box-shadow: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<script type="importmap">
     {
         "imports": {
             "vue": "/ui/lib/vue.min.mjs",
             "vue-router": "/ui/lib/vue-router.min.mjs",
-            "@servicestack/client": "/ui/lib/servicestack-client.min.mjs",
-            "@servicestack/vue": "/ui/lib/servicestack-vue.min.mjs",
+            "@servicestack/client": "/ui/lib/servicestack-client.mjs",
+            "@servicestack/vue": "/ui/lib/servicestack-vue.mjs",
             "idb": "/ui/lib/idb.min.mjs",
             "marked": "/ui/lib/marked.min.mjs",
             "highlight.js": "/ui/lib/highlight.min.mjs"
         }
     }
-    </script>    
-    <body>
-        <div id="app"></div>
-    </body>
-    <script type="module">
-        import { createApp, defineAsyncComponent } from 'vue'
-        import { createWebHistory, createRouter } from "vue-router"
-        import ServiceStackVue from "@servicestack/vue"
-        import { useThreadStore } from '/ui/threadStore.mjs'
-        import App from '/ui/App.mjs'
+</script>
+<body>
+<div id="app"></div>
+</body>
+<script type="module">
+import { createApp, defineAsyncComponent } from 'vue'
+import { createWebHistory, createRouter } from "vue-router"
+import ServiceStackVue from "@servicestack/vue"
+import App from '/ui/App.mjs'
+import ai from '/ui/ai.mjs'
+import SettingsDialog from '/ui/SettingsDialog.mjs'
 
-        async function init() {
-            // Load models and prompts
-            const { initDB } = useThreadStore()
-            const [_, configRes, modelsRes] = await Promise.all([
-                await initDB(),
-                fetch('/config'),
-                fetch('/models'),
-            ])
-            const config = await configRes.json()
-            const models = await modelsRes.json()
-            return { config, models }
-        }
+const { config, models } = await ai.init()
+const MainComponent = defineAsyncComponent(() => import(ai.base + '/ui/Main.mjs'))
+const RecentsComponent = defineAsyncComponent(() => import(ai.base + '/ui/Recents.mjs'))
 
-        const { config, models } = await init()
-        const MainComponent = defineAsyncComponent(() => import('/ui/Main.mjs'))
-        const RecentsComponent = defineAsyncComponent(() => import('/ui/Recents.mjs'))
+const Components = {
+    SettingsDialog,
+}
 
-        const routes = [
-            { path: '/', component: MainComponent },
-            { path: '/c/:id', component: MainComponent },
-            { path: '/recents', component: RecentsComponent  },
-            { path: '/:fallback(.*)*', component: MainComponent }
-        ]
-        const router = createRouter({
-            history: createWebHistory(),
-            routes,
-        })
-        const app = createApp(App, { config, models })
-        app.use(router)
-        app.use(ServiceStackVue)
-        app.provide('config', config)
-        app.provide('models', models)
+const routes = [
+    { path: '/', component: MainComponent },
+    { path: '/c/:id', component: MainComponent },
+    { path: '/recents', component: RecentsComponent  },
+    { path: '/:fallback(.*)*', component: MainComponent }
+]
+routes.forEach(r => r.path = ai.base + r.path)
+const router = createRouter({
+    history: createWebHistory(),
+    routes,
+})
+const app = createApp(App, { config, models })
+app.use(router)
+app.use(ServiceStackVue)
+app.provide('ai', ai)
+app.provide('config', config)
+app.provide('models', models)
+Object.keys(Components).forEach(name => {
+    app.component(name, Components[name])
+})
 
-        app.mount('#app')
-    </script>
+window.ai = app.config.globalProperties.$ai = ai
+
+app.mount('#app')
+</script>
 </html>

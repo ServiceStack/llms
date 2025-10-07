@@ -46,6 +46,7 @@ const RecentResults = {
         q: String
     },
     setup(props) {
+        const ai = inject('ai')
         const router = useRouter()
         const config = inject('config')
         const { threads, loadThreads } = useThreadStore()
@@ -127,7 +128,7 @@ const RecentResults = {
             return ''
         }
 
-        const open = (id) => router.push(`/c/${id}`)
+        const open = (id) => router.push(`${ai.base}/c/${id}`)
         const formatDate = (iso) => new Date(iso).toLocaleString()
 
         return {
