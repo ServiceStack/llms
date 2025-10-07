@@ -57,34 +57,31 @@ pip install aiohttp
 
 ## Quick Start
 
-### 1. Initialize Configuration
-
-Create a default configuration file:
-
-```bash
-llms --init
-```
-
-This saves the latest [llms.json](llms.json) configuration to `~/.llms/llms.json`.
-
-Modify `~/.llms/llms.json` to enable providers, add required API keys, additional models or any custom
-OpenAI-compatible providers.
-
-### 2. Set API Keys
+### 1. Set API Keys
 
 Set environment variables for the providers you want to use:
 
 ```bash
-export OPENROUTER_API_KEY="..."
-export GROQ_API_KEY="..."
-export GOOGLE_API_KEY="..."
-export ANTHROPIC_API_KEY="..."
-export GROK_API_KEY="..."
-export DASHSCOPE_API_KEY="..."
-# ... etc
+export OPENROUTER_FREE_API_KEY="..."
 ```
 
-### 3. Enable Providers
+| Provider        | Variable                  | Description         | Example |
+|-----------------|---------------------------|---------------------|---------|
+| openrouter_free | `OPENROUTER_FREE_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
+| groq            | `GROQ_API_KEY`            | Groq API key        | `gsk_...` |
+| google_free     | `GOOGLE_FREE_API_KEY`     | Google FREE API key | `AIza...` |
+| codestral       | `CODESTRAL_API_KEY`       | Codestral API key   | `...` |
+| ollama          | N/A                       | No API key required | |
+| openrouter      | `OPENROUTER_API_KEY`      | OpenRouter API key  | `sk-or-...` |
+| google          | `GOOGLE_API_KEY`          | Google API key      | `AIza...` |
+| anthropic       | `ANTHROPIC_API_KEY`       | Anthropic API key   | `sk-ant-...` |
+| openai          | `OPENAI_API_KEY`          | OpenAI API key      | `sk-...` |
+| grok            | `GROK_API_KEY`            | Grok (X.AI) API key | `xai-...` |
+| qwen            | `DASHSCOPE_API_KEY`       | Qwen (Alibaba) API key | `sk-...` |
+| z.ai            | `ZAI_API_KEY`             | Z.ai API key        | `sk-...` |
+| mistral         | `MISTRAL_API_KEY`         | Mistral API key     | `...` |
+
+### 2. Enable Providers
 
 Enable the providers you want to use:
 
@@ -96,7 +93,17 @@ llms --enable openrouter_free google_free groq
 llms --enable openrouter anthropic google openai mistral grok qwen
 ```
 
-### 4. Start Chatting
+### 3. Run UI
+
+Start the UI and an OpenAI compatible API on port **8000**:
+
+:::sh
+llms --serve 8000
+:::
+
+Launches the UI at `http://localhost:8000` and an OpenAI Endpoint at `http://localhost:8000/v1/chat/completions`.
+
+### 4. Use llms.py CLI
 
 ```bash
 llms "What is the capital of France?"
@@ -104,7 +111,7 @@ llms "What is the capital of France?"
 
 ## Configuration
 
-The configuration file (`llms.json`) defines available providers, models, and default settings. Key sections:
+The configuration file [llms.json](llms.json) is saved to `~/.llms/llms.json` and defines available providers, models, and default settings. Key sections:
 
 ### Defaults
 - `headers`: Common HTTP headers for all requests
@@ -118,6 +125,7 @@ Each provider configuration includes:
 - `api_key`: API key (supports environment variables with `$VAR_NAME`)
 - `base_url`: API endpoint URL
 - `models`: Model name mappings (local name → provider name)
+
 
 ## Command Line Usage
 
