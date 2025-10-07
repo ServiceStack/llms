@@ -444,7 +444,14 @@ class GoogleProvider(OpenAiProvider):
         async with aiohttp.ClientSession() as session:
             for message in chat['messages']:
                 if message['role'] == 'system':
-                    system_prompt = message
+                    content = message['content']
+                    if isinstance(content, list):
+                        for item in content:
+                            if 'text' in item:
+                                system_prompt = item['text']
+                                break
+                    elif isinstance(content, str):
+                        system_prompt = content
                 elif 'content' in message:
                     if isinstance(message['content'], list):
                         parts = []
@@ -520,7 +527,7 @@ class GoogleProvider(OpenAiProvider):
             # Add system instruction if present
             if system_prompt is not None:
                 gemini_chat['systemInstruction'] = {
-                    "parts": [{"text": system_prompt['content']}]
+                    "parts": [{"text": system_prompt}]
                 }
 
             if 'stop' in chat:
