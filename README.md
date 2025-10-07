@@ -97,9 +97,9 @@ llms --enable openrouter anthropic google openai mistral grok qwen
 
 Start the UI and an OpenAI compatible API on port **8000**:
 
-:::sh
+```bash
 llms --serve 8000
-:::
+```
 
 Launches the UI at `http://localhost:8000` and an OpenAI Endpoint at `http://localhost:8000/v1/chat/completions`.
 
