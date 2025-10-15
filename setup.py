@@ -16,7 +16,7 @@ with open(os.path.join(this_directory, "requirements.txt"), encoding="utf-8") as
 
 setup(
     name="llms-py",
-    version="2.0.14",
+    version="2.0.15",
     author="ServiceStack",
     author_email="team@servicestack.net",
     description="A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers",
@@ -28,12 +28,21 @@ setup(
         "Source": "https://github.com/ServiceStack/llms",
         "Documentation": "https://github.com/ServiceStack/llms#readme",
     },
-    py_modules=["llms"],
+    packages=["llms"],
+    package_data={
+        "llms": [
+            "index.html",
+            "llms.json",
+            "ui.json",
+            "ui/*",
+            "ui/lib/*",
+        ]
+    },
     install_requires=requirements,
     python_requires=">=3.7",
     entry_points={
         "console_scripts": [
-            "llms=llms:main",
+            "llms=llms.main:main",
         ],
     },
     classifiers=[
@@ -58,47 +67,5 @@ setup(
     ],
     keywords="llm ai openai anthropic google gemini groq mistral ollama cli server chat completion",
     include_package_data=True,
-    data_files=[
-        ("", ["index.html", "ui.json", "llms.json", "requirements.txt"]),
-        (
-            "ui",
-            [
-                "ui/ai.mjs",
-                "ui/app.css",
-                "ui/App.mjs",
-                "ui/Avatar.mjs",
-                "ui/Brand.mjs",
-                "ui/ChatPrompt.mjs",
-                "ui/fav.svg",
-                "ui/Main.mjs",
-                "ui/markdown.mjs",
-                "ui/ModelSelector.mjs",
-                "ui/ProviderStatus.mjs",
-                "ui/Recents.mjs",
-                "ui/SettingsDialog.mjs",
-                "ui/Sidebar.mjs",
-                "ui/SignIn.mjs",
-                "ui/SystemPromptEditor.mjs",
-                "ui/SystemPromptSelector.mjs",
-                "ui/tailwind.input.css",
-                "ui/threadStore.mjs",
-                "ui/typography.css",
-                "ui/utils.mjs",
-                "ui/Welcome.mjs",
-            ],
-        ),
-        (
-            "ui/lib",
-            [
-                "ui/lib/highlight.min.mjs",
-                "ui/lib/idb.min.mjs",
-                "ui/lib/marked.min.mjs",
-                "ui/lib/servicestack-client.mjs",
-                "ui/lib/servicestack-vue.mjs",
-                "ui/lib/vue-router.min.mjs",
-                "ui/lib/vue.min.mjs",
-            ],
-        ),
-    ],
     zip_safe=False,
 )

@@ -884,7 +884,6 @@ def get_config_path():
     home_config_path = home_llms_path("llms.json")
     check_paths = [
         "./llms.json",
-        "./llms/llms.json",  # Check package directory for local development
         home_config_path,
     ]
     if os.environ.get("LLMS_CONFIG_PATH"):
@@ -899,8 +898,7 @@ def get_config_path():
 def get_ui_path():
     ui_paths = [
         home_llms_path("ui.json"),
-        "ui.json",
-        "./llms/ui.json"  # Check package directory for local development
+        "ui.json"
     ]
     for ui_path in ui_paths:
         if os.path.exists(ui_path):
@@ -1484,5 +1482,5 @@ def main():
     parser.print_help()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     main()
