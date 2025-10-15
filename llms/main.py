@@ -834,7 +834,7 @@ def save_config(config):
         _log(f"Saved config to {g_config_path}")
 
 def github_url(filename):
-    return f"https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/{filename}"
+    return f"https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms/{filename}"
 
 async def save_text(url, save_path):
     async with aiohttp.ClientSession() as session:

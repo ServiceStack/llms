@@ -33,26 +33,8 @@ Read the [Introductory Blog Post](https://servicestack.net/posts/llms-py-ui).
 
 ## Installation
 
-### Option 1: Install from PyPI
-
 ```bash
 pip install llms-py
-```
-
-### Option 2: Download directly
-
-1. Download [llms.py](llms.py)
-
-```bash
-curl -O https://raw.githubusercontent.com/ServiceStack/llms/main/llms.py
-chmod +x llms.py
-mv llms.py ~/.local/bin/llms
-```
-
-2. Install single dependency:
-
-```bash
-pip install aiohttp
 ```
 
 ## Quick Start
