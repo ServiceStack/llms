@@ -22,7 +22,7 @@ from aiohttp import web
 from pathlib import Path
 from importlib import resources   # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 
-VERSION = "2.0.11"
+VERSION = "2.0.14"
 _ROOT = None
 g_config_path = None
 g_ui_path = None
@@ -838,6 +838,7 @@ def github_url(filename):
 
 async def save_text(url, save_path):
     async with aiohttp.ClientSession() as session:
+        _log(f"GET {url}")
         async with session.get(url) as resp:
             text = await resp.text()
             if resp.status >= 400:
@@ -1110,34 +1111,61 @@ def main():
     if not g_config_path or not os.path.exists(g_config_path):
         # copy llms.json and ui.json to llms_home
  
-        if not os.path.exists(home_config_path) and resource_exists(resource_config_path):
+        if not os.path.exists(home_config_path):
             llms_home = os.path.dirname(home_config_path)
             os.makedirs(llms_home, exist_ok=True)
 
-            # Read config from resource (handle both Path and Traversable objects)
-            try:
-                config_json = read_resource_text(resource_config_path)
-                with open(home_config_path, "w") as f:
-                    f.write(config_json)
-                    _log(f"Created default config at {home_config_path}")
-            except (OSError, AttributeError) as e:
-                _log(f"Error reading resource config: {e}")
-
-            # Read UI config from resource
-            if not os.path.exists(home_ui_path) and resource_exists(resource_ui_path):
+            if resource_exists(resource_config_path):
                 try:
-                    ui_json = read_resource_text(resource_ui_path)
-                    with open(home_ui_path, "w") as f:
-                        f.write(ui_json)
-                        _log(f"Created default ui config at {home_ui_path}")
+                    # Read config from resource (handle both Path and Traversable objects)
+                    config_json = read_resource_text(resource_ui_path)
                 except (OSError, AttributeError) as e:
-                    _log(f"Error reading resource ui config: {e}")
+                    _log(f"Error reading resource config: {e}")
+            if not config_json:
+                try:
+                    config_json = asyncio.run(save_text(github_url("llms.json"), home_ui_path))
+                except Exception as e:
+                    _log(f"Error downloading llms.json: {e}")
+                    print("Could not create llms.json. Create one with --init or use --config <path>")
+                    exit(1)
 
+            with open(home_config_path, "w") as f:
+                f.write(config_json)
+                _log(f"Created default config at {home_config_path}")
             # Update g_config_path to point to the copied file
             g_config_path = home_config_path
-        else:
-            print("Config file not found. Create one with --init or use --config <path>")
-            exit(1)
+    if not g_config_path or not os.path.exists(g_config_path):
+        print("llms.json not found. Create one with --init or use --config <path>")
+        exit(1)
+
+    if not g_ui_path or not os.path.exists(g_ui_path):
+        # Read UI config from resource
+        if not os.path.exists(home_ui_path):
+            llms_home = os.path.dirname(home_ui_path)
+            os.makedirs(llms_home, exist_ok=True)
+            if resource_exists(resource_ui_path):
+                try:
+                    # Read config from resource (handle both Path and Traversable objects)
+                    ui_json = read_resource_text(resource_ui_path)
+                except (OSError, AttributeError) as e:
+                    _log(f"Error reading resource ui config: {e}")
+            if not ui_json:
+                try:
+                    ui_json = asyncio.run(save_text(github_url("ui.json"), home_ui_path))
+                except Exception as e:
+                    _log(f"Error downloading ui.json: {e}")
+                    print("Could not create ui.json. Create one with --init or use --config <path>")
+                    exit(1)
+
+            with open(home_ui_path, "w") as f:
+                f.write(ui_json)
+                _log(f"Created default ui config at {home_ui_path}")
+        
+        # Update g_config_path to point to the copied file
+        g_ui_path = home_ui_path
+    if not g_ui_path or not os.path.exists(g_ui_path):
+        print("ui.json not found. Create one with --init or use --config <path>")
+        exit(1)
 
     # read contents
     with open(g_config_path, "r") as f:
@@ -1172,6 +1200,10 @@ def main():
 
     if cli_args.serve is not None:
         port = int(cli_args.serve)
+
+        if not os.path.exists(g_ui_path):
+            print(f"UI not found at {g_ui_path}")
+            exit(1)
 
         app = web.Application()
 
@@ -1247,6 +1279,20 @@ def main():
                 raise web.HTTPNotFound
 
         app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
+        
+        async def ui_config_handler(request):
+            with open(g_ui_path, "r") as f:
+                ui = json.load(f)
+                if 'defaults' not in ui:
+                    ui['defaults'] = g_config['defaults']
+                enabled, disabled = provider_status()
+                ui['status'] = {
+                    "all": list(g_config['providers'].keys()),
+                    "enabled": enabled, 
+                    "disabled": disabled 
+                }
+                return web.json_response(ui)
+        app.router.add_get('/config', ui_config_handler)
 
         async def not_found_handler(request):
             return web.Response(text="404: Not Found", status=404)
@@ -1262,24 +1308,9 @@ def main():
 
         # Serve index.html as fallback route (SPA routing)
         app.router.add_route('*', '/{tail:.*}', index_handler)
-        
-        if os.path.exists(g_ui_path):
-            async def ui_config_handler(request):
-                with open(g_ui_path, "r") as f:
-                    ui = json.load(f)
-                    if 'defaults' not in ui:
-                        ui['defaults'] = g_config['defaults']
-                    enabled, disabled = provider_status()
-                    ui['status'] = {
-                        "all": list(g_config['providers'].keys()),
-                        "enabled": enabled, 
-                        "disabled": disabled 
-                    }
-                    return web.json_response(ui)
-            app.router.add_get('/config', ui_config_handler)
 
         print(f"Starting server on port {port}...")
-        web.run_app(app, host='0.0.0.0', port=port)
+        web.run_app(app, host='0.0.0.0', port=port, print=_log)
         exit(0)
 
     if cli_args.enable is not None:
