@@ -2,7 +2,7 @@
 
 Lightweight CLI and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
 
-Configure additional providers and models in [llms.json](llms.json)
+Configure additional providers and models in [llms.json](llms/llms.json)
  - Mix and match local models with models from different API providers
  - Requests automatically routed to available providers that supports the requested model (in defined order)
  - Define free/cheapest/local providers first to save on costs
@@ -93,7 +93,7 @@ llms "What is the capital of France?"
 
 ## Configuration
 
-The configuration file [llms.json](llms.json) is saved to `~/.llms/llms.json` and defines available providers, models, and default settings. Key sections:
+The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.json` and defines available providers, models, and default settings. Key sections:
 
 ### Defaults
 - `headers`: Common HTTP headers for all requests
@@ -135,7 +135,7 @@ llms "Explain quantum computing" --raw
 
 ### Using a Chat Template
 
-By default llms uses the `defaults/text` chat completion request defined in [llms.json](llms.json).
+By default llms uses the `defaults/text` chat completion request defined in [llms.json](llms/llms.json).
 
 You can instead use a custom chat completion request with `--chat`, e.g:
 
@@ -538,7 +538,7 @@ llms --update
 ```
 
 This command:
-- Downloads the latest `llms.py` from `https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms.py`
+- Downloads the latest `llms.py` from `github.com/ServiceStack/llms/blob/main/llms/main.py`
 - Overwrites your current `llms.py` file with the latest version
 - Preserves your existing configuration file (`llms.json`)
 - Requires an internet connection to download the update
