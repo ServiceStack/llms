@@ -44,12 +44,12 @@ pip install llms-py
 Set environment variables for the providers you want to use:
 
 ```bash
-export OPENROUTER_FREE_API_KEY="..."
+export OPENROUTER_API_KEY="..."
 ```
 
 | Provider        | Variable                  | Description         | Example |
 |-----------------|---------------------------|---------------------|---------|
-| openrouter_free | `OPENROUTER_FREE_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
+| openrouter_free | `OPENROUTER_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
 | groq            | `GROQ_API_KEY`            | Groq API key        | `gsk_...` |
 | google_free     | `GOOGLE_FREE_API_KEY`     | Google FREE API key | `AIza...` |
 | codestral       | `CODESTRAL_API_KEY`       | Codestral API key   | `...` |
@@ -575,7 +575,7 @@ or directly in your `llms.json`.
 
 | Provider        | Variable                  | Description         | Example |
 |-----------------|---------------------------|---------------------|---------|
-| openrouter_free | `OPENROUTER_FREE_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
+| openrouter_free | `OPENROUTER_API_KEY` | OpenRouter FREE models API key | `sk-or-...` |
 | groq            | `GROQ_API_KEY`            | Groq API key        | `gsk_...` |
 | google_free     | `GOOGLE_FREE_API_KEY`     | Google FREE API key | `AIza...` |
 | codestral       | `CODESTRAL_API_KEY`       | Codestral API key   | `...` |
