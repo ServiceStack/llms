@@ -427,17 +427,8 @@ llms --default grok-4
 
 ### Update
 
-1. Installed from PyPI
-
 ```bash
 pip install llms-py --upgrade
-```
-
-2. Using Direct Download
-
-```bash
-# Update to latest version (Downloads latest llms.py)
-llms --update
 ```
 
 ### Advanced Options
