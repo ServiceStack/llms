@@ -1,0 +1,30 @@
+{
+    "grok-4": {
+        "input": "0.000003",
+        "output": "0.000015"
+    },
+    "grok-code-fast-1": {
+        "input": "0.0000002",
+        "output": "0.0000015"
+    },
+    "grok-4-fast-reasoning": {
+        "input": "0.0000002",
+        "output": "0.0000005"
+    },
+    "grok-4-fast-non-reasoning": {
+        "input": "0.0000002",
+        "output": "0.0000005"
+    },
+    "grok-4-0709": {
+        "input": "0.000003",
+        "output": "0.000015"
+    },
+    "grok-3-mini": {
+        "input": "0.0000003",
+        "output": "0.0000005"
+    },
+    "grok-3": {
+        "input": "0.000003",
+        "output": "0.000015"
+    }
+}

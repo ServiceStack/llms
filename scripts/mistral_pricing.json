@@ -1,0 +1,74 @@
+{
+    "mistral-medium-latest": {
+        "input": "0.0000004",
+        "output": "0.000002"
+    },
+    "magistral-medium-latest": {
+        "input": "0.000002",
+        "output": "0.000005"
+    },
+    "devstral-medium-2507": {
+        "input": "0.0000004",
+        "output": "0.000002"
+    },
+    "codestral-latest": {
+        "input": "0.00000030",
+        "output": "0.00000030"
+    },
+    "mistral-small-latest": {
+        "input": "0.00000010",
+        "output": "0.00000030"
+    },
+    "magistral-small-latest": {
+        "input": "0.00000050",
+        "output": "0.0000015"
+    },
+    "devstral-small-2507": {
+        "input": "0.0000001",
+        "output": "0.0000003"
+    },
+    "voxtral-small-latest": {
+        "input": "0.0000001",
+        "output": "0.0000003"
+    },
+    "voxtral-mini-latest": {
+        "input": "0.00000004",
+        "output": "0.00000004"
+    },
+    "mistral-large-latest": {
+        "input": "0.000002",
+        "output": "0.000006"
+    },
+    "pixtral-large-latest": {
+        "input": "0.000002",
+        "output": "0.000006"
+    },
+    "pixtral-12b": {
+        "input": "0.00000015",
+        "output": "0.00000015"
+    },
+    "open-mistral-nemo": {
+        "input": "0.00000015",
+        "output": "0.00000015"
+    },
+    "open-mistral-7b": {
+        "input": "0.00000025",
+        "output": "0.00000025"
+    },
+    "open-mixtral-8x7b": {
+        "input": "0.0000007",
+        "output": "0.0000007"
+    },
+    "open-mixtral-8x22b": {
+        "input": "0.000002",
+        "output": "0.000006"
+    },
+    "ministral-8b-latest": {
+        "input": "0.0000001",
+        "output": "0.0000001"
+    },
+    "ministral-3b-latest": {
+        "input": "0.00000004",
+        "output": "0.00000004"
+    }
+}

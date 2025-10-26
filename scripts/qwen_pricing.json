@@ -1,0 +1,106 @@
+{
+    "qwen3-max": {
+        "input": "0.0000012",
+        "output": "0.000006"
+    },
+    "qwen-max": {
+        "input": "0.0000012",
+        "output": "0.000006"
+    },
+    "qwen-plus": {
+        "input": "0.0000004",
+        "output": "0.0000012"
+    },
+    "qwen-flash": {
+        "input": "0.00000005",
+        "output": "0.0000004"
+    },
+    "qwq-plus": {
+        "input": "0.0000008",
+        "output": "0.0000024"
+    },
+    "qwen-turbo": {
+        "input": "0.00000005",
+        "output": "0.0000005"
+    },
+    "qwen-omni-turbo": {
+        "input": "0.00000007",
+        "output": "0.00000027"
+    },
+    "qwen3-omni-flash": {
+        "input": "0.00000043",
+        "output": "0.00000166"
+    },
+    "qwen3-coder-plus": {
+        "input": "0.000001",
+        "output": "0.000005"
+    },
+    "qwen3-coder-flash": {
+        "input": "0.0000003",
+        "output": "0.0000015"
+    },
+    "qwen3-next-80b-a3b-instruct": {
+        "input": "0.0000005",
+        "output": "0.000002"
+    },
+    "qwen3-235b-a22b": {
+        "input": "0.0000007",
+        "output": "0.0000028"
+    },
+    "qwen3-32b": {
+        "input": "0.0000007",
+        "output": "0.0000028"
+    },
+    "qwen3-30b-a3b": {
+        "input": "0.0000002",
+        "output": "0.0000008"
+    },
+    "qwen3-14b": {
+        "input": "0.00000035",
+        "output": "0.0000014"
+    },
+    "qwen3-8b": {
+        "input": "0.00000018",
+        "output": "0.0000007"
+    },
+    "qwen3-4b": {
+        "input": "0.00000011",
+        "output": "0.00000042"
+    },
+    "qwen3-1.7b": {
+        "input": "0.00000011",
+        "output": "0.00000042"
+    },
+    "qwen3-0.6b": {
+        "input": "0.00000011",
+        "output": "0.00000042"
+    },
+    "qwen3-coder-480b-a35b-instruct": {
+        "input": "0.0000015",
+        "output": "0.0000075"
+    },
+    "qwen3-coder-30b-a3b-instruct": {
+        "input": "0.00000045",
+        "output": "0.00000225"
+    },
+    "qwen3-vl-plus": {
+        "input": "0.0000002",
+        "output": "0.0000016"
+    },
+    "qwen3-vl-235b-a22b-thinking": {
+        "input": "0.0000007",
+        "output": "0.0000084"
+    },
+    "qwen3-vl-235b-a22b-instruct": {
+        "input": "0.0000007",
+        "output": "0.0000084"
+    },
+    "qwen3-vl-30b-a3b-instruct": {
+        "input": "0.0000002",
+        "output": "0.0000024"
+    },
+    "qwen2.5-omni-7b": {
+        "input": "0.0000001",
+        "output": "0.0000004"
+    }
+}

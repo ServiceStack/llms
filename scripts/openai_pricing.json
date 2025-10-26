@@ -1,0 +1,70 @@
+{
+  "gpt-5-nano": {
+    "input": "0.00000005",
+    "output": "0.0000004"
+  },
+  "gpt-5-mini": {
+    "input": "0.00000025",
+    "output": "0.000002"
+  },
+  "gpt-5": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "gpt-5-chat-latest": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "gpt-4.1-nano": {
+    "input": "0.0000001",
+    "output": "0.0000004"
+  },
+  "gpt-4.1-mini": {
+    "input": "0.0000004",
+    "output": "0.0000016"
+  },
+  "gpt-4.1": {
+    "input": "0.000002",
+    "output": "0.000008"
+  },
+  "o4-mini": {
+    "input": "0.0000011",
+    "output": "0.0000044"
+  },
+  "o3": {
+    "input": "0.000002",
+    "output": "0.000008"
+  },
+  "gpt-4o-mini-search-preview": {
+    "input": "0.00000015",
+    "output": "0.0000006"
+  },
+  "gpt-4o-search-preview": {
+    "input": "0.0000025",
+    "output": "0.00001"
+  },
+  "o3-mini": {
+    "input": "0.0000011",
+    "output": "0.0000044"
+  },
+  "o1-mini": {
+    "input": "0.0000011",
+    "output": "0.0000044"
+  },
+  "chatgpt-4o-latest": {
+    "input": "0.000005",
+    "output": "0.000015"
+  },
+  "gpt-4o-mini": {
+    "input": "0.00000015",
+    "output": "0.0000006"
+  },
+  "gpt-4o": {
+    "input": "0.0000025",
+    "output": "0.00001"
+  },
+  "gpt-3.5-turbo": {
+    "input": "0.000003",
+    "output": "0.000006"
+  }
+}

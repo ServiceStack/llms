@@ -1,0 +1,218 @@
+{
+  "meta-llama/llama-3.1-405b-instruct": {
+    "input": "0.0000008",
+    "output": "0.0000008"
+  },
+  "meta-llama/llama-3.3-70b-instruct": {
+    "input": "0.00000013",
+    "output": "0.00000038"
+  },
+  "microsoft/phi-4": {
+    "input": "0.00000006",
+    "output": "0.00000014"
+  },
+  "mistralai/codestral-2508": {
+    "input": "0.0000003",
+    "output": "0.0000009"
+  },
+  "mistralai/mistral-nemo": {
+    "input": "0.00000002",
+    "output": "0.00000004"
+  },
+  "mistralai/mixtral-8x22b-instruct": {
+    "input": "0.000002",
+    "output": "0.000006"
+  },
+  "mistralai/mistral-small-3.2-24b-instruct": {
+    "input": "0.00000006",
+    "output": "0.00000018"
+  },
+  "amazon/nova-micro-v1": {
+    "input": "0.000000035",
+    "output": "0.00000014"
+  },
+  "amazon/nova-lite-v1": {
+    "input": "0.00000006",
+    "output": "0.00000024"
+  },
+  "amazon/nova-pro-v1": {
+    "input": "0.0000008",
+    "output": "0.0000032"
+  },
+  "anthropic/claude-opus-4.1": {
+    "input": "0.000015",
+    "output": "0.000075"
+  },
+  "anthropic/claude-sonnet-4.5": {
+    "input": "0.000003",
+    "output": "0.000015"
+  },
+  "anthropic/claude-sonnet-4": {
+    "input": "0.000003",
+    "output": "0.000015"
+  },
+  "openai/gpt-5": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "openai/gpt-5-chat": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "openai/gpt-5-mini": {
+    "input": "0.00000025",
+    "output": "0.000002"
+  },
+  "openai/gpt-5-nano": {
+    "input": "0.00000005",
+    "output": "0.0000004"
+  },
+  "openai/gpt-5-codex": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "openai/gpt-oss-120b": {
+    "input": "0.00000005",
+    "output": "0.00000024"
+  },
+  "openai/gpt-oss-20b": {
+    "input": "0.00000003",
+    "output": "0.00000014"
+  },
+  "openai/gpt-4o": {
+    "input": "0.000006",
+    "output": "0.000018"
+  },
+  "openai/gpt-4o-mini": {
+    "input": "0.00000015",
+    "output": "0.0000006"
+  },
+  "openai/gpt-4.1": {
+    "input": "0.000002",
+    "output": "0.000008"
+  },
+  "openai/gpt-4.1-mini": {
+    "input": "0.0000004",
+    "output": "0.0000016"
+  },
+  "openai/gpt-4.1-nano": {
+    "input": "0.0000001",
+    "output": "0.0000004"
+  },
+  "openai/o4-mini": {
+    "input": "0.0000011",
+    "output": "0.0000044"
+  },
+  "openai/o4-mini-high": {
+    "input": "0.0000011",
+    "output": "0.0000044"
+  },
+  "x-ai/grok-4": {
+    "input": "0.000003",
+    "output": "0.000015"
+  },
+  "x-ai/grok-4-fast": {
+    "input": "0.0000002",
+    "output": "0.0000005"
+  },
+  "x-ai/grok-code-fast-1": {
+    "input": "0.0000002",
+    "output": "0.0000015"
+  },
+  "z-ai/glm-4.6": {
+    "input": "0.0000006",
+    "output": "0.0000019"
+  },
+  "z-ai/glm-4.5v": {
+    "input": "0.0000006",
+    "output": "0.0000018"
+  },
+  "z-ai/glm-4.5": {
+    "input": "0.00000035",
+    "output": "0.00000155"
+  },
+  "z-ai/glm-4.5-air": {
+    "input": "0.00000013",
+    "output": "0.00000085"
+  },
+  "moonshotai/kimi-k2": {
+    "input": "0.00000014",
+    "output": "0.00000249"
+  },
+  "deepseek/deepseek-chat": {
+    "input": "0.0000003",
+    "output": "0.00000085"
+  },
+  "deepseek/deepseek-v3.2-exp": {
+    "input": "0.00000027",
+    "output": "0.0000004"
+  },
+  "deepseek/deepseek-chat-v3.1": {
+    "input": "0.00000027",
+    "output": "0.000001"
+  },
+  "deepseek/deepseek-r1": {
+    "input": "0.0000004",
+    "output": "0.000002"
+  },
+  "deepseek/deepseek-v3.1-terminus": {
+    "input": "0.00000027",
+    "output": "0.000001"
+  },
+  "qwen/qwen3-8b": {
+    "input": "0.000000035",
+    "output": "0.000000138"
+  },
+  "qwen/qwen3-30b-a3b": {
+    "input": "0.00000006",
+    "output": "0.00000022"
+  },
+  "qwen/qwen3-32b": {
+    "input": "0.00000005",
+    "output": "0.0000002"
+  },
+  "qwen/qwen3-235b-a22b": {
+    "input": "0.00000018",
+    "output": "0.00000054"
+  },
+  "qwen/qwen3-coder": {
+    "input": "0.00000038",
+    "output": "0.00000153"
+  },
+  "qwen/qwen3-coder-flash": {
+    "input": "0.0000003",
+    "output": "0.0000015"
+  },
+  "qwen/qwen3-coder-plus": {
+    "input": "0.000001",
+    "output": "0.000005"
+  },
+  "qwen/qwen3-coder-30b-a3b-instruct": {
+    "input": "0.00000006",
+    "output": "0.00000025"
+  },
+  "qwen/qwen3-max": {
+    "input": "0.0000012",
+    "output": "0.000006"
+  },
+  "qwen/qwen3-vl-235b-a22b-instruct": {
+    "input": "0.0000003",
+    "output": "0.0000012"
+  },
+  "qwen/qwen3-vl-235b-a22b-thinking": {
+    "input": "0.0000003",
+    "output": "0.0000012"
+  },
+  "inclusionai/ling-1t": {
+    "input": "0.00000057",
+    "output": "0.00000228"
+  },
+  "meta-llama/llama-4-scout": {
+    "input": "0.00000008",
+    "output": "0.0000003"
+  },
+  "meta-llama/llama-4-maverick": {
+    "input": "0.00000015",
+    "output": "0.0000006"
+  }
+}
