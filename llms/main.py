@@ -156,6 +156,47 @@ def get_file_mime_type(filename):
     mime_type, _ = mimetypes.guess_type(filename)
     return mime_type or "application/octet-stream"
 
+
+def price_to_string(price: float | int | str | None) -> str | None:
+    """Convert numeric price to string without scientific notation.
+
+    Detects and rounds up numbers with recurring 9s (e.g., 0.00014999999999999999)
+    to avoid floating-point precision artifacts.
+    """
+    if price is None or price == 0 or price == "0":
+        return "0"
+    try:
+        price_float = float(price)
+        # Format with enough decimal places to avoid scientific notation
+        formatted = format(price_float, '.20f')
+
+        # Detect recurring 9s pattern (e.g., "...9999999")
+        # If we have 4 or more consecutive 9s, round up
+        if '9999' in formatted:
+            # Round up by adding a small amount and reformatting
+            # Find the position of the 9s to determine precision
+            import decimal
+            decimal.getcontext().prec = 28
+            d = decimal.Decimal(str(price_float))
+            # Round to one less decimal place than where the 9s start
+            nines_pos = formatted.find('9999')
+            if nines_pos > 0:
+                # Round up at the position before the 9s
+                decimal_places = nines_pos - formatted.find('.') - 1
+                if decimal_places > 0:
+                    quantize_str = '0.' + '0' * (decimal_places - 1) + '1'
+                    d = d.quantize(decimal.Decimal(quantize_str), rounding=decimal.ROUND_UP)
+                    result = str(d)
+                    # Remove trailing zeros
+                    if '.' in result:
+                        result = result.rstrip('0').rstrip('.')
+                    return result
+
+        # Normal case: strip trailing zeros
+        return formatted.rstrip('0').rstrip('.')
+    except (ValueError, TypeError):
+        return None
+
 async def process_chat(chat):
     if not chat:
         raise Exception("No chat provided")
@@ -307,6 +348,9 @@ class OpenAiProvider:
         self.verbosity = kwargs['verbosity'] if 'verbosity' in kwargs else None
         self.stream = bool(kwargs['stream']) if 'stream' in kwargs else None
         self.enable_thinking = bool(kwargs['enable_thinking']) if 'enable_thinking' in kwargs else None
+        self.pricing = kwargs['pricing'] if 'pricing' in kwargs else None
+        self.default_pricing = kwargs['default_pricing'] if 'default_pricing' in kwargs else None
+        self.check = kwargs['check'] if 'check' in kwargs else None
 
     @classmethod
     def test(cls, base_url=None, api_key=None, models={}, **kwargs):
@@ -315,10 +359,30 @@ class OpenAiProvider:
     async def load(self):
         pass
 
-    async def chat(self, chat):
-        model = chat['model']
+    def model_pricing(self, model):
+        provider_model = self.provider_model(model) or model
+        if self.pricing and provider_model in self.pricing:
+            return self.pricing[provider_model]
+        return self.default_pricing or None
+
+    def provider_model(self, model):
         if model in self.models:
-            chat['model'] = self.models[model]
+            return self.models[model]
+        return None
+
+    def to_response(self, response, chat, started_at):
+        if 'metadata' not in response:
+            response['metadata'] = {}
+        response['metadata']['duration'] = int((time.time() - started_at) * 1000)
+        if chat is not None and 'model' in chat:
+            pricing = self.model_pricing(chat['model'])
+            if pricing and 'input' in pricing and 'output' in pricing:
+                response['metadata']['pricing'] = f"{pricing['input']}/{pricing['output']}"
+        _log(json.dumps(response, indent=2))
+        return response
+
+    async def chat(self, chat):
+        chat['model'] = self.provider_model(chat['model']) or chat['model']
 
         # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
         #     f.write(json.dumps(chat, indent=2))
@@ -361,9 +425,11 @@ class OpenAiProvider:
         chat = await process_chat(chat)
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
+
         async with aiohttp.ClientSession() as session:
+            started_at = time.time()
             async with session.post(self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)) as response:
-                return await response_json(response)
+                return self.to_response(await response_json(response), chat, started_at)
 
 class OllamaProvider(OpenAiProvider):
     def __init__(self, base_url, models, all_models=False, **kwargs):
@@ -430,9 +496,7 @@ class GoogleProvider(OpenAiProvider):
         return api_key is not None and len(models) > 0
 
     async def chat(self, chat):
-        model = chat['model']
-        if model in self.models:
-            chat['model'] = self.models[model]
+        chat['model'] = self.provider_model(chat['model']) or chat['model']
 
         chat = await process_chat(chat)
         generationConfig = {}
@@ -530,6 +594,8 @@ class GoogleProvider(OpenAiProvider):
                     "parts": [{"text": system_prompt}]
                 }
 
+            if 'max_completion_tokens' in chat:
+                generationConfig['maxOutputTokens'] = chat['max_completion_tokens']
             if 'stop' in chat:
                 generationConfig['stopSequences'] = [chat['stop']]
             if 'temperature' in chat:
@@ -552,6 +618,7 @@ class GoogleProvider(OpenAiProvider):
 
             _log(f"POST {gemini_chat_url}")
             _log(gemini_chat_summary(gemini_chat))
+            started_at = time.time()
 
             if self.curl:
                 curl_args = [
@@ -621,7 +688,7 @@ class GoogleProvider(OpenAiProvider):
                     "total_tokens": usage['totalTokenCount'],
                     "prompt_tokens": usage['promptTokenCount'],
                 }
-            return response
+            return self.to_response(response, chat, started_at)
 
 def get_models():
     ret = []
@@ -630,6 +697,24 @@ def get_models():
             if model not in ret:
                 ret.append(model)
     ret.sort()
+    return ret
+
+def get_active_models():
+    ret = []
+    existing_models = set()
+    for id, provider in g_handlers.items():
+        for model in provider.models.keys():
+            if model not in existing_models:
+                existing_models.add(model)
+                provider_model = provider.models[model]
+                pricing = provider.model_pricing(model)
+                ret.append({
+                    "id": model,
+                    "provider": id,
+                    "provider_model": provider_model,
+                    "pricing": pricing
+                })
+    ret.sort(key=lambda x: x["id"])
     return ret
 
 async def chat_completion(chat):
@@ -1082,6 +1167,101 @@ def read_resource_file_bytes(resource_file):
     except (OSError, PermissionError, AttributeError) as e:
         _log(f"Error reading resource bytes: {e}")
 
+async def check_models(provider_name, model_names=None):
+    """
+    Check validity of models for a specific provider by sending a ping message.
+
+    Args:
+        provider_name: Name of the provider to check
+        model_names: List of specific model names to check, or None to check all models
+    """
+    if provider_name not in g_handlers:
+        print(f"Provider '{provider_name}' not found or not enabled")
+        print(f"Available providers: {', '.join(g_handlers.keys())}")
+        return
+
+    provider = g_handlers[provider_name]
+    models_to_check = []
+
+    # Determine which models to check
+    if model_names is None or (len(model_names) == 1 and model_names[0] == 'all'):
+        # Check all models for this provider
+        models_to_check = list(provider.models.keys())
+    else:
+        # Check only specified models
+        for model_name in model_names:
+            if model_name in provider.models:
+                models_to_check.append(model_name)
+            else:
+                print(f"Model '{model_name}' not found in provider '{provider_name}'")
+
+    if not models_to_check:
+        print(f"No models to check for provider '{provider_name}'")
+        return
+
+    print(f"\nChecking {len(models_to_check)} model{'' if len(models_to_check) == 1 else 's'} for provider '{provider_name}':\n")
+
+    # Test each model
+    for model in models_to_check:
+        # Create a simple ping chat request
+        chat = (provider.check or g_config['defaults']['check']).copy()
+        chat["model"] = model
+
+        started_at = time.time()
+        try:
+            # Try to get a response from the model
+            response = await provider.chat(chat)
+            duration_ms = int((time.time() - started_at) * 1000)
+
+            # Check if we got a valid response
+            if response and 'choices' in response and len(response['choices']) > 0:
+                print(f"  ✓ {model:<40} ({duration_ms}ms)")
+            else:
+                print(f"  ✗ {model:<40} Invalid response format")
+        except HTTPError as e:
+            duration_ms = int((time.time() - started_at) * 1000)
+            error_msg = f"HTTP {e.status}"
+            try:
+                # Try to parse error body for more details
+                error_body = json.loads(e.body) if e.body else {}
+                if 'error' in error_body:
+                    error = error_body['error']
+                    if isinstance(error, dict):
+                        if 'message' in error:
+                            # OpenRouter
+                            if isinstance(error['message'], str):
+                                error_msg = error['message']
+                                if 'code' in error:
+                                    error_msg = f"{error['code']} {error_msg}"
+                                if 'metadata' in error and 'raw' in error['metadata']:
+                                    error_msg += f" - {error['metadata']['raw']}"
+                                if 'provider' in error:
+                                    error_msg += f" ({error['provider']})"
+                    elif isinstance(error, str):
+                        error_msg = error
+                elif 'message' in error_body:
+                    if isinstance(error_body['message'], str):
+                        error_msg = error_body['message']
+                    elif isinstance(error_body['message'], dict):
+                        # codestral error format
+                        if 'detail' in error_body['message'] and isinstance(error_body['message']['detail'], list):
+                            error_msg = error_body['message']['detail'][0]['msg']
+                            if 'loc' in error_body['message']['detail'][0] and len(error_body['message']['detail'][0]['loc']) > 0:
+                                error_msg += f" (in {' '.join(error_body['message']['detail'][0]['loc'])})"
+            except Exception as parse_error:
+                _log(f"Error parsing error body: {parse_error}")
+                error_msg = e.body[:100] if e.body else f"HTTP {e.status}"
+            print(f"  ✗ {model:<40} {error_msg}")
+        except asyncio.TimeoutError:
+            duration_ms = int((time.time() - started_at) * 1000)
+            print(f"  ✗ {model:<40} Timeout after {duration_ms}ms")
+        except Exception as e:
+            duration_ms = int((time.time() - started_at) * 1000)
+            error_msg = str(e)[:100]
+            print(f"  ✗ {model:<40} {error_msg}")
+
+    print()
+
 def main():
     global _ROOT, g_verbose, g_default_model, g_logprefix, g_config_path, g_ui_path
 
@@ -1098,6 +1278,7 @@ def main():
     parser.add_argument('--raw',          action='store_true', help='Return raw AI JSON response')
 
     parser.add_argument('--list',         action='store_true', help='Show list of enabled providers and their models (alias ls provider?)')
+    parser.add_argument('--check',        default=None, help='Check validity of models for a provider', metavar='PROVIDER')
 
     parser.add_argument('--serve',        default=None, help='Port to start an OpenAI Chat compatible server on', metavar='PORT')
 
@@ -1244,6 +1425,13 @@ def main():
         print_status()
         exit(0)
 
+    if cli_args.check is not None:
+        # Check validity of models for a provider
+        provider_name = cli_args.check
+        model_names = extra_args if len(extra_args) > 0 else None
+        asyncio.run(check_models(provider_name, model_names))
+        exit(0)
+
     if cli_args.serve is not None:
         port = int(cli_args.serve)
 
@@ -1264,7 +1452,11 @@ def main():
 
         async def models_handler(request):
             return web.json_response(get_models())
-        app.router.add_get('/models', models_handler)
+        app.router.add_get('/models/list', models_handler)
+
+        async def active_models_handler(request):
+            return web.json_response(get_active_models())
+        app.router.add_get('/models', active_models_handler)
 
         async def status_handler(request):
             enabled, disabled = provider_status()
