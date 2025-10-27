@@ -1,19 +1,8 @@
 name: Test LLM Providers
 
 on:
-  # Run on manual trigger
+  # Run on manual trigger only
   workflow_dispatch:
-  # Run on schedule (daily at 00:00 UTC)
-  schedule:
-    - cron: '0 0 * * *'
-  # Run on push to main branch
-  push:
-    branches:
-      - main
-  # Run on pull requests
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -49,7 +38,7 @@ jobs:
       
       - name: Verify installation
         run: |
-          llms --version
+          llms
       
       - name: Test providers
         id: test-providers
