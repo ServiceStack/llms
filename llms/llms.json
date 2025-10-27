@@ -93,10 +93,6 @@
                 }
             ],
             "max_completion_tokens": 16,
-            "reasoning": {
-                "max_tokens": 16,
-                "reasoning_effort": "low"
-            },
             "stream": false
         }
     },
@@ -147,7 +143,6 @@
             "api_key": "$GROQ_API_KEY",
             "models": {
                 "allam-2-7b": "allam-2-7b",
-                "gemma2:9b": "gemma2-9b-it",
                 "compound": "groq/compound",
                 "compound-mini": "groq/compound-mini",
                 "llama3.1:8b": "llama-3.1-8b-instant",
@@ -599,7 +594,6 @@
             "base_url": "https://api.anthropic.com",
             "api_key": "$ANTHROPIC_API_KEY",
             "models": {
-                "claude-opus-4-1": "claude-opus-4-1",
                 "claude-sonnet-4-5": "claude-sonnet-4-5",
                 "claude-sonnet-4-0": "claude-sonnet-4-0",
                 "claude-3-7-sonnet": "claude-3-7-sonnet-latest",
@@ -640,6 +634,25 @@
                     "input": "0.00000025",
                     "output": "0.00000125"
                 }
+            },
+            "check": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "1+1="
+                            }
+                        ]
+                    }
+                ],
+                "max_completion_tokens": 512,
+                "reasoning": {
+                    "max_tokens": 128,
+                    "reasoning_effort": "low"
+                },
+                "stream": false
             }
         },
         "openai": {
@@ -735,21 +748,6 @@
                     "input": "0.000003",
                     "output": "0.000006"
                 }
-            },
-            "check": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "1+1="
-                            }
-                        ]
-                    }
-                ],
-                "max_completion_tokens": 16,
-                "stream": false
             }
         },
         "grok": {
