@@ -168,7 +168,7 @@
             }
         },
         "google_free": {
-            "enabled": true,
+            "enabled": false,
             "type": "GoogleProvider",
             "api_key": "$GOOGLE_FREE_API_KEY",
             "models": {
