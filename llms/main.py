@@ -22,7 +22,7 @@ from aiohttp import web
 from pathlib import Path
 from importlib import resources   # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 
-VERSION = "2.0.19"
+VERSION = "2.0.20"
 _ROOT = None
 g_config_path = None
 g_ui_path = None
