@@ -47,25 +47,14 @@ jobs:
           # Create output directory
           mkdir -p test-results
           
-          # Initialize results files
+          # Initialize results file
           RESULTS_TXT="test-results/provider-test-results.txt"
-          RESULTS_MD="test-results/provider-test-results.md"
-          
+
           echo "LLM Provider Test Results" > $RESULTS_TXT
           echo "=========================" >> $RESULTS_TXT
           echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $RESULTS_TXT
           echo "llms-py version: $(pip show llms-py | grep Version | cut -d' ' -f2)" >> $RESULTS_TXT
           echo "" >> $RESULTS_TXT
-          
-          echo "# LLM Provider Test Results" > $RESULTS_MD
-          echo "" >> $RESULTS_MD
-          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')  " >> $RESULTS_MD
-          echo "**llms-py version:** \`$(pip show llms-py | grep Version | cut -d' ' -f2)\`" >> $RESULTS_MD
-          echo "" >> $RESULTS_MD
-          echo "## Test Results" >> $RESULTS_MD
-          echo "" >> $RESULTS_MD
-          echo "| Provider | Status | Details |" >> $RESULTS_MD
-          echo "|----------|--------|---------|" >> $RESULTS_MD
           
           # List of providers to test
           PROVIDERS=(
@@ -90,21 +79,11 @@ jobs:
             
             # Run the check command and capture output
             if output=$(llms --check "$provider" 2>&1); then
-              status="✅ PASS"
               echo "Status: PASS" >> $RESULTS_TXT
               echo "$output" >> $RESULTS_TXT
-              
-              # Escape pipe characters and newlines for markdown table
-              details=$(echo "$output" | head -n 3 | tr '\n' ' ' | sed 's/|/\\|/g' | cut -c1-100)
-              echo "| \`$provider\` | ✅ PASS | $details |" >> $RESULTS_MD
             else
-              status="❌ FAIL"
               echo "Status: FAIL" >> $RESULTS_TXT
               echo "$output" >> $RESULTS_TXT
-              
-              # Escape pipe characters and newlines for markdown table
-              details=$(echo "$output" | head -n 3 | tr '\n' ' ' | sed 's/|/\\|/g' | cut -c1-100)
-              echo "| \`$provider\` | ❌ FAIL | $details |" >> $RESULTS_MD
             fi
             
             echo "" >> $RESULTS_TXT
@@ -113,12 +92,7 @@ jobs:
           
           echo "=========================" >> $RESULTS_TXT
           echo "Test run completed" >> $RESULTS_TXT
-          
-          echo "" >> $RESULTS_MD
-          echo "---" >> $RESULTS_MD
-          echo "" >> $RESULTS_MD
-          echo "Test run completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $RESULTS_MD
-          
+
           # Display results in console
           echo ""
           echo "=========================================="
@@ -127,25 +101,11 @@ jobs:
           cat $RESULTS_TXT
           echo "=========================================="
       
-      - name: Upload test results (TXT)
+      - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: provider-test-results-txt
+          name: provider-test-results
           path: test-results/provider-test-results.txt
           retention-days: 90
-      
-      - name: Upload test results (Markdown)
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: provider-test-results-md
-          path: test-results/provider-test-results.md
-          retention-days: 90
-      
-      - name: Display results summary
-        if: always()
-        run: |
-          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
-          cat test-results/provider-test-results.md >> $GITHUB_STEP_SUMMARY
 
