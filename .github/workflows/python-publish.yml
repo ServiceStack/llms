@@ -28,6 +28,8 @@ jobs:
 
       - name: Build release distributions
         run: |
+          # Clean previous build artifacts (matches publish.py --prod behavior)
+          rm -rf build/ dist/ *.egg-info/
           # NOTE: put your own distribution build steps here.
           python -m pip install build
           python -m build
