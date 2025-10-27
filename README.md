@@ -1,6 +1,6 @@
 # llms.py
 
-Lightweight CLI and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
+Lightweight CLI, API and ChatGPT-like alternative to Open WebUI for accessing multiple LLMs, entirely offline, with all data kept private in browser storage.
 
 Configure additional providers and models in [llms.json](llms/llms.json)
  - Mix and match local models with models from different API providers
@@ -13,6 +13,7 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 - **Lightweight**: Single [llms.py](llms.py) Python file with single `aiohttp` dependency
 - **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Z.ai, Mistral
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
+- **Built-in Analytics**: Built-in analytics UI to visualize costs, requests, and token usage
 - **Configuration Management**: Easy provider enable/disable and configuration management
 - **CLI Interface**: Simple command-line interface for quick interactions
 - **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
@@ -27,9 +28,13 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 
 Simple ChatGPT-like UI to access ALL Your LLMs, Locally or Remotely!
 
-[![llms.py UI](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
+[![](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
 
-Read the [Introductory Blog Post](https://servicestack.net/posts/llms-py-ui).
+[![](https://servicestack.net/img/posts/llms-py-ui/analytics-costs.webp)](https://servicestack.net/posts/llms-py-ui)
+
+[![](https://servicestack.net/img/posts/llms-py-ui/analytics-activity.webp)](https://servicestack.net/posts/llms-py-ui)
+
+[More Features and Screenshots](https://servicestack.net/posts/llms-py-ui).
 
 ## Installation
 
