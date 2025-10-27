@@ -99,6 +99,7 @@ def bump_version():
     run_command(f'git commit -am "Bump version to {new_version}"')
     run_command(f'git tag v{new_version}')
     run_command("git push --tags")
+    run_command("git push")
 
 def main():
     parser = argparse.ArgumentParser(description="Publish llms-py package to PyPI")
