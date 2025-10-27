@@ -26,11 +26,15 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 
 ## llms.py UI
 
-Simple ChatGPT-like UI to access ALL Your LLMs, Locally or Remotely!
+Access all your local all remote LLMs with a single ChatGPT-like UI:
 
 [![](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
 
+**Monthly Costs Analysis**
+
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-costs.webp)](https://servicestack.net/posts/llms-py-ui)
+
+**Monthly Activity Log**
 
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-activity.webp)](https://servicestack.net/posts/llms-py-ui)
 
