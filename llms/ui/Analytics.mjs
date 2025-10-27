@@ -380,7 +380,7 @@ export default {
                                             </div>
                                         </div>
                                         <div class="flex flex-col gap-2">
-                                            <button type="button" v-if="request.threadId" @click="openThread(request.threadId)" class="flex-shrink-0 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-300 rounded hover:bg-blue-50 transition-colors whitespace-nowrap">
+                                            <button type="button" v-if="threadExists(request.threadId)" @click="openThread(request.threadId)" class="flex-shrink-0 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-300 rounded hover:bg-blue-50 transition-colors whitespace-nowrap">
                                                 View<span class="hidden lg:inline"> Thread</span>
                                             </button>
                                             <button type="button" @click="deleteRequestLog(request.id)" class="flex-shrink-0 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 border border-red-300 rounded hover:bg-red-50 transition-colors whitespace-nowrap">
@@ -525,6 +525,7 @@ export default {
         const activityHasMore = ref(true)
         const activityOffset = ref(0)
         const activityPageSize = 20
+        const existingThreadIds = ref(new Set())
 
         const selectedModel = ref('')
         const selectedProvider = ref('')
@@ -1234,11 +1235,43 @@ export default {
             }
         }
 
+        const loadExistingThreadIds = async () => {
+            try {
+                // Calculate date range for selected month/year
+                const startDate = new Date(selectedYear.value, selectedMonth.value - 1, 1)
+                const endDate = new Date(selectedYear.value, selectedMonth.value, 0, 23, 59, 59)
+
+                // Convert to timestamp strings (threadId format)
+                const startThreadId = startDate.getTime().toString()
+                const endThreadId = endDate.getTime().toString()
+
+                const db = await initDB()
+                const tx = db.transaction(['threads'], 'readonly')
+                const store = tx.objectStore('threads')
+
+                // Use IDBKeyRange to only load threads within the month's timestamp range
+                const range = IDBKeyRange.bound(startThreadId, endThreadId)
+                const monthThreads = await store.getAll(range)
+
+                // Create a Set of existing thread IDs for the month
+                existingThreadIds.value = new Set(monthThreads.map(thread => thread.id))
+            } catch (error) {
+                console.error('Failed to load existing thread IDs:', error)
+                existingThreadIds.value = new Set()
+            }
+        }
+
+        const threadExists = (threadId) => {
+            return threadId ? existingThreadIds.value.has(threadId) : false
+        }
+
         const loadActivityRequests = async (reset = false) => {
             if (reset) {
                 activityOffset.value = 0
                 activityRequests.value = []
                 isActivityLoading.value = true
+                // Load all existing thread IDs once when resetting
+                await loadExistingThreadIds()
             } else {
                 isActivityLoadingMore.value = true
             }
@@ -1474,6 +1507,7 @@ export default {
             onActivityScroll,
             clearActivityFilters,
             formatActivityDate,
+            threadExists,
             openThread,
             deleteRequestLog,
             loadActivityFilterOptions,

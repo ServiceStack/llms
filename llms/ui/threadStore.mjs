@@ -89,7 +89,7 @@ async function logRequest(threadId, model, request, response) {
         outputPrice,
         cost: (parseFloat(inputPrice) * inputTokens) + (parseFloat(outputPrice) * outputTokens),
         duration: metadata.duration ?? 0,
-        created: subtractDays(response.created ?? Math.floor(Date.now() / 1000), 1),
+        created: response.created ?? Math.floor(Date.now() / 1000),
         finishReason,
         providerRef: response.provider,
         ref: response.id || undefined,
