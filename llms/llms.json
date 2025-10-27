@@ -240,7 +240,7 @@
             }
         },
         "ollama": {
-            "enabled": true,
+            "enabled": false,
             "type": "OllamaProvider",
             "base_url": "http://localhost:11434",
             "models": {},
@@ -509,8 +509,8 @@
                     "output": "0.000006"
                 },
                 "qwen/qwen3-vl-235b-a22b-instruct": {
-                    "input": "0.0000003",
-                    "output": "0.0000012"
+                    "input": "0.00000022",
+                    "output": "0.00000088"
                 },
                 "qwen/qwen3-vl-235b-a22b-thinking": {
                     "input": "0.0000003",
