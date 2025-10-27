@@ -27,7 +27,7 @@ share/python-wheels/
 MANIFEST
 
 # Custom
-!ui/lib/
+!llms/ui/lib/
 
 
 # PyInstaller
