@@ -261,7 +261,6 @@
                 "nova-micro": "amazon/nova-micro-v1",
                 "nova-lite": "amazon/nova-lite-v1",
                 "nova-pro": "amazon/nova-pro-v1",
-                "claude-opus-4-1": "anthropic/claude-opus-4.1",
                 "claude-sonnet-4-5": "anthropic/claude-sonnet-4.5",
                 "claude-sonnet-4-0": "anthropic/claude-sonnet-4",
                 "gpt-5": "openai/gpt-5",

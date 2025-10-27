@@ -1,0 +1,162 @@
+name: Test LLM Providers
+
+on:
+  # Run on manual trigger
+  workflow_dispatch:
+  # Run on schedule (daily at 00:00 UTC)
+  schedule:
+    - cron: '0 0 * * *'
+  # Run on push to main branch
+  push:
+    branches:
+      - main
+  # Run on pull requests
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-providers:
+    runs-on: ubuntu-latest
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CODESTRAL_API_KEY: ${{ secrets.CODESTRAL_API_KEY }}
+      DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_FREE_API_KEY: ${{ secrets.GOOGLE_FREE_API_KEY }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      
+      - name: Install llms-py package
+        run: |
+          python -m pip install --upgrade pip
+          pip install llms-py
+      
+      - name: Verify installation
+        run: |
+          llms --version
+      
+      - name: Test providers
+        id: test-providers
+        continue-on-error: true
+        run: |
+          # Create output directory
+          mkdir -p test-results
+          
+          # Initialize results files
+          RESULTS_TXT="test-results/provider-test-results.txt"
+          RESULTS_MD="test-results/provider-test-results.md"
+          
+          echo "LLM Provider Test Results" > $RESULTS_TXT
+          echo "=========================" >> $RESULTS_TXT
+          echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $RESULTS_TXT
+          echo "llms-py version: $(pip show llms-py | grep Version | cut -d' ' -f2)" >> $RESULTS_TXT
+          echo "" >> $RESULTS_TXT
+          
+          echo "# LLM Provider Test Results" > $RESULTS_MD
+          echo "" >> $RESULTS_MD
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')  " >> $RESULTS_MD
+          echo "**llms-py version:** \`$(pip show llms-py | grep Version | cut -d' ' -f2)\`" >> $RESULTS_MD
+          echo "" >> $RESULTS_MD
+          echo "## Test Results" >> $RESULTS_MD
+          echo "" >> $RESULTS_MD
+          echo "| Provider | Status | Details |" >> $RESULTS_MD
+          echo "|----------|--------|---------|" >> $RESULTS_MD
+          
+          # List of providers to test
+          PROVIDERS=(
+            "openrouter_free"
+            "groq"
+            "codestral"
+            "openrouter"
+            "google"
+            "anthropic"
+            "openai"
+            "grok"
+            "qwen"
+            "z.ai"
+            "qwen"
+            "mistral"
+          )
+          
+          # Test each provider
+          for provider in "${PROVIDERS[@]}"; do
+            echo "Testing provider: $provider" >> $RESULTS_TXT
+            echo "-----------------------------------" >> $RESULTS_TXT
+            
+            # Run the check command and capture output
+            if output=$(llms --check "$provider" 2>&1); then
+              status="✅ PASS"
+              echo "Status: PASS" >> $RESULTS_TXT
+              echo "$output" >> $RESULTS_TXT
+              
+              # Escape pipe characters and newlines for markdown table
+              details=$(echo "$output" | head -n 3 | tr '\n' ' ' | sed 's/|/\\|/g' | cut -c1-100)
+              echo "| \`$provider\` | ✅ PASS | $details |" >> $RESULTS_MD
+            else
+              status="❌ FAIL"
+              echo "Status: FAIL" >> $RESULTS_TXT
+              echo "$output" >> $RESULTS_TXT
+              
+              # Escape pipe characters and newlines for markdown table
+              details=$(echo "$output" | head -n 3 | tr '\n' ' ' | sed 's/|/\\|/g' | cut -c1-100)
+              echo "| \`$provider\` | ❌ FAIL | $details |" >> $RESULTS_MD
+            fi
+            
+            echo "" >> $RESULTS_TXT
+            echo "" >> $RESULTS_TXT
+          done
+          
+          echo "=========================" >> $RESULTS_TXT
+          echo "Test run completed" >> $RESULTS_TXT
+          
+          echo "" >> $RESULTS_MD
+          echo "---" >> $RESULTS_MD
+          echo "" >> $RESULTS_MD
+          echo "Test run completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $RESULTS_MD
+          
+          # Display results in console
+          echo ""
+          echo "=========================================="
+          echo "Test Results Summary"
+          echo "=========================================="
+          cat $RESULTS_TXT
+          echo "=========================================="
+      
+      - name: Upload test results (TXT)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provider-test-results-txt
+          path: test-results/provider-test-results.txt
+          retention-days: 90
+      
+      - name: Upload test results (Markdown)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provider-test-results-md
+          path: test-results/provider-test-results.md
+          retention-days: 90
+      
+      - name: Display results summary
+        if: always()
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          cat test-results/provider-test-results.md >> $GITHUB_STEP_SUMMARY
+
