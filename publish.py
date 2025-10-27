@@ -55,15 +55,61 @@ def check_dependencies():
         print("pip install build twine")
         sys.exit(1)
 
+def bump_version():
+    """
+    Bump the package version.
+    This function should implement version bumping logic by 
+     - extracting version from pyproject.toml
+     - incrementing patch version
+     - Use string search/replace to replace old version with new version in:
+        - llms/ui/ai.mjs
+        - llms/main.py
+        - setup.py
+        - pyproject.toml
+    """
+    print("Bumping package version...")
+    import re
+
+    version_file = "pyproject.toml"
+    with open(version_file, "r") as f:
+        content = f.read()
+        version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
+        print(f"Current version: {version}")
+        major, minor, patch = map(int, version.split("."))
+        patch += 1
+        new_version = f"{major}.{minor}.{patch}"
+        print(f"New version: {new_version}")
+        content = content.replace(version, new_version)
+        with open(version_file, "w") as f:
+            f.write(content)
+    # Update other files
+    files_to_update = [
+        "llms/ui/ai.mjs",
+        "llms/main.py",
+        "setup.py"
+    ]
+    for file in files_to_update:
+        with open(file, "r") as f:
+            content = f.read()
+            content = content.replace(version, new_version)
+        with open(file, "w") as f:
+            f.write(content)
+    print("Version bumped successfully.")
+    # Create git commit and tag
+    run_command(f'git commit -am "Bump version to {new_version}"')
+    run_command(f'git tag v{new_version}')
+    run_command("git push --tags")
+
 def main():
     parser = argparse.ArgumentParser(description="Publish llms-py package to PyPI")
+    parser.add_argument("--bump", action="store_true", help="Bump the package version")
     parser.add_argument("--test", action="store_true", help="Upload to TestPyPI")
     parser.add_argument("--prod", action="store_true", help="Upload to PyPI")
     parser.add_argument("--build", action="store_true", help="Just build the package")
     
     args = parser.parse_args()
     
-    if not any([args.test, args.prod, args.build]):
+    if not any([args.bump, args.test, args.prod, args.build]):
         parser.print_help()
         sys.exit(1)
     
@@ -71,7 +117,9 @@ def main():
     clean_build()
     build_package()
     
-    if args.test:
+    if args.bump:
+        bump_version()
+    elif args.test:
         upload_to_testpypi()
         print("\nPackage uploaded to TestPyPI!")
         print("You can test install with:")
