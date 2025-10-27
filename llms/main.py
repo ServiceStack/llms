@@ -938,12 +938,6 @@ async def save_default_config(config_path):
     config_json = await save_text(github_url("llms.json"), config_path)
     g_config = json.loads(config_json)
 
-async def update_llms():
-    """
-    Update llms.py from GitHub
-    """    
-    await save_text(github_url("llms.py"), __file__)
-
 def provider_status():
     enabled = list(g_handlers.keys())
     disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
@@ -1291,7 +1285,6 @@ def main():
     parser.add_argument('--root',         default=None, help='Change root directory for UI files', metavar='PATH')
     parser.add_argument('--logprefix',    default="",   help='Prefix used in log messages', metavar='PREFIX')
     parser.add_argument('--verbose',      action='store_true', help='Verbose output')
-    parser.add_argument('--update',       action='store_true', help='Update to latest version')
 
     cli_args, extra_args = parser.parse_known_args()
     if cli_args.verbose:
@@ -1615,11 +1608,6 @@ def main():
         default_text['model'] = default_model
         save_config(g_config)
         print(f"\nDefault model set to: {default_model}")
-        exit(0)
-
-    if cli_args.update:
-        asyncio.run(update_llms())
-        print(f"{__file__} updated")
         exit(0)
 
     if cli_args.chat is not None or cli_args.image is not None or cli_args.audio is not None or cli_args.file is not None or len(extra_args) > 0:
