@@ -61,7 +61,7 @@ export default {
                         <!-- Export/Import buttons -->
                         <div class="mt-2 flex space-x-3 justify-center">
                             <button type="button"
-                                @click="exportThreads"
+                                @click="(e) => e.altKey ? exportRequests() : exportThreads()"
                                 :disabled="isExporting"
                                 :title="'Export ' + threads?.threads?.value?.length + ' conversations'"
                                 class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -411,7 +411,7 @@ export default {
                 const exportData = {
                     exportedAt: new Date().toISOString(),
                     version: '1.0',
-                    source: 'ServiceStack.AI.Chat',
+                    source: 'llmspy',
                     threadCount: allThreads.length,
                     threads: allThreads
                 }
@@ -423,7 +423,7 @@ export default {
 
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `aichat-threads-export-${new Date().toISOString().split('T')[0]}.json`
+                link.download = `llmsthreads-export-${new Date().toISOString().split('T')[0]}.json`
                 document.body.appendChild(link)
                 link.click()
                 document.body.removeChild(link)
@@ -432,6 +432,44 @@ export default {
             } catch (error) {
                 console.error('Failed to export threads:', error)
                 alert('Failed to export threads: ' + error.message)
+            } finally {
+                isExporting.value = false
+            }
+        }
+
+        async function exportRequests() {
+            if (isExporting.value) return
+
+            isExporting.value = true
+            try {
+                // Load all threads from IndexedDB
+                const allRequests = await threads.getAllRequests()
+
+                // Create export data with metadata
+                const exportData = {
+                    exportedAt: new Date().toISOString(),
+                    version: '1.0',
+                    source: 'llmspy',
+                    requestsCount: allRequests.length,
+                    requests: allRequests
+                }
+
+                // Create and download JSON file
+                const jsonString = JSON.stringify(exportData, null, 2)
+                const blob = new Blob([jsonString], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+
+                const link = document.createElement('a')
+                link.href = url
+                link.download = `llmsrequests-export-${new Date().toISOString().split('T')[0]}.json`
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                URL.revokeObjectURL(url)
+
+            } catch (error) {
+                console.error('Failed to export requests:', error)
+                alert('Failed to export requests: ' + error.message)
             } finally {
                 isExporting.value = false
             }
@@ -447,71 +485,110 @@ export default {
             if (!file) return
 
             isImporting.value = true
+            var importType = 'threads'
             try {
                 const text = await file.text()
                 const importData = JSON.parse(text)
-
-                // Validate import data structure
-                if (!importData.threads || !Array.isArray(importData.threads)) {
-                    throw new Error('Invalid import file: missing or invalid threads array')
-                }
+                importType = importData.threads 
+                    ? 'threads' 
+                    : importData.requests
+                        ? 'requests'
+                        : 'unknown'
 
                 // Import threads one by one
                 let importedCount = 0
                 let updatedCount = 0
 
-                for (const threadData of importData.threads) {
-                    if (!threadData.id) {
-                        console.warn('Skipping thread without ID:', threadData)
-                        continue
+                const db = await threads.initDB()
+
+                if (importData.threads) {
+                    if (!Array.isArray(importData.threads)) {
+                        throw new Error('Invalid import file: missing or invalid threads array')
                     }
 
-                    try {
-                        // Check if thread already exists
-                        const existingThread = await threads.getThread(threadData.id)
-
-                        if (existingThread) {
-                            // Update existing thread
-                            await threads.updateThread(threadData.id, {
-                                title: threadData.title,
-                                model: threadData.model,
-                                systemPrompt: threadData.systemPrompt,
-                                messages: threadData.messages || [],
-                                createdAt: threadData.createdAt,
-                                // Keep the existing updatedAt or use imported one
-                                updatedAt: threadData.updatedAt || existingThread.updatedAt
-                            })
-                            updatedCount++
-                        } else {
-                            // Add new thread directly to IndexedDB
-                            //await threads.initDB()
-                            const db = await threads.initDB()
-                            const tx = db.transaction(['threads'], 'readwrite')
-                            await tx.objectStore('threads').add({
-                                id: threadData.id,
-                                title: threadData.title || 'Imported Chat',
-                                model: threadData.model || '',
-                                systemPrompt: threadData.systemPrompt || '',
-                                messages: threadData.messages || [],
-                                createdAt: threadData.createdAt || new Date().toISOString(),
-                                updatedAt: threadData.updatedAt || new Date().toISOString()
-                            })
-                            await tx.complete
-                            importedCount++
+                    for (const threadData of importData.threads) {
+                        if (!threadData.id) {
+                            console.warn('Skipping thread without ID:', threadData)
+                            continue
                         }
-                    } catch (error) {
-                        console.error('Failed to import thread:', threadData.id, error)
+
+                        try {
+                            // Check if thread already exists
+                            const existingThread = await threads.getThread(threadData.id)
+
+                            if (existingThread) {
+                                // Update existing thread
+                                await threads.updateThread(threadData.id, {
+                                    title: threadData.title,
+                                    model: threadData.model,
+                                    systemPrompt: threadData.systemPrompt,
+                                    messages: threadData.messages || [],
+                                    createdAt: threadData.createdAt,
+                                    // Keep the existing updatedAt or use imported one
+                                    updatedAt: threadData.updatedAt || existingThread.updatedAt
+                                })
+                                updatedCount++
+                            } else {
+                                // Add new thread directly to IndexedDB
+                                const tx = db.transaction(['threads'], 'readwrite')
+                                await tx.objectStore('threads').add({
+                                    id: threadData.id,
+                                    title: threadData.title || 'Imported Chat',
+                                    model: threadData.model || '',
+                                    systemPrompt: threadData.systemPrompt || '',
+                                    messages: threadData.messages || [],
+                                    createdAt: threadData.createdAt || new Date().toISOString(),
+                                    updatedAt: threadData.updatedAt || new Date().toISOString()
+                                })
+                                await tx.complete
+                                importedCount++
+                            }
+                        } catch (error) {
+                            console.error('Failed to import thread:', threadData.id, error)
+                        }
                     }
+
+                    // Reload threads to reflect changes
+                    await threads.loadThreads()
+
+                    alert(`Import completed!\nNew threads: ${importedCount}\nUpdated threads: ${updatedCount}`)
+                }
+                if (importData.requests) {
+                    if (!Array.isArray(importData.requests)) {
+                        throw new Error('Invalid import file: missing or invalid requests array')
+                    }
+
+                    for (const requestData of importData.requests) {
+                        if (!requestData.id) {
+                            console.warn('Skipping request without ID:', requestData)
+                            continue
+                        }
+
+                        try {
+                            // Check if request already exists
+                            const existingRequest = await threads.getRequest(requestData.id)
+
+                            if (existingRequest) {
+                                updatedCount++
+                            } else {
+                                // Add new request directly to IndexedDB
+                                const db = await threads.initDB()
+                                const tx = db.transaction(['requests'], 'readwrite')
+                                await tx.objectStore('requests').add(requestData)
+                                await tx.complete
+                                importedCount++
+                            }
+                        } catch (error) {
+                            console.error('Failed to import request:', requestData.id, error)
+                        }
+                    }
+
+                    alert(`Import completed!\nNew requests: ${importedCount}\nUpdated requests: ${updatedCount}`)
                 }
 
-                // Reload threads to reflect changes
-                await threads.loadThreads()
-
-                alert(`Import completed!\nNew threads: ${importedCount}\nUpdated threads: ${updatedCount}`)
-
             } catch (error) {
-                console.error('Failed to import threads:', error)
-                alert('Failed to import threads: ' + error.message)
+                console.error('Failed to import ' + importType + ':', error)
+                alert('Failed to import ' + importType + ': ' + error.message)
             } finally {
                 isImporting.value = false
                 // Clear the file input
@@ -725,6 +802,7 @@ export default {
             cancelEdit,
             configUpdated,
             exportThreads,
+            exportRequests,
             isExporting,
             triggerImport,
             handleFileImport,

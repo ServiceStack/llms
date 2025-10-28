@@ -396,6 +396,15 @@ function getGroupedThreads(total) {
 // Group threads by time periods
 const groupedThreads = computed(() => getGroupedThreads(threads.value.length))
 
+async function getAllRequests() {
+    await initDB()
+
+    const tx = db.transaction(['requests'], 'readonly')
+    const store = tx.objectStore('requests')
+    const allRequests = await store.getAll()
+    return allRequests
+}
+
 // Query requests with pagination and filtering
 async function getRequests(filters = {}, limit = 20, offset = 0) {
     try {
@@ -518,6 +527,7 @@ export function useThreadStore() {
         clearCurrentThread,
         getGroupedThreads,
         getRequests,
+        getAllRequests,
         getFilterOptions,
         deleteRequest,
     }
