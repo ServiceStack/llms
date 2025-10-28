@@ -126,6 +126,10 @@ The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.jso
 ### Defaults
 - `headers`: Common HTTP headers for all requests
 - `text`: Default chat completion request template for text prompts
+- `image`: Default chat completion request template for image prompts
+- `audio`: Default chat completion request template for audio prompts
+- `file`: Default chat completion request template for file prompts
+- `check`: Check request template for testing provider connectivity
 
 ### Providers
 
@@ -135,7 +139,9 @@ Each provider configuration includes:
 - `api_key`: API key (supports environment variables with `$VAR_NAME`)
 - `base_url`: API endpoint URL
 - `models`: Model name mappings (local name → provider name)
-
+- `pricing`: Pricing per token (input/output) for each model
+- `default_pricing`: Default pricing if not specified in `pricing`
+- `check`: Check request template for testing provider connectivity
 
 ## Command Line Usage
 
