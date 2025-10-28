@@ -10,7 +10,7 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 
 ## Features
 
-- **Lightweight**: Single [llms.py](llms.py) Python file with single `aiohttp` dependency
+- **Lightweight**: Single [llms.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) Python file with single `aiohttp` dependency
 - **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Z.ai, Mistral
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Built-in Analytics**: Built-in analytics UI to visualize costs, requests, and token usage
@@ -495,9 +495,6 @@ llms --verbose --logprefix "[DEBUG] " "Hello world"
 # Set default model (updates config file)
 llms --default grok-4
 
-# Update llms.py to latest version
-llms --update
-
 # Pass custom parameters to chat request (URL-encoded)
 llms --args "temperature=0.7&seed=111" "What is 2+2?"
 
@@ -567,18 +564,9 @@ When you set a default model:
 
 ### Updating llms.py
 
-The `--update` option downloads and installs the latest version of `llms.py` from the GitHub repository:
-
 ```bash
-# Update to latest version
-llms --update
+pip install llms-py --upgrade
 ```
-
-This command:
-- Downloads the latest `llms.py` from `github.com/ServiceStack/llms/blob/main/llms/main.py`
-- Overwrites your current `llms.py` file with the latest version
-- Preserves your existing configuration file (`llms.json`)
-- Requires an internet connection to download the update
 
 ### Beautiful rendered Markdown
 
@@ -815,35 +803,33 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
 
 ## Usage
 
-    Run `llms` without arguments to see the help screen:
+    usage: llms [-h] [--config FILE] [-m MODEL] [--chat REQUEST] [-s PROMPT] [--image IMAGE] [--audio AUDIO] [--file FILE]
+                [--args PARAMS] [--raw] [--list] [--check PROVIDER] [--serve PORT] [--enable PROVIDER] [--disable PROVIDER]
+                [--default MODEL] [--init] [--root PATH] [--logprefix PREFIX] [--verbose]
 
-    usage: llms.py [-h] [--config FILE] [-m MODEL] [--chat REQUEST] [-s PROMPT] [--image IMAGE] [--audio AUDIO]
-                  [--file FILE] [--raw] [--list] [--serve PORT] [--enable PROVIDER] [--disable PROVIDER]
-                  [--default MODEL] [--init] [--logprefix PREFIX] [--verbose] [--update]
-
-    llms
+    llms v2.0.24
 
     options:
       -h, --help            show this help message and exit
       --config FILE         Path to config file
-      -m MODEL, --model MODEL
-                            Model to use
+      -m, --model MODEL     Model to use
       --chat REQUEST        OpenAI Chat Completion Request to send
-      -s PROMPT, --system PROMPT
-                            System prompt to use for chat completion
+      -s, --system PROMPT   System prompt to use for chat completion
       --image IMAGE         Image input to use in chat completion
       --audio AUDIO         Audio input to use in chat completion
       --file FILE           File input to use in chat completion
+      --args PARAMS         URL-encoded parameters to add to chat request (e.g. "temperature=0.7&seed=111")
       --raw                 Return raw AI JSON response
       --list                Show list of enabled providers and their models (alias ls provider?)
+      --check PROVIDER      Check validity of models for a provider
       --serve PORT          Port to start an OpenAI Chat compatible server on
       --enable PROVIDER     Enable a provider
       --disable PROVIDER    Disable a provider
       --default MODEL       Configure the default model to use
       --init                Create a default llms.json
+      --root PATH           Change root directory for UI files
       --logprefix PREFIX    Prefix used in log messages
       --verbose             Verbose output
-      --update              Update to latest version
 
 ## Troubleshooting
 
@@ -905,9 +891,10 @@ This shows:
 
 ### Project Structure
 
-- `llms.py` - Main script with CLI and server functionality
-- `llms.json` - Default configuration file
-- `requirements.txt` - Python dependencies
+- `llms/main.py` - Main script with CLI and server functionality
+- `llms/llms.json` - Default configuration file
+- `llms/ui.json` - UI configuration file
+- `requirements.txt` - Python dependencies (aiohttp)
 
 ### Provider Classes
 
