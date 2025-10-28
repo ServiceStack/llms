@@ -91,19 +91,7 @@ export OPENROUTER_API_KEY="..."
 | z.ai            | `ZAI_API_KEY`             | Z.ai API key        | `sk-...` |
 | mistral         | `MISTRAL_API_KEY`         | Mistral API key     | `...` |
 
-### 2. Enable Providers
-
-Enable the providers you want to use:
-
-```bash
-# Enable providers with free models and free tiers
-llms --enable openrouter_free google_free groq
-
-# Enable paid providers
-llms --enable openrouter anthropic google openai mistral grok qwen
-```
-
-### 3. Run UI
+### 2. Run Server
 
 Start the UI and an OpenAI compatible API on port **8000**:
 
@@ -113,10 +101,30 @@ llms --serve 8000
 
 Launches the UI at `http://localhost:8000` and an OpenAI Endpoint at `http://localhost:8000/v1/chat/completions`.
 
-### 4. Use llms.py CLI
+Or to see detailed request/response logging, add `--verbose`:
+
+```bash
+llms --serve 8000 --verbose
+```
+
+### Use llms.py CLI
 
 ```bash
 llms "What is the capital of France?"
+```
+
+### Enable Providers
+
+Any providers that have their API Keys set and enabled in `llms.json` are automatically made available.
+
+You can also specify providers to enable/disable in the UI at runtime next to the model selector, or on the command line:
+
+```bash
+# Disable free providers with free models and free tiers
+llms --disable openrouter_free codestral google_free groq
+
+# Enable paid providers
+llms --enable openrouter anthropic google openai grok z.ai qwen mistral
 ```
 
 ## Configuration
