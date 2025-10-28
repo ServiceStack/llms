@@ -28,7 +28,7 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 
 Access all your local all remote LLMs with a single ChatGPT-like UI:
 
-[![](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
+[![](https://servicestack.net/img/posts/llms-py-ui/bg.webp?)](https://servicestack.net/posts/llms-py-ui)
 
 **Monthly Costs Analysis**
 
@@ -52,9 +52,7 @@ llms --check groq
 llms --check groq kimi-k2 llama4:400b gpt-oss:120b
 ```
 
-:::{.wideshot}
 [![llms-check.webp](https://servicestack.net/img/posts/llms-py-ui/llms-check.webp)](https://servicestack.net/img/posts/llms-py-ui/llms-check.webp)
-:::
 
 As they're a good indicator for the reliability and speed you can expect from different providers we've created a 
 [test-providers.yml](https://github.com/ServiceStack/llms/actions/workflows/test-providers.yml) GitHub Action to
