@@ -65,9 +65,95 @@ test the response times for all configured providers and models, the results of 
 
 ## Installation
 
+### Using pip
+
 ```bash
 pip install llms-py
 ```
+
+### Using Docker
+
+Run llms-py in a Docker container without installing Python or dependencies:
+
+```bash
+# Pull the latest image from GitHub Container Registry
+docker pull ghcr.io/servicestack/llms:latest
+
+# Run the server on port 8000
+docker run -p 8000:8000 \
+  -e OPENROUTER_API_KEY="your-key" \
+  -e GROQ_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+
+# Or use docker-compose (recommended)
+docker-compose up
+```
+
+**Using docker-compose** (recommended for local development):
+
+1. Create a `.env` file with your API keys:
+```bash
+OPENROUTER_API_KEY=your-key
+GROQ_API_KEY=your-key
+GOOGLE_FREE_API_KEY=your-key
+# Add other API keys as needed
+```
+
+2. Start the server:
+```bash
+docker-compose up -d
+```
+
+3. Access the UI at `http://localhost:8000`
+
+**Building locally:**
+
+```bash
+# Build the Docker image
+./docker-build.sh
+
+# Or manually
+docker build -t llms-py:latest .
+
+# Run the container
+docker run -p 8000:8000 \
+  -e OPENROUTER_API_KEY="your-key" \
+  llms-py:latest
+```
+
+**Persisting configuration:**
+
+To persist your llms configuration between container restarts, mount a volume:
+
+```bash
+docker run -p 8000:8000 \
+  -v llms-data:/home/llms/.llms \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+The `docker-compose.yml` file automatically creates a named volume for persistence.
+
+**Using custom configuration files:**
+
+You can provide your own `llms.json` and `ui.json` configuration files:
+
+```bash
+# Mount a local directory with your custom configs
+docker run -p 8000:8000 \
+  -v $(pwd)/config:/home/llms/.llms \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+
+# Or mount individual config files
+docker run -p 8000:8000 \
+  -v $(pwd)/my-llms.json:/home/llms/.llms/llms.json:ro \
+  -v $(pwd)/my-ui.json:/home/llms/.llms/ui.json:ro \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuration files.
 
 ## Quick Start
 
@@ -830,6 +916,222 @@ Example: If both OpenAI and OpenRouter support `kimi-k2`, the request will first
       --root PATH           Change root directory for UI files
       --logprefix PREFIX    Prefix used in log messages
       --verbose             Verbose output
+
+## Docker Deployment
+
+### Quick Start with Docker
+
+The easiest way to run llms-py is using Docker:
+
+```bash
+# Using docker-compose (recommended)
+docker-compose up -d
+
+# Or pull and run directly
+docker run -p 8000:8000 \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+### Docker Images
+
+Pre-built Docker images are automatically published to GitHub Container Registry:
+
+- **Latest stable**: `ghcr.io/servicestack/llms:latest`
+- **Specific version**: `ghcr.io/servicestack/llms:v2.0.24`
+- **Main branch**: `ghcr.io/servicestack/llms:main`
+
+### Environment Variables
+
+Pass API keys as environment variables:
+
+```bash
+docker run -p 8000:8000 \
+  -e OPENROUTER_API_KEY="sk-or-..." \
+  -e GROQ_API_KEY="gsk_..." \
+  -e GOOGLE_FREE_API_KEY="AIza..." \
+  -e ANTHROPIC_API_KEY="sk-ant-..." \
+  -e OPENAI_API_KEY="sk-..." \
+  ghcr.io/servicestack/llms:latest
+```
+
+### Using docker-compose
+
+Create a `docker-compose.yml` file (or use the one in the repository):
+
+```yaml
+version: '3.8'
+
+services:
+  llms:
+    image: ghcr.io/servicestack/llms:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GOOGLE_FREE_API_KEY=${GOOGLE_FREE_API_KEY}
+    volumes:
+      - llms-data:/home/llms/.llms
+    restart: unless-stopped
+
+volumes:
+  llms-data:
+```
+
+Create a `.env` file with your API keys:
+
+```bash
+OPENROUTER_API_KEY=sk-or-...
+GROQ_API_KEY=gsk_...
+GOOGLE_FREE_API_KEY=AIza...
+```
+
+Start the service:
+
+```bash
+docker-compose up -d
+```
+
+### Building Locally
+
+Build the Docker image from source:
+
+```bash
+# Using the build script
+./docker-build.sh
+
+# Or manually
+docker build -t llms-py:latest .
+
+# Run your local build
+docker run -p 8000:8000 \
+  -e OPENROUTER_API_KEY="your-key" \
+  llms-py:latest
+```
+
+### Volume Mounting
+
+To persist configuration and analytics data between container restarts:
+
+```bash
+# Using a named volume (recommended)
+docker run -p 8000:8000 \
+  -v llms-data:/home/llms/.llms \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+
+# Or mount a local directory
+docker run -p 8000:8000 \
+  -v $(pwd)/llms-config:/home/llms/.llms \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+### Custom Configuration Files
+
+Customize llms-py behavior by providing your own `llms.json` and `ui.json` files:
+
+**Option 1: Mount a directory with custom configs**
+
+```bash
+# Create config directory with your custom files
+mkdir -p config
+# Add your custom llms.json and ui.json to config/
+
+# Mount the directory
+docker run -p 8000:8000 \
+  -v $(pwd)/config:/home/llms/.llms \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+**Option 2: Mount individual config files**
+
+```bash
+docker run -p 8000:8000 \
+  -v $(pwd)/my-llms.json:/home/llms/.llms/llms.json:ro \
+  -v $(pwd)/my-ui.json:/home/llms/.llms/ui.json:ro \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+**With docker-compose:**
+
+```yaml
+volumes:
+  # Use local directory
+  - ./config:/home/llms/.llms
+
+  # Or mount individual files
+  # - ./my-llms.json:/home/llms/.llms/llms.json:ro
+  # - ./my-ui.json:/home/llms/.llms/ui.json:ro
+```
+
+The container will auto-create default config files on first run if they don't exist. You can customize these to:
+- Enable/disable specific providers
+- Add or remove models
+- Configure API endpoints
+- Set custom pricing
+- Customize chat templates
+- Configure UI settings
+
+See [DOCKER.md](DOCKER.md) for detailed configuration examples.
+
+### Custom Port
+
+Change the port mapping to run on a different port:
+
+```bash
+# Run on port 3000 instead of 8000
+docker run -p 3000:8000 \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest
+```
+
+### Docker CLI Usage
+
+You can also use the Docker container for CLI commands:
+
+```bash
+# Run a single query
+docker run --rm \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest \
+  llms "What is the capital of France?"
+
+# List available models
+docker run --rm \
+  -e OPENROUTER_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest \
+  llms --list
+
+# Check provider status
+docker run --rm \
+  -e GROQ_API_KEY="your-key" \
+  ghcr.io/servicestack/llms:latest \
+  llms --check groq
+```
+
+### Health Checks
+
+The Docker image includes a health check that verifies the server is responding:
+
+```bash
+# Check container health
+docker ps
+
+# View health check logs
+docker inspect --format='{{json .State.Health}}' llms-server
+```
+
+### Multi-Architecture Support
+
+The Docker images support multiple architectures:
+- `linux/amd64` (x86_64)
+- `linux/arm64` (ARM64/Apple Silicon)
+
+Docker will automatically pull the correct image for your platform.
 
 ## Troubleshooting
 

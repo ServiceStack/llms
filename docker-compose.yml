@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  llms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llms-py:latest
+    container_name: llms-server
+    ports:
+      - "8000:8000"
+    environment:
+      # API Keys - Set these in your .env file or pass them directly
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GOOGLE_FREE_API_KEY=${GOOGLE_FREE_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - CODESTRAL_API_KEY=${CODESTRAL_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROK_API_KEY=${GROK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+    volumes:
+      # Persist configuration and analytics data
+      # The container will auto-create llms.json and ui.json on first run
+      - llms-data:/home/llms/.llms
+
+      # Alternative: Mount a local directory to use custom config files
+      # Uncomment the line below and comment out the line above to use local configs
+      # Place your custom llms.json and ui.json in ./config/ directory
+      # - ./config:/home/llms/.llms
+
+      # Alternative: Mount individual config files (read-only recommended)
+      # - ./my-llms.json:/home/llms/.llms/llms.json:ro
+      # - ./my-ui.json:/home/llms/.llms/ui.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  llms-data:
+    driver: local
+
