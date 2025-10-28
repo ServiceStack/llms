@@ -497,7 +497,7 @@ export default {
 
                 // Import threads one by one
                 let importedCount = 0
-                let updatedCount = 0
+                let existingCount = 0
 
                 const db = await threads.initDB()
 
@@ -505,6 +505,8 @@ export default {
                     if (!Array.isArray(importData.threads)) {
                         throw new Error('Invalid import file: missing or invalid threads array')
                     }
+
+                    const threadIds = new Set(await threads.getAllThreadIds())
 
                     for (const threadData of importData.threads) {
                         if (!threadData.id) {
@@ -514,20 +516,9 @@ export default {
 
                         try {
                             // Check if thread already exists
-                            const existingThread = await threads.getThread(threadData.id)
-
+                            const existingThread = threadIds.has(threadData.id)
                             if (existingThread) {
-                                // Update existing thread
-                                await threads.updateThread(threadData.id, {
-                                    title: threadData.title,
-                                    model: threadData.model,
-                                    systemPrompt: threadData.systemPrompt,
-                                    messages: threadData.messages || [],
-                                    createdAt: threadData.createdAt,
-                                    // Keep the existing updatedAt or use imported one
-                                    updatedAt: threadData.updatedAt || existingThread.updatedAt
-                                })
-                                updatedCount++
+                                existingCount++
                             } else {
                                 // Add new thread directly to IndexedDB
                                 const tx = db.transaction(['threads'], 'readwrite')
@@ -551,12 +542,14 @@ export default {
                     // Reload threads to reflect changes
                     await threads.loadThreads()
 
-                    alert(`Import completed!\nNew threads: ${importedCount}\nUpdated threads: ${updatedCount}`)
+                    alert(`Import completed!\nNew threads: ${importedCount}\nExisting threads: ${existingCount}`)
                 }
                 if (importData.requests) {
                     if (!Array.isArray(importData.requests)) {
                         throw new Error('Invalid import file: missing or invalid requests array')
                     }
+
+                    const requestIds = new Set(await threads.getAllRequestIds())
 
                     for (const requestData of importData.requests) {
                         if (!requestData.id) {
@@ -566,10 +559,9 @@ export default {
 
                         try {
                             // Check if request already exists
-                            const existingRequest = await threads.getRequest(requestData.id)
-
+                            const existingRequest = requestIds.has(requestData.id)
                             if (existingRequest) {
-                                updatedCount++
+                                existingCount++
                             } else {
                                 // Add new request directly to IndexedDB
                                 const db = await threads.initDB()
@@ -583,7 +575,7 @@ export default {
                         }
                     }
 
-                    alert(`Import completed!\nNew requests: ${importedCount}\nUpdated requests: ${updatedCount}`)
+                    alert(`Import completed!\nNew requests: ${importedCount}\nExisting requests: ${existingCount}`)
                 }
 
             } catch (error) {

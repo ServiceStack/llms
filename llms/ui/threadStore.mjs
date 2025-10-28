@@ -405,6 +405,32 @@ async function getAllRequests() {
     return allRequests
 }
 
+async function getRequest(requestId) {
+    await initDB()
+
+    const tx = db.transaction(['requests'], 'readonly')
+    const store = tx.objectStore('requests')
+    const request = await store.get(requestId)
+    return request
+}
+
+async function getAllRequestIds() {
+    await initDB()
+    
+    const tx = db.transaction(['requests'], 'readonly')
+    const store = tx.objectStore('requests')
+    const ids = await store.getAllKeys()
+    return ids
+}
+
+async function getAllThreadIds() {
+    await initDB()
+    const tx = db.transaction(['threads'], 'readonly')
+    const store = tx.objectStore('threads')
+    const ids = await store.getAllKeys()
+    return ids    
+}
+
 // Query requests with pagination and filtering
 async function getRequests(filters = {}, limit = 20, offset = 0) {
     try {
@@ -526,9 +552,12 @@ export function useThreadStore() {
         setCurrentThreadFromRoute,
         clearCurrentThread,
         getGroupedThreads,
+        getRequest,
         getRequests,
         getAllRequests,
         getFilterOptions,
         deleteRequest,
+        getAllRequestIds,
+        getAllThreadIds,
     }
 }
