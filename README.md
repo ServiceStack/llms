@@ -103,9 +103,9 @@ Start the UI and an OpenAI compatible API on port **8000**:
 llms --serve 8000
 ```
 
-Launches the UI at `http://localhost:8000` and an OpenAI Endpoint at `http://localhost:8000/v1/chat/completions`.
+Launches UI at `http://localhost:8000` and OpenAI Endpoint at `http://localhost:8000/v1/chat/completions`.
 
-Or to see detailed request/response logging, add `--verbose`:
+To see detailed request/response logging, add `--verbose`:
 
 ```bash
 llms --serve 8000 --verbose
