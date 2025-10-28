@@ -522,15 +522,7 @@ export default {
                             } else {
                                 // Add new thread directly to IndexedDB
                                 const tx = db.transaction(['threads'], 'readwrite')
-                                await tx.objectStore('threads').add({
-                                    id: threadData.id,
-                                    title: threadData.title || 'Imported Chat',
-                                    model: threadData.model || '',
-                                    systemPrompt: threadData.systemPrompt || '',
-                                    messages: threadData.messages || [],
-                                    createdAt: threadData.createdAt || new Date().toISOString(),
-                                    updatedAt: threadData.updatedAt || new Date().toISOString()
-                                })
+                                await tx.objectStore('threads').add(threadData)
                                 await tx.complete
                                 importedCount++
                             }
