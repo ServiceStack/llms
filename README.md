@@ -34,6 +34,10 @@ Access all your local all remote LLMs with a single ChatGPT-like UI:
 
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-costs.webp)](https://servicestack.net/posts/llms-py-ui)
 
+**Monthly Token Usage**
+
+[![](https://servicestack.net/img/posts/llms-py-ui/analytics-tokens.webp)](https://servicestack.net/posts/llms-py-ui)
+
 **Monthly Activity Log**
 
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-activity.webp)](https://servicestack.net/posts/llms-py-ui)
