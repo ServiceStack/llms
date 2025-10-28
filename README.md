@@ -40,6 +40,27 @@ Access all your local all remote LLMs with a single ChatGPT-like UI:
 
 [More Features and Screenshots](https://servicestack.net/posts/llms-py-ui).
 
+**Check Provider Reliability and Response Times**
+
+Check the status of configured providers to test if they're configured correctly, reachable and what their response times is for the simplest `1+1=` request:
+
+```bash
+# Check all models for a provider:
+llms --check groq
+
+# Check specific models for a provider:
+llms --check groq kimi-k2 llama4:400b gpt-oss:120b
+```
+
+:::{.wideshot}
+[![llms-check.webp](https://servicestack.net/img/posts/llms-py-ui/llms-check.webp)](https://servicestack.net/img/posts/llms-py-ui/llms-check.webp)
+:::
+
+As they're a good indicator for the reliability and speed you can expect from different providers we've created a 
+[test-providers.yml](https://github.com/ServiceStack/llms/actions/workflows/test-providers.yml) GitHub Action to
+test the response times for all configured providers and models, the results of which will be frequently published to
+[/checks/latest.txt](https://github.com/ServiceStack/llms/blob/main/docs/checks/latest.txt)
+
 ## Installation
 
 ```bash
