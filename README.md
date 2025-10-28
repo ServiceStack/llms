@@ -117,7 +117,7 @@ llms "What is the capital of France?"
 
 Any providers that have their API Keys set and enabled in `llms.json` are automatically made available.
 
-You can also specify providers to enable/disable in the UI at runtime next to the model selector, or on the command line:
+Providers can be enabled or disabled in the UI at runtime next to the model selector, or on the command line:
 
 ```bash
 # Disable free providers with free models and free tiers
