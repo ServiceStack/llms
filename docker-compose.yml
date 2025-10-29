@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   llms:
     image: ghcr.io/servicestack/llms:latest
