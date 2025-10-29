@@ -73,7 +73,7 @@ pip install llms-py
 
 ### Using Docker
 
-Run llms-py in a Docker container without installing Python or dependencies:
+a) Simple - Run in a Docker container:
 
 ```bash
 # Pull the latest image from GitHub Container Registry
@@ -83,76 +83,38 @@ docker pull ghcr.io/servicestack/llms:latest
 docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY ghcr.io/servicestack/llms:latest
 ```
 
-Or use docker-compose (recommended):
+Use custom `llms.json` and `ui.json` config files outside of the container (auto created if not exists):
 
 ```bash
-docker-compose up
+docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY \
+  -v ~/.llms:/home/llms/.llms \
+  ghcr.io/servicestack/llms:latest
 ```
 
-**Using docker-compose** (recommended for local development):
+b) Recommended - Use Docker Compose
 
-1. Create a `.env` file with your API keys:
+Download and use [docker-compose.yml](https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml):
 
 ```bash
-OPENROUTER_API_KEY=your-key
-GROQ_API_KEY=your-key
-GOOGLE_FREE_API_KEY=your-key
-# Add other API keys as needed
+curl -O https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml
 ```
 
-2. Start the server:
+Update API Keys in `docker-compose.yml` then start the server:
+
 ```bash
 docker-compose up -d
 ```
 
-3. Access the UI at `http://localhost:8000`
-
-**Building locally:**
+c) Build and run local Docker image from source:
 
 ```bash
-# Build the Docker image
-./docker-build.sh
+git clone https://github.com/ServiceStack/llms
 
-# Or manually
-docker build -t llms-py:latest .
-
-# Run the container
-docker run -p 8000:8000 \
-  -e OPENROUTER_API_KEY="your-key" \
-  llms-py:latest
+docker-compose -f docker-compose.local.yml up -d --build
 ```
 
-**Persisting configuration:**
+After the container starts, you can access the UI at `http://localhost:8000`.
 
-To persist your llms configuration between container restarts, mount a volume:
-
-```bash
-docker run -p 8000:8000 \
-  -v llms-data:/home/llms/.llms \
-  -e OPENROUTER_API_KEY="your-key" \
-  ghcr.io/servicestack/llms:latest
-```
-
-The `docker-compose.yml` file automatically creates a named volume for persistence.
-
-**Using custom configuration files:**
-
-You can provide your own `llms.json` and `ui.json` configuration files:
-
-```bash
-# Mount a local directory with your custom configs
-docker run -p 8000:8000 \
-  -v $(pwd)/config:/home/llms/.llms \
-  -e OPENROUTER_API_KEY="your-key" \
-  ghcr.io/servicestack/llms:latest
-
-# Or mount individual config files
-docker run -p 8000:8000 \
-  -v $(pwd)/my-llms.json:/home/llms/.llms/llms.json:ro \
-  -v $(pwd)/my-ui.json:/home/llms/.llms/ui.json:ro \
-  -e OPENROUTER_API_KEY="your-key" \
-  ghcr.io/servicestack/llms:latest
-```
 
 See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuration files.
 
