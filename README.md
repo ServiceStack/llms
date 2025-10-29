@@ -73,7 +73,7 @@ pip install llms-py
 
 ### Using Docker
 
-a) Simple - Run in a Docker container:
+**a) Simple - Run in a Docker container:**
 
 ```bash
 # Pull the latest image from GitHub Container Registry
@@ -91,7 +91,7 @@ docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY \
   ghcr.io/servicestack/llms:latest
 ```
 
-b) Recommended - Use Docker Compose
+**b) Recommended - Use Docker Compose:**
 
 Download and use [docker-compose.yml](https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml):
 
@@ -105,7 +105,7 @@ Update API Keys in `docker-compose.yml` then start the server:
 docker-compose up -d
 ```
 
-c) Build and run local Docker image from source:
+**c) Build and run local Docker image from source:**
 
 ```bash
 git clone https://github.com/ServiceStack/llms
