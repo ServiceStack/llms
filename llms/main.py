@@ -354,7 +354,7 @@ class OpenAiProvider:
 
     @classmethod
     def test(cls, base_url=None, api_key=None, models={}, **kwargs):
-        return base_url is not None and api_key is not None and len(models) > 0
+        return base_url and api_key and len(models) > 0
 
     async def load(self):
         pass
@@ -467,7 +467,7 @@ class OllamaProvider(OpenAiProvider):
 
     @classmethod
     def test(cls, base_url=None, models={}, all_models=False, **kwargs):
-        return base_url is not None and (len(models) > 0 or all_models)
+        return base_url and (len(models) > 0 or all_models)
 
 class GoogleOpenAiProvider(OpenAiProvider):
     def __init__(self, api_key, models, **kwargs):
@@ -476,7 +476,7 @@ class GoogleOpenAiProvider(OpenAiProvider):
 
     @classmethod
     def test(cls, api_key=None, models={}, **kwargs):
-        return api_key is not None and len(models) > 0
+        return api_key and len(models) > 0
 
 class GoogleProvider(OpenAiProvider):
     def __init__(self, models, api_key, safety_settings=None, thinking_config=None, curl=False, **kwargs):
@@ -912,7 +912,7 @@ async def load_llms():
         await provider.load()
 
 def save_config(config):
-    global g_config
+    global g_config, g_config_path
     g_config = config
     with open(g_config_path, "w") as f:
         json.dump(g_config, f, indent=4)
@@ -921,21 +921,25 @@ def save_config(config):
 def github_url(filename):
     return f"https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/llms/{filename}"
 
-async def save_text(url, save_path):
+async def get_text(url):
     async with aiohttp.ClientSession() as session:
         _log(f"GET {url}")
         async with session.get(url) as resp:
             text = await resp.text()
             if resp.status >= 400:
                 raise HTTPError(resp.status, reason=resp.reason, body=text, headers=dict(resp.headers))
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, "w") as f:
-                f.write(text)
             return text
+
+async def save_text_url(url, save_path):
+    text = await get_text(url)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w") as f:
+        f.write(text)
+    return text
 
 async def save_default_config(config_path):
     global g_config
-    config_json = await save_text(github_url("llms.json"), config_path)
+    config_json = await save_text_url(github_url("llms.json"), config_path)
     g_config = json.loads(config_json)
 
 def provider_status():
@@ -1256,8 +1260,59 @@ async def check_models(provider_name, model_names=None):
 
     print()
 
+def text_from_resource(filename):
+    global _ROOT
+    resource_path = _ROOT / filename
+    if resource_exists(resource_path):
+        try:
+            return read_resource_text(resource_path)
+        except (OSError, AttributeError) as e:
+            _log(f"Error reading resource config {filename}: {e}")
+    return None
+
+def text_from_file(filename):
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            return f.read()
+    return None
+
+async def text_from_resource_or_url(filename):
+    text = text_from_resource(filename)
+    if not text:
+        try:
+            resource_url = github_url(filename)
+            text = await get_text(resource_url)
+        except Exception as e:
+            _log(f"Error downloading JSON from {resource_url}: {e}")
+            raise e
+    return text
+
+async def save_home_configs():
+    home_config_path = home_llms_path("llms.json")
+    home_ui_path = home_llms_path("ui.json")
+    if os.path.exists(home_config_path) and os.path.exists(home_ui_path):
+        return
+
+    llms_home = os.path.dirname(home_config_path)
+    os.makedirs(llms_home, exist_ok=True)
+    try:
+        if not os.path.exists(home_config_path):
+            config_json = await text_from_resource_or_url("llms.json")
+            with open(home_config_path, "w") as f:
+                f.write(config_json)
+            _log(f"Created default config at {home_config_path}")
+
+        if not os.path.exists(home_ui_path):
+            ui_json = await text_from_resource_or_url("ui.json")
+            with open(home_ui_path, "w") as f:
+                f.write(ui_json)
+            _log(f"Created default ui config at {home_ui_path}")
+    except Exception as e:
+        print("Could not create llms.json. Create one with --init or use --config <path>")
+        exit(1)
+
 def main():
-    global _ROOT, g_verbose, g_default_model, g_logprefix, g_config_path, g_ui_path
+    global _ROOT, g_verbose, g_default_model, g_logprefix, g_config, g_config_path, g_ui_path
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument('--config',       default=None, help='Path to config file', metavar='FILE')
@@ -1295,24 +1350,13 @@ def main():
     if cli_args.logprefix:
         g_logprefix = cli_args.logprefix
 
-    if cli_args.config is not None:
-        g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config)
-
-    _ROOT = resolve_root()
-    if cli_args.root:
-        _ROOT = Path(cli_args.root)
-
+    _ROOT = Path(cli_args.root) if cli_args.root else resolve_root()
     if not _ROOT:
         print("Resource root not found")
         exit(1)
 
-    g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config) if cli_args.config else get_config_path()
-    g_ui_path = get_ui_path()
-
     home_config_path = home_llms_path("llms.json")
-    resource_config_path = _ROOT / "llms.json"
     home_ui_path = home_llms_path("ui.json")
-    resource_ui_path = _ROOT / "ui.json"
 
     if cli_args.init:
         if os.path.exists(home_config_path):
@@ -1324,74 +1368,38 @@ def main():
         if os.path.exists(home_ui_path):
             print(f"ui.json already exists at {home_ui_path}")
         else:
-            asyncio.run(save_text(github_url("ui.json"), home_ui_path))
+            asyncio.run(save_text_url(github_url("ui.json"), home_ui_path))
             print(f"Created default ui config at {home_ui_path}")
         exit(0)
 
-    if not g_config_path or not os.path.exists(g_config_path):
-        # copy llms.json and ui.json to llms_home
- 
-        if not os.path.exists(home_config_path):
-            llms_home = os.path.dirname(home_config_path)
-            os.makedirs(llms_home, exist_ok=True)
+    if cli_args.config:
+        # read contents
+        g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config) 
+        with open(g_config_path, "r") as f:
+            config_json = f.read()
+            g_config = json.loads(config_json)
 
-            if resource_exists(resource_config_path):
-                try:
-                    # Read config from resource (handle both Path and Traversable objects)
-                    config_json = read_resource_text(resource_config_path)
-                except (OSError, AttributeError) as e:
-                    _log(f"Error reading resource config: {e}")
-            if not config_json:
-                try:
-                    config_json = asyncio.run(save_text(github_url("llms.json"), home_config_path))
-                except Exception as e:
-                    _log(f"Error downloading llms.json: {e}")
-                    print("Could not create llms.json. Create one with --init or use --config <path>")
-                    exit(1)
-
-            with open(home_config_path, "w") as f:
-                f.write(config_json)
-                _log(f"Created default config at {home_config_path}")
-            # Update g_config_path to point to the copied file
-            g_config_path = home_config_path
-    if not g_config_path or not os.path.exists(g_config_path):
-        print("llms.json not found. Create one with --init or use --config <path>")
-        exit(1)
-
-    if not g_ui_path or not os.path.exists(g_ui_path):
-        # Read UI config from resource
-        if not os.path.exists(home_ui_path):
-            llms_home = os.path.dirname(home_ui_path)
-            os.makedirs(llms_home, exist_ok=True)
-            if resource_exists(resource_ui_path):
-                try:
-                    # Read config from resource (handle both Path and Traversable objects)
-                    ui_json = read_resource_text(resource_ui_path)
-                except (OSError, AttributeError) as e:
-                    _log(f"Error reading resource ui config: {e}")
-            if not ui_json:
-                try:
-                    ui_json = asyncio.run(save_text(github_url("ui.json"), home_ui_path))
-                except Exception as e:
-                    _log(f"Error downloading ui.json: {e}")
-                    print("Could not create ui.json. Create one with --init or use --config <path>")
-                    exit(1)
-
-            with open(home_ui_path, "w") as f:
-                f.write(ui_json)
+        config_dir = os.path.dirname(g_config_path)
+        # look for ui.json in same directory as config
+        ui_path = os.path.join(config_dir, "ui.json")
+        if os.path.exists(ui_path):
+            g_ui_path = ui_path
+        else:
+            if not os.path.exists(home_ui_path):
+                ui_json = text_from_resource("ui.json")
+                with open(home_ui_path, "w") as f:
+                    f.write(ui_json)
                 _log(f"Created default ui config at {home_ui_path}")
-        
-        # Update g_config_path to point to the copied file
+            g_ui_path = home_ui_path
+    else:
+        # ensure llms.json and ui.json exist in home directory
+        asyncio.run(save_home_configs())
+        g_config_path = home_config_path
         g_ui_path = home_ui_path
-    if not g_ui_path or not os.path.exists(g_ui_path):
-        print("ui.json not found. Create one with --init or use --config <path>")
-        exit(1)
+        g_config = json.loads(text_from_file(g_config_path))
 
-    # read contents
-    with open(g_config_path, "r") as f:
-        config_json = f.read()
-        init_llms(json.loads(config_json))
-        asyncio.run(load_llms())
+    init_llms(g_config)
+    asyncio.run(load_llms())
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")
