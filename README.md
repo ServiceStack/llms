@@ -76,14 +76,17 @@ pip install llms-py
 **a) Simple - Run in a Docker container:**
 
 ```bash
-# Pull the latest image from GitHub Container Registry
-docker pull ghcr.io/servicestack/llms:latest
-
 # Run the server on port 8000
 docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY ghcr.io/servicestack/llms:latest
 ```
 
-Use custom `llms.json` and `ui.json` config files outside of the container (auto created if not exists):
+Get the latest version:
+
+```bash
+docker pull ghcr.io/servicestack/llms:latest
+```
+
+Use custom `llms.json` and `ui.json` config files outside of the container (auto created if they don't exist):
 
 ```bash
 docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY \
