@@ -1426,6 +1426,22 @@ def main():
         exit(0)
 
     if cli_args.serve is not None:
+        # Disable inactive providers and save to config before starting server
+        all_providers = g_config['providers'].keys()
+        enabled_providers = list(g_handlers.keys())
+        disable_providers = []
+        for provider in all_providers:
+            provider_config = g_config['providers'][provider]
+            if provider not in enabled_providers:
+                if 'enabled' in provider_config and provider_config['enabled']:
+                    provider_config['enabled'] = False
+                    disable_providers.append(provider)
+        
+        if len(disable_providers) > 0:
+            _log(f"Disabled unavailable providers: {', '.join(disable_providers)}")
+            save_config(g_config)
+
+        # Start server
         port = int(cli_args.serve)
 
         if not os.path.exists(g_ui_path):
