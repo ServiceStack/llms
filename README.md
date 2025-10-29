@@ -113,7 +113,7 @@ git clone https://github.com/ServiceStack/llms
 docker-compose -f docker-compose.local.yml up -d --build
 ```
 
-After the container starts, you can access the UI at `http://localhost:8000`.
+After the container starts, you can access the UI and API at `http://localhost:8000`.
 
 
 See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuration files.
