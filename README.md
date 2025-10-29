@@ -75,8 +75,9 @@ pip install llms-py
 
 **a) Simple - Run in a Docker container:**
 
+Run the server on port `8000`:
+
 ```bash
-# Run the server on port 8000
 docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY ghcr.io/servicestack/llms:latest
 ```
 
