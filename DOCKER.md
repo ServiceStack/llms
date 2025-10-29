@@ -164,28 +164,37 @@ docker build -t llms-py:latest .
 
 ## Docker Compose
 
-### Start Services
+### Using Pre-built Image (Recommended for Users)
+
+The default `docker-compose.yml` uses the pre-built image from GitHub Container Registry:
 
 ```bash
+# Start services
 docker-compose up -d
-```
 
-### View Logs
-
-```bash
+# View logs
 docker-compose logs -f
-```
 
-### Stop Services
-
-```bash
+# Stop services
 docker-compose down
 ```
 
-### Rebuild and Restart
+### Building from Source (For Developers)
+
+If you've cloned the repository and want to build from source, use `docker-compose.local.yml`:
 
 ```bash
-docker-compose up -d --build
+# Build and start services
+docker-compose -f docker-compose.local.yml up -d --build
+
+# View logs
+docker-compose -f docker-compose.local.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.local.yml down
+
+# Rebuild and restart
+docker-compose -f docker-compose.local.yml up -d --build
 ```
 
 ## Data Persistence

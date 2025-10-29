@@ -80,10 +80,7 @@ Run llms-py in a Docker container without installing Python or dependencies:
 docker pull ghcr.io/servicestack/llms:latest
 
 # Run the server on port 8000
-docker run -p 8000:8000 \
-  -e OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
-  -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/servicestack/llms:latest
+docker run -p 8000:8000 -e OPENROUTER_API_KEY=$OPENROUTER_API_KEY ghcr.io/servicestack/llms:latest
 ```
 
 Or use docker-compose (recommended):
@@ -95,6 +92,7 @@ docker-compose up
 **Using docker-compose** (recommended for local development):
 
 1. Create a `.env` file with your API keys:
+
 ```bash
 OPENROUTER_API_KEY=your-key
 GROQ_API_KEY=your-key
