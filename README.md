@@ -71,7 +71,7 @@ test the response times for all configured providers and models, the results of 
 pip install llms-py
 ```
 
-[Using Docker](#using-docker).
+- [Using Docker](#using-docker)
 
 ## Quick Start
 
