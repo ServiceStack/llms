@@ -71,56 +71,7 @@ test the response times for all configured providers and models, the results of 
 pip install llms-py
 ```
 
-### Using Docker
-
-**a) Simple - Run in a Docker container:**
-
-Run the server on port `8000`:
-
-```bash
-docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY ghcr.io/servicestack/llms:latest
-```
-
-Get the latest version:
-
-```bash
-docker pull ghcr.io/servicestack/llms:latest
-```
-
-Use custom `llms.json` and `ui.json` config files outside of the container (auto created if they don't exist):
-
-```bash
-docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY \
-  -v ~/.llms:/home/llms/.llms \
-  ghcr.io/servicestack/llms:latest
-```
-
-**b) Recommended - Use Docker Compose:**
-
-Download and use [docker-compose.yml](https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml):
-
-```bash
-curl -O https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml
-```
-
-Update API Keys in `docker-compose.yml` then start the server:
-
-```bash
-docker-compose up -d
-```
-
-**c) Build and run local Docker image from source:**
-
-```bash
-git clone https://github.com/ServiceStack/llms
-
-docker-compose -f docker-compose.local.yml up -d --build
-```
-
-After the container starts, you can access the UI and API at `http://localhost:8000`.
-
-
-See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuration files.
+[Using Docker](#using-docker).
 
 ## Quick Start
 
@@ -183,6 +134,57 @@ llms --disable openrouter_free codestral google_free groq
 # Enable paid providers
 llms --enable openrouter anthropic google openai grok z.ai qwen mistral
 ```
+
+## Using Docker
+
+#### a) Simple - Run in a Docker container:
+
+Run the server on port `8000`:
+
+```bash
+docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY ghcr.io/servicestack/llms:latest
+```
+
+Get the latest version:
+
+```bash
+docker pull ghcr.io/servicestack/llms:latest
+```
+
+Use custom `llms.json` and `ui.json` config files outside of the container (auto created if they don't exist):
+
+```bash
+docker run -p 8000:8000 -e GROQ_API_KEY=$GROQ_API_KEY \
+  -v ~/.llms:/home/llms/.llms \
+  ghcr.io/servicestack/llms:latest
+```
+
+#### b) Recommended - Use Docker Compose:
+
+Download and use [docker-compose.yml](https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml):
+
+```bash
+curl -O https://raw.githubusercontent.com/ServiceStack/llms/refs/heads/main/docker-compose.yml
+```
+
+Update API Keys in `docker-compose.yml` then start the server:
+
+```bash
+docker-compose up -d
+```
+
+#### c) Build and run local Docker image from source:
+
+```bash
+git clone https://github.com/ServiceStack/llms
+
+docker-compose -f docker-compose.local.yml up -d --build
+```
+
+After the container starts, you can access the UI and API at `http://localhost:8000`.
+
+
+See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuration files.
 
 ## Configuration
 
