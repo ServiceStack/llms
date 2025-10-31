@@ -16,6 +16,7 @@ import sys
 import site
 import secrets
 import re
+from io import BytesIO
 from urllib.parse import parse_qs, urlencode
 
 import aiohttp
@@ -23,6 +24,12 @@ from aiohttp import web
 
 from pathlib import Path
 from importlib import resources   # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 VERSION = "2.0.27"
 _ROOT = None
@@ -201,6 +208,77 @@ def price_to_string(price: float | int | str | None) -> str | None:
     except (ValueError, TypeError):
         return None
 
+def convert_image_if_needed(image_bytes, mimetype='image/png'):
+    """
+    Convert and resize image to WebP if it exceeds configured limits.
+
+    Args:
+        image_bytes: Raw image bytes
+        mimetype: Original image MIME type
+
+    Returns:
+        tuple: (converted_bytes, new_mimetype) or (original_bytes, original_mimetype) if no conversion needed
+    """
+    if not HAS_PIL:
+        return image_bytes, mimetype
+
+    # Get conversion config
+    convert_config = g_config.get('convert', {}).get('image', {}) if g_config else {}
+    if not convert_config:
+        return image_bytes, mimetype
+
+    max_size_str = convert_config.get('max_size', '1536x1024')
+    max_length = convert_config.get('max_length', 1.5*1024*1024) # 1.5MB
+
+    try:
+        # Parse max_size (e.g., "1536x1024")
+        max_width, max_height = map(int, max_size_str.split('x'))
+
+        # Open image
+        with Image.open(BytesIO(image_bytes)) as img:
+            original_width, original_height = img.size
+
+            # Check if image exceeds limits
+            needs_resize = original_width > max_width or original_height > max_height
+
+            # Check if base64 length would exceed max_length (in KB)
+            # Base64 encoding increases size by ~33%, so check raw bytes * 1.33 / 1024
+            estimated_kb = (len(image_bytes) * 1.33) / 1024
+            needs_conversion = estimated_kb > max_length
+
+            if not needs_resize and not needs_conversion:
+                return image_bytes, mimetype
+
+            # Convert RGBA to RGB if necessary (WebP doesn't support transparency in RGB mode)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                # Create a white background
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Resize if needed (preserve aspect ratio)
+            if needs_resize:
+                img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+                _log(f"Resized image from {original_width}x{original_height} to {img.size[0]}x{img.size[1]}")
+
+            # Convert to WebP
+            output = BytesIO()
+            img.save(output, format='WEBP', quality=85, method=6)
+            converted_bytes = output.getvalue()
+
+            _log(f"Converted image to WebP: {len(image_bytes)} bytes -> {len(converted_bytes)} bytes ({len(converted_bytes)*100//len(image_bytes)}%)")
+
+            return converted_bytes, 'image/webp'
+
+    except Exception as e:
+        _log(f"Error converting image: {e}")
+        # Return original if conversion fails
+        return image_bytes, mimetype
+
 async def process_chat(chat):
     if not chat:
         raise Exception("No chat provided")
@@ -231,19 +309,31 @@ async def process_chat(chat):
                                     mimetype = get_file_mime_type(get_filename(url))
                                     if 'Content-Type' in response.headers:
                                         mimetype = response.headers['Content-Type']
+                                    # convert/resize image if needed
+                                    content, mimetype = convert_image_if_needed(content, mimetype)
                                     # convert to data uri
                                     image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             elif is_file_path(url):
                                 _log(f"Reading image: {url}")
                                 with open(url, "rb") as f:
                                     content = f.read()
-                                    ext = os.path.splitext(url)[1].lower().lstrip('.') if '.' in url else 'png'
                                     # get mimetype from file extension
                                     mimetype = get_file_mime_type(get_filename(url))
+                                    # convert/resize image if needed
+                                    content, mimetype = convert_image_if_needed(content, mimetype)
                                     # convert to data uri
                                     image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             elif url.startswith('data:'):
-                                pass
+                                # Extract existing data URI and process it
+                                if ';base64,' in url:
+                                    prefix = url.split(';base64,')[0]
+                                    mimetype = prefix.split(':')[1] if ':' in prefix else 'image/png'
+                                    base64_data = url.split(';base64,')[1]
+                                    content = base64.b64decode(base64_data)
+                                    # convert/resize image if needed
+                                    content, mimetype = convert_image_if_needed(content, mimetype)
+                                    # update data uri with potentially converted image
+                                    image_url['url'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             else:
                                 raise Exception(f"Invalid image: {url}")
                     elif item['type'] == 'input_audio' and 'input_audio' in item:
@@ -1481,7 +1571,9 @@ def main():
 
             _log("Authentication enabled - GitHub OAuth configured")
 
-        app = web.Application()
+        client_max_size = g_config.get('limits', {}).get('client_max_size', 20*1024*1024) # 20MB max request size (to handle base64 encoding overhead)
+        _log(f"client_max_size set to {client_max_size} bytes ({client_max_size/1024/1024:.1f}MB)")
+        app = web.Application(client_max_size=client_max_size)
 
         # Authentication middleware helper
         def check_auth(request):

@@ -10,7 +10,7 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 
 ## Features
 
-- **Lightweight**: Single [llms.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) Python file with single `aiohttp` dependency
+- **Lightweight**: Single [llms.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) Python file with single `aiohttp` dependency (Pillow optional)
 - **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Z.ai, Mistral
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Built-in Analytics**: Built-in analytics UI to visualize costs, requests, and token usage
@@ -18,6 +18,7 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 - **CLI Interface**: Simple command-line interface for quick interactions
 - **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
 - **Image Support**: Process images through vision-capable models
+  - Auto resizes and converts to webp if exceeds configured limits
 - **Audio Support**: Process audio through audio-capable models
 - **Custom Chat Templates**: Configurable chat completion request templates for different modalities
 - **Auto-Discovery**: Automatically discover available Ollama models
@@ -223,6 +224,8 @@ The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.jso
 - `audio`: Default chat completion request template for audio prompts
 - `file`: Default chat completion request template for file prompts
 - `check`: Check request template for testing provider connectivity
+- `limits`: Override Request size limits
+- `convert`: Max image size and length limits and auto conversion settings
 
 ### Providers
 
@@ -1191,7 +1194,7 @@ This shows:
 - `llms/main.py` - Main script with CLI and server functionality
 - `llms/llms.json` - Default configuration file
 - `llms/ui.json` - UI configuration file
-- `requirements.txt` - Python dependencies (aiohttp)
+- `requirements.txt` - Python dependencies, required: `aiohttp`, optional: `Pillow`
 
 ### Provider Classes
 

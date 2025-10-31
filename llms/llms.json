@@ -105,6 +105,15 @@
             "stream": false
         }
     },
+    "limits": {
+        "client_max_size": 20971520
+    },
+    "convert": {
+        "image": {
+            "max_size": "1536x1024",
+            "max_length": 1572864
+        }
+    },
     "providers": {
         "openrouter_free": {
             "enabled": true,
