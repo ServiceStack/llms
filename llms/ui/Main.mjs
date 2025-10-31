@@ -6,6 +6,7 @@ import { storageObject, addCopyButtons, formatCost, statsTitle } from './utils.m
 import { renderMarkdown } from './markdown.mjs'
 import ChatPrompt, { useChatPrompt } from './ChatPrompt.mjs'
 import SignIn from './SignIn.mjs'
+import OAuthSignIn from './OAuthSignIn.mjs'
 import Avatar from './Avatar.mjs'
 import ModelSelector from './ModelSelector.mjs'
 import SystemPromptSelector from './SystemPromptSelector.mjs'
@@ -22,32 +23,34 @@ export default {
         SystemPromptEditor,
         ChatPrompt,
         SignIn,
+        OAuthSignIn,
         Avatar,
         Welcome,
     },
     template: `
         <div class="flex flex-col h-full w-full">
-            <!-- Header with model and prompt selectors -->
-            <div class="border-b border-gray-200 bg-white px-2 py-2 w-full min-h-16">
+            <!-- Header with model and prompt selectors (hidden when auth required and not authenticated) -->
+            <div v-if="!($ai.requiresAuth && !$ai.auth)" class="border-b border-gray-200 bg-white px-2 py-2 w-full min-h-16">
                 <div class="flex items-center justify-between w-full">
                     <ModelSelector :models="models" v-model="selectedModel" @updated="configUpdated" />
 
                     <div class="flex items-center space-x-2">
-                        <SystemPromptSelector :prompts="prompts" v-model="selectedPrompt" 
+                        <SystemPromptSelector :prompts="prompts" v-model="selectedPrompt"
                             :show="showSystemPrompt" @toggle="showSystemPrompt = !showSystemPrompt" />
                         <Avatar />
                     </div>
                 </div>
             </div>
 
-            <SystemPromptEditor v-if="showSystemPrompt" 
+            <SystemPromptEditor v-if="showSystemPrompt && !($ai.requiresAuth && !$ai.auth)"
                 v-model="currentSystemPrompt" :prompts="prompts" :selected="selectedPrompt" />
 
             <!-- Messages Area -->
             <div class="flex-1 overflow-y-auto" ref="messagesContainer">
                 <div class="mx-auto max-w-6xl px-4 py-6">
                     <div v-if="$ai.requiresAuth && !$ai.auth">
-                        <SignIn @done="$ai.signIn($event)" />
+                        <OAuthSignIn v-if="$ai.authType === 'oauth'" @done="$ai.signIn($event)" />
+                        <SignIn v-else @done="$ai.signIn($event)" />
                     </div>
                     <!-- Welcome message when no thread is selected -->
                     <div v-else-if="!currentThread" class="text-center py-12">

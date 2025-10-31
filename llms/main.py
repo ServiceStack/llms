@@ -14,7 +14,8 @@ import mimetypes
 import traceback
 import sys
 import site
-from urllib.parse import parse_qs
+import secrets
+from urllib.parse import parse_qs, urlencode
 
 import aiohttp
 from aiohttp import web
@@ -31,6 +32,8 @@ g_handlers = {}
 g_verbose = False
 g_logprefix=""
 g_default_model=""
+g_sessions = {}  # OAuth session storage: {session_token: {userId, userName, displayName, profileUrl, email, created}}
+g_oauth_states = {}  # CSRF protection: {state: {created, redirect_uri}}
 
 def _log(message):
     """Helper method for logging from the global polling task."""
@@ -1456,9 +1459,61 @@ def main():
             print(f"UI not found at {g_ui_path}")
             exit(1)
 
+        # Validate auth configuration if enabled
+        auth_enabled = g_config.get('auth', {}).get('enabled', False)
+        if auth_enabled:
+            github_config = g_config.get('auth', {}).get('github', {})
+            client_id = github_config.get('client_id', '')
+            client_secret = github_config.get('client_secret', '')
+
+            # Expand environment variables
+            if client_id.startswith('$'):
+                client_id = os.environ.get(client_id[1:], '')
+            if client_secret.startswith('$'):
+                client_secret = os.environ.get(client_secret[1:], '')
+
+            if not client_id or not client_secret:
+                print("ERROR: Authentication is enabled but GitHub OAuth is not properly configured.")
+                print("Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables,")
+                print("or disable authentication by setting 'auth.enabled' to false in llms.json")
+                exit(1)
+
+            _log("Authentication enabled - GitHub OAuth configured")
+
         app = web.Application()
 
+        # Authentication middleware helper
+        def check_auth(request):
+            """Check if request is authenticated. Returns (is_authenticated, user_data)"""
+            if not auth_enabled:
+                return True, None
+
+            # Check for OAuth session token
+            session_token = request.query.get('session') or request.headers.get('X-Session-Token')
+            if session_token and session_token in g_sessions:
+                return True, g_sessions[session_token]
+
+            # Check for API key
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                api_key = auth_header[7:]
+                if api_key:
+                    return True, {"authProvider": "apikey"}
+
+            return False, None
+
         async def chat_handler(request):
+            # Check authentication if enabled
+            is_authenticated, user_data = check_auth(request)
+            if not is_authenticated:
+                return web.json_response({
+                    "error": {
+                        "message": "Authentication required",
+                        "type": "authentication_error",
+                        "code": "unauthorized"
+                    }
+                }, status=401)
+
             try:
                 chat = await request.json()
                 response = await chat_completion(chat)
@@ -1504,6 +1559,198 @@ def main():
             })
         app.router.add_post('/providers/{provider}', provider_handler)
 
+        # OAuth handlers
+        async def github_auth_handler(request):
+            """Initiate GitHub OAuth flow"""
+            if 'auth' not in g_config or 'github' not in g_config['auth']:
+                return web.json_response({"error": "GitHub OAuth not configured"}, status=500)
+
+            auth_config = g_config['auth']['github']
+            client_id = auth_config.get('client_id', '')
+            redirect_uri = auth_config.get('redirect_uri', '')
+
+            # Expand environment variables
+            if client_id.startswith('$'):
+                client_id = os.environ.get(client_id[1:], '')
+            if redirect_uri.startswith('$'):
+                redirect_uri = os.environ.get(redirect_uri[1:], '')
+
+            if not client_id:
+                return web.json_response({"error": "GitHub client_id not configured"}, status=500)
+
+            # Generate CSRF state token
+            state = secrets.token_urlsafe(32)
+            g_oauth_states[state] = {
+                'created': time.time(),
+                'redirect_uri': redirect_uri
+            }
+
+            # Clean up old states (older than 10 minutes)
+            current_time = time.time()
+            expired_states = [s for s, data in g_oauth_states.items() if current_time - data['created'] > 600]
+            for s in expired_states:
+                del g_oauth_states[s]
+
+            # Build GitHub authorization URL
+            params = {
+                'client_id': client_id,
+                'redirect_uri': redirect_uri,
+                'state': state,
+                'scope': 'read:user user:email'
+            }
+            auth_url = f"https://github.com/login/oauth/authorize?{urlencode(params)}"
+
+            return web.HTTPFound(auth_url)
+
+        async def github_callback_handler(request):
+            """Handle GitHub OAuth callback"""
+            code = request.query.get('code')
+            state = request.query.get('state')
+
+            if not code or not state:
+                return web.Response(text="Missing code or state parameter", status=400)
+
+            # Verify state token (CSRF protection)
+            if state not in g_oauth_states:
+                return web.Response(text="Invalid state parameter", status=400)
+
+            state_data = g_oauth_states.pop(state)
+
+            if 'auth' not in g_config or 'github' not in g_config['auth']:
+                return web.json_response({"error": "GitHub OAuth not configured"}, status=500)
+
+            auth_config = g_config['auth']['github']
+            client_id = auth_config.get('client_id', '')
+            client_secret = auth_config.get('client_secret', '')
+            redirect_uri = auth_config.get('redirect_uri', '')
+
+            # Expand environment variables
+            if client_id.startswith('$'):
+                client_id = os.environ.get(client_id[1:], '')
+            if client_secret.startswith('$'):
+                client_secret = os.environ.get(client_secret[1:], '')
+            if redirect_uri.startswith('$'):
+                redirect_uri = os.environ.get(redirect_uri[1:], '')
+
+            if not client_id or not client_secret:
+                return web.json_response({"error": "GitHub OAuth credentials not configured"}, status=500)
+
+            # Exchange code for access token
+            async with aiohttp.ClientSession() as session:
+                token_url = "https://github.com/login/oauth/access_token"
+                token_data = {
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'code': code,
+                    'redirect_uri': redirect_uri
+                }
+                headers = {'Accept': 'application/json'}
+
+                async with session.post(token_url, data=token_data, headers=headers) as resp:
+                    token_response = await resp.json()
+                    access_token = token_response.get('access_token')
+
+                    if not access_token:
+                        error = token_response.get('error_description', 'Failed to get access token')
+                        return web.Response(text=f"OAuth error: {error}", status=400)
+
+                # Fetch user info
+                user_url = "https://api.github.com/user"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json"
+                }
+
+                async with session.get(user_url, headers=headers) as resp:
+                    user_data = await resp.json()
+
+            # Create session
+            session_token = secrets.token_urlsafe(32)
+            g_sessions[session_token] = {
+                "userId": str(user_data.get('id', '')),
+                "userName": user_data.get('login', ''),
+                "displayName": user_data.get('name', ''),
+                "profileUrl": user_data.get('avatar_url', ''),
+                "email": user_data.get('email', ''),
+                "created": time.time()
+            }
+
+            # Redirect to UI with session token
+            return web.HTTPFound(f"/?session={session_token}")
+
+        async def session_handler(request):
+            """Validate and return session info"""
+            session_token = request.query.get('session') or request.headers.get('X-Session-Token')
+
+            if not session_token or session_token not in g_sessions:
+                return web.json_response({"error": "Invalid or expired session"}, status=401)
+
+            session_data = g_sessions[session_token]
+
+            # Clean up old sessions (older than 24 hours)
+            current_time = time.time()
+            expired_sessions = [token for token, data in g_sessions.items() if current_time - data['created'] > 86400]
+            for token in expired_sessions:
+                del g_sessions[token]
+
+            return web.json_response({
+                **session_data,
+                "sessionToken": session_token
+            })
+
+        async def logout_handler(request):
+            """End OAuth session"""
+            session_token = request.query.get('session') or request.headers.get('X-Session-Token')
+
+            if session_token and session_token in g_sessions:
+                del g_sessions[session_token]
+
+            return web.json_response({"success": True})
+
+        async def auth_handler(request):
+            """Check authentication status and return user info"""
+            # Check for OAuth session token
+            session_token = request.query.get('session') or request.headers.get('X-Session-Token')
+
+            if session_token and session_token in g_sessions:
+                session_data = g_sessions[session_token]
+                return web.json_response({
+                    "userId": session_data.get("userId", ""),
+                    "userName": session_data.get("userName", ""),
+                    "displayName": session_data.get("displayName", ""),
+                    "profileUrl": session_data.get("profileUrl", ""),
+                    "authProvider": "github"
+                })
+
+            # Check for API key in Authorization header
+            # auth_header = request.headers.get('Authorization', '')
+            # if auth_header.startswith('Bearer '):
+            #     # For API key auth, return a basic response
+            #     # You can customize this based on your API key validation logic
+            #     api_key = auth_header[7:]
+            #     if api_key:  # Add your API key validation logic here
+            #         return web.json_response({
+            #             "userId": "1",
+            #             "userName": "apiuser",
+            #             "displayName": "API User",
+            #             "profileUrl": "",
+            #             "authProvider": "apikey"
+            #         })
+
+            # Not authenticated - return error in expected format
+            return web.json_response({
+                "responseStatus": {
+                    "errorCode": "Unauthorized",
+                    "message": "Not authenticated"
+                }
+            }, status=401)
+
+        app.router.add_get('/auth', auth_handler)
+        app.router.add_get('/auth/github', github_auth_handler)
+        app.router.add_get('/auth/github/callback', github_callback_handler)
+        app.router.add_get('/auth/session', session_handler)
+        app.router.add_post('/auth/logout', logout_handler)
+
         async def ui_static(request: web.Request) -> web.Response:
             path = Path(request.match_info["path"])
 
@@ -1543,9 +1790,12 @@ def main():
                 enabled, disabled = provider_status()
                 ui['status'] = {
                     "all": list(g_config['providers'].keys()),
-                    "enabled": enabled, 
-                    "disabled": disabled 
+                    "enabled": enabled,
+                    "disabled": disabled
                 }
+                # Add auth configuration
+                ui['requiresAuth'] = auth_enabled
+                ui['authType'] = 'oauth' if auth_enabled else 'apikey'
                 return web.json_response(ui)
         app.router.add_get('/config', ui_config_handler)
 

@@ -1,4 +1,12 @@
 {
+    "auth": {
+        "enabled": true,
+        "github": {
+            "client_id": "$GITHUB_CLIENT_ID",
+            "client_secret": "$GITHUB_CLIENT_SECRET",
+            "redirect_uri": "http://localhost:8000/auth/github/callback"
+        }
+    },
     "defaults": {
         "headers": {
             "Content-Type": "application/json",

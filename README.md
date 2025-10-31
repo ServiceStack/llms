@@ -186,6 +186,12 @@ After the container starts, you can access the UI and API at `http://localhost:8
 
 See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuration files.
 
+## GitHub OAuth Authentication
+
+llms.py supports optional GitHub OAuth authentication to secure your web UI and API endpoints. When enabled, users must sign in with their GitHub account before accessing the application.
+
+See [GITHUB_OAUTH_SETUP.md](GITHUB_OAUTH_SETUP.md) for detailed setup instructions.
+
 ## Configuration
 
 The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.json` and defines available providers, models, and default settings. Key sections:
