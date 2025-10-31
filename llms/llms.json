@@ -1,6 +1,6 @@
 {
     "auth": {
-        "enabled": true,
+        "enabled": false,
         "github": {
             "client_id": "$GITHUB_CLIENT_ID",
             "client_secret": "$GITHUB_CLIENT_SECRET",
