@@ -113,6 +113,7 @@
                 "mai-ds-r1": "microsoft/mai-ds-r1:free",
                 "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct:free",
                 "nemotron-nano:9b": "nvidia/nemotron-nano-9b-v2:free",
+                "nemotron-nano:12b":"nvidia/nemotron-nano-12b-v2-vl:free",
                 "deepseek-r1-distill-llama:70b": "deepseek/deepseek-r1-distill-llama-70b:free",
                 "gpt-oss:20b": "openai/gpt-oss-20b:free",
                 "mistral-small3.2:24b": "mistralai/mistral-small-3.2-24b-instruct:free",
