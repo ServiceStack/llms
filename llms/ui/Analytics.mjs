@@ -1021,7 +1021,9 @@ export default {
 
                         // Only display label if percentage > 1%
                         if (parseFloat(percentage) > 1) {
-                            chartCtx.fillStyle = '#000'
+                            // Use white color in dark mode, black in light mode
+                            const isDarkMode = document.documentElement.classList.contains('dark')
+                            chartCtx.fillStyle = isDarkMode ? '#fff' : '#000'
                             chartCtx.font = 'bold 12px Arial'
                             chartCtx.textAlign = 'center'
                             chartCtx.textBaseline = 'middle'
@@ -1078,7 +1080,9 @@ export default {
 
                         // Only display label if percentage > 1%
                         if (parseFloat(percentage) > 1) {
-                            chartCtx.fillStyle = '#000'
+                            // Use white color in dark mode, black in light mode
+                            const isDarkMode = document.documentElement.classList.contains('dark')
+                            chartCtx.fillStyle = isDarkMode ? '#fff' : '#000'
                             chartCtx.font = 'bold 12px Arial'
                             chartCtx.textAlign = 'center'
                             chartCtx.textBaseline = 'middle'
@@ -1135,7 +1139,9 @@ export default {
 
                         // Only display label if percentage > 1%
                         if (parseFloat(percentage) > 1) {
-                            chartCtx.fillStyle = '#000'
+                            // Use white color in dark mode, black in light mode
+                            const isDarkMode = document.documentElement.classList.contains('dark')
+                            chartCtx.fillStyle = isDarkMode ? '#fff' : '#000'
                             chartCtx.font = 'bold 12px Arial'
                             chartCtx.textAlign = 'center'
                             chartCtx.textBaseline = 'middle'
@@ -1192,7 +1198,9 @@ export default {
 
                         // Only display label if percentage > 1%
                         if (parseFloat(percentage) > 1) {
-                            chartCtx.fillStyle = '#000'
+                            // Use white color in dark mode, black in light mode
+                            const isDarkMode = document.documentElement.classList.contains('dark')
+                            chartCtx.fillStyle = isDarkMode ? '#fff' : '#000'
                             chartCtx.font = 'bold 12px Arial'
                             chartCtx.textAlign = 'center'
                             chartCtx.textBaseline = 'middle'
