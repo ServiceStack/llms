@@ -38,7 +38,6 @@ export default {
                         <SystemPromptSelector :prompts="prompts" v-model="selectedPrompt"
                             :show="showSystemPrompt" @toggle="showSystemPrompt = !showSystemPrompt" />
                         <Avatar />
-                        <DarkModeToggle />
                     </div>
                 </div>
             </div>
@@ -63,7 +62,7 @@ export default {
                         </div>
 
                         <!-- Export/Import buttons -->
-                        <div class="mt-2 flex space-x-3 justify-center">
+                        <div class="mt-2 flex space-x-3 justify-center items-center">
                             <button type="button"
                                 @click="(e) => e.altKey ? exportRequests() : exportThreads()"
                                 :disabled="isExporting"
@@ -104,6 +103,9 @@ export default {
                                 @change="handleFileImport"
                                 class="hidden"
                             />
+
+                            <DarkModeToggle />
+
                         </div>
 
                     </div>
