@@ -10,7 +10,7 @@ export default {
         return { ai }
     },
     template: `
-        <div class="flex h-screen bg-white">
+        <div class="flex h-screen bg-white dark:bg-gray-900">
             <!-- Sidebar (hidden when auth required and not authenticated) -->
             <div v-if="!(ai.requiresAuth && !ai.auth)" class="w-72 xl:w-80 flex-shrink-0">
                 <Sidebar />

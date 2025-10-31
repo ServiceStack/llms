@@ -43,6 +43,8 @@
     b, strong { font-weight:600; }
     ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-thumb{background-color:#ccc}
+    .dark ::-webkit-scrollbar{background:#1f2937}
+    .dark ::-webkit-scrollbar-thumb{background-color:#4b5563}
     [role=dialog].z-10 {
         z-index: 60;
     }

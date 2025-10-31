@@ -1,8 +1,8 @@
 <html>
 <head>
     <title>llms.py</title>
-    <link rel="stylesheet" href="/ui/typography.css">
     <link rel="stylesheet" href="/ui/app.css">
+    <link rel="stylesheet" href="/ui/typography.css">
     <link rel="icon" type="image/svg" href="/ui/fav.svg">
     <style>
         [type='button'],button[type='submit']{cursor:pointer}
@@ -38,6 +38,22 @@
 <body>
 <div id="app"></div>
 </body>
+<script>
+let colorScheme = location.search === "?dark"
+        ? "dark"
+        : location.search === "?light"
+            ? "light"
+            : localStorage.getItem('color-scheme')
+let darkMode = colorScheme != null
+    ? colorScheme === 'dark'
+    : window.matchMedia('(prefers-color-scheme: dark)').matches
+let html = document.documentElement
+html.classList.toggle('dark', darkMode)
+html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
+if (localStorage.getItem('color-scheme') === null) {
+    localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
+}    
+</script>
 <script type="module">
 import { createApp, defineAsyncComponent } from 'vue'
 import { createWebHistory, createRouter } from "vue-router"

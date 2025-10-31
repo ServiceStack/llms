@@ -19,15 +19,15 @@ export default {
                         <span :title="id">{{id}}</span>
                         <span class="flex items-center space-x-1">
                             <span v-if="pricing && (parseFloat(pricing.input) == 0 && parseFloat(pricing.input) == 0)">
-                                <span class="text-xs text-gray-500" title="Free to use">FREE</span>                            
+                                <span class="text-xs text-gray-500 dark:text-gray-400" title="Free to use">FREE</span>
                             </span>
-                            <span v-else-if="pricing" class="text-xs text-gray-500" 
+                            <span v-else-if="pricing" class="text-xs text-gray-500 dark:text-gray-400"
                                 :title="'Estimated Cost per token: ' + pricing.input + ' input | ' + pricing.output + ' output'">
                               {{tokenPrice(pricing.input)}}
                               &#183;
                               {{tokenPrice(pricing.output)}} M
                             </span>
-                            <span :title="provider_model + ' from ' + provider">    
+                            <span :title="provider_model + ' from ' + provider">
                                 <ProviderIcon :provider="provider" />
                             </span>
                         </span>
