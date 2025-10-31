@@ -30,25 +30,25 @@ Access all your local all remote LLMs with a single ChatGPT-like UI:
 
 [![](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
 
-**Dark Mode Support**
+#### Dark Mode Support
 
 [![](https://servicestack.net/img/posts/llms-py-ui/dark-attach-image.webp)](https://servicestack.net/posts/llms-py-ui)
 
-**Monthly Costs Analysis**
+#### Monthly Costs Analysis
 
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-costs.webp)](https://servicestack.net/posts/llms-py-ui)
 
-**Monthly Token Usage (Dark Mode)**
+#### Monthly Token Usage (Dark Mode)
 
 [![](https://servicestack.net/img/posts/llms-py-ui/dark-analytics-tokens.webp)](https://servicestack.net/posts/llms-py-ui)
 
-**Monthly Activity Log**
+#### Monthly Activity Log
 
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-activity.webp)](https://servicestack.net/posts/llms-py-ui)
 
 [More Features and Screenshots](https://servicestack.net/posts/llms-py-ui).
 
-**Check Provider Reliability and Response Times**
+#### Check Provider Reliability and Response Times
 
 Check the status of configured providers to test if they're configured correctly, reachable and what their response times is for the simplest `1+1=` request:
 
