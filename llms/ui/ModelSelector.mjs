@@ -1,6 +1,5 @@
 import ProviderStatus from "./ProviderStatus.mjs"
 import ProviderIcon from "./ProviderIcon.mjs"
-import { useFormatters } from "@servicestack/vue"
 
 export default {
     components: {

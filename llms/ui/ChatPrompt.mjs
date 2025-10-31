@@ -77,9 +77,18 @@ export default {
                         v-model="messageText"
                         @keydown.enter.exact.prevent="sendMessage"
                         @keydown.enter.shift.exact="addNewLine"
-                        placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                        @paste="onPaste"
+                        @dragover="onDragOver"
+                        @dragleave="onDragLeave"
+                        @drop="onDrop"
+                        placeholder="Type your message... (Enter to send, Shift+Enter for new line, drag & drop or paste files)"
                         rows="3"
-                        class="block w-full rounded-md border border-gray-300 px-3 py-2 pr-12 text-sm placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        :class="[
+                            'block w-full rounded-md border px-3 py-2 pr-12 text-sm placeholder-gray-500 focus:outline-none focus:ring-1',
+                            isDragging
+                                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                        ]"
                         :disabled="isGenerating || !model"
                     ></textarea>
                     <button title="Send (Enter)" type="button"
@@ -167,6 +176,93 @@ export default {
         }
         const removeAttachment = (i) => {
             attachedFiles.value.splice(i, 1)
+        }
+
+        // Helper function to add files and set default message
+        const addFilesAndSetMessage = (files) => {
+            if (files.length === 0) return
+
+            attachedFiles.value.push(...files)
+
+            // Set default message text if empty
+            if (!messageText.value.trim()) {
+                if (hasImage()) {
+                    messageText.value = getTextContent(config.defaults.image)
+                } else if (hasAudio()) {
+                    messageText.value = getTextContent(config.defaults.audio)
+                } else {
+                    messageText.value = getTextContent(config.defaults.file)
+                }
+            }
+        }
+
+        // Handle paste events for clipboard images, audio, and files
+        const onPaste = async (e) => {
+            // Use the paste event's clipboardData directly (works best for paste events)
+            const items = e.clipboardData?.items
+            if (!items) return
+
+            const files = []
+
+            // Check all clipboard items
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i]
+
+                // Handle files (images, audio, etc.)
+                if (item.kind === 'file') {
+                    const file = item.getAsFile()
+                    if (file) {
+                        // Generate a better filename based on type
+                        let filename = file.name
+                        if (!filename || filename === 'image.png' || filename === 'blob') {
+                            const ext = file.type.split('/')[1] || 'png'
+                            const timestamp = new Date().getTime()
+                            if (file.type.startsWith('image/')) {
+                                filename = `pasted-image-${timestamp}.${ext}`
+                            } else if (file.type.startsWith('audio/')) {
+                                filename = `pasted-audio-${timestamp}.${ext}`
+                            } else {
+                                filename = `pasted-file-${timestamp}.${ext}`
+                            }
+                            // Create a new File object with the better name
+                            files.push(new File([file], filename, { type: file.type }))
+                        } else {
+                            files.push(file)
+                        }
+                    }
+                }
+            }
+
+            if (files.length > 0) {
+                e.preventDefault()
+                addFilesAndSetMessage(files)
+            }
+        }
+
+        // Handle drag and drop events
+        const isDragging = ref(false)
+
+        const onDragOver = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            isDragging.value = true
+        }
+
+        const onDragLeave = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            isDragging.value = false
+        }
+
+        const onDrop = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            isDragging.value = false
+
+            const files = Array.from(e.dataTransfer?.files || [])
+            if (files.length > 0) {
+                addFilesAndSetMessage(files)
+            }
         }
 
         function createChatRequest() {
@@ -433,8 +529,13 @@ export default {
             messageText,
             fileInput,
             showSettings,
+            isDragging,
             triggerFilePicker,
             onFilesSelected,
+            onPaste,
+            onDragOver,
+            onDragLeave,
+            onDrop,
             removeAttachment,
             sendMessage,
             addNewLine,
