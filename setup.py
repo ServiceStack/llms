@@ -16,7 +16,7 @@ with open(os.path.join(this_directory, "requirements.txt"), encoding="utf-8") as
 
 setup(
     name="llms-py",
-    version="2.0.27",
+    version="2.0.28",
     author="ServiceStack",
     author_email="team@servicestack.net",
     description="A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers",
