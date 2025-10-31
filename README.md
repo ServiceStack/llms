@@ -194,6 +194,22 @@ See [DOCKER.md](DOCKER.md) for detailed instructions on customizing configuratio
 
 llms.py supports optional GitHub OAuth authentication to secure your web UI and API endpoints. When enabled, users must sign in with their GitHub account before accessing the application.
 
+```json
+{
+    "auth": {
+        "enabled": true,
+        "github": {
+            "client_id": "$GITHUB_CLIENT_ID",
+            "client_secret": "$GITHUB_CLIENT_SECRET",
+            "redirect_uri": "http://localhost:8000/auth/github/callback",
+            "restrict_to": "$GITHUB_USERS"
+        }
+    }
+}
+```
+
+`GITHUB_USERS` is optional but if set will only allow access to the specified users.
+
 See [GITHUB_OAUTH_SETUP.md](GITHUB_OAUTH_SETUP.md) for detailed setup instructions.
 
 ## Configuration

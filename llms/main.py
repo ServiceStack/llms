@@ -15,6 +15,7 @@ import traceback
 import sys
 import site
 import secrets
+import re
 from urllib.parse import parse_qs, urlencode
 
 import aiohttp
@@ -1601,6 +1602,29 @@ def main():
             auth_url = f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
             return web.HTTPFound(auth_url)
+        
+        def validate_user(github_username):
+            auth_config = g_config['auth']['github']
+            # Check if user is restricted
+            restrict_to = auth_config.get('restrict_to', '')
+
+            # Expand environment variables
+            if restrict_to.startswith('$'):
+                restrict_to = os.environ.get(restrict_to[1:], '')
+
+            # If restrict_to is configured, validate the user
+            if restrict_to:
+                # Parse allowed users (comma or space delimited)
+                allowed_users = [u.strip() for u in re.split(r'[,\s]+', restrict_to) if u.strip()]
+
+                # Check if user is in the allowed list
+                if not github_username or github_username not in allowed_users:
+                    _log(f"Access denied for user: {github_username}. Not in allowed list: {allowed_users}")
+                    return web.Response(
+                        text=f"Access denied. User '{github_username}' is not authorized to access this application.",
+                        status=403
+                    )
+            return None
 
         async def github_callback_handler(request):
             """Handle GitHub OAuth callback"""
@@ -1663,6 +1687,11 @@ def main():
 
                 async with session.get(user_url, headers=headers) as resp:
                     user_data = await resp.json()
+
+                # Validate user
+                error_response = validate_user(user_data.get('login', ''))
+                if error_response:
+                    return error_response
 
             # Create session
             session_token = secrets.token_urlsafe(32)

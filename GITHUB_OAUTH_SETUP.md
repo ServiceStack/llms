@@ -38,6 +38,8 @@ Set the following environment variables with your GitHub OAuth credentials:
 ```bash
 export GITHUB_CLIENT_ID="your_github_client_id_here"
 export GITHUB_CLIENT_SECRET="your_github_client_secret_here"
+# Optional - Comma or space separated list of allowed users (if set restricts access to these users)
+export GITHUB_USERS="octocat mythz"
 ```
 
 For permanent configuration, add these to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.).
