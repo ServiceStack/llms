@@ -94,16 +94,18 @@
     border-left-style: solid;
 }
 
-.dark .prose :not(:where([class~="not-prose"] *)), .dark .prose :where(td):not(:where([class~="not-prose"] *)) {
+.dark .prose :where(td):not(:where([class~="not-prose"] *)) {
     color: rgb(209 213 219); /*text-gray-300*/
 }
 .dark .prose :where(h1,h2,h3,h4,h5,h6,th):not(:where([class~="not-prose"] *)) {
     color: rgb(243 244 246); /*text-gray-100*/
 }
-.dark .prose :where(code):not(:where([class~="not-prose"] *)) {
+.dark .prose :where(code):not(:where([class~="not-prose"] *)),
+.dark .message em {
     background-color: rgb(30 58 138); /*text-blue-900*/
     color: rgb(243 244 246); /*text-gray-100*/
 }
+
 .dark .prose :where(pre code):not(:where([class~="not-prose"] *)) {
     background-color: unset;
 }
