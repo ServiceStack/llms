@@ -33,7 +33,7 @@ Access all your local all remote LLMs with a single ChatGPT-like UI:
 
 #### Dark Mode Support
 
-[![](https://servicestack.net/img/posts/llms-py-ui/dark-attach-image.webp)](https://servicestack.net/posts/llms-py-ui)
+[![](https://servicestack.net/img/posts/llms-py-ui/dark-attach-image.webp?)](https://servicestack.net/posts/llms-py-ui)
 
 #### Monthly Costs Analysis
 
@@ -41,7 +41,7 @@ Access all your local all remote LLMs with a single ChatGPT-like UI:
 
 #### Monthly Token Usage (Dark Mode)
 
-[![](https://servicestack.net/img/posts/llms-py-ui/dark-analytics-tokens.webp)](https://servicestack.net/posts/llms-py-ui)
+[![](https://servicestack.net/img/posts/llms-py-ui/dark-analytics-tokens.webp?)](https://servicestack.net/posts/llms-py-ui)
 
 #### Monthly Activity Log
 
