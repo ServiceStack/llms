@@ -28,15 +28,19 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 
 Access all your local all remote LLMs with a single ChatGPT-like UI:
 
-[![](https://servicestack.net/img/posts/llms-py-ui/bg.webp?)](https://servicestack.net/posts/llms-py-ui)
+[![](https://servicestack.net/img/posts/llms-py-ui/bg.webp)](https://servicestack.net/posts/llms-py-ui)
+
+**Dark Mode Support**
+
+[![](https://servicestack.net/img/posts/llms-py-ui/dark-attach-image.webp)](https://servicestack.net/posts/llms-py-ui)
 
 **Monthly Costs Analysis**
 
 [![](https://servicestack.net/img/posts/llms-py-ui/analytics-costs.webp)](https://servicestack.net/posts/llms-py-ui)
 
-**Monthly Token Usage**
+**Monthly Token Usage (Dark Mode)**
 
-[![](https://servicestack.net/img/posts/llms-py-ui/analytics-tokens.webp)](https://servicestack.net/posts/llms-py-ui)
+[![](https://servicestack.net/img/posts/llms-py-ui/dark-analytics-tokens.webp)](https://servicestack.net/posts/llms-py-ui)
 
 **Monthly Activity Log**
 
