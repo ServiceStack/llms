@@ -1405,6 +1405,66 @@ async def save_home_configs():
         print("Could not create llms.json. Create one with --init or use --config <path>")
         exit(1)
 
+async def reload_providers():
+    global g_config, g_handlers
+    g_handlers = init_llms(g_config)
+    await load_llms()
+    _log(f"{len(g_handlers)} providers loaded")
+    return g_handlers
+
+async def watch_config_files(config_path, ui_path, interval=1):
+    """Watch config files and reload providers when they change"""
+    global g_config
+
+    config_path = Path(config_path)
+    ui_path = Path(ui_path) if ui_path else None
+
+    file_mtimes = {}
+
+    _log(f"Watching config files: {config_path}" + (f", {ui_path}" if ui_path else ""))
+
+    while True:
+        await asyncio.sleep(interval)
+
+        # Check llms.json
+        try:
+            if config_path.is_file():
+                mtime = config_path.stat().st_mtime
+
+                if str(config_path) not in file_mtimes:
+                    file_mtimes[str(config_path)] = mtime
+                elif file_mtimes[str(config_path)] != mtime:
+                    _log(f"Config file changed: {config_path.name}")
+                    file_mtimes[str(config_path)] = mtime
+
+                    try:
+                        # Reload llms.json
+                        with open(config_path, "r") as f:
+                            g_config = json.load(f)
+
+                        # Reload providers
+                        await reload_providers()
+                        _log("Providers reloaded successfully")
+                    except Exception as e:
+                        _log(f"Error reloading config: {e}")
+        except FileNotFoundError:
+            pass
+
+        # Check ui.json
+        if ui_path:
+            try:
+                if ui_path.is_file():
+                    mtime = ui_path.stat().st_mtime
+
+                    if str(ui_path) not in file_mtimes:
+                        file_mtimes[str(ui_path)] = mtime
+                    elif file_mtimes[str(ui_path)] != mtime:
+                        _log(f"Config file changed: {ui_path.name}")
+                        file_mtimes[str(ui_path)] = mtime
+                        _log("ui.json reloaded - reload page to update")
+            except FileNotFoundError:
+                pass
+
 def main():
     global _ROOT, g_verbose, g_default_model, g_logprefix, g_config, g_config_path, g_ui_path
 
@@ -1492,8 +1552,7 @@ def main():
         g_ui_path = home_ui_path
         g_config = json.loads(text_from_file(g_config_path))
 
-    init_llms(g_config)
-    asyncio.run(load_llms())
+    asyncio.run(reload_providers())
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")
@@ -1934,6 +1993,14 @@ def main():
 
         # Serve index.html as fallback route (SPA routing)
         app.router.add_route('*', '/{tail:.*}', index_handler)
+
+        # Setup file watcher for config files
+        async def start_background_tasks(app):
+            """Start background tasks when the app starts"""
+            # Start watching config files in the background
+            asyncio.create_task(watch_config_files(g_config_path, g_ui_path))
+
+        app.on_startup.append(start_background_tasks)
 
         print(f"Starting server on port {port}...")
         web.run_app(app, host='0.0.0.0', port=port, print=_log)
