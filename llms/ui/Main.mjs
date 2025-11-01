@@ -218,7 +218,7 @@ export default {
                         </div>
 
                         <!-- Loading indicator -->
-                        <div v-if="isGenerating" class="flex items-start space-x-3">
+                        <div v-if="isGenerating" class="flex items-start space-x-3 group">
                             <!-- Avatar outside the bubble -->
                             <div class="flex-shrink-0">
                                 <div class="w-8 h-8 rounded-full bg-gray-600 dark:bg-gray-500 text-white flex items-center justify-center text-sm font-medium">
@@ -234,6 +234,13 @@ export default {
                                     <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
                                 </div>
                             </div>
+
+                            <!-- Cancel button -->
+                            <button type="button" @click="cancelRequest"
+                                class="px-3 py-1 rounded text-sm text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 border border-transparent hover:border-red-300 dark:hover:border-red-600 transition-all"
+                                title="Cancel request">
+                                cancel
+                            </button>
                         </div>
 
                         <!-- Error message bubble -->
@@ -741,6 +748,11 @@ export default {
             editingMessage.value = null
         }
 
+        // Cancel pending request
+        const cancelRequest = () => {
+            chatPrompt.cancel()
+        }
+
         function tokensTitle(usage) {
             let title = []
             if (usage.tokens && usage.price) {
@@ -790,6 +802,7 @@ export default {
             editMessage,
             saveEditedMessage,
             cancelEdit,
+            cancelRequest,
             configUpdated,
             exportThreads,
             exportRequests,

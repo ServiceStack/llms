@@ -11,6 +11,7 @@ export function useChatPrompt() {
     const attachedFiles = ref([])
     const isGenerating = ref(false)
     const errorStatus = ref(null)
+    const abortController = ref(null)
     const hasImage = () => attachedFiles.value.some(f => imageExts.includes(lastRightPart(f.name, '.')))
     const hasAudio = () => attachedFiles.value.some(f => audioExts.includes(lastRightPart(f.name, '.')))
     const hasFile = () => attachedFiles.value.length > 0
@@ -21,6 +22,17 @@ export function useChatPrompt() {
         isGenerating.value = false
         attachedFiles.value = []
         messageText.value = ''
+        abortController.value = null
+    }
+
+    function cancel() {
+        // Cancel the pending request
+        if (abortController.value) {
+            abortController.value.abort()
+        }
+        // Reset UI state
+        isGenerating.value = false
+        abortController.value = null
     }
 
     return {
@@ -28,6 +40,7 @@ export function useChatPrompt() {
         attachedFiles,
         errorStatus,
         isGenerating,
+        abortController,
         get generating() {
             return isGenerating.value
         },
@@ -36,6 +49,7 @@ export function useChatPrompt() {
         hasFile,
         // hasText,
         reset,
+        cancel,
     }
 }
 
@@ -91,15 +105,18 @@ export default {
                         ]"
                         :disabled="isGenerating || !model"
                     ></textarea>
-                    <button title="Send (Enter)" type="button"
+                    <button v-if="!isGenerating" title="Send (Enter)" type="button"
                         @click="sendMessage"
                         :disabled="!messageText.trim() || isGenerating || !model"
                         class="absolute bottom-2 right-2 size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:border-gray-200 dark:disabled:border-gray-700 transition-colors">
-                        <svg v-if="isGenerating" class="size-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <svg class="size-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="20" stroke-dashoffset="20" d="M12 21l0 -17.5"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.2s" values="20;0"/></path><path stroke-dasharray="12" stroke-dashoffset="12" d="M12 3l7 7M12 3l-7 7"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.2s" dur="0.2s" values="12;0"/></path></g></svg>
+                    </button>
+                    <button v-else title="Cancel request" type="button"
+                        @click="cancelRequest"
+                        class="absolute bottom-2 right-2 size-8 flex items-center justify-center rounded-md border border-red-300 dark:border-red-600 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                        <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                         </svg>
-                        <svg v-else class="size-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="20" stroke-dashoffset="20" d="M12 21l0 -17.5"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.2s" values="20;0"/></path><path stroke-dasharray="12" stroke-dashoffset="12" d="M12 3l7 7M12 3l-7 7"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.2s" dur="0.2s" values="12;0"/></path></g></svg>
                     </button>
                 </div>
 
@@ -304,6 +321,10 @@ export default {
             }
             messageText.value = ''
 
+            // Create AbortController for this request
+            const controller = new AbortController()
+            chatPrompt.abortController.value = controller
+
             try {
                 let threadId
 
@@ -441,7 +462,8 @@ export default {
                 console.debug('chatRequest', chatRequest)
                 const startTime = Date.now()
                 const response = await ai.post('/v1/chat/completions', {
-                    body: JSON.stringify(chatRequest)
+                    body: JSON.stringify(chatRequest),
+                    signal: controller.signal
                 })
 
                 let result = null
@@ -516,9 +538,23 @@ export default {
                     attachedFiles.value = []
                     // Error will be cleared when user sends next message (no auto-timeout)
                 }
+            } catch (error) {
+                // Check if the error is due to abort
+                if (error.name === 'AbortError') {
+                    console.log('Request was cancelled by user')
+                    // Don't show error for cancelled requests
+                } else {
+                    // Re-throw other errors to be handled by outer catch
+                    throw error
+                }
             } finally {
                 isGenerating.value = false
+                chatPrompt.abortController.value = null
             }
+        }
+
+        const cancelRequest = () => {
+            chatPrompt.cancel()
         }
 
         const addNewLine = () => {
@@ -541,6 +577,7 @@ export default {
             onDrop,
             removeAttachment,
             sendMessage,
+            cancelRequest,
             addNewLine,
         }
     }

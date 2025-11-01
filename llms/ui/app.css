@@ -1916,6 +1916,13 @@
       }
     }
   }
+  .hover\:border-red-300 {
+    &:hover {
+      @media (hover: hover) {
+        border-color: var(--color-red-300);
+      }
+    }
+  }
   .hover\:bg-black\/10 {
     &:hover {
       @media (hover: hover) {
@@ -3292,6 +3299,15 @@
       &:hover {
         @media (hover: hover) {
           border-color: var(--color-gray-600);
+        }
+      }
+    }
+  }
+  .dark\:hover\:border-red-600 {
+    &:where(.dark, .dark *) {
+      &:hover {
+        @media (hover: hover) {
+          border-color: var(--color-red-600);
         }
       }
     }
