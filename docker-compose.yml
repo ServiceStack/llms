@@ -17,6 +17,7 @@ services:
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - ZAI_API_KEY=${ZAI_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - VERBOSE=1
     volumes:
       # Maintain user-modifiable config files outside the container
       # llms.json and ui.json will be auto-created on first run

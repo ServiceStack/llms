@@ -1496,7 +1496,10 @@ def main():
     parser.add_argument('--verbose',      action='store_true', help='Verbose output')
 
     cli_args, extra_args = parser.parse_known_args()
-    if cli_args.verbose:
+
+    # Check for verbose mode from CLI argument or environment variables
+    verbose_env = os.environ.get('VERBOSE', '').lower()
+    if cli_args.verbose or verbose_env in ('1', 'true'):
         g_verbose = True
         # printdump(cli_args)
     if cli_args.model:
