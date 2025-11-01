@@ -87,7 +87,7 @@ export default {
             <div class="flex-1">
                 <div class="relative">
                     <textarea
-                        ref="messageInput"
+                        ref="refMessage"
                         v-model="messageText"
                         @keydown.enter.exact.prevent="sendMessage"
                         @keydown.enter.shift.exact="addNewLine"
@@ -168,6 +168,7 @@ export default {
         } = threads
 
         const fileInput = ref(null)
+        const refMessage = ref(null)
         const showSettings = ref(false)
         const { applySettings } = chatSettings
 
@@ -550,6 +551,10 @@ export default {
             } finally {
                 isGenerating.value = false
                 chatPrompt.abortController.value = null
+                // Restore focus to the textarea
+                nextTick(() => {
+                    refMessage.value?.focus()
+                })
             }
         }
 
@@ -567,6 +572,7 @@ export default {
             attachedFiles,
             messageText,
             fileInput,
+            refMessage,
             showSettings,
             isDragging,
             triggerFilePicker,
