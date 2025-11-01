@@ -1,10 +1,11 @@
+import { ref, onMounted, onUnmounted } from "vue"
 export default {
     template:`
         <button v-if="modelValue" type="button" title="Clear System Prompt" @click="$emit('update:modelValue', null)">
             <svg class="size-4 text-gray-500 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12z"/></svg>
         </button>
 
-        <Autocomplete id="prompt" :options="prompts" label=""
+        <Autocomplete ref="refSelector" id="prompt" :options="prompts" label=""
             :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)"
             class="w-72 xl:w-84"
             :match="(x, value) => x.name.toLowerCase().includes(value.toLowerCase())"
@@ -32,5 +33,24 @@ export default {
         show: Boolean,
     },
     setup() {
+        const refSelector = ref()
+    
+        function collapse(e) {
+            // call toggle when clicking outside of the Autocomplete component
+            if (refSelector.value && !refSelector.value.$el.contains(e.target)) {
+                refSelector.value.toggle(false)
+            }
+        }
+
+        onMounted(() => {
+            document.addEventListener('click', collapse)
+        })
+        onUnmounted(() => {
+            document.removeEventListener('click', collapse)
+        })
+
+        return {
+            refSelector,
+        }
     }
 }

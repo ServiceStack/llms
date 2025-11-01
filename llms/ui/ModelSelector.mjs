@@ -1,3 +1,4 @@
+import { ref, onMounted, onUnmounted } from "vue"
 import ProviderStatus from "./ProviderStatus.mjs"
 import ProviderIcon from "./ProviderIcon.mjs"
 
@@ -9,7 +10,7 @@ export default {
     template:`
         <!-- Model Selector -->
         <div class="pl-1 flex space-x-2">
-            <Autocomplete id="model" :options="models" label=""
+            <Autocomplete ref="refSelector" id="model" :options="models" label=""
                 :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)"
                 class="w-72 xl:w-84"
                 :match="(x, value) => x.id.toLowerCase().includes(value.toLowerCase())"
@@ -52,8 +53,25 @@ export default {
             return ret.endsWith('.00') ? ret.slice(0, -3) : ret
         }
 
+        const refSelector = ref()
+    
+        function collapse(e) {
+            // call toggle when clicking outside of the Autocomplete component
+            if (refSelector.value && !refSelector.value.$el.contains(e.target)) {
+                refSelector.value.toggle(false)
+            }
+        }
+
+        onMounted(() => {
+            document.addEventListener('click', collapse)
+        })
+        onUnmounted(() => {
+            document.removeEventListener('click', collapse)
+        })
+
         return {
-            tokenPrice
+            refSelector,
+            tokenPrice,
         }
     }
 }
