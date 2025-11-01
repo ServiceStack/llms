@@ -68,6 +68,26 @@ As they're a good indicator for the reliability and speed you can expect from di
 test the response times for all configured providers and models, the results of which will be frequently published to
 [/checks/latest.txt](https://github.com/ServiceStack/llms/blob/main/docs/checks/latest.txt)
 
+## Change Log
+
+#### v2.0.30 (2025-11-01)
+- Improved Responsive Layout with collapsible Sidebar
+- Return focus to textarea after request completes
+- Support `VERBOSE=1` for enabling `--verbose` mode (useful in Docker)
+- Autoreload providers and UI config when change to config files is detected
+- Add cancel button to cancel pending request
+- Clicking outside model or system prompt selector will collapse it
+- Clicking on selected item no longer deselects it
+
+#### v2.0.28 (2025-10-31)
+- Dark Mode
+- Drag n' Drop files in Message prompt
+- Copy & Paste files in Message prompt
+- Support for GitHub OAuth and optional restrict access to specified Users
+- Support for Docker and Docker Compose
+
+[llms.py Releases](https://github.com/ServiceStack/llms/releases)
+
 ## Installation
 
 ### Using pip
