@@ -16,9 +16,10 @@ export default {
                 :match="(x, value) => x.id.toLowerCase().includes(value.toLowerCase())"
                 placeholder="Select Model...">
                 <template #item="{ id, provider, provider_model, pricing }">
-                    <div :key="id + provider + provider_model" class="group truncate max-w-72 flex justify-between">
+                    <div :key="id + provider + provider_model" 
+                        class="group truncate max-w-68 xl:max-w-72 flex justify-between">
                         <span :title="id">{{id}}</span>
-                        <span class="flex items-center space-x-1">
+                        <div class="hidden md:flex items-center space-x-1">
                             <span v-if="pricing && (parseFloat(pricing.input) == 0 && parseFloat(pricing.input) == 0)">
                                 <span class="text-xs text-gray-500 dark:text-gray-400" title="Free to use">FREE</span>
                             </span>
@@ -28,10 +29,10 @@ export default {
                               &#183;
                               {{tokenPrice(pricing.output)}} M
                             </span>
-                            <span :title="provider_model + ' from ' + provider">
-                                <ProviderIcon :provider="provider" />
+                            <span class="min-w-6" :title="provider_model + ' from ' + provider">
+                                <ProviderIcon class="hidden xl:inline" :provider="provider" />
                             </span>
-                        </span>
+                        </div>
                     </div>
                 </template>
             </Autocomplete>

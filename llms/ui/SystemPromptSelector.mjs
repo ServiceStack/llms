@@ -7,7 +7,7 @@ export default {
 
         <Autocomplete ref="refSelector" id="prompt" :options="prompts" label=""
             :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)"
-            class="w-72 xl:w-84"
+            class="w-68 xl:w-84"
             :match="(x, value) => x.name.toLowerCase().includes(value.toLowerCase())"
             placeholder="Select a System Prompt...">
             <template #item="{ value }">

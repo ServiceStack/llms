@@ -14,6 +14,7 @@ export const o = {
     requiresAuth: false,
     authType: 'apikey',  // 'oauth' or 'apikey' - controls which SignIn component to use
     headers,
+    isSidebarOpen: true,  // Shared sidebar state (default open for lg+ screens)
     
     resolveUrl(url){
         return url.startsWith('http') || url.startsWith('/v1') ? url : base + url

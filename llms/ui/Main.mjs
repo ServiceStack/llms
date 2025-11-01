@@ -30,11 +30,13 @@ export default {
     template: `
         <div class="flex flex-col h-full w-full">
             <!-- Header with model and prompt selectors (hidden when auth required and not authenticated) -->
-            <div v-if="!($ai.requiresAuth && !$ai.auth)" class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-2 w-full min-h-16">
-                <div class="flex items-center justify-between w-full">
+            <div v-if="!($ai.requiresAuth && !$ai.auth)" 
+                :class="!$ai.isSidebarOpen ? 'pl-6' : ''"
+                class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-2 w-full min-h-16">
+                <div class="flex flex-wrap items-center justify-between w-full">
                     <ModelSelector :models="models" v-model="selectedModel" @updated="configUpdated" />
 
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 pl-4">
                         <SystemPromptSelector :prompts="prompts" v-model="selectedPrompt"
                             :show="showSystemPrompt" @toggle="showSystemPrompt = !showSystemPrompt" />
                         <Avatar />
