@@ -434,6 +434,9 @@ export default {
                     }))
                 }
 
+                chatRequest.metadata ??= {}
+                chatRequest.metadata.threadId = threadId
+
                 // Send to API
                 console.debug('chatRequest', chatRequest)
                 const startTime = Date.now()
