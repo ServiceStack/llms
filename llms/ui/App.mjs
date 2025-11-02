@@ -50,7 +50,7 @@ export default {
             <div
                 v-if="isMobile && ai.isSidebarOpen && !(ai.requiresAuth && !ai.auth)"
                 @click="closeSidebar"
-                class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                class="fixed inset-0 bg-black/50 z-40 lg:hidden"
             ></div>
 
             <!-- Sidebar (hidden when auth required and not authenticated) -->
