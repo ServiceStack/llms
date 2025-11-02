@@ -1,6 +1,6 @@
 LLM Provider Test Results
 =========================
-Date: 2025-11-02 05:27:54 UTC
+Date: 2025-11-02 05:36:38 UTC
 llms-py version: 2.0.30
 
 Testing provider: openrouter_free
@@ -9,34 +9,34 @@ Status: PASS
 
 Checking 28 models for provider 'openrouter_free':
 
-  ✓ qwen2.5vl                                (2063ms)
-  ✓ llama4:109b                              (1860ms)
-  ✓ llama4:400b                              (554ms)
-  ✓ deepseek-v3.1:671b                       (2248ms)
+  ✓ qwen2.5vl                                (1507ms)
+  ✓ llama4:109b                              (867ms)
+  ✓ llama4:400b                              (650ms)
+  ✓ deepseek-v3.1:671b                       (1982ms)
   ✗ deepseek-r1:671b                         429 Provider returned error - deepseek/deepseek-r1-0528:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations
-  ✗ gemini-2.0-flash                         429 Provider returned error - google/gemini-2.0-flash-exp:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations
-  ✓ glm-4.5-air                              (1460ms)
+  ✓ gemini-2.0-flash                         (512ms)
+  ✓ glm-4.5-air                              (1635ms)
   ✗ mai-ds-r1                                429 Provider returned error - microsoft/mai-ds-r1:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations
-  ✓ llama3.3:70b                             (920ms)
-  ✓ nemotron-nano:9b                         (2287ms)
-  ✓ nemotron-nano:12b                        (5088ms)
-  ✓ deepseek-r1-distill-llama:70b            (754ms)
-  ✓ gpt-oss:20b                              (490ms)
-  ✓ mistral-small3.2:24b                     (884ms)
-  ✓ mistral-nemo:12b                         (1118ms)
+  ✓ llama3.3:70b                             (755ms)
+  ✓ nemotron-nano:9b                         (2259ms)
+  ✓ nemotron-nano:12b                        (5075ms)
+  ✓ deepseek-r1-distill-llama:70b            (1097ms)
+  ✓ gpt-oss:20b                              (491ms)
+  ✓ mistral-small3.2:24b                     (964ms)
+  ✓ mistral-nemo:12b                         (989ms)
   ✗ devstral-small                           404 No endpoints found for mistralai/devstral-small-2505:free.
-  ✓ venice-uncensored:24b                    (814ms)
-  ✓ llama3.3:8b                              (540ms)
+  ✓ venice-uncensored:24b                    (878ms)
+  ✓ llama3.3:8b                              (634ms)
   ✗ kimi-dev:72b                             404 No endpoints found for moonshotai/kimi-dev-72b:free.
-  ✓ gemma3:27b                               (834ms)
-  ✓ qwen3-coder                              (2821ms)
-  ✓ qwen3:235b                               (1008ms)
-  ✗ qwen3:30b                                429 Provider returned error - qwen/qwen3-30b-a3b:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations
+  ✓ gemma3:27b                               (521ms)
+  ✓ qwen3-coder                              (2166ms)
+  ✓ qwen3:235b                               (999ms)
+  ✓ qwen3:30b                                (1312ms)
   ✗ qwen3:8b                                 404 No endpoints found for qwen/qwen3-8b:free.
-  ✗ qwen3:4b                                 429 Rate limit exceeded: free-models-per-min. 
-  ✗ qwen2.5vl:32b                            429 Rate limit exceeded: free-models-per-min. 
-  ✗ qwen-2.5:72b                             429 Rate limit exceeded: free-models-per-min. 
-  ✓ minimax-m2                               (993ms)
+  ✓ qwen3:4b                                 (660ms)
+  ✓ qwen2.5vl:32b                            (1796ms)
+  ✓ qwen-2.5:72b                             (1001ms)
+  ✓ minimax-m2                               (954ms)
 
 
 Testing provider: groq
@@ -45,20 +45,20 @@ Status: PASS
 
 Checking 14 models for provider 'groq':
 
-  ✓ allam-2-7b                               (321ms)
-  ✓ compound                                 (141ms)
-  ✓ compound-mini                            (1557ms)
-  ✓ llama3.1:8b                              (82ms)
-  ✓ llama3.3:70b                             (83ms)
-  ✓ llama4:109b                              (62ms)
-  ✓ llama4:400b                              (83ms)
-  ✓ llama-guard-4:12b                        (189ms)
-  ✓ llama-prompt-guard2:22m                  (140ms)
-  ✓ llama-prompt-guard2:86m                  (152ms)
-  ✓ kimi-k2                                  (128ms)
-  ✓ gpt-oss:120b                             (88ms)
-  ✓ gpt-oss:20b                              (86ms)
-  ✓ qwen3:32b                                (111ms)
+  ✓ allam-2-7b                               (306ms)
+  ✓ compound                                 (210ms)
+  ✓ compound-mini                            (354ms)
+  ✓ llama3.1:8b                              (129ms)
+  ✓ llama3.3:70b                             (60ms)
+  ✓ llama4:109b                              (79ms)
+  ✓ llama4:400b                              (85ms)
+  ✓ llama-guard-4:12b                        (170ms)
+  ✓ llama-prompt-guard2:22m                  (145ms)
+  ✓ llama-prompt-guard2:86m                  (148ms)
+  ✓ kimi-k2                                  (139ms)
+  ✓ gpt-oss:120b                             (149ms)
+  ✓ gpt-oss:20b                              (71ms)
+  ✓ qwen3:32b                                (142ms)
 
 
 Testing provider: codestral
@@ -67,7 +67,7 @@ Status: PASS
 
 Checking 1 model for provider 'codestral':
 
-  ✓ codestral:22b                            (2106ms)
+  ✓ codestral:22b                            (444ms)
 
 
 Testing provider: openrouter
@@ -76,59 +76,59 @@ Status: PASS
 
 Checking 53 models for provider 'openrouter':
 
-  ✓ llama3.1:70b                             (298ms)
-  ✓ llama3.3:70b                             (274ms)
-  ✓ phi-4:14b                                (424ms)
-  ✓ codestral:22b                            (491ms)
-  ✓ mistral-nemo:12b                         (1327ms)
-  ✓ mixtral:8x22b                            (417ms)
-  ✓ mistral-small3.2:24b                     (346ms)
-  ✓ nova-micro                               (454ms)
-  ✓ nova-lite                                (538ms)
-  ✓ nova-pro                                 (1062ms)
-  ✓ claude-sonnet-4-5                        (2405ms)
-  ✓ claude-sonnet-4-0                        (1796ms)
-  ✓ gpt-5                                    (1903ms)
-  ✓ gpt-5-chat                               (1686ms)
-  ✓ gpt-5-mini                               (4211ms)
-  ✓ gpt-5-nano                               (1003ms)
-  ✓ gpt-5-codex                              (1403ms)
-  ✓ gpt-oss:120b                             (612ms)
-  ✓ gpt-oss:20b                              (536ms)
-  ✓ gpt-4o                                   (368ms)
-  ✓ gpt-4o-mini                              (440ms)
-  ✓ gpt-4.1                                  (756ms)
-  ✓ gpt-4.1-mini                             (624ms)
-  ✓ gpt-4.1-nano                             (1079ms)
-  ✓ o4-mini                                  (1964ms)
-  ✓ o4-mini-high                             (2058ms)
-  ✓ grok-4                                   (4028ms)
-  ✓ grok-4-fast                              (600ms)
-  ✓ grok-code-fast-1                         (2051ms)
-  ✓ glm-4.6                                  (796ms)
-  ✓ glm-4.5v                                 (1382ms)
-  ✓ glm-4.5                                  (5587ms)
-  ✓ glm-4.5-air                              (790ms)
-  ✓ kimi-k2                                  (1151ms)
-  ✓ deepseek-v3.1:671b                       (553ms)
-  ✓ deepseek-v3.2-exp                        (12236ms)
-  ✓ deepseek-chat-v3.1:671b                  (792ms)
-  ✓ deepseek-r1:671b                         (13323ms)
-  ✓ deepseek-v3.1-terminus                   (1131ms)
-  ✓ qwen3:8b                                 (1099ms)
-  ✓ qwen3:30b                                (1763ms)
-  ✓ qwen3:32b                                (401ms)
-  ✓ qwen3:235b                               (1133ms)
-  ✓ qwen3-coder                              (842ms)
-  ✓ qwen3-coder-flash                        (1054ms)
-  ✓ qwen3-coder-plus                         (1681ms)
-  ✓ qwen3-coder:30b                          (949ms)
-  ✓ qwen3-max                                (1828ms)
-  ✓ qwen3-vl:235b                            (1640ms)
-  ✓ qwen3-vl-thinking:235b                   (2168ms)
-  ✓ ling-1t                                  (6379ms)
-  ✓ llama4:109b                              (196ms)
-  ✓ llama4:400b                              (273ms)
+  ✓ llama3.1:70b                             (391ms)
+  ✓ llama3.3:70b                             (358ms)
+  ✓ phi-4:14b                                (1656ms)
+  ✓ codestral:22b                            (348ms)
+  ✓ mistral-nemo:12b                         (305ms)
+  ✓ mixtral:8x22b                            (484ms)
+  ✓ mistral-small3.2:24b                     (404ms)
+  ✓ nova-micro                               (586ms)
+  ✓ nova-lite                                (603ms)
+  ✓ nova-pro                                 (764ms)
+  ✓ claude-sonnet-4-5                        (3192ms)
+  ✓ claude-sonnet-4-0                        (1682ms)
+  ✓ gpt-5                                    (674ms)
+  ✓ gpt-5-chat                               (522ms)
+  ✓ gpt-5-mini                               (4719ms)
+  ✓ gpt-5-nano                               (675ms)
+  ✓ gpt-5-codex                              (1324ms)
+  ✓ gpt-oss:120b                             (539ms)
+  ✓ gpt-oss:20b                              (390ms)
+  ✓ gpt-4o                                   (566ms)
+  ✓ gpt-4o-mini                              (428ms)
+  ✓ gpt-4.1                                  (845ms)
+  ✓ gpt-4.1-mini                             (619ms)
+  ✓ gpt-4.1-nano                             (513ms)
+  ✓ o4-mini                                  (619ms)
+  ✓ o4-mini-high                             (1788ms)
+  ✓ grok-4                                   (3955ms)
+  ✓ grok-4-fast                              (566ms)
+  ✓ grok-code-fast-1                         (3248ms)
+  ✓ glm-4.6                                  (754ms)
+  ✓ glm-4.5v                                 (571ms)
+  ✓ glm-4.5                                  (3315ms)
+  ✓ glm-4.5-air                              (909ms)
+  ✓ kimi-k2                                  (424ms)
+  ✓ deepseek-v3.1:671b                       (493ms)
+  ✓ deepseek-v3.2-exp                        (1783ms)
+  ✓ deepseek-chat-v3.1:671b                  (1179ms)
+  ✓ deepseek-r1:671b                         (27480ms)
+  ✓ deepseek-v3.1-terminus                   (1304ms)
+  ✓ qwen3:8b                                 (1155ms)
+  ✓ qwen3:30b                                (468ms)
+  ✓ qwen3:32b                                (306ms)
+  ✓ qwen3:235b                               (661ms)
+  ✓ qwen3-coder                              (821ms)
+  ✓ qwen3-coder-flash                        (1064ms)
+  ✓ qwen3-coder-plus                         (2147ms)
+  ✓ qwen3-coder:30b                          (778ms)
+  ✓ qwen3-max                                (1138ms)
+  ✓ qwen3-vl:235b                            (800ms)
+  ✓ qwen3-vl-thinking:235b                   (1666ms)
+  ✓ ling-1t                                  (5439ms)
+  ✓ llama4:109b                              (553ms)
+  ✓ llama4:400b                              (353ms)
 
 
 Testing provider: google
@@ -137,11 +137,11 @@ Status: PASS
 
 Checking 5 models for provider 'google':
 
-  ✓ gemini-flash-latest                      (1450ms)
-  ✓ gemini-flash-lite-latest                 (1714ms)
-  ✓ gemini-2.5-pro                           (6395ms)
-  ✓ gemini-2.5-flash                         (1069ms)
-  ✓ gemini-2.5-flash-lite                    (1195ms)
+  ✓ gemini-flash-latest                      (1205ms)
+  ✓ gemini-flash-lite-latest                 (1380ms)
+  ✓ gemini-2.5-pro                           (5082ms)
+  ✓ gemini-2.5-flash                         (2056ms)
+  ✓ gemini-2.5-flash-lite                    (1216ms)
 
 
 Testing provider: anthropic
@@ -150,12 +150,12 @@ Status: PASS
 
 Checking 6 models for provider 'anthropic':
 
-  ✓ claude-sonnet-4-5                        (2515ms)
-  ✓ claude-sonnet-4-0                        (3125ms)
-  ✓ claude-3-7-sonnet                        (543ms)
-  ✓ claude-haiku-4-5                         (859ms)
-  ✓ claude-3-5-haiku                         (701ms)
-  ✓ claude-3-haiku                           (446ms)
+  ✓ claude-sonnet-4-5                        (2344ms)
+  ✓ claude-sonnet-4-0                        (1555ms)
+  ✓ claude-3-7-sonnet                        (496ms)
+  ✓ claude-haiku-4-5                         (801ms)
+  ✓ claude-3-5-haiku                         (945ms)
+  ✓ claude-3-haiku                           (291ms)
 
 
 Testing provider: openai
@@ -164,23 +164,23 @@ Status: PASS
 
 Checking 17 models for provider 'openai':
 
-  ✓ gpt-5-nano                               (1697ms)
-  ✓ gpt-5-mini                               (1969ms)
-  ✓ gpt-5                                    (2118ms)
-  ✓ gpt-5-chat-latest                        (612ms)
-  ✓ gpt-4.1-nano                             (478ms)
-  ✓ gpt-4.1-mini                             (1142ms)
-  ✓ gpt-4.1                                  (630ms)
-  ✓ o4-mini                                  (1291ms)
-  ✓ o3                                       (1756ms)
-  ✓ gpt-4o-mini-search-preview               (1459ms)
-  ✓ gpt-4o-search-preview                    (1933ms)
-  ✓ o3-mini                                  (572ms)
+  ✓ gpt-5-nano                               (926ms)
+  ✓ gpt-5-mini                               (1261ms)
+  ✓ gpt-5                                    (1048ms)
+  ✓ gpt-5-chat-latest                        (276ms)
+  ✓ gpt-4.1-nano                             (492ms)
+  ✓ gpt-4.1-mini                             (803ms)
+  ✓ gpt-4.1                                  (549ms)
+  ✓ o4-mini                                  (656ms)
+  ✓ o3                                       (574ms)
+  ✓ gpt-4o-mini-search-preview               (1558ms)
+  ✓ gpt-4o-search-preview                    (3262ms)
+  ✓ o3-mini                                  (675ms)
   ✗ o1-mini                                  None You have insufficient permissions for this operation.
-  ✓ chatgpt-4o-latest                        (378ms)
-  ✓ gpt-4o-mini                              (579ms)
-  ✓ gpt-4o                                   (986ms)
-  ✓ gpt-3.5-turbo                            (689ms)
+  ✓ chatgpt-4o-latest                        (239ms)
+  ✓ gpt-4o-mini                              (440ms)
+  ✓ gpt-4o                                   (486ms)
+  ✓ gpt-3.5-turbo                            (314ms)
 
 
 Testing provider: grok
@@ -189,13 +189,13 @@ Status: PASS
 
 Checking 7 models for provider 'grok':
 
-  ✓ grok-4                                   (5746ms)
-  ✓ grok-code-fast-1                         (2370ms)
-  ✓ grok-4-fast-reasoning                    (545ms)
-  ✓ grok-4-fast-non-reasoning                (315ms)
-  ✓ grok-4-0709                              (4696ms)
-  ✓ grok-3-mini                              (3455ms)
-  ✓ grok-3                                   (575ms)
+  ✓ grok-4                                   (3506ms)
+  ✓ grok-code-fast-1                         (1063ms)
+  ✓ grok-4-fast-reasoning                    (582ms)
+  ✓ grok-4-fast-non-reasoning                (248ms)
+  ✓ grok-4-0709                              (3788ms)
+  ✓ grok-3-mini                              (3371ms)
+  ✓ grok-3                                   (533ms)
 
 
 Testing provider: qwen
@@ -204,32 +204,32 @@ Status: PASS
 
 Checking 26 models for provider 'qwen':
 
-  ✓ qwen3-max                                (1884ms)
-  ✓ qwen-max                                 (1835ms)
-  ✓ qwen-plus                                (1452ms)
-  ✓ qwen-flash                               (1380ms)
-  ✓ qwq-plus                                 (6831ms)
-  ✓ qwen-turbo                               (1523ms)
-  ✓ qwen-omni-turbo                          (904ms)
-  ✓ qwen3-omni-flash                         (2933ms)
-  ✓ qwen3-coder-plus                         (1681ms)
-  ✓ qwen3-coder-flash                        (1740ms)
-  ✓ qwen3-next:80b                           (984ms)
-  ✓ qwen3:235b                               (1319ms)
-  ✓ qwen3:32b                                (1550ms)
-  ✓ qwen3:30b                                (1154ms)
-  ✓ qwen3:14b                                (1377ms)
-  ✓ qwen3:8b                                 (1112ms)
+  ✓ qwen3-max                                (1905ms)
+  ✓ qwen-max                                 (1767ms)
+  ✓ qwen-plus                                (1172ms)
+  ✓ qwen-flash                               (1270ms)
+  ✓ qwq-plus                                 (4442ms)
+  ✓ qwen-turbo                               (1258ms)
+  ✓ qwen-omni-turbo                          (1173ms)
+  ✓ qwen3-omni-flash                         (3214ms)
+  ✓ qwen3-coder-plus                         (1154ms)
+  ✓ qwen3-coder-flash                        (1508ms)
+  ✓ qwen3-next:80b                           (1320ms)
+  ✓ qwen3:235b                               (1017ms)
+  ✓ qwen3:32b                                (1084ms)
+  ✓ qwen3:30b                                (1137ms)
+  ✓ qwen3:14b                                (1442ms)
+  ✓ qwen3:8b                                 (888ms)
   ✓ qwen3:4b                                 (942ms)
-  ✓ qwen3:1.7b                               (1282ms)
-  ✓ qwen3:0.6b                               (909ms)
-  ✓ qwen3-coder                              (1422ms)
-  ✓ qwen3-coder:30b                          (1552ms)
-  ✓ qwen3-vl-plus                            (3616ms)
-  ✓ qwen3-vl-thinking:235b                   (7509ms)
-  ✓ qwen3-vl:235b                            (1734ms)
-  ✓ qwen3-vl:30b                             (1193ms)
-  ✓ qwen2.5-omni:7b                          (939ms)
+  ✓ qwen3:1.7b                               (877ms)
+  ✓ qwen3:0.6b                               (932ms)
+  ✓ qwen3-coder                              (1211ms)
+  ✓ qwen3-coder:30b                          (1592ms)
+  ✓ qwen3-vl-plus                            (3562ms)
+  ✓ qwen3-vl-thinking:235b                   (7905ms)
+  ✓ qwen3-vl:235b                            (1671ms)
+  ✓ qwen3-vl:30b                             (1149ms)
+  ✓ qwen2.5-omni:7b                          (833ms)
 
 
 Testing provider: z.ai
@@ -238,13 +238,13 @@ Status: PASS
 
 Checking 7 models for provider 'z.ai':
 
-  ✓ glm-4.6                                  (15435ms)
-  ✗ glm-4.5                                  1305 Too many API requests at the moment, please try again later
-  ✓ glm-4.5-air                              (3230ms)
-  ✓ glm-4.5-x                                (9890ms)
-  ✓ glm-4.5-airx                             (5154ms)
-  ✓ glm-4.5-flash                            (17579ms)
-  ✓ glm-4:32b                                (1951ms)
+  ✓ glm-4.6                                  (47049ms)
+  ✓ glm-4.5                                  (15083ms)
+  ✓ glm-4.5-air                              (4790ms)
+  ✓ glm-4.5-x                                (13257ms)
+  ✓ glm-4.5-airx                             (4123ms)
+  ✓ glm-4.5-flash                            (14321ms)
+  ✓ glm-4:32b                                (1403ms)
 
 
 Testing provider: qwen
@@ -253,32 +253,32 @@ Status: PASS
 
 Checking 26 models for provider 'qwen':
 
-  ✓ qwen3-max                                (1728ms)
-  ✓ qwen-max                                 (1428ms)
-  ✓ qwen-plus                                (918ms)
-  ✓ qwen-flash                               (1292ms)
-  ✓ qwq-plus                                 (6391ms)
-  ✓ qwen-turbo                               (1241ms)
-  ✓ qwen-omni-turbo                          (917ms)
-  ✓ qwen3-omni-flash                         (2882ms)
-  ✓ qwen3-coder-plus                         (1463ms)
-  ✓ qwen3-coder-flash                        (1777ms)
-  ✓ qwen3-next:80b                           (937ms)
-  ✓ qwen3:235b                               (1008ms)
-  ✓ qwen3:32b                                (1152ms)
-  ✓ qwen3:30b                                (1445ms)
-  ✓ qwen3:14b                                (1338ms)
-  ✓ qwen3:8b                                 (1056ms)
-  ✓ qwen3:4b                                 (928ms)
-  ✓ qwen3:1.7b                               (905ms)
-  ✓ qwen3:0.6b                               (921ms)
-  ✓ qwen3-coder                              (1421ms)
-  ✓ qwen3-coder:30b                          (1624ms)
-  ✓ qwen3-vl-plus                            (3236ms)
-  ✓ qwen3-vl-thinking:235b                   (6965ms)
-  ✓ qwen3-vl:235b                            (1900ms)
-  ✓ qwen3-vl:30b                             (1154ms)
-  ✓ qwen2.5-omni:7b                          (926ms)
+  ✓ qwen3-max                                (2048ms)
+  ✓ qwen-max                                 (1358ms)
+  ✓ qwen-plus                                (1221ms)
+  ✓ qwen-flash                               (1184ms)
+  ✓ qwq-plus                                 (4917ms)
+  ✓ qwen-turbo                               (1003ms)
+  ✓ qwen-omni-turbo                          (829ms)
+  ✓ qwen3-omni-flash                         (2642ms)
+  ✓ qwen3-coder-plus                         (1327ms)
+  ✓ qwen3-coder-flash                        (1618ms)
+  ✓ qwen3-next:80b                           (946ms)
+  ✓ qwen3:235b                               (1020ms)
+  ✓ qwen3:32b                                (1044ms)
+  ✓ qwen3:30b                                (1245ms)
+  ✓ qwen3:14b                                (960ms)
+  ✓ qwen3:8b                                 (873ms)
+  ✓ qwen3:4b                                 (889ms)
+  ✓ qwen3:1.7b                               (943ms)
+  ✓ qwen3:0.6b                               (930ms)
+  ✓ qwen3-coder                              (1215ms)
+  ✓ qwen3-coder:30b                          (1645ms)
+  ✓ qwen3-vl-plus                            (3150ms)
+  ✓ qwen3-vl-thinking:235b                   (8706ms)
+  ✓ qwen3-vl:235b                            (1785ms)
+  ✓ qwen3-vl:30b                             (1207ms)
+  ✓ qwen2.5-omni:7b                          (852ms)
 
 
 Testing provider: mistral
@@ -287,24 +287,24 @@ Status: PASS
 
 Checking 18 models for provider 'mistral':
 
-  ✗ mistral-medium                           Service tier capacity exceeded for this model.
-  ✓ magistral-medium                         (2815ms)
-  ✓ devstral-medium                          (446ms)
-  ✓ codestral:22b                            (284ms)
-  ✓ mistral-small3.2:24b                     (562ms)
-  ✓ magistral-small                          (660ms)
-  ✓ devstral-small                           (365ms)
-  ✓ voxtral-small                            (304ms)
-  ✓ voxtral-mini                             (226ms)
-  ✓ mistral-large:123b                       (1505ms)
-  ✓ pixtral-large:124b                       (9996ms)
-  ✓ pixtral:12b                              (301ms)
-  ✓ mistral-nemo:12b                         (278ms)
-  ✓ mistral:7b                               (546ms)
-  ✓ mixtral:8x7b                             (333ms)
-  ✓ mixtral:8x22b                            (452ms)
-  ✓ ministral:8b                             (228ms)
-  ✓ ministral:3b                             (234ms)
+  ✓ mistral-medium                           (1074ms)
+  ✓ magistral-medium                         (3024ms)
+  ✓ devstral-medium                          (392ms)
+  ✓ codestral:22b                            (296ms)
+  ✓ mistral-small3.2:24b                     (582ms)
+  ✓ magistral-small                          (1308ms)
+  ✓ devstral-small                           (350ms)
+  ✓ voxtral-small                            (295ms)
+  ✓ voxtral-mini                             (265ms)
+  ✗ mistral-large:123b                       Service tier capacity exceeded for this model.
+  ✓ pixtral-large:124b                       (642ms)
+  ✓ pixtral:12b                              (323ms)
+  ✓ mistral-nemo:12b                         (350ms)
+  ✓ mistral:7b                               (1058ms)
+  ✓ mixtral:8x7b                             (595ms)
+  ✓ mixtral:8x22b                            (383ms)
+  ✓ ministral:8b                             (220ms)
+  ✓ ministral:3b                             (272ms)
 
 
 =========================
