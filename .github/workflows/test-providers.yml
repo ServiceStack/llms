@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test-providers:
@@ -26,6 +26,9 @@ jobs:
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -108,4 +111,39 @@ jobs:
           name: provider-test-results
           path: test-results/provider-test-results.txt
           retention-days: 90
+
+      - name: Save results to repository
+        if: always()
+        run: |
+          # Create docs/checks directory if it doesn't exist
+          mkdir -p docs/checks
+
+          # Get current date in YYYY-MM-DD format
+          DATE=$(date -u '+%Y-%m-%d')
+
+          # Copy results to both latest.txt and dated file
+          cp test-results/provider-test-results.txt docs/checks/latest.txt
+          cp test-results/provider-test-results.txt docs/checks/${DATE}.txt
+
+          echo "Results saved to:"
+          echo "  - docs/checks/latest.txt"
+          echo "  - docs/checks/${DATE}.txt"
+
+      - name: Commit and push results
+        if: always()
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          git add docs/checks/
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            DATE=$(date -u '+%Y-%m-%d')
+            git commit -m "Update LLM provider test results - ${DATE}"
+            git push
+            echo "Results committed and pushed successfully"
+          fi
 
