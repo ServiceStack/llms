@@ -277,6 +277,7 @@
                 "mistral-nemo:12b": "mistralai/mistral-nemo",
                 "mixtral:8x22b": "mistralai/mixtral-8x22b-instruct",
                 "mistral-small3.2:24b": "mistralai/mistral-small-3.2-24b-instruct",
+                "nova-premier": "amazon/nova-premier-v1",
                 "nova-micro": "amazon/nova-micro-v1",
                 "nova-lite": "amazon/nova-lite-v1",
                 "nova-pro": "amazon/nova-pro-v1",
