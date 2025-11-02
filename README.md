@@ -72,12 +72,12 @@ test the response times for all configured providers and models, the results of 
 
 #### v2.0.30 (2025-11-01)
 - Improved Responsive Layout with collapsible Sidebar
-- Return focus to textarea after request completes
-- Support `VERBOSE=1` for enabling `--verbose` mode (useful in Docker)
-- Autoreload providers and UI config when change to config files is detected
+- Watching config files for changes and auto-reloading
 - Add cancel button to cancel pending request
+- Return focus to textarea after request completes
 - Clicking outside model or system prompt selector will collapse it
 - Clicking on selected item no longer deselects it
+- Support `VERBOSE=1` for enabling `--verbose` mode (useful in Docker)
 
 #### v2.0.28 (2025-10-31)
 - Dark Mode
