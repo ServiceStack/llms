@@ -522,6 +522,8 @@ class OpenAiProvider:
         chat = await process_chat(chat)
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
+        # remove metadata if any (conflicts with some providers, e.g. Z.ai)
+        chat.pop('metadata', None)
 
         async with aiohttp.ClientSession() as session:
             started_at = time.time()
