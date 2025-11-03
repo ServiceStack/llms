@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# Copyright (c) Demis Bellot, ServiceStack <https://servicestack.net>
+# License: https://github.com/ServiceStack/llms/blob/main/LICENSE
+
 # A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
 # Docs: https://github.com/ServiceStack/llms
 
