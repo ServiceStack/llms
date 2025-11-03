@@ -1,0 +1,134 @@
+{
+  "auth": {
+    "enabled": false,
+    "github": {
+      "client_id": "$GITHUB_CLIENT_ID",
+      "client_secret": "$GITHUB_CLIENT_SECRET",
+      "redirect_uri": "http://localhost:8000/auth/github/callback",
+      "restrict_to": "$GITHUB_USERS"
+    }
+  },
+  "defaults": {
+    "headers": {
+      "Content-Type": "application/json",
+      "User-Agent": "llms.py/1.0"
+    },
+    "text": {
+      "model": "kimi-k2",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        }
+      ]
+    },
+    "image": {
+      "model": "qwen2.5vl",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": ""
+              }
+            },
+            {
+              "type": "text",
+              "text": "Describe the key features of the input image"
+            }
+          ]
+        }
+      ]
+    },
+    "audio": {
+      "model": "gpt-4o-audio-preview",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "input_audio": {
+                "data": "",
+                "format": "mp3"
+              }
+            },
+            {
+              "type": "text",
+              "text": "Please transcribe and summarize this audio file"
+            }
+          ]
+        }
+      ]
+    },
+    "file": {
+      "model": "qwen2.5vl",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "file",
+              "file": {
+                "filename": "",
+                "file_data": ""
+              }
+            },
+            {
+              "type": "text",
+              "text": "Please summarize this document"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "1+1="
+            }
+          ]
+        }
+      ],
+      "max_completion_tokens": 16,
+      "stream": false
+    }
+  },
+  "limits": {
+    "client_max_size": 20971520
+  },
+  "convert": {
+    "image": {
+      "max_size": "1536x1024",
+      "max_length": 1572864
+    }
+  },
+  "providers": {
+    "openrouter_free": {
+      "enabled": true,
+      "type": "OpenAiProvider",
+      "base_url": "https://openrouter.ai/api",
+      "api_key": "$OPENROUTER_API_KEY",
+      "models": {
+        "devstral-small": "mistralai/devstral-small-2505:free",
+        "kimi-dev:72b": "moonshotai/kimi-dev-72b:free",
+        "qwen3:8b": "qwen/qwen3-8b:free"
+      },
+      "default_pricing": {
+        "input": "0",
+        "output": "0"
+      }
+    } 
+   }
+}
