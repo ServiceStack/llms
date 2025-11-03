@@ -14,6 +14,7 @@ Configure additional providers and models in [llms.json](llms/llms.json)
 - **Multi-Provider Support**: OpenRouter, Ollama, Anthropic, Google, OpenAI, Grok, Groq, Qwen, Z.ai, Mistral
 - **OpenAI-Compatible API**: Works with any client that supports OpenAI's chat completion API
 - **Built-in Analytics**: Built-in analytics UI to visualize costs, requests, and token usage
+- **GitHub OAuth**: Optionally Secure your web UI and restrict access to specified GitHub Users
 - **Configuration Management**: Easy provider enable/disable and configuration management
 - **CLI Interface**: Simple command-line interface for quick interactions
 - **Server Mode**: Run an OpenAI-compatible HTTP server at `http://localhost:{PORT}/v1/chat/completions`
