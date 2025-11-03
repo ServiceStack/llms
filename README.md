@@ -235,7 +235,10 @@ See [GITHUB_OAUTH_SETUP.md](GITHUB_OAUTH_SETUP.md) for detailed setup instructio
 
 ## Configuration
 
-The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.json` and defines available providers, models, and default settings. Key sections:
+The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.json` and defines available providers, models, and default settings. If it doesn't exist, `llms.json` is auto created with the latest 
+configuration, so you can re-create it by deleting your local config (e.g. `rm -rf ~/.llms`). 
+
+Key sections:
 
 ### Defaults
 - `headers`: Common HTTP headers for all requests
@@ -248,7 +251,6 @@ The configuration file [llms.json](llms/llms.json) is saved to `~/.llms/llms.jso
 - `convert`: Max image size and length limits and auto conversion settings
 
 ### Providers
-
 Each provider configuration includes:
 - `enabled`: Whether the provider is active
 - `type`: Provider class (OpenAiProvider, GoogleProvider, etc.)
