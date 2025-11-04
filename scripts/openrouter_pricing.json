@@ -55,6 +55,30 @@
     "input": "0.000003",
     "output": "0.000015"
   },
+  "google/gemini-2.5-flash": {
+    "input": "0.0000003",
+    "output": "0.0000025"
+  },
+  "google/gemini-2.5-flash-lite": {
+    "input": "0.0000001",
+    "output": "0.0000004"
+  },
+  "google/gemini-2.5-pro": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "google/gemma-3-4b-it": {
+    "input": "0.00000001703012",
+    "output": "0.0000000681536"
+  },
+  "google/gemma-3-12b-it": {
+    "input": "0.00000003",
+    "output": "0.0000001"
+  },
+  "google/gemma-3-27b-it": {
+    "input": "0.00000009",
+    "output": "0.00000016"
+  },
   "openai/gpt-5": {
     "input": "0.00000125",
     "output": "0.00001"
@@ -138,6 +162,10 @@
   "z-ai/glm-4.5-air": {
     "input": "0.00000013",
     "output": "0.00000085"
+  },
+  "minimax/minimax-m2": {
+    "input": "0.00000015",
+    "output": "0.00000045"
   },
   "moonshotai/kimi-k2": {
     "input": "0.00000014",
