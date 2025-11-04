@@ -127,6 +127,7 @@
         "deepseek-v3.1:671b": "deepseek/deepseek-chat-v3.1:free",
         "deepseek-r1:671b": "deepseek/deepseek-r1-0528:free",
         "gemini-2.0-flash": "google/gemini-2.0-flash-exp:free",
+        "gemma3n:e2b": "google/gemma-3n-e2b-it:free",
         "glm-4.5-air": "z-ai/glm-4.5-air:free",
         "mai-ds-r1": "microsoft/mai-ds-r1:free",
         "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct:free",
@@ -259,291 +260,6 @@
       "default_pricing": {
         "input": "0",
         "output": "0"
-      }
-    },
-    "openrouter": {
-      "enabled": true,
-      "type": "OpenAiProvider",
-      "base_url": "https://openrouter.ai/api",
-      "api_key": "$OPENROUTER_API_KEY",
-      "models": {
-        "llama3.1:70b": "meta-llama/llama-3.1-405b-instruct",
-        "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct",
-        "phi-4:14b": "microsoft/phi-4",
-        "codestral:22b": "mistralai/codestral-2508",
-        "mistral-nemo:12b": "mistralai/mistral-nemo",
-        "mixtral:8x22b": "mistralai/mixtral-8x22b-instruct",
-        "mistral-small3.2:24b": "mistralai/mistral-small-3.2-24b-instruct",
-        "nova-premier": "amazon/nova-premier-v1",
-        "nova-micro": "amazon/nova-micro-v1",
-        "nova-lite": "amazon/nova-lite-v1",
-        "nova-pro": "amazon/nova-pro-v1",
-        "nemotron-nano-vl:12b": "nvidia/nemotron-nano-12b-v2-vl",
-        "claude-sonnet-4-5": "anthropic/claude-sonnet-4.5",
-        "claude-sonnet-4-0": "anthropic/claude-sonnet-4",
-        "gpt-5": "openai/gpt-5",
-        "gpt-5-chat": "openai/gpt-5-chat",
-        "gpt-5-mini": "openai/gpt-5-mini",
-        "gpt-5-nano": "openai/gpt-5-nano",
-        "gpt-5-codex": "openai/gpt-5-codex",
-        "gpt-oss:120b": "openai/gpt-oss-120b",
-        "gpt-oss:20b": "openai/gpt-oss-20b",
-        "gpt-4o": "openai/gpt-4o",
-        "gpt-4o-mini": "openai/gpt-4o-mini",
-        "gpt-4.1": "openai/gpt-4.1",
-        "gpt-4.1-mini": "openai/gpt-4.1-mini",
-        "gpt-4.1-nano": "openai/gpt-4.1-nano",
-        "o4-mini": "openai/o4-mini",
-        "o4-mini-high": "openai/o4-mini-high",
-        "grok-4": "x-ai/grok-4",
-        "grok-4-fast": "x-ai/grok-4-fast",
-        "grok-code-fast-1": "x-ai/grok-code-fast-1",
-        "glm-4.6": "z-ai/glm-4.6",
-        "glm-4.5v": "z-ai/glm-4.5v",
-        "glm-4.5": "z-ai/glm-4.5",
-        "glm-4.5-air": "z-ai/glm-4.5-air",
-        "kimi-k2": "moonshotai/kimi-k2",
-        "deepseek-v3.1:671b": "deepseek/deepseek-chat",
-        "deepseek-v3.2-exp": "deepseek/deepseek-v3.2-exp",
-        "deepseek-chat-v3.1:671b": "deepseek/deepseek-chat-v3.1",
-        "deepseek-r1:671b": "deepseek/deepseek-r1",
-        "deepseek-v3.1-terminus": "deepseek/deepseek-v3.1-terminus",
-        "qwen3:8b": "qwen/qwen3-8b",
-        "qwen3:30b": "qwen/qwen3-30b-a3b",
-        "qwen3:32b": "qwen/qwen3-32b",
-        "qwen3:235b": "qwen/qwen3-235b-a22b",
-        "qwen3-coder": "qwen/qwen3-coder",
-        "qwen3-coder-flash": "qwen/qwen3-coder-flash",
-        "qwen3-coder-plus": "qwen/qwen3-coder-plus",
-        "qwen3-coder:30b": "qwen/qwen3-coder-30b-a3b-instruct",
-        "qwen3-max": "qwen/qwen3-max",
-        "qwen3-vl:235b": "qwen/qwen3-vl-235b-a22b-instruct",
-        "qwen3-vl-thinking:235b": "qwen/qwen3-vl-235b-a22b-thinking",
-        "ling-1t": "inclusionai/ling-1t",
-        "llama4:109b": "meta-llama/llama-4-scout",
-        "llama4:400b": "meta-llama/llama-4-maverick"
-      },
-      "pricing": {
-        "meta-llama/llama-3.1-405b-instruct": {
-          "input": "0.0000008",
-          "output": "0.0000008"
-        },
-        "meta-llama/llama-3.3-70b-instruct": {
-          "input": "0.00000013",
-          "output": "0.00000038"
-        },
-        "microsoft/phi-4": {
-          "input": "0.00000006",
-          "output": "0.00000014"
-        },
-        "mistralai/codestral-2508": {
-          "input": "0.0000003",
-          "output": "0.0000009"
-        },
-        "mistralai/mistral-nemo": {
-          "input": "0.00000002",
-          "output": "0.00000004"
-        },
-        "mistralai/mixtral-8x22b-instruct": {
-          "input": "0.000002",
-          "output": "0.000006"
-        },
-        "mistralai/mistral-small-3.2-24b-instruct": {
-          "input": "0.00000006",
-          "output": "0.00000018"
-        },
-        "amazon/nova-premier-v1": {
-          "input": "0.0000025",
-          "output": "0.0000125"
-        },
-        "amazon/nova-micro-v1": {
-          "input": "0.000000035",
-          "output": "0.00000014"
-        },
-        "amazon/nova-lite-v1": {
-          "input": "0.00000006",
-          "output": "0.00000024"
-        },
-        "amazon/nova-pro-v1": {
-          "input": "0.0000008",
-          "output": "0.0000032"
-        },
-        "nvidia/nemotron-nano-12b-v2-vl": {
-          "input": "0.0000002",
-          "output": "0.0000006"
-        },
-        "anthropic/claude-sonnet-4.5": {
-          "input": "0.000003",
-          "output": "0.000015"
-        },
-        "anthropic/claude-sonnet-4": {
-          "input": "0.000003",
-          "output": "0.000015"
-        },
-        "openai/gpt-5": {
-          "input": "0.00000125",
-          "output": "0.00001"
-        },
-        "openai/gpt-5-chat": {
-          "input": "0.00000125",
-          "output": "0.00001"
-        },
-        "openai/gpt-5-mini": {
-          "input": "0.00000025",
-          "output": "0.000002"
-        },
-        "openai/gpt-5-nano": {
-          "input": "0.00000005",
-          "output": "0.0000004"
-        },
-        "openai/gpt-5-codex": {
-          "input": "0.00000125",
-          "output": "0.00001"
-        },
-        "openai/gpt-oss-120b": {
-          "input": "0.00000005",
-          "output": "0.00000024"
-        },
-        "openai/gpt-oss-20b": {
-          "input": "0.00000003",
-          "output": "0.00000014"
-        },
-        "openai/gpt-4o": {
-          "input": "0.000006",
-          "output": "0.000018"
-        },
-        "openai/gpt-4o-mini": {
-          "input": "0.00000015",
-          "output": "0.0000006"
-        },
-        "openai/gpt-4.1": {
-          "input": "0.000002",
-          "output": "0.000008"
-        },
-        "openai/gpt-4.1-mini": {
-          "input": "0.0000004",
-          "output": "0.0000016"
-        },
-        "openai/gpt-4.1-nano": {
-          "input": "0.0000001",
-          "output": "0.0000004"
-        },
-        "openai/o4-mini": {
-          "input": "0.0000011",
-          "output": "0.0000044"
-        },
-        "openai/o4-mini-high": {
-          "input": "0.0000011",
-          "output": "0.0000044"
-        },
-        "x-ai/grok-4": {
-          "input": "0.000003",
-          "output": "0.000015"
-        },
-        "x-ai/grok-4-fast": {
-          "input": "0.0000002",
-          "output": "0.0000005"
-        },
-        "x-ai/grok-code-fast-1": {
-          "input": "0.0000002",
-          "output": "0.0000015"
-        },
-        "z-ai/glm-4.6": {
-          "input": "0.00000045",
-          "output": "0.0000019"
-        },
-        "z-ai/glm-4.5v": {
-          "input": "0.0000006",
-          "output": "0.0000018"
-        },
-        "z-ai/glm-4.5": {
-          "input": "0.00000035",
-          "output": "0.00000155"
-        },
-        "z-ai/glm-4.5-air": {
-          "input": "0.00000013",
-          "output": "0.00000085"
-        },
-        "moonshotai/kimi-k2": {
-          "input": "0.00000014",
-          "output": "0.00000249"
-        },
-        "deepseek/deepseek-chat": {
-          "input": "0.0000003",
-          "output": "0.00000085"
-        },
-        "deepseek/deepseek-v3.2-exp": {
-          "input": "0.00000027",
-          "output": "0.0000004"
-        },
-        "deepseek/deepseek-chat-v3.1": {
-          "input": "0.0000002",
-          "output": "0.0000008"
-        },
-        "deepseek/deepseek-r1": {
-          "input": "0.0000003",
-          "output": "0.0000012"
-        },
-        "deepseek/deepseek-v3.1-terminus": {
-          "input": "0.00000027",
-          "output": "0.000001"
-        },
-        "qwen/qwen3-8b": {
-          "input": "0.000000035",
-          "output": "0.000000138"
-        },
-        "qwen/qwen3-30b-a3b": {
-          "input": "0.00000006",
-          "output": "0.00000022"
-        },
-        "qwen/qwen3-32b": {
-          "input": "0.00000005",
-          "output": "0.0000002"
-        },
-        "qwen/qwen3-235b-a22b": {
-          "input": "0.00000018",
-          "output": "0.00000054"
-        },
-        "qwen/qwen3-coder": {
-          "input": "0.00000038",
-          "output": "0.00000153"
-        },
-        "qwen/qwen3-coder-flash": {
-          "input": "0.0000003",
-          "output": "0.0000015"
-        },
-        "qwen/qwen3-coder-plus": {
-          "input": "0.000001",
-          "output": "0.000005"
-        },
-        "qwen/qwen3-coder-30b-a3b-instruct": {
-          "input": "0.00000006",
-          "output": "0.00000025"
-        },
-        "qwen/qwen3-max": {
-          "input": "0.0000012",
-          "output": "0.000006"
-        },
-        "qwen/qwen3-vl-235b-a22b-instruct": {
-          "input": "0.00000022",
-          "output": "0.00000088"
-        },
-        "qwen/qwen3-vl-235b-a22b-thinking": {
-          "input": "0.0000003",
-          "output": "0.0000012"
-        },
-        "inclusionai/ling-1t": {
-          "input": "0.00000057",
-          "output": "0.00000228"
-        },
-        "meta-llama/llama-4-scout": {
-          "input": "0.00000008",
-          "output": "0.0000003"
-        },
-        "meta-llama/llama-4-maverick": {
-          "input": "0.00000015",
-          "output": "0.0000006"
-        }
       }
     },
     "google": {
@@ -1115,6 +831,326 @@
           }
         ],
         "stream": false
+      }
+    },
+    "openrouter": {
+      "enabled": true,
+      "type": "OpenAiProvider",
+      "base_url": "https://openrouter.ai/api",
+      "api_key": "$OPENROUTER_API_KEY",
+      "models": {
+        "llama3.1:70b": "meta-llama/llama-3.1-405b-instruct",
+        "llama3.3:70b": "meta-llama/llama-3.3-70b-instruct",
+        "phi-4:14b": "microsoft/phi-4",
+        "codestral:22b": "mistralai/codestral-2508",
+        "mistral-nemo:12b": "mistralai/mistral-nemo",
+        "mixtral:8x22b": "mistralai/mixtral-8x22b-instruct",
+        "mistral-small3.2:24b": "mistralai/mistral-small-3.2-24b-instruct",
+        "nova-premier": "amazon/nova-premier-v1",
+        "nova-micro": "amazon/nova-micro-v1",
+        "nova-lite": "amazon/nova-lite-v1",
+        "nova-pro": "amazon/nova-pro-v1",
+        "nemotron-nano-vl:12b": "nvidia/nemotron-nano-12b-v2-vl",
+        "claude-sonnet-4-5": "anthropic/claude-sonnet-4.5",
+        "claude-sonnet-4-0": "anthropic/claude-sonnet-4",
+        "gemini-flash-latest": "google/gemini-2.5-flash",
+        "gemini-flash-lite-latest": "google/gemini-2.5-flash-lite",
+        "gemini-2.5-pro": "google/gemini-2.5-pro",
+        "gemma3:4b": "google/gemma-3-4b-it",
+        "gemma3:12b": "google/gemma-3-12b-it",
+        "gemma3:27b": "google/gemma-3-27b-it",
+        "gpt-5": "openai/gpt-5",
+        "gpt-5-chat": "openai/gpt-5-chat",
+        "gpt-5-mini": "openai/gpt-5-mini",
+        "gpt-5-nano": "openai/gpt-5-nano",
+        "gpt-5-codex": "openai/gpt-5-codex",
+        "gpt-oss:120b": "openai/gpt-oss-120b",
+        "gpt-oss:20b": "openai/gpt-oss-20b",
+        "gpt-4o": "openai/gpt-4o",
+        "gpt-4o-mini": "openai/gpt-4o-mini",
+        "gpt-4.1": "openai/gpt-4.1",
+        "gpt-4.1-mini": "openai/gpt-4.1-mini",
+        "gpt-4.1-nano": "openai/gpt-4.1-nano",
+        "o4-mini": "openai/o4-mini",
+        "o4-mini-high": "openai/o4-mini-high",
+        "grok-4": "x-ai/grok-4",
+        "grok-4-fast": "x-ai/grok-4-fast",
+        "grok-code-fast-1": "x-ai/grok-code-fast-1",
+        "glm-4.6": "z-ai/glm-4.6",
+        "glm-4.5v": "z-ai/glm-4.5v",
+        "glm-4.5": "z-ai/glm-4.5",
+        "glm-4.5-air": "z-ai/glm-4.5-air",
+        "minimax-m2": "minimax/minimax-m2",
+        "kimi-k2": "moonshotai/kimi-k2",
+        "deepseek-v3.1:671b": "deepseek/deepseek-chat",
+        "deepseek-v3.2-exp": "deepseek/deepseek-v3.2-exp",
+        "deepseek-chat-v3.1:671b": "deepseek/deepseek-chat-v3.1",
+        "deepseek-r1:671b": "deepseek/deepseek-r1",
+        "deepseek-v3.1-terminus": "deepseek/deepseek-v3.1-terminus",
+        "qwen3:8b": "qwen/qwen3-8b",
+        "qwen3:30b": "qwen/qwen3-30b-a3b",
+        "qwen3:32b": "qwen/qwen3-32b",
+        "qwen3:235b": "qwen/qwen3-235b-a22b",
+        "qwen3-coder": "qwen/qwen3-coder",
+        "qwen3-coder-flash": "qwen/qwen3-coder-flash",
+        "qwen3-coder-plus": "qwen/qwen3-coder-plus",
+        "qwen3-coder:30b": "qwen/qwen3-coder-30b-a3b-instruct",
+        "qwen3-max": "qwen/qwen3-max",
+        "qwen3-vl:235b": "qwen/qwen3-vl-235b-a22b-instruct",
+        "qwen3-vl-thinking:235b": "qwen/qwen3-vl-235b-a22b-thinking",
+        "ling-1t": "inclusionai/ling-1t",
+        "llama4:109b": "meta-llama/llama-4-scout",
+        "llama4:400b": "meta-llama/llama-4-maverick"
+      },
+      "pricing": {
+        "meta-llama/llama-3.1-405b-instruct": {
+          "input": "0.0000008",
+          "output": "0.0000008"
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "input": "0.00000013",
+          "output": "0.00000038"
+        },
+        "microsoft/phi-4": {
+          "input": "0.00000006",
+          "output": "0.00000014"
+        },
+        "mistralai/codestral-2508": {
+          "input": "0.0000003",
+          "output": "0.0000009"
+        },
+        "mistralai/mistral-nemo": {
+          "input": "0.00000002",
+          "output": "0.00000004"
+        },
+        "mistralai/mixtral-8x22b-instruct": {
+          "input": "0.000002",
+          "output": "0.000006"
+        },
+        "mistralai/mistral-small-3.2-24b-instruct": {
+          "input": "0.00000006",
+          "output": "0.00000018"
+        },
+        "amazon/nova-premier-v1": {
+          "input": "0.0000025",
+          "output": "0.0000125"
+        },
+        "amazon/nova-micro-v1": {
+          "input": "0.000000035",
+          "output": "0.00000014"
+        },
+        "amazon/nova-lite-v1": {
+          "input": "0.00000006",
+          "output": "0.00000024"
+        },
+        "amazon/nova-pro-v1": {
+          "input": "0.0000008",
+          "output": "0.0000032"
+        },
+        "nvidia/nemotron-nano-12b-v2-vl": {
+          "input": "0.0000002",
+          "output": "0.0000006"
+        },
+        "anthropic/claude-sonnet-4.5": {
+          "input": "0.000003",
+          "output": "0.000015"
+        },
+        "anthropic/claude-sonnet-4": {
+          "input": "0.000003",
+          "output": "0.000015"
+        },
+        "google/gemini-2.5-flash": {
+          "input": "0.0000003",
+          "output": "0.0000025"
+        },
+        "google/gemini-2.5-flash-lite": {
+          "input": "0.0000001",
+          "output": "0.0000004"
+        },
+        "google/gemini-2.5-pro": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "google/gemma-3-4b-it": {
+          "input": "0.00000001703012",
+          "output": "0.0000000681536"
+        },
+        "google/gemma-3-12b-it": {
+          "input": "0.00000003",
+          "output": "0.0000001"
+        },
+        "google/gemma-3-27b-it": {
+          "input": "0.00000009",
+          "output": "0.00000016"
+        },
+        "openai/gpt-5": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "openai/gpt-5-chat": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "openai/gpt-5-mini": {
+          "input": "0.00000025",
+          "output": "0.000002"
+        },
+        "openai/gpt-5-nano": {
+          "input": "0.00000005",
+          "output": "0.0000004"
+        },
+        "openai/gpt-5-codex": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "openai/gpt-oss-120b": {
+          "input": "0.00000005",
+          "output": "0.00000024"
+        },
+        "openai/gpt-oss-20b": {
+          "input": "0.00000003",
+          "output": "0.00000014"
+        },
+        "openai/gpt-4o": {
+          "input": "0.000006",
+          "output": "0.000018"
+        },
+        "openai/gpt-4o-mini": {
+          "input": "0.00000015",
+          "output": "0.0000006"
+        },
+        "openai/gpt-4.1": {
+          "input": "0.000002",
+          "output": "0.000008"
+        },
+        "openai/gpt-4.1-mini": {
+          "input": "0.0000004",
+          "output": "0.0000016"
+        },
+        "openai/gpt-4.1-nano": {
+          "input": "0.0000001",
+          "output": "0.0000004"
+        },
+        "openai/o4-mini": {
+          "input": "0.0000011",
+          "output": "0.0000044"
+        },
+        "openai/o4-mini-high": {
+          "input": "0.0000011",
+          "output": "0.0000044"
+        },
+        "x-ai/grok-4": {
+          "input": "0.000003",
+          "output": "0.000015"
+        },
+        "x-ai/grok-4-fast": {
+          "input": "0.0000002",
+          "output": "0.0000005"
+        },
+        "x-ai/grok-code-fast-1": {
+          "input": "0.0000002",
+          "output": "0.0000015"
+        },
+        "z-ai/glm-4.6": {
+          "input": "0.00000045",
+          "output": "0.0000019"
+        },
+        "z-ai/glm-4.5v": {
+          "input": "0.0000006",
+          "output": "0.0000018"
+        },
+        "z-ai/glm-4.5": {
+          "input": "0.00000035",
+          "output": "0.00000155"
+        },
+        "z-ai/glm-4.5-air": {
+          "input": "0.00000013",
+          "output": "0.00000085"
+        },
+        "minimax/minimax-m2": {
+          "input": "0.00000015",
+          "output": "0.00000045"
+        },
+        "moonshotai/kimi-k2": {
+          "input": "0.00000014",
+          "output": "0.00000249"
+        },
+        "deepseek/deepseek-chat": {
+          "input": "0.0000003",
+          "output": "0.00000085"
+        },
+        "deepseek/deepseek-v3.2-exp": {
+          "input": "0.00000027",
+          "output": "0.0000004"
+        },
+        "deepseek/deepseek-chat-v3.1": {
+          "input": "0.0000002",
+          "output": "0.0000008"
+        },
+        "deepseek/deepseek-r1": {
+          "input": "0.0000003",
+          "output": "0.0000012"
+        },
+        "deepseek/deepseek-v3.1-terminus": {
+          "input": "0.00000027",
+          "output": "0.000001"
+        },
+        "qwen/qwen3-8b": {
+          "input": "0.000000035",
+          "output": "0.000000138"
+        },
+        "qwen/qwen3-30b-a3b": {
+          "input": "0.00000006",
+          "output": "0.00000022"
+        },
+        "qwen/qwen3-32b": {
+          "input": "0.00000005",
+          "output": "0.0000002"
+        },
+        "qwen/qwen3-235b-a22b": {
+          "input": "0.00000018",
+          "output": "0.00000054"
+        },
+        "qwen/qwen3-coder": {
+          "input": "0.00000038",
+          "output": "0.00000153"
+        },
+        "qwen/qwen3-coder-flash": {
+          "input": "0.0000003",
+          "output": "0.0000015"
+        },
+        "qwen/qwen3-coder-plus": {
+          "input": "0.000001",
+          "output": "0.000005"
+        },
+        "qwen/qwen3-coder-30b-a3b-instruct": {
+          "input": "0.00000006",
+          "output": "0.00000025"
+        },
+        "qwen/qwen3-max": {
+          "input": "0.0000012",
+          "output": "0.000006"
+        },
+        "qwen/qwen3-vl-235b-a22b-instruct": {
+          "input": "0.00000022",
+          "output": "0.00000088"
+        },
+        "qwen/qwen3-vl-235b-a22b-thinking": {
+          "input": "0.0000003",
+          "output": "0.0000012"
+        },
+        "inclusionai/ling-1t": {
+          "input": "0.00000057",
+          "output": "0.00000228"
+        },
+        "meta-llama/llama-4-scout": {
+          "input": "0.00000008",
+          "output": "0.0000003"
+        },
+        "meta-llama/llama-4-maverick": {
+          "input": "0.00000015",
+          "output": "0.0000006"
+        }
       }
     }
   }
