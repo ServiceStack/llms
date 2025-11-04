@@ -34,7 +34,7 @@ try:
 except ImportError:
     HAS_PIL = False
 
-VERSION = "2.0.32"
+VERSION = "2.0.33"
 _ROOT = None
 g_config_path = None
 g_ui_path = None
