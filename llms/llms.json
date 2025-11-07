@@ -882,6 +882,7 @@
         "glm-4.5-air": "z-ai/glm-4.5-air",
         "minimax-m2": "minimax/minimax-m2",
         "kimi-k2": "moonshotai/kimi-k2",
+        "kimi-k2-thinking": "moonshotai/kimi-k2-thinking",
         "deepseek-v3.1:671b": "deepseek/deepseek-chat",
         "deepseek-v3.2-exp": "deepseek/deepseek-v3.2-exp",
         "deepseek-chat-v3.1:671b": "deepseek/deepseek-chat-v3.1",
