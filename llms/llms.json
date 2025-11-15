@@ -859,6 +859,10 @@
         "gemma3:4b": "google/gemma-3-4b-it",
         "gemma3:12b": "google/gemma-3-12b-it",
         "gemma3:27b": "google/gemma-3-27b-it",
+        "gpt-5.1": "openai/gpt-5.1",
+        "gpt-5.1-chat": "openai/gpt-5.1-chat",
+        "gpt-5.1-codex": "openai/gpt-5.1-codex",
+        "gpt-5.1-codex-mini": "openai/gpt-5.1-codex-mini",
         "gpt-5": "openai/gpt-5",
         "gpt-5-chat": "openai/gpt-5-chat",
         "gpt-5-mini": "openai/gpt-5-mini",
@@ -883,6 +887,7 @@
         "minimax-m2": "minimax/minimax-m2",
         "kimi-k2": "moonshotai/kimi-k2",
         "kimi-k2-thinking": "moonshotai/kimi-k2-thinking",
+        "kimi-linear:48b": "moonshotai/kimi-linear-48b-a3b-instruct",
         "deepseek-v3.1:671b": "deepseek/deepseek-chat",
         "deepseek-v3.2-exp": "deepseek/deepseek-v3.2-exp",
         "deepseek-chat-v3.1:671b": "deepseek/deepseek-chat-v3.1",
@@ -905,8 +910,8 @@
       },
       "pricing": {
         "meta-llama/llama-3.1-405b-instruct": {
-          "input": "0.0000008",
-          "output": "0.0000008"
+          "input": "0.0000035",
+          "output": "0.0000035"
         },
         "meta-llama/llama-3.3-70b-instruct": {
           "input": "0.00000013",
@@ -983,6 +988,22 @@
         "google/gemma-3-27b-it": {
           "input": "0.00000009",
           "output": "0.00000016"
+        },
+        "openai/gpt-5.1": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "openai/gpt-5.1-chat": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "openai/gpt-5.1-codex": {
+          "input": "0.00000125",
+          "output": "0.00001"
+        },
+        "openai/gpt-5.1-codex-mini": {
+          "input": "0.00000025",
+          "output": "0.000002"
         },
         "openai/gpt-5": {
           "input": "0.00000125",
@@ -1062,23 +1083,31 @@
         },
         "z-ai/glm-4.5": {
           "input": "0.00000035",
-          "output": "0.00000155"
+          "output": "0.0000015"
         },
         "z-ai/glm-4.5-air": {
           "input": "0.00000013",
           "output": "0.00000085"
         },
         "minimax/minimax-m2": {
-          "input": "0.00000015",
-          "output": "0.00000045"
+          "input": "0.000000255",
+          "output": "0.00000102"
         },
         "moonshotai/kimi-k2": {
-          "input": "0.00000014",
-          "output": "0.00000249"
+          "input": "0.0000005",
+          "output": "0.0000024"
+        },
+        "moonshotai/kimi-k2-thinking": {
+          "input": "0.00000055",
+          "output": "0.00000225"
+        },
+        "moonshotai/kimi-linear-48b-a3b-instruct": {
+          "input": "0.0000003",
+          "output": "0.0000006"
         },
         "deepseek/deepseek-chat": {
           "input": "0.0000003",
-          "output": "0.00000085"
+          "output": "0.0000012"
         },
         "deepseek/deepseek-v3.2-exp": {
           "input": "0.00000027",
