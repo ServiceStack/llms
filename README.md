@@ -8,6 +8,15 @@ Configure additional providers and models in [llms.json](llms/llms.json)
  - Define free/cheapest/local providers first to save on costs
  - Any failures are automatically retried on the next available provider
 
+## Under Development
+
+To make docs easier to read, currently exploring different static website generators for llms.py:
+
+#### Astro
+
+- Website: https://astro.llmspy.org 
+- Source:  https://github.com/ServiceStack/astro.llmspy.org
+
 ## Features
 
 - **Lightweight**: Single [llms.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) Python file with single `aiohttp` dependency (Pillow optional)
