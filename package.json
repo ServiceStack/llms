@@ -1,5 +1,8 @@
 {
     "scripts": {
-        "test": "python -m unittest discover -s tests -p 'test_*.py'"
+        "test": "python -m unittest discover -s tests -p 'test_*.py'",
+        "build": "python publish.py --build --prod",
+        "bump": "python publish.py --bump",
+        "release": "python publish.py --release"
     }
 }

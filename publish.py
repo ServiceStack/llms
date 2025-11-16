@@ -55,10 +55,19 @@ def check_dependencies():
         print("pip install build twine")
         sys.exit(1)
 
+def get_current_version():
+    """Get the current version from pyproject.toml."""
+    import re
+    version_file = "pyproject.toml"
+    with open(version_file, "r") as f:
+        content = f.read()
+        version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
+        return version
+
 def bump_version():
     """
     Bump the package version.
-    This function should implement version bumping logic by 
+    This function should implement version bumping logic by
      - extracting version from pyproject.toml
      - incrementing patch version
      - Use string search/replace to replace old version with new version in:
@@ -101,23 +110,48 @@ def bump_version():
     run_command("git push --tags")
     run_command("git push")
 
+def create_release():
+    """
+    Create a GitHub Release using the latest version.
+    This should be run after bump_version().
+    """
+    print("Creating GitHub Release...")
+    version = get_current_version()
+    tag = f"v{version}"
+
+    print(f"Creating release for version {version} (tag: {tag})")
+
+    # Create GitHub release using gh CLI
+    # The release notes will be auto-generated from commits
+    release_cmd = f'gh release create {tag} --title "Release {version}" --generate-notes'
+    run_command(release_cmd)
+
+    print(f"GitHub Release {version} created successfully!")
+    print(f"View at: https://github.com/ServiceStack/llms/releases/tag/{tag}")
+
 def main():
     parser = argparse.ArgumentParser(description="Publish llms-py package to PyPI")
     parser.add_argument("--bump", action="store_true", help="Bump the package version")
+    parser.add_argument("--release", action="store_true", help="Create a GitHub Release (run after bump)")
     parser.add_argument("--test", action="store_true", help="Upload to TestPyPI")
     parser.add_argument("--prod", action="store_true", help="Upload to PyPI")
     parser.add_argument("--build", action="store_true", help="Just build the package")
-    
+
     args = parser.parse_args()
-    
-    if not any([args.bump, args.test, args.prod, args.build]):
+
+    if not any([args.bump, args.release, args.test, args.prod, args.build]):
         parser.print_help()
         sys.exit(1)
-    
+
+    # Release doesn't need build steps
+    if args.release:
+        create_release()
+        return
+
     check_dependencies()
     clean_build()
     build_package()
-    
+
     if args.bump:
         bump_version()
     elif args.test:
