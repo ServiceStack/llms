@@ -1,4 +1,20 @@
 {
+  "gpt-5.1": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "gpt-5.1-chat-latest": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "gpt-5.1-codex": {
+    "input": "0.00000125",
+    "output": "0.00001"
+  },
+  "gpt-5.1-codex-mini": {
+    "input": "0.00000025",
+    "output": "0.000002"
+  },
   "gpt-5-nano": {
     "input": "0.00000005",
     "output": "0.0000004"

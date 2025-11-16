@@ -2,6 +2,12 @@
   "text_tokens": {
     "batch": [
       {
+        "Model": "gpt-5.1",
+        "Input": "$0.625",
+        "Cached input": "$0.0625",
+        "Output": "$5.00"
+      },
+      {
         "Model": "gpt-5",
         "Input": "$0.625",
         "Cached input": "$0.0625",
@@ -124,6 +130,12 @@
     ],
     "flex": [
       {
+        "Model": "gpt-5.1",
+        "Input": "$0.625",
+        "Cached input": "$0.0625",
+        "Output": "$5.00"
+      },
+      {
         "Model": "gpt-5",
         "Input": "$0.625",
         "Cached input": "$0.0625",
@@ -156,6 +168,12 @@
     ],
     "standard": [
       {
+        "Model": "gpt-5.1",
+        "Input": "$1.25",
+        "Cached input": "$0.125",
+        "Output": "$10.00"
+      },
+      {
         "Model": "gpt-5",
         "Input": "$1.25",
         "Cached input": "$0.125",
@@ -174,7 +192,19 @@
         "Output": "$0.40"
       },
       {
+        "Model": "gpt-5.1-chat-latest",
+        "Input": "$1.25",
+        "Cached input": "$0.125",
+        "Output": "$10.00"
+      },
+      {
         "Model": "gpt-5-chat-latest",
+        "Input": "$1.25",
+        "Cached input": "$0.125",
+        "Output": "$10.00"
+      },
+      {
+        "Model": "gpt-5.1-codex",
         "Input": "$1.25",
         "Cached input": "$0.125",
         "Output": "$10.00"
@@ -330,6 +360,12 @@
         "Output": "$4.40"
       },
       {
+        "Model": "gpt-5.1-codex-mini",
+        "Input": "$0.25",
+        "Cached input": "$0.025",
+        "Output": "$2.00"
+      },
+      {
         "Model": "codex-mini-latest",
         "Input": "$1.50",
         "Cached input": "$0.375",
@@ -374,6 +410,12 @@
     ],
     "priority": [
       {
+        "Model": "gpt-5.1",
+        "Input": "$2.50",
+        "Cached input": "$0.25",
+        "Output": "$20.00"
+      },
+      {
         "Model": "gpt-5",
         "Input": "$2.50",
         "Cached input": "$0.25",
@@ -384,6 +426,18 @@
         "Input": "$0.45",
         "Cached input": "$0.045",
         "Output": "$3.60"
+      },
+      {
+        "Model": "gpt-5.1-codex",
+        "Input": "$2.50",
+        "Cached input": "$0.25",
+        "Output": "$20.00"
+      },
+      {
+        "Model": "gpt-5-codex",
+        "Input": "$2.50",
+        "Cached input": "$0.25",
+        "Output": "$20.00"
       },
       {
         "Model": "gpt-4.1",
