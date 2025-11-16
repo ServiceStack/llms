@@ -1536,7 +1536,7 @@ def main():
 
     if cli_args.config:
         # read contents
-        g_config_path = os.path.join(os.path.dirname(__file__), cli_args.config) 
+        g_config_path = cli_args.config
         with open(g_config_path, "r") as f:
             config_json = f.read()
             g_config = json.loads(config_json)
