@@ -6,27 +6,26 @@
 # A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers.
 # Docs: https://github.com/ServiceStack/llms
 
-import os
-import time
-import json
 import argparse
 import asyncio
-import subprocess
 import base64
+import json
 import mimetypes
-import traceback
-import sys
-import site
-import secrets
+import os
 import re
+import secrets
+import site
+import subprocess
+import sys
+import time
+import traceback
+from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
+from pathlib import Path
 from urllib.parse import parse_qs, urlencode
 
 import aiohttp
 from aiohttp import web
-
-from pathlib import Path
-from importlib import resources   # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 
 try:
     from PIL import Image
@@ -63,23 +62,21 @@ def chat_summary(chat):
     # replace image_url.url with <image>
     clone = json.loads(json.dumps(chat))
     for message in clone['messages']:
-        if 'content' in message:
-            if isinstance(message['content'], list):
-                for item in message['content']:
-                    if 'image_url' in item:
-                        if 'url' in item['image_url']:
-                            url = item['image_url']['url']
-                            prefix = url.split(',', 1)[0]
-                            item['image_url']['url'] = prefix + f",({len(url) - len(prefix)})"
-                    elif 'input_audio' in item:
-                        if 'data' in item['input_audio']:
-                            data = item['input_audio']['data']
-                            item['input_audio']['data'] = f"({len(data)})"
-                    elif 'file' in item:
-                        if 'file_data' in item['file']:
-                            data = item['file']['file_data']
-                            prefix = data.split(',', 1)[0]
-                            item['file']['file_data'] = prefix + f",({len(data) - len(prefix)})"
+        if 'content' in message and isinstance(message['content'], list):
+            for item in message['content']:
+                if 'image_url' in item:
+                    if 'url' in item['image_url']:
+                        url = item['image_url']['url']
+                        prefix = url.split(',', 1)[0]
+                        item['image_url']['url'] = prefix + f",({len(url) - len(prefix)})"
+                elif 'input_audio' in item:
+                    if 'data' in item['input_audio']:
+                        data = item['input_audio']['data']
+                        item['input_audio']['data'] = f"({len(data)})"
+                elif 'file' in item and 'file_data' in item['file']:
+                    data = item['file']['file_data']
+                    prefix = data.split(',', 1)[0]
+                    item['file']['file_data'] = prefix + f",({len(data) - len(prefix)})"
     return json.dumps(clone, indent=2)
 
 def gemini_chat_summary(gemini_chat):
@@ -92,8 +89,8 @@ def gemini_chat_summary(gemini_chat):
                 part['inline_data']['data'] = f"({len(data)})"
     return json.dumps(clone, indent=2)
 
-image_exts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
-audio_exts = 'mp3,wav,ogg,flac,m4a,opus,webm'.split(',')
+image_exts = ['png', 'webp', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'tiff', 'ico']
+audio_exts = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'opus', 'webm']
 
 def is_file_path(path):
     # macOs max path is 1023
@@ -386,7 +383,7 @@ async def process_chat(chat):
                                     file['file_data'] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             elif url.startswith('data:'):
                                 if 'filename' not in file:
-                                    file['filename'] = 'file' 
+                                    file['filename'] = 'file'
                                 pass # use base64 data as-is
                             else:
                                 raise Exception(f"Invalid file: {url}")
@@ -409,7 +406,9 @@ async def response_json(response):
     return body
 
 class OpenAiProvider:
-    def __init__(self, base_url, api_key=None, models={}, **kwargs):
+    def __init__(self, base_url, api_key=None, models=None, **kwargs):
+        if models is None:
+            models = {}
         self.base_url = base_url.strip("/")
         self.api_key = api_key
         self.models = models
@@ -421,9 +420,7 @@ class OpenAiProvider:
         else:
             self.chat_url = f"{base_url}/v1/chat/completions"
 
-        self.headers = kwargs['headers'] if 'headers' in kwargs else {
-            "Content-Type": "application/json",
-        }
+        self.headers = kwargs.get('headers', {"Content-Type": "application/json"})
         if api_key is not None:
             self.headers["Authorization"] = f"Bearer {api_key}"
 
@@ -432,25 +429,27 @@ class OpenAiProvider:
         self.n = int(kwargs['n']) if 'n' in kwargs else None
         self.parallel_tool_calls = bool(kwargs['parallel_tool_calls']) if 'parallel_tool_calls' in kwargs else None
         self.presence_penalty = float(kwargs['presence_penalty']) if 'presence_penalty' in kwargs else None
-        self.prompt_cache_key = kwargs['prompt_cache_key'] if 'prompt_cache_key' in kwargs else None
-        self.reasoning_effort = kwargs['reasoning_effort'] if 'reasoning_effort' in kwargs else None
-        self.safety_identifier = kwargs['safety_identifier'] if 'safety_identifier' in kwargs else None        
+        self.prompt_cache_key = kwargs.get('prompt_cache_key')
+        self.reasoning_effort = kwargs.get('reasoning_effort')
+        self.safety_identifier = kwargs.get('safety_identifier')
         self.seed = int(kwargs['seed']) if 'seed' in kwargs else None
-        self.service_tier = kwargs['service_tier'] if 'service_tier' in kwargs else None
-        self.stop = kwargs['stop'] if 'stop' in kwargs else None
+        self.service_tier = kwargs.get('service_tier')
+        self.stop = kwargs.get('stop')
         self.store = bool(kwargs['store']) if 'store' in kwargs else None
         self.temperature = float(kwargs['temperature']) if 'temperature' in kwargs else None
         self.top_logprobs = int(kwargs['top_logprobs']) if 'top_logprobs' in kwargs else None
         self.top_p = float(kwargs['top_p']) if 'top_p' in kwargs else None
-        self.verbosity = kwargs['verbosity'] if 'verbosity' in kwargs else None
+        self.verbosity = kwargs.get('verbosity')
         self.stream = bool(kwargs['stream']) if 'stream' in kwargs else None
         self.enable_thinking = bool(kwargs['enable_thinking']) if 'enable_thinking' in kwargs else None
-        self.pricing = kwargs['pricing'] if 'pricing' in kwargs else None
-        self.default_pricing = kwargs['default_pricing'] if 'default_pricing' in kwargs else None
-        self.check = kwargs['check'] if 'check' in kwargs else None
+        self.pricing = kwargs.get('pricing')
+        self.default_pricing = kwargs.get('default_pricing')
+        self.check = kwargs.get('check')
 
     @classmethod
-    def test(cls, base_url=None, api_key=None, models={}, **kwargs):
+    def test(cls, base_url=None, api_key=None, models=None, **kwargs):
+        if models is None:
+            models = {}
         return base_url and api_key and len(models) > 0
 
     async def load(self):
@@ -565,7 +564,9 @@ class OllamaProvider(OpenAiProvider):
             self.models = {**default_models, **self.models}
 
     @classmethod
-    def test(cls, base_url=None, models={}, all_models=False, **kwargs):
+    def test(cls, base_url=None, models=None, all_models=False, **kwargs):
+        if models is None:
+            models = {}
         return base_url and (len(models) > 0 or all_models)
 
 class GoogleOpenAiProvider(OpenAiProvider):
@@ -574,7 +575,9 @@ class GoogleOpenAiProvider(OpenAiProvider):
         self.chat_url = "https://generativelanguage.googleapis.com/v1beta/chat/completions"
 
     @classmethod
-    def test(cls, api_key=None, models={}, **kwargs):
+    def test(cls, api_key=None, models=None, **kwargs):
+        if models is None:
+            models = {}
         return api_key and len(models) > 0
 
 class GoogleProvider(OpenAiProvider):
@@ -583,22 +586,22 @@ class GoogleProvider(OpenAiProvider):
         self.safety_settings = safety_settings
         self.thinking_config = thinking_config
         self.curl = curl
-        self.headers = kwargs['headers'] if 'headers' in kwargs else {
-            "Content-Type": "application/json",
-        }
+        self.headers = kwargs.get('headers', {"Content-Type": "application/json"})
         # Google fails when using Authorization header, use query string param instead
         if 'Authorization' in self.headers:
             del self.headers['Authorization']
 
     @classmethod
-    def test(cls, api_key=None, models={}, **kwargs):
+    def test(cls, api_key=None, models=None, **kwargs):
+        if models is None:
+            models = {}
         return api_key is not None and len(models) > 0
 
     async def chat(self, chat):
         chat['model'] = self.provider_model(chat['model']) or chat['model']
 
         chat = await process_chat(chat)
-        generationConfig = {}
+        generation_config = {}
 
         # Filter out system messages and convert to proper Gemini format
         contents = []
@@ -629,11 +632,11 @@ class GoogleProvider(OpenAiProvider):
                                         raise(Exception("Image was not downloaded: " + url))
                                     # Extract mime type from data uri
                                     mimetype = url.split(';',1)[0].split(':',1)[1] if ';' in url else "image/png"
-                                    base64Data = url.split(',',1)[1]
+                                    base64_data = url.split(',',1)[1]
                                     parts.append({
                                         "inline_data": {
                                             "mime_type": mimetype,
-                                            "data": base64Data
+                                            "data": base64_data
                                         }
                                     })
                                 elif item['type'] == 'input_audio' and 'input_audio' in item:
@@ -658,11 +661,11 @@ class GoogleProvider(OpenAiProvider):
                                         raise(Exception("File was not downloaded: " + data))
                                     # Extract mime type from data uri
                                     mimetype = data.split(';',1)[0].split(':',1)[1] if ';' in data else "application/octet-stream"
-                                    base64Data = data.split(',',1)[1]
+                                    base64_data = data.split(',',1)[1]
                                     parts.append({
                                         "inline_data": {
                                             "mime_type": mimetype,
-                                            "data": base64Data
+                                            "data": base64_data
                                         }
                                     })
                             if 'text' in item:
@@ -694,23 +697,23 @@ class GoogleProvider(OpenAiProvider):
                 }
 
             if 'max_completion_tokens' in chat:
-                generationConfig['maxOutputTokens'] = chat['max_completion_tokens']
+                generation_config['maxOutputTokens'] = chat['max_completion_tokens']
             if 'stop' in chat:
-                generationConfig['stopSequences'] = [chat['stop']]
+                generation_config['stopSequences'] = [chat['stop']]
             if 'temperature' in chat:
-                generationConfig['temperature'] = chat['temperature']
+                generation_config['temperature'] = chat['temperature']
             if 'top_p' in chat:
-                generationConfig['topP'] = chat['top_p']
+                generation_config['topP'] = chat['top_p']
             if 'top_logprobs' in chat:
-                generationConfig['topK'] = chat['top_logprobs']
+                generation_config['topK'] = chat['top_logprobs']
 
             if 'thinkingConfig' in chat:
-                generationConfig['thinkingConfig'] = chat['thinkingConfig']
+                generation_config['thinkingConfig'] = chat['thinkingConfig']
             elif self.thinking_config:
-                generationConfig['thinkingConfig'] = self.thinking_config
+                generation_config['thinkingConfig'] = self.thinking_config
 
-            if len(generationConfig) > 0:
-                gemini_chat['generationConfig'] = generationConfig
+            if len(generation_config) > 0:
+                gemini_chat['generationConfig'] = generation_config
 
             started_at = int(time.time() * 1000)
             gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
@@ -792,7 +795,7 @@ class GoogleProvider(OpenAiProvider):
 def get_models():
     ret = []
     for provider in g_handlers.values():
-        for model in provider.models.keys():
+        for model in provider.models:
             if model not in ret:
                 ret.append(model)
     ret.sort()
@@ -802,7 +805,7 @@ def get_active_models():
     ret = []
     existing_models = set()
     for id, provider in g_handlers.items():
-        for model in provider.models.keys():
+        for model in provider.models:
             if model not in existing_models:
                 existing_models.add(model)
                 provider_model = provider.models[model]
@@ -1007,7 +1010,7 @@ def init_llms(config):
 async def load_llms():
     global g_handlers
     _log("Loading providers...")
-    for name, provider in g_handlers.items():
+    for _name, provider in g_handlers.items():
         await provider.load()
 
 def save_config(config):
@@ -1043,7 +1046,7 @@ async def save_default_config(config_path):
 
 def provider_status():
     enabled = list(g_handlers.keys())
-    disabled = [provider for provider in g_config['providers'].keys() if provider not in enabled]
+    disabled = [provider for provider in g_config['providers'] if provider not in enabled]
     enabled.sort()
     disabled.sort()
     return enabled, disabled
@@ -1246,7 +1249,7 @@ def read_resource_text(resource_path):
     if hasattr(resource_path, 'read_text'):
         return resource_path.read_text()
     else:
-        with open(resource_path, "r") as f:
+        with open(resource_path) as f:
             return f.read()
 
 def read_resource_file_bytes(resource_file):
@@ -1371,7 +1374,7 @@ def text_from_resource(filename):
 
 def text_from_file(filename):
     if os.path.exists(filename):
-        with open(filename, "r") as f:
+        with open(filename) as f:
             return f.read()
     return None
 
@@ -1406,7 +1409,7 @@ async def save_home_configs():
             with open(home_ui_path, "w") as f:
                 f.write(ui_json)
             _log(f"Created default ui config at {home_ui_path}")
-    except Exception as e:
+    except Exception:
         print("Could not create llms.json. Create one with --init or use --config <path>")
         exit(1)
 
@@ -1444,7 +1447,7 @@ async def watch_config_files(config_path, ui_path, interval=1):
 
                     try:
                         # Reload llms.json
-                        with open(config_path, "r") as f:
+                        with open(config_path) as f:
                             g_config = json.load(f)
 
                         # Reload providers
@@ -1537,7 +1540,7 @@ def main():
     if cli_args.config:
         # read contents
         g_config_path = cli_args.config
-        with open(g_config_path, "r") as f:
+        with open(g_config_path) as f:
             config_json = f.read()
             g_config = json.loads(config_json)
 
@@ -1605,7 +1608,7 @@ def main():
                 if 'enabled' in provider_config and provider_config['enabled']:
                     provider_config['enabled'] = False
                     disable_providers.append(provider)
-        
+
         if len(disable_providers) > 0:
             _log(f"Disabled unavailable providers: {', '.join(disable_providers)}")
             save_config(g_config)
@@ -1703,7 +1706,7 @@ def main():
             provider = request.match_info.get('provider', "")
             data = await request.json()
             msg = None
-            if provider:                
+            if provider:
                 if data.get('enable', False):
                     provider_config, msg = enable_provider(provider)
                     _log(f"Enabled provider {provider}")
@@ -1761,7 +1764,7 @@ def main():
             auth_url = f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
             return web.HTTPFound(auth_url)
-        
+
         def validate_user(github_username):
             auth_config = g_config['auth']['github']
             # Check if user is restricted
@@ -1797,7 +1800,7 @@ def main():
             if state not in g_oauth_states:
                 return web.Response(text="Invalid state parameter", status=400)
 
-            state_data = g_oauth_states.pop(state)
+            g_oauth_states.pop(state)
 
             if 'auth' not in g_config or 'github' not in g_config['auth']:
                 return web.json_response({"error": "GitHub OAuth not configured"}, status=500)
@@ -1969,9 +1972,9 @@ def main():
                 raise web.HTTPNotFound
 
         app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
-        
+
         async def ui_config_handler(request):
-            with open(g_ui_path, "r") as f:
+            with open(g_ui_path) as f:
                 ui = json.load(f)
                 if 'defaults' not in ui:
                     ui['defaults'] = g_config['defaults']
@@ -2096,7 +2099,7 @@ def main():
                     exit(1)
                 _log(f"Using chat: {chat_path}")
 
-                with open (chat_path, "r") as f:
+                with open (chat_path) as f:
                     chat_json = f.read()
                     chat = json.loads(chat_json)
 
@@ -2132,5 +2135,5 @@ def main():
     parser.print_help()
 
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     main()
