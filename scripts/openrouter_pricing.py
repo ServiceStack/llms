@@ -9,7 +9,7 @@ from utils import download_urls
 async def main():
     await download_urls({"openrouter_pricing_all.json": "https://openrouter.ai/api/frontend/models"})
 
-    with open("../llms/llms.json") as f:
+    with open("../llms/llms.json", encoding="utf-8") as f:
         llms = json.load(f)
         providers = llms.get("providers", {})
         provider_ids = list(providers.keys())
@@ -20,7 +20,7 @@ async def main():
         models = openrouter.get("models", {})
         print(f"Found {len(models)} models")
 
-        with open("openrouter_pricing_all.json") as f:
+        with open("openrouter_pricing_all.json", encoding="utf-8") as f:
             or_obj = json.load(f)
             or_models = or_obj.get("data", [])
             for model in models:
@@ -35,7 +35,7 @@ async def main():
                                 "output": pricing.get("completion", 0),
                             }
 
-        with open("openrouter_pricing.json", "w") as f:
+        with open("openrouter_pricing.json", "w", encoding="utf-8") as f:
             json.dump(openrouter_pricing, f, indent=2)
             print(f"✓ Successfully created openrouter_pricing.json with {len(openrouter_pricing)} model pricings")
 

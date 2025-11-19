@@ -1043,7 +1043,7 @@ async def load_llms():
 def save_config(config):
     global g_config, g_config_path
     g_config = config
-    with open(g_config_path, "w") as f:
+    with open(g_config_path, "w", encoding="utf-8") as f:
         json.dump(g_config, f, indent=4)
         _log(f"Saved config to {g_config_path}")
 
@@ -1065,7 +1065,7 @@ async def get_text(url):
 async def save_text_url(url, save_path):
     text = await get_text(url)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    with open(save_path, "w") as f:
+    with open(save_path, "w", encoding="utf-8") as f:
         f.write(text)
     return text
 
@@ -1297,7 +1297,7 @@ def read_resource_text(resource_path):
     if hasattr(resource_path, "read_text"):
         return resource_path.read_text()
     else:
-        with open(resource_path) as f:
+        with open(resource_path, encoding="utf-8") as f:
             return f.read()
 
 
@@ -1433,7 +1433,7 @@ def text_from_resource(filename):
 
 def text_from_file(filename):
     if os.path.exists(filename):
-        with open(filename) as f:
+        with open(filename, encoding="utf-8") as f:
             return f.read()
     return None
 
@@ -1461,13 +1461,13 @@ async def save_home_configs():
     try:
         if not os.path.exists(home_config_path):
             config_json = await text_from_resource_or_url("llms.json")
-            with open(home_config_path, "w") as f:
+            with open(home_config_path, "w", encoding="utf-8") as f:
                 f.write(config_json)
             _log(f"Created default config at {home_config_path}")
 
         if not os.path.exists(home_ui_path):
             ui_json = await text_from_resource_or_url("ui.json")
-            with open(home_ui_path, "w") as f:
+            with open(home_ui_path, "w", encoding="utf-8") as f:
                 f.write(ui_json)
             _log(f"Created default ui config at {home_ui_path}")
     except Exception:
@@ -1615,7 +1615,7 @@ def main():
     if cli_args.config:
         # read contents
         g_config_path = cli_args.config
-        with open(g_config_path) as f:
+        with open(g_config_path, encoding="utf-8") as f:
             config_json = f.read()
             g_config = json.loads(config_json)
 
@@ -1627,7 +1627,7 @@ def main():
         else:
             if not os.path.exists(home_ui_path):
                 ui_json = text_from_resource("ui.json")
-                with open(home_ui_path, "w") as f:
+                with open(home_ui_path, "w", encoding="utf-8") as f:
                     f.write(ui_json)
                 _log(f"Created default ui config at {home_ui_path}")
             g_ui_path = home_ui_path
@@ -2052,7 +2052,7 @@ def main():
         app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
 
         async def ui_config_handler(request):
-            with open(g_ui_path) as f:
+            with open(g_ui_path, encoding="utf-8") as f:
                 ui = json.load(f)
                 if "defaults" not in ui:
                     ui["defaults"] = g_config["defaults"]

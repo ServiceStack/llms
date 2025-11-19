@@ -67,7 +67,7 @@ def get_current_version():
     import re
 
     version_file = "pyproject.toml"
-    with open(version_file) as f:
+    with open(version_file, encoding="utf-8") as f:
         content = f.read()
         version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
         return version
@@ -89,7 +89,7 @@ def bump_version():
     import re
 
     version_file = "pyproject.toml"
-    with open(version_file) as f:
+    with open(version_file, encoding="utf-8") as f:
         content = f.read()
         version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
         print(f"Current version: {version}")
@@ -98,15 +98,15 @@ def bump_version():
         new_version = f"{major}.{minor}.{patch}"
         print(f"New version: {new_version}")
         content = content.replace(version, new_version)
-        with open(version_file, "w") as f:
+        with open(version_file, "w", encoding="utf-8") as f:
             f.write(content)
     # Update other files
     files_to_update = ["llms/ui/ai.mjs", "llms/main.py", "setup.py"]
     for file in files_to_update:
-        with open(file) as f:
+        with open(file, encoding="utf-8") as f:
             content = f.read()
             content = content.replace(version, new_version)
-        with open(file, "w") as f:
+        with open(file, "w", encoding="utf-8") as f:
             f.write(content)
     print("Version bumped successfully.")
     # Create git commit and tag

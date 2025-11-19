@@ -58,7 +58,7 @@ def convert_price_to_float(price_str: str) -> float | None:
 
 def parse_pricing_markdown(file_path: str) -> Dict[str, Any]:
     """Parse the OpenAI pricing markdown file."""
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         lines = f.readlines()
 
     pricing_data = {
@@ -257,7 +257,7 @@ def main():
     pricing_data = parse_pricing_markdown(str(md_file))
 
     print(f"Writing to {json_file}...")
-    with open(json_file, "w") as f:
+    with open(json_file, "w", encoding="utf-8") as f:
         json.dump(pricing_data, f, indent=2)
 
     print(f"✓ Successfully converted to {json_file}")
@@ -267,7 +267,7 @@ def main():
     print("Extracting standard pricing...")
     openai_pricing = extract_standard_pricing(pricing_data)
 
-    with open("../llms/llms.json") as f:
+    with open("../llms/llms.json", encoding="utf-8") as f:
         llms = json.load(f)
         providers = llms.get("providers", {})
         provider = providers.get("openai", {})
@@ -279,7 +279,7 @@ def main():
             model_info = next((m for m in openai_pricing if m.get("Model") == provider_model), None)
             if model_info:
                 billing[provider_model] = {"input": model_info.get("Input"), "output": model_info.get("Output")}
-        with open(json_pricing_file, "w") as f:
+        with open(json_pricing_file, "w", encoding="utf-8") as f:
             json.dump(billing, f, indent=2)
             print(f"✓ Successfully created {json_pricing_file}")
             print(f"  Total models: {len(billing)}")
