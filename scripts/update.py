@@ -33,10 +33,7 @@ async def main():
 
             if provider_id in free_providers:
                 print(f"Setting {provider_id} to free")
-                provider["default_pricing"] = {
-                  "input": "0",
-                  "output": "0"
-                }
+                provider["default_pricing"] = {"input": "0", "output": "0"}
             elif os.path.exists(f"{provider_id}_pricing.json"):
                 with open(f"{provider_id}_pricing.json") as f:
                     pricing = json.load(f)
@@ -53,6 +50,7 @@ async def main():
         with open("../llms/llms.json", "w") as f:
             print("Saving llms.json")
             f.write(json.dumps(llms, indent=2))
+
 
 if __name__ == "__main__":
     asyncio.run(main())

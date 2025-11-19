@@ -18,21 +18,21 @@ def parse_markdown_table(lines: List[str], start_idx: int) -> tuple[List[Dict[st
     Returns (list of row dicts, index of next line after table).
     """
     # Skip header separator line
-    if start_idx + 1 >= len(lines) or not lines[start_idx + 1].startswith('|---'):
+    if start_idx + 1 >= len(lines) or not lines[start_idx + 1].startswith("|---"):
         return [], start_idx
 
     header_line = lines[start_idx]
-    headers = [h.strip() for h in header_line.split('|')[1:-1]]
+    headers = [h.strip() for h in header_line.split("|")[1:-1]]
 
     rows = []
     idx = start_idx + 2
 
     while idx < len(lines):
         line = lines[idx].strip()
-        if not line.startswith('|') or line.startswith('|---'):
+        if not line.startswith("|") or line.startswith("|---"):
             break
 
-        cells = [cell.strip() for cell in line.split('|')[1:-1]]
+        cells = [cell.strip() for cell in line.split("|")[1:-1]]
         if len(cells) == len(headers):
             row = {headers[i]: cells[i] for i in range(len(headers))}
             rows.append(row)
@@ -45,11 +45,11 @@ def parse_markdown_table(lines: List[str], start_idx: int) -> tuple[List[Dict[st
 def convert_price_to_float(price_str: str) -> float | None:
     """Convert price string like '$1.25' or '-' to float."""
     price_str = price_str.strip()
-    if price_str == '-' or price_str == '':
+    if price_str == "-" or price_str == "":
         return None
 
     # Remove $ and any other non-numeric characters except decimal point
-    price_str = re.sub(r'[^\d.]', '', price_str)
+    price_str = re.sub(r"[^\d.]", "", price_str)
     try:
         return float(price_str)
     except ValueError:
@@ -71,7 +71,7 @@ def parse_pricing_markdown(file_path: str) -> Dict[str, Any]:
         "transcription_and_speech": {},
         "image_generation": {},
         "embeddings": [],
-        "legacy_models": {}
+        "legacy_models": {},
     }
 
     i = 0
@@ -130,7 +130,7 @@ def parse_pricing_markdown(file_path: str) -> Dict[str, Any]:
             continue
 
         # Parse tables
-        if line.startswith('|') and not line.startswith('|---'):
+        if line.startswith("|") and not line.startswith("|---"):
             rows, next_idx = parse_markdown_table(lines, i)
 
             if current_section == "text_tokens":
@@ -189,7 +189,7 @@ def price_to_per_token_string(price_str: str) -> str | None:
         return None
     per_token = price / 1_000_000
     # Format as string with up to 20 decimal places, removing trailing zeros
-    return format(per_token, '.20f').rstrip('0').rstrip('.')
+    return format(per_token, ".20f").rstrip("0").rstrip(".")
 
 
 def extract_standard_pricing(pricing_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -206,7 +206,7 @@ def extract_standard_pricing(pricing_data: Dict[str, Any]) -> List[Dict[str, Any
                 "Model": model.get("Model"),
                 "Input": price_to_per_token_string(model.get("Input", "-")),
                 "Cached input": price_to_per_token_string(model.get("Cached input", "-")),
-                "Output": price_to_per_token_string(model.get("Output", "-"))
+                "Output": price_to_per_token_string(model.get("Output", "-")),
             }
             models.append(model_entry)
 
@@ -218,7 +218,7 @@ def extract_standard_pricing(pricing_data: Dict[str, Any]) -> List[Dict[str, Any
                 "Training": model.get("Training"),
                 "Input": price_to_per_token_string(model.get("Input", "-")),
                 "Cached Input": price_to_per_token_string(model.get("Cached Input", "-")),
-                "Output": price_to_per_token_string(model.get("Output", "-"))
+                "Output": price_to_per_token_string(model.get("Output", "-")),
             }
             models.append(model_entry)
 
@@ -228,18 +228,14 @@ def extract_standard_pricing(pricing_data: Dict[str, Any]) -> List[Dict[str, Any
             model_entry = {
                 "Model": model.get("Model"),
                 "Input": price_to_per_token_string(model.get("Input", "-")),
-                "Output": price_to_per_token_string(model.get("Output", "-"))
+                "Output": price_to_per_token_string(model.get("Output", "-")),
             }
             models.append(model_entry)
 
     # Extract from transcription_and_speech standard pricing
     if "transcription_and_speech" in pricing_data and "standard" in pricing_data["transcription_and_speech"]:
         for model in pricing_data["transcription_and_speech"]["standard"]:
-            model_entry = {
-                "Model": model.get("Model"),
-                "Use case": model.get("Use case"),
-                "Cost": model.get("Cost")
-            }
+            model_entry = {"Model": model.get("Model"), "Use case": model.get("Use case"), "Cost": model.get("Cost")}
             models.append(model_entry)
 
     return models
@@ -261,7 +257,7 @@ def main():
     pricing_data = parse_pricing_markdown(str(md_file))
 
     print(f"Writing to {json_file}...")
-    with open(json_file, 'w') as f:
+    with open(json_file, "w") as f:
         json.dump(pricing_data, f, indent=2)
 
     print(f"✓ Successfully converted to {json_file}")
@@ -282,14 +278,12 @@ def main():
             provider_model = models[model]
             model_info = next((m for m in openai_pricing if m.get("Model") == provider_model), None)
             if model_info:
-                billing[provider_model] = {
-                    "input": model_info.get("Input"),
-                    "output": model_info.get("Output")
-                }
-        with open(json_pricing_file, 'w') as f:
+                billing[provider_model] = {"input": model_info.get("Input"), "output": model_info.get("Output")}
+        with open(json_pricing_file, "w") as f:
             json.dump(billing, f, indent=2)
             print(f"✓ Successfully created {json_pricing_file}")
             print(f"  Total models: {len(billing)}")
+
 
 if __name__ == "__main__":
     main()

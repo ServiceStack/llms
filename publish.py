@@ -25,25 +25,30 @@ def run_command(cmd, check=True):
         sys.exit(1)
     return result
 
+
 def clean_build():
     """Clean previous build artifacts."""
     print("Cleaning previous build artifacts...")
     run_command("rm -rf build/ dist/ *.egg-info/", check=False)
+
 
 def build_package():
     """Build the package."""
     print("Building package...")
     run_command("python -m build")
 
+
 def upload_to_testpypi():
     """Upload to TestPyPI."""
     print("Uploading to TestPyPI...")
     run_command("python -m twine upload --repository testpypi dist/* --verbose")
 
+
 def upload_to_pypi():
     """Upload to PyPI."""
     print("Uploading to PyPI...")
     run_command("python -m twine upload dist/*")
+
 
 def check_dependencies():
     """Check if required tools are installed."""
@@ -56,14 +61,17 @@ def check_dependencies():
         print("pip install build twine")
         sys.exit(1)
 
+
 def get_current_version():
     """Get the current version from pyproject.toml."""
     import re
+
     version_file = "pyproject.toml"
     with open(version_file) as f:
         content = f.read()
         version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
         return version
+
 
 def bump_version():
     """
@@ -93,11 +101,7 @@ def bump_version():
         with open(version_file, "w") as f:
             f.write(content)
     # Update other files
-    files_to_update = [
-        "llms/ui/ai.mjs",
-        "llms/main.py",
-        "setup.py"
-    ]
+    files_to_update = ["llms/ui/ai.mjs", "llms/main.py", "setup.py"]
     for file in files_to_update:
         with open(file) as f:
             content = f.read()
@@ -107,9 +111,10 @@ def bump_version():
     print("Version bumped successfully.")
     # Create git commit and tag
     run_command(f'git commit -am "Bump version to {new_version}"')
-    run_command(f'git tag v{new_version}')
+    run_command(f"git tag v{new_version}")
     run_command("git push --tags")
     run_command("git push")
+
 
 def create_release():
     """
@@ -129,6 +134,7 @@ def create_release():
 
     print(f"GitHub Release {version} created successfully!")
     print(f"View at: https://github.com/ServiceStack/llms/releases/tag/{tag}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Publish llms-py package to PyPI")
@@ -172,6 +178,7 @@ def main():
         print("Files created in dist/:")
         for file in os.listdir("dist"):
             print(f"  {file}")
+
 
 if __name__ == "__main__":
     main()

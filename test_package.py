@@ -22,9 +22,11 @@ def run_command(cmd, check=True):
         print(f"✅ PASSED: {cmd}")
         return True
 
+
 def test_llms_command():
     """Test that the llms command is available and shows help."""
     return run_command("llms --help")
+
 
 def test_llms_init():
     """Test that llms --init works."""
@@ -49,15 +51,18 @@ def test_llms_init():
             print(f"stderr: {result.stderr}")
             return False
 
+
 def test_python_import():
     """Test that the llms module can be imported."""
     try:
         import llms
+
         print("✅ PASSED: import llms")
         return True
     except ImportError as e:
         print(f"❌ FAILED: import llms - {e}")
         return False
+
 
 def main():
     """Run all tests."""
@@ -87,6 +92,7 @@ def main():
     else:
         print("❌ Some tests failed. Please check the installation.")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

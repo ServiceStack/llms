@@ -7,9 +7,7 @@ from utils import download_urls
 
 
 async def main():
-    await download_urls({
-        "openrouter_pricing_all.json": "https://openrouter.ai/api/frontend/models"
-    })
+    await download_urls({"openrouter_pricing_all.json": "https://openrouter.ai/api/frontend/models"})
 
     with open("../llms/llms.json") as f:
         llms = json.load(f)
@@ -34,12 +32,13 @@ async def main():
                             pricing = endpoint.get("pricing", {})
                             openrouter_pricing[provider_model] = {
                                 "input": pricing.get("prompt", 0),
-                                "output": pricing.get("completion", 0)
+                                "output": pricing.get("completion", 0),
                             }
 
-        with open("openrouter_pricing.json", 'w') as f:
+        with open("openrouter_pricing.json", "w") as f:
             json.dump(openrouter_pricing, f, indent=2)
             print(f"✓ Successfully created openrouter_pricing.json with {len(openrouter_pricing)} model pricings")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
