@@ -734,7 +734,7 @@ class GoogleProvider(OpenAiProvider):
                     o = subprocess.run(curl_args, check=True, capture_output=True, text=True, timeout=120)
                     obj = json.loads(o.stdout)
                 except Exception as e:
-                    raise Exception(f"Error executing curl: {e}")
+                    raise Exception(f"Error executing curl: {e}") from e
             else:
                 async with session.post(gemini_chat_url, headers=self.headers, data=json.dumps(gemini_chat), timeout=aiohttp.ClientTimeout(total=120)) as res:
                     obj = await response_json(res)
@@ -746,11 +746,10 @@ class GoogleProvider(OpenAiProvider):
                 "model": obj.get('modelVersion', chat['model']),
             }
             choices = []
-            i = 0
             if 'error' in obj:
                 _log(f"Error: {obj['error']}")
                 raise Exception(obj['error']['message'])
-            for candidate in obj['candidates']:
+            for i, candidate in enumerate(obj['candidates']):
                 role = "assistant"
                 if 'content' in candidate and 'role' in candidate['content']:
                     role = "assistant" if candidate['content']['role'] == 'model' else candidate['content']['role']
@@ -781,7 +780,6 @@ class GoogleProvider(OpenAiProvider):
                 if reasoning:
                     choice['message']['reasoning'] = reasoning
                 choices.append(choice)
-                i += 1
             response['choices'] = choices
             if 'usageMetadata' in obj:
                 usage = obj['usageMetadata']
@@ -1327,27 +1325,25 @@ async def check_models(provider_name, model_names=None):
                 if 'error' in error_body:
                     error = error_body['error']
                     if isinstance(error, dict):
-                        if 'message' in error:
+                        if 'message' in error and isinstance(error['message'], str):
                             # OpenRouter
-                            if isinstance(error['message'], str):
-                                error_msg = error['message']
-                                if 'code' in error:
-                                    error_msg = f"{error['code']} {error_msg}"
-                                if 'metadata' in error and 'raw' in error['metadata']:
-                                    error_msg += f" - {error['metadata']['raw']}"
-                                if 'provider' in error:
-                                    error_msg += f" ({error['provider']})"
+                            error_msg = error['message']
+                            if 'code' in error:
+                                error_msg = f"{error['code']} {error_msg}"
+                            if 'metadata' in error and 'raw' in error['metadata']:
+                                error_msg += f" - {error['metadata']['raw']}"
+                            if 'provider' in error:
+                                error_msg += f" ({error['provider']})"
                     elif isinstance(error, str):
                         error_msg = error
                 elif 'message' in error_body:
                     if isinstance(error_body['message'], str):
                         error_msg = error_body['message']
-                    elif isinstance(error_body['message'], dict):
+                    elif isinstance(error_body['message'], dict) and 'detail' in error_body['message'] and isinstance(error_body['message']['detail'], list):
                         # codestral error format
-                        if 'detail' in error_body['message'] and isinstance(error_body['message']['detail'], list):
-                            error_msg = error_body['message']['detail'][0]['msg']
-                            if 'loc' in error_body['message']['detail'][0] and len(error_body['message']['detail'][0]['loc']) > 0:
-                                error_msg += f" (in {' '.join(error_body['message']['detail'][0]['loc'])})"
+                        error_msg = error_body['message']['detail'][0]['msg']
+                        if 'loc' in error_body['message']['detail'][0] and len(error_body['message']['detail'][0]['loc']) > 0:
+                            error_msg += f" (in {' '.join(error_body['message']['detail'][0]['loc'])})"
             except Exception as parse_error:
                 _log(f"Error parsing error body: {parse_error}")
                 error_msg = e.body[:100] if e.body else f"HTTP {e.status}"
@@ -1604,10 +1600,9 @@ def main():
         disable_providers = []
         for provider in all_providers:
             provider_config = g_config['providers'][provider]
-            if provider not in enabled_providers:
-                if 'enabled' in provider_config and provider_config['enabled']:
-                    provider_config['enabled'] = False
-                    disable_providers.append(provider)
+            if provider not in enabled_providers and 'enabled' in provider_config and provider_config['enabled']:
+                provider_config['enabled'] = False
+                disable_providers.append(provider)
 
         if len(disable_providers) > 0:
             _log(f"Disabled unavailable providers: {', '.join(disable_providers)}")
@@ -1960,16 +1955,16 @@ def main():
                         raise web.HTTPNotFound
                     try:
                         resource.relative_to(Path(_ROOT))  # basic directory-traversal guard
-                    except ValueError:
-                        raise web.HTTPBadRequest(text="Invalid path")
+                    except ValueError as e:
+                        raise web.HTTPBadRequest(text="Invalid path") from e
                     content = resource.read_bytes()
 
                 content_type, _ = mimetypes.guess_type(str(path))
                 if content_type is None:
                     content_type = "application/octet-stream"
                 return web.Response(body=content, content_type=content_type)
-            except (OSError, PermissionError, AttributeError):
-                raise web.HTTPNotFound
+            except (OSError, PermissionError, AttributeError) as e:
+                raise web.HTTPNotFound from e
 
         app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
 
