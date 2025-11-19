@@ -1,5 +1,7 @@
 import json
+
 import aiohttp
+
 
 async def download_urls(urls):
     async def fetch_and_save(session, url, filename):

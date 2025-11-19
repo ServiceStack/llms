@@ -9,8 +9,7 @@ Source: https://platform.openai.com/docs/pricing [Copy page] -> openai_pricing.m
 import json
 import re
 from pathlib import Path
-import subprocess
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 
 def parse_markdown_table(lines: List[str], start_idx: int) -> tuple[List[Dict[str, str]], int]:
@@ -21,25 +20,25 @@ def parse_markdown_table(lines: List[str], start_idx: int) -> tuple[List[Dict[st
     # Skip header separator line
     if start_idx + 1 >= len(lines) or not lines[start_idx + 1].startswith('|---'):
         return [], start_idx
-    
+
     header_line = lines[start_idx]
     headers = [h.strip() for h in header_line.split('|')[1:-1]]
-    
+
     rows = []
     idx = start_idx + 2
-    
+
     while idx < len(lines):
         line = lines[idx].strip()
         if not line.startswith('|') or line.startswith('|---'):
             break
-        
+
         cells = [cell.strip() for cell in line.split('|')[1:-1]]
         if len(cells) == len(headers):
             row = {headers[i]: cells[i] for i in range(len(headers))}
             rows.append(row)
-        
+
         idx += 1
-    
+
     return rows, idx
 
 
@@ -48,7 +47,7 @@ def convert_price_to_float(price_str: str) -> float | None:
     price_str = price_str.strip()
     if price_str == '-' or price_str == '':
         return None
-    
+
     # Remove $ and any other non-numeric characters except decimal point
     price_str = re.sub(r'[^\d.]', '', price_str)
     try:
@@ -59,9 +58,9 @@ def convert_price_to_float(price_str: str) -> float | None:
 
 def parse_pricing_markdown(file_path: str) -> Dict[str, Any]:
     """Parse the OpenAI pricing markdown file."""
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         lines = f.readlines()
-    
+
     pricing_data = {
         "text_tokens": {},
         "image_tokens": {},
@@ -74,14 +73,14 @@ def parse_pricing_markdown(file_path: str) -> Dict[str, Any]:
         "embeddings": [],
         "legacy_models": {}
     }
-    
+
     i = 0
     current_section = None
     current_subsection = None
-    
+
     while i < len(lines):
         line = lines[i].strip()
-        
+
         # Detect main sections
         if line.lower() == "text tokens":
             current_section = "text_tokens"
@@ -123,64 +122,63 @@ def parse_pricing_markdown(file_path: str) -> Dict[str, Any]:
             current_section = "legacy_models"
             i += 1
             continue
-        
+
         # Detect subsections (pricing tiers)
         if line.lower() in ["batch", "flex", "standard", "priority"]:
             current_subsection = line.lower()
             i += 1
             continue
-        
+
         # Parse tables
         if line.startswith('|') and not line.startswith('|---'):
             rows, next_idx = parse_markdown_table(lines, i)
-            
+
             if current_section == "text_tokens":
                 if current_subsection:
                     if current_subsection not in pricing_data["text_tokens"]:
                         pricing_data["text_tokens"][current_subsection] = []
                     pricing_data["text_tokens"][current_subsection] = rows
-            
+
             elif current_section == "image_tokens":
                 pricing_data["image_tokens"] = rows
-            
+
             elif current_section == "audio_tokens":
                 pricing_data["audio_tokens"] = rows
-            
+
             elif current_section == "video":
                 pricing_data["video"] = rows
-            
+
             elif current_section == "fine_tuning":
                 if current_subsection:
                     if current_subsection not in pricing_data["fine_tuning"]:
                         pricing_data["fine_tuning"][current_subsection] = []
                     pricing_data["fine_tuning"][current_subsection] = rows
-            
+
             elif current_section == "built_in_tools":
                 pricing_data["built_in_tools"] = rows
-            
+
             elif current_section == "transcription_and_speech":
                 if current_subsection:
                     if current_subsection not in pricing_data["transcription_and_speech"]:
                         pricing_data["transcription_and_speech"][current_subsection] = []
                     pricing_data["transcription_and_speech"][current_subsection] = rows
-            
+
             elif current_section == "image_generation":
                 pricing_data["image_generation"] = rows
-            
+
             elif current_section == "embeddings":
                 pricing_data["embeddings"] = rows
-            
-            elif current_section == "legacy_models":
-                if current_subsection:
-                    if current_subsection not in pricing_data["legacy_models"]:
-                        pricing_data["legacy_models"][current_subsection] = []
-                    pricing_data["legacy_models"][current_subsection] = rows
-            
+
+            elif current_section == "legacy_models" and current_subsection:
+                if current_subsection not in pricing_data["legacy_models"]:
+                    pricing_data["legacy_models"][current_subsection] = []
+                pricing_data["legacy_models"][current_subsection] = rows
+
             i = next_idx
             continue
-        
+
         i += 1
-    
+
     return pricing_data
 
 
@@ -270,7 +268,7 @@ def main():
     print(f"  Total sections: {len(pricing_data)}")
 
     # Extract and save standard pricing
-    print(f"Extracting standard pricing...")
+    print("Extracting standard pricing...")
     openai_pricing = extract_standard_pricing(pricing_data)
 
     with open("../llms/llms.json") as f:
@@ -280,7 +278,7 @@ def main():
         models = provider.get("models", {})
 
         billing = {}
-        for model in models.keys():
+        for model in models:
             provider_model = models[model]
             model_info = next((m for m in openai_pricing if m.get("Model") == provider_model), None)
             if model_info:

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-import subprocess
-import os
-import re
-import json
 import asyncio
-import aiohttp
+import json
+import os
+import subprocess
 
 from utils import price_to_string
+
 
 async def main():
     # Run ./openai_pricing.py to generate openai_pricing.json
@@ -31,7 +30,7 @@ async def main():
             models = provider.get("models", {})
             print(f"Found {len(models)} models for {provider_id}")
             pricing = {}
-            
+
             if provider_id in free_providers:
                 print(f"Setting {provider_id} to free")
                 provider["default_pricing"] = {

@@ -3,18 +3,15 @@
 Unit tests for configuration and provider management in llms.main module.
 """
 
-import unittest
-import sys
 import os
-import tempfile
-import json
+import sys
+import unittest
 
 # Add parent directory to path to import llms module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from llms.main import (
     home_llms_path,
-    provider_status,
     init_llms,
 )
 
@@ -26,7 +23,7 @@ class TestHomeLlmsPath(unittest.TestCase):
         result = home_llms_path('llms.json')
         self.assertIsInstance(result, str)
         self.assertTrue(result.endswith('/.llms/llms.json'))
-    
+
     def test_home_llms_path_ui(self):
         result = home_llms_path('ui.json')
         self.assertIsInstance(result, str)
@@ -57,7 +54,7 @@ class TestProviderStatus(unittest.TestCase):
                 }
             }
         }
-    
+
     def test_init_llms_basic(self):
         """Test basic initialization of llms configuration."""
         config = {
@@ -70,7 +67,7 @@ class TestProviderStatus(unittest.TestCase):
         }
         init_llms(config)
         # Should not raise an exception
-    
+
     def test_init_llms_with_env_vars(self):
         """Test initialization with environment variable substitution."""
         os.environ['TEST_API_KEY'] = 'secret-key-123'
@@ -109,7 +106,7 @@ class TestConfigValidation(unittest.TestCase):
         }
         # Should not raise an exception
         init_llms(config)
-    
+
     def test_config_with_disabled_provider(self):
         """Test that disabled providers are handled correctly."""
         config = {

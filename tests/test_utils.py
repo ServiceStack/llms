@@ -3,25 +3,24 @@
 Unit tests for utility functions in llms.main module.
 """
 
-import unittest
-import sys
-import os
-import tempfile
 import json
+import os
+import sys
+import unittest
 
 # Add parent directory to path to import llms module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from llms.main import (
-    is_url,
-    get_filename,
-    parse_args_params,
     apply_args_to_chat,
-    is_base_64,
-    get_file_mime_type,
-    price_to_string,
     chat_summary,
     gemini_chat_summary,
+    get_file_mime_type,
+    get_filename,
+    is_base_64,
+    is_url,
+    parse_args_params,
+    price_to_string,
 )
 
 
@@ -30,16 +29,16 @@ class TestUrlUtils(unittest.TestCase):
 
     def test_is_url_with_http(self):
         self.assertTrue(is_url('http://example.com'))
-    
+
     def test_is_url_with_https(self):
         self.assertTrue(is_url('https://example.com'))
-    
+
     def test_is_url_with_path(self):
         self.assertFalse(is_url('/path/to/file'))
-    
+
     def test_is_url_with_none(self):
         self.assertFalse(is_url(None))
-    
+
     def test_is_url_with_empty_string(self):
         self.assertFalse(is_url(''))
 
@@ -49,13 +48,13 @@ class TestFilenameUtils(unittest.TestCase):
 
     def test_get_filename_with_path(self):
         self.assertEqual(get_filename('/path/to/file.txt'), 'file.txt')
-    
+
     def test_get_filename_with_url(self):
         self.assertEqual(get_filename('https://example.com/path/to/file.txt'), 'file.txt')
-    
+
     def test_get_filename_without_path(self):
         self.assertEqual(get_filename('file.txt'), 'file')
-    
+
     def test_get_filename_with_multiple_slashes(self):
         self.assertEqual(get_filename('/path/to/nested/file.txt'), 'file.txt')
 
@@ -65,30 +64,30 @@ class TestParseArgsParams(unittest.TestCase):
 
     def test_parse_empty_string(self):
         self.assertEqual(parse_args_params(''), {})
-    
+
     def test_parse_none(self):
         self.assertEqual(parse_args_params(None), {})
-    
+
     def test_parse_boolean_true(self):
         result = parse_args_params('stream=true')
         self.assertEqual(result, {'stream': True})
-    
+
     def test_parse_boolean_false(self):
         result = parse_args_params('stream=false')
         self.assertEqual(result, {'stream': False})
-    
+
     def test_parse_integer(self):
         result = parse_args_params('max_tokens=100')
         self.assertEqual(result, {'max_tokens': 100})
-    
+
     def test_parse_float(self):
         result = parse_args_params('temperature=0.7')
         self.assertEqual(result, {'temperature': 0.7})
-    
+
     def test_parse_string(self):
         result = parse_args_params('model=gpt-4')
         self.assertEqual(result, {'model': 'gpt-4'})
-    
+
     def test_parse_multiple_params(self):
         result = parse_args_params('stream=true&max_tokens=100&temperature=0.7')
         self.assertEqual(result, {
@@ -96,7 +95,7 @@ class TestParseArgsParams(unittest.TestCase):
             'max_tokens': 100,
             'temperature': 0.7
         })
-    
+
     def test_parse_multiple_values(self):
         result = parse_args_params('stop=word1&stop=word2')
         self.assertEqual(result, {'stop': ['word1', 'word2']})
@@ -109,27 +108,27 @@ class TestApplyArgsToChat(unittest.TestCase):
         chat = {'model': 'gpt-4'}
         result = apply_args_to_chat(chat, {})
         self.assertEqual(result, {'model': 'gpt-4'})
-    
+
     def test_apply_none_args(self):
         chat = {'model': 'gpt-4'}
         result = apply_args_to_chat(chat, None)
         self.assertEqual(result, {'model': 'gpt-4'})
-    
+
     def test_apply_max_tokens(self):
         chat = {'model': 'gpt-4'}
         result = apply_args_to_chat(chat, {'max_tokens': '100'})
         self.assertEqual(result['max_tokens'], 100)
-    
+
     def test_apply_temperature(self):
         chat = {'model': 'gpt-4'}
         result = apply_args_to_chat(chat, {'temperature': '0.7'})
         self.assertEqual(result['temperature'], 0.7)
-    
+
     def test_apply_stop_single(self):
         chat = {'model': 'gpt-4'}
         result = apply_args_to_chat(chat, {'stop': 'word'})
         self.assertEqual(result['stop'], 'word')
-    
+
     def test_apply_stop_multiple(self):
         chat = {'model': 'gpt-4'}
         result = apply_args_to_chat(chat, {'stop': 'word1,word2,word3'})
@@ -141,10 +140,10 @@ class TestBase64Utils(unittest.TestCase):
 
     def test_is_base_64_valid(self):
         self.assertTrue(is_base_64('SGVsbG8gV29ybGQ='))
-    
+
     def test_is_base_64_invalid(self):
         self.assertFalse(is_base_64('not base64!@#$'))
-    
+
     def test_is_base_64_empty(self):
         self.assertTrue(is_base_64(''))
 
@@ -154,7 +153,7 @@ class TestMimeTypeUtils(unittest.TestCase):
 
     def test_get_file_mime_type_png(self):
         self.assertEqual(get_file_mime_type('image.png'), 'image/png')
-    
+
     def test_get_file_mime_type_jpg(self):
         self.assertEqual(get_file_mime_type('image.jpg'), 'image/jpeg')
 
@@ -265,7 +264,7 @@ class TestChatSummary(unittest.TestCase):
         }
         result = gemini_chat_summary(gemini_chat)
         self.assertIsInstance(result, str)
-        parsed = json.loads(result)
+        json.loads(result)
         # Check that inline_data is replaced with size
         self.assertNotIn('C' * 1000, result)
         self.assertIn('(1000)', result)

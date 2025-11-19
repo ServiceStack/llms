@@ -8,10 +8,11 @@ Usage:
     python publish.py --build   # Just build the package
 """
 
+import argparse
+import os
 import subprocess
 import sys
-import os
-import argparse
+
 
 def run_command(cmd, check=True):
     """Run a shell command and return the result."""
@@ -59,7 +60,7 @@ def get_current_version():
     """Get the current version from pyproject.toml."""
     import re
     version_file = "pyproject.toml"
-    with open(version_file, "r") as f:
+    with open(version_file) as f:
         content = f.read()
         version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
         return version
@@ -80,7 +81,7 @@ def bump_version():
     import re
 
     version_file = "pyproject.toml"
-    with open(version_file, "r") as f:
+    with open(version_file) as f:
         content = f.read()
         version = re.search(r"version = \"(\d+\.\d+\.\d+)\"", content).group(1)
         print(f"Current version: {version}")
@@ -98,7 +99,7 @@ def bump_version():
         "setup.py"
     ]
     for file in files_to_update:
-        with open(file, "r") as f:
+        with open(file) as f:
             content = f.read()
             content = content.replace(version, new_version)
         with open(file, "w") as f:

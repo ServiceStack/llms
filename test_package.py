@@ -3,10 +3,11 @@
 Simple test script to verify the llms-py package works correctly.
 """
 
+import os
 import subprocess
 import sys
 import tempfile
-import os
+
 
 def run_command(cmd, check=True):
     """Run a shell command and return the result."""
@@ -62,24 +63,24 @@ def main():
     """Run all tests."""
     print("Testing llms package installation...")
     print("=" * 50)
-    
+
     tests = [
         test_python_import,
         test_llms_command,
         test_llms_init,
     ]
-    
+
     passed = 0
     total = len(tests)
-    
+
     for test in tests:
         if test():
             passed += 1
         print()
-    
+
     print("=" * 50)
     print(f"Tests passed: {passed}/{total}")
-    
+
     if passed == total:
         print("🎉 All tests passed! The llms package is working correctly.")
         return 0

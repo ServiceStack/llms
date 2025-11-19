@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
-from asyncio import subprocess
-import os
-import re
-import json
 import asyncio
-import aiohttp
+import json
+
 from utils import download_urls
+
 
 async def main():
     await download_urls({
@@ -27,7 +25,7 @@ async def main():
         with open("openrouter_pricing_all.json") as f:
             or_obj = json.load(f)
             or_models = or_obj.get("data", [])
-            for model in models.keys():
+            for model in models:
                 provider_model = models[model]
                 for or_model in or_models:
                     if provider_model == or_model.get("slug"):
