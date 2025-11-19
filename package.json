@@ -4,6 +4,11 @@
         "build": "python publish.py --build --prod",
         "version": "python -c \"from publish import get_current_version; print(get_current_version())\"",
         "bump": "python publish.py --bump",
-        "release": "python publish.py --release"
+        "release": "python publish.py --release",
+        "lint": "ruff check .",
+        "lint:fix": "ruff check --fix .",
+        "lint:fix:unsafe": "ruff check --fix --unsafe-fixes .",
+        "format": "ruff format .",
+        "format:check": "ruff format --check ."
     }
 }
