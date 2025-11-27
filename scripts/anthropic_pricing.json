@@ -1,11 +1,7 @@
 {
-    "claude-opus-4-1": {
-        "input": "0.000015",
-        "output": "0.000075"
-    },
-    "claude-opus-4": {
-        "input": "0.000015",
-        "output": "0.000075"
+    "claude-opus-4-5": {
+        "input": "0.000005",
+        "output": "0.000025"
     },
     "claude-sonnet-4-5": {
         "input": "0.000003",
