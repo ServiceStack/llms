@@ -11,7 +11,7 @@
   "defaults": {
     "headers": {
       "Content-Type": "application/json",
-      "User-Agent": "llms.py/1.0"
+      "User-Agent": "llmspy.org/1.0"
     },
     "text": {
       "model": "kimi-k2",
