@@ -17,6 +17,10 @@ async def main():
     out = subprocess.run(["python", "./openrouter_pricing.py"], check=True)
     print(out.stdout)
 
+    # Run ./chutes_pricing.py to generate openrouter_pricing.json
+    out = subprocess.run(["python", "./chutes_pricing.py"], check=True)
+    print(out.stdout)
+
     with open("../llms/llms.json") as f:
         llms = json.load(f)
         providers = llms.get("providers", {})
