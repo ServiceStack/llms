@@ -449,20 +449,17 @@ async def response_json(response):
     return body
 
 
-class OpenAiProvider:
-    def __init__(self, base_url, api_key=None, models=None, **kwargs):
+class OpenAiCompatible:
+    sdk = "@ai-sdk/openai-compatible"
+
+    def __init__(self, api, api_key=None, models=None, all_models=None, **kwargs):
         if models is None:
             models = {}
-        self.base_url = base_url.strip("/")
+        self.api = api.strip("/")
+        self.chat_url = f"{api}/chat/completions"
         self.api_key = api_key
         self.models = models
-
-        # check if base_url ends with /v{\d} to handle providers with different versions (e.g. z.ai uses /v4)
-        last_segment = base_url.rsplit("/", 1)[1]
-        if last_segment.startswith("v") and last_segment[1:].isdigit():
-            self.chat_url = f"{base_url}/chat/completions"
-        else:
-            self.chat_url = f"{base_url}/v1/chat/completions"
+        self.all_models = all_models if all_models is not None else False
 
         self.headers = kwargs.get("headers", {"Content-Type": "application/json"})
         if api_key is not None:
@@ -491,13 +488,14 @@ class OpenAiProvider:
         self.check = kwargs.get("check")
 
     @classmethod
-    def test(cls, base_url=None, api_key=None, models=None, **kwargs):
+    def test(cls, api=None, api_key=None, models=None, all_models=None, **kwargs):
         if models is None:
             models = {}
-        return base_url and api_key and len(models) > 0
+        return api and api_key and (len(models) > 0 or all_models)
 
     async def load(self):
-        pass
+        if self.all_models:
+            await self.load_models(default_models=self.models)
 
     def model_pricing(self, model):
         provider_model = self.provider_model(model) or model
@@ -576,10 +574,53 @@ class OpenAiProvider:
                 return self.to_response(await response_json(response), chat, started_at)
 
 
-class OllamaProvider(OpenAiProvider):
-    def __init__(self, base_url, models, all_models=False, **kwargs):
-        super().__init__(base_url=base_url, models=models, **kwargs)
-        self.all_models = all_models
+class OpenAiProvider(OpenAiCompatible):
+    sdk = "@ai-sdk/openai"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
+
+
+class AnthropicProvider(OpenAiCompatible):
+    sdk = "@ai-sdk/anthropic"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
+
+
+class MistralProvider(OpenAiCompatible):
+    sdk = "@ai-sdk/mistral"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
+
+
+class GroqProvider(OpenAiCompatible):
+    sdk = "@ai-sdk/groq"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
+
+
+class XaiProvider(OpenAiCompatible):
+    sdk = "@ai-sdk/xai"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
+
+
+class CodestralOnlyProvider(OpenAiCompatible):
+    sdk = "codestral"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
+
+
+class OllamaProvider(OpenAiCompatible):
+    sdk = "ollama"
+
+    def __init__(self, api, models, **kwargs):
+        super().__init__(api=api, models=models, **kwargs)
 
     async def load(self):
         if self.all_models:
@@ -589,9 +630,9 @@ class OllamaProvider(OpenAiProvider):
         ret = {}
         try:
             async with aiohttp.ClientSession() as session:
-                _log(f"GET {self.base_url}/api/tags")
+                _log(f"GET {self.api}/api/tags")
                 async with session.get(
-                    f"{self.base_url}/api/tags", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)
+                    f"{self.api}/api/tags", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)
                 ) as response:
                     data = await response_json(response)
                     for model in data.get("models", []):
@@ -613,15 +654,17 @@ class OllamaProvider(OpenAiProvider):
             self.models = {**default_models, **self.models}
 
     @classmethod
-    def test(cls, base_url=None, models=None, all_models=False, **kwargs):
+    def test(cls, api_key=None, models=None, all_models=None, **kwargs):
         if models is None:
             models = {}
-        return base_url and (len(models) > 0 or all_models)
+        return api_key is not None and (len(models) > 0 or all_models)
 
 
-class GoogleOpenAiProvider(OpenAiProvider):
+class GoogleOpenAiProvider(OpenAiCompatible):
+    sdk = "google-openai-compatible"
+
     def __init__(self, api_key, models, **kwargs):
-        super().__init__(base_url="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
+        super().__init__(api="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
         self.chat_url = "https://generativelanguage.googleapis.com/v1beta/chat/completions"
 
     @classmethod
@@ -631,9 +674,11 @@ class GoogleOpenAiProvider(OpenAiProvider):
         return api_key and len(models) > 0
 
 
-class GoogleProvider(OpenAiProvider):
+class GoogleProvider(GoogleOpenAiProvider):
+    sdk = "@ai-sdk/google"
+
     def __init__(self, models, api_key, safety_settings=None, thinking_config=None, curl=False, **kwargs):
-        super().__init__(base_url="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
+        super().__init__(api="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
         self.safety_settings = safety_settings
         self.thinking_config = thinking_config
         self.curl = curl
@@ -643,10 +688,10 @@ class GoogleProvider(OpenAiProvider):
             del self.headers["Authorization"]
 
     @classmethod
-    def test(cls, api_key=None, models=None, **kwargs):
+    def test(cls, api_key=None, models=None, all_models=None, **kwargs):
         if models is None:
             models = {}
-        return api_key is not None and len(models) > 0
+        return api_key is not None and (len(models) > 0 or all_models)
 
     async def chat(self, chat):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
@@ -843,6 +888,19 @@ class GoogleProvider(OpenAiProvider):
             return self.to_response(response, chat, started_at)
 
 
+ALL_PROVIDERS = [
+    OpenAiProvider,
+    AnthropicProvider,
+    MistralProvider,
+    GroqProvider,
+    XaiProvider,
+    CodestralOnlyProvider,
+    OllamaProvider,
+    GoogleProvider,
+    GoogleOpenAiProvider,
+]
+
+
 def get_models():
     ret = []
     for provider in g_handlers.values():
@@ -991,10 +1049,15 @@ def config_str(key):
     return key in g_config and g_config[key] or None
 
 
+def load_config(config):
+    global g_config
+    g_config = config
+
+
 def init_llms(config):
     global g_config, g_handlers
 
-    g_config = config
+    load_config(config)
     g_handlers = {}
     # iterate over config and replace $ENV with env value
     for key, value in g_config.items():
@@ -1007,30 +1070,64 @@ def init_llms(config):
 
     for name, orig in providers.items():
         definition = orig.copy()
-        provider_type = definition["type"]
         if "enabled" in definition and not definition["enabled"]:
             continue
 
-        # Replace API keys with environment variables if they start with $
-        if "api_key" in definition:
-            value = definition["api_key"]
-            if isinstance(value, str) and value.startswith("$"):
-                definition["api_key"] = os.environ.get(value[1:], "")
+        constructor_kwargs = create_provider_kwargs(definition)
+        provider = None
+        if "npm" in definition:
+            provider = create_provider_with_npm_sdk(definition["npm"], **constructor_kwargs)
+        if not provider and "type" in definition:
+            provider = create_provider_with_type(definition["type"], **constructor_kwargs)
 
-        # Create a copy of definition without the 'type' key for constructor kwargs
-        constructor_kwargs = {k: v for k, v in definition.items() if k != "type" and k != "enabled"}
-        constructor_kwargs["headers"] = g_config["defaults"]["headers"].copy()
-
-        if provider_type == "OpenAiProvider" and OpenAiProvider.test(**constructor_kwargs):
-            g_handlers[name] = OpenAiProvider(**constructor_kwargs)
-        elif provider_type == "OllamaProvider" and OllamaProvider.test(**constructor_kwargs):
-            g_handlers[name] = OllamaProvider(**constructor_kwargs)
-        elif provider_type == "GoogleProvider" and GoogleProvider.test(**constructor_kwargs):
-            g_handlers[name] = GoogleProvider(**constructor_kwargs)
-        elif provider_type == "GoogleOpenAiProvider" and GoogleOpenAiProvider.test(**constructor_kwargs):
-            g_handlers[name] = GoogleOpenAiProvider(**constructor_kwargs)
-
+        if provider and provider.test(**constructor_kwargs):
+            g_handlers[name] = provider
     return g_handlers
+
+
+def create_provider_kwargs(definition):
+    # if not api, look for base_url
+    if "api" not in definition and "base_url" in definition:
+        api = definition["base_url"]
+        # api should include the version prefix (e.g. /v1)
+        # check if api ends with /v{\d} to handle providers with different versions (e.g. z.ai uses /v4)
+        last_segment = api.rsplit("/", 1)[1]
+        if not (last_segment.startswith("v") and last_segment[1:].isdigit()):
+            api += "/v1"
+        definition["api"] = api
+
+    # Replace API keys with environment variables if they start with $
+    if "api_key" in definition:
+        value = definition["api_key"]
+        if isinstance(value, str) and value.startswith("$"):
+            definition["api_key"] = os.environ.get(value[1:], "")
+
+    if "api_key" not in definition and "env" in definition:
+        for env_var in definition["env"]:
+            val = os.environ.get(env_var)
+            if val:
+                definition["api_key"] = val
+                break
+
+    # Create a copy of definition without the 'type' key for constructor kwargs
+    constructor_kwargs = {k: v for k, v in definition.items() if k not in ("type", "enabled", "env")}
+    constructor_kwargs["headers"] = g_config["defaults"]["headers"].copy()
+    return constructor_kwargs
+
+
+def create_provider_with_npm_sdk(npm_sdk, **kwargs):
+    for provider in ALL_PROVIDERS:
+        if provider.sdk == npm_sdk:
+            return provider(**kwargs)
+    return None
+
+
+def create_provider_with_type(provider_type, **kwargs):
+    for provider in ALL_PROVIDERS:
+        # use name of class
+        if provider.__name__ == provider_type:
+            return provider(**kwargs)
+    return None
 
 
 async def load_llms():
