@@ -581,55 +581,6 @@ class OpenAiCompatible:
             return self.provider_model(last_part)
         return None
 
-    def validate_modalities(self, chat):
-        model_id = chat.get("model")
-        if not model_id or not self.models:
-            return
-
-        model_info = None
-        # Try to find model info using provider_model logic (already resolved to ID)
-        if model_id in self.models:
-            model_info = self.models[model_id]
-        else:
-            # Fallback scan
-            for m_id, m_info in self.models.items():
-                if m_id == model_id or m_info.get("id") == model_id:
-                    model_info = m_info
-                    break
-
-        print(f"DEBUG: Validate modalities: model={model_id}, found_info={model_info is not None}")
-        if model_info:
-            print(f"DEBUG: Modalities: {model_info.get('modalities')}")
-
-        if not model_info:
-            return
-
-        modalities = model_info.get("modalities", {})
-        input_modalities = modalities.get("input", [])
-
-        # Check for unsupported modalities
-        has_audio = False
-        has_image = False
-        for message in chat.get("messages", []):
-            content = message.get("content")
-            if isinstance(content, list):
-                for item in content:
-                    type_ = item.get("type")
-                    if type_ == "input_audio" or "input_audio" in item:
-                        has_audio = True
-                    elif type_ == "image_url" or "image_url" in item:
-                        has_image = True
-
-        if has_audio and "audio" not in input_modalities:
-            raise Exception(
-                f"Model '{model_id}' does not support audio input. Supported modalities: {', '.join(input_modalities)}"
-            )
-
-        if has_image and "image" not in input_modalities:
-            raise Exception(
-                f"Model '{model_id}' does not support image input. Supported modalities: {', '.join(input_modalities)}"
-            )
-
     def to_response(self, response, chat, started_at):
         if "metadata" not in response:
             response["metadata"] = {}
@@ -643,8 +594,6 @@ class OpenAiCompatible:
 
     async def chat(self, chat):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
-
-        self.validate_modalities(chat)
 
         # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
         #     f.write(json.dumps(chat, indent=2))
