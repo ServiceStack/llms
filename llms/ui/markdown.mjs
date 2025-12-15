@@ -5,7 +5,7 @@ export const marked = (() => {
     const aliases = {
         vue: 'html',
     }
-    
+
     const ret = new Marked(
         markedHighlight({
             langPrefix: 'hljs language-',
@@ -18,18 +18,21 @@ export const marked = (() => {
             }
         })
     )
-    ret.use({ extensions:[thinkTag()] })
+    ret.use({ extensions: [thinkTag()] })
     //ret.use({ extensions: [divExtension()] })
     return ret
 })();
 
 export function renderMarkdown(content) {
+    if (Array.isArray(content)) {
+        content = content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+    }
     if (content) {
         content = content
-            .replaceAll(`\\[ \\boxed{`,'\n<span class="inline-block text-xl text-blue-500 bg-blue-50 dark:text-blue-400 dark:bg-blue-950 px-3 py-1 rounded">')
-            .replaceAll('} \\]','</span>\n')
+            .replaceAll(`\\[ \\boxed{`, '\n<span class="inline-block text-xl text-blue-500 bg-blue-50 dark:text-blue-400 dark:bg-blue-950 px-3 py-1 rounded">')
+            .replaceAll('} \\]', '</span>\n')
     }
-    return marked.parse(content)
+    return marked.parse(content || '')
 }
 
 // export async function renderMarkdown(body) {

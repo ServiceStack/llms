@@ -1,421 +1,336 @@
 {
-  "auth": {
-    "enabled": false,
-    "github": {
-      "client_id": "GITHUB_CLIENT_ID",
-      "client_secret": "GITHUB_CLIENT_SECRET",
-      "redirect_uri": "http://localhost:8000/auth/github/callback",
-      "restrict_to": "GITHUB_USERS"
-    }
-  },
-  "defaults": {
-    "headers": {
-      "Content-Type": "application/json",
-      "User-Agent": "llmspy.org/1.0"
-    },
-    "text": {
-      "model": "kimi-k2",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": ""
-            }
-          ]
+    "version": 3,
+    "auth": {
+        "enabled": false,
+        "github": {
+            "client_id": "GITHUB_CLIENT_ID",
+            "client_secret": "GITHUB_CLIENT_SECRET",
+            "redirect_uri": "http://localhost:8000/auth/github/callback",
+            "restrict_to": "GITHUB_USERS"
         }
-      ]
     },
-    "image": {
-      "model": "qwen2.5vl",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "image_url",
-              "image_url": {
-                "url": ""
-              }
-            },
-            {
-              "type": "text",
-              "text": "Describe the key features of the input image"
-            }
-          ]
-        }
-      ]
-    },
-    "audio": {
-      "model": "gpt-4o-audio-preview",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "input_audio",
-              "input_audio": {
-                "data": "",
-                "format": "mp3"
-              }
-            },
-            {
-              "type": "text",
-              "text": "Please transcribe and summarize this audio file"
-            }
-          ]
-        }
-      ]
-    },
-    "file": {
-      "model": "qwen2.5vl",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "file",
-              "file": {
-                "filename": "",
-                "file_data": ""
-              }
-            },
-            {
-              "type": "text",
-              "text": "Please summarize this document"
-            }
-          ]
-        }
-      ]
-    },
-    "check": {
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "1+1="
-            }
-          ]
-        }
-      ],
-      "max_completion_tokens": 16,
-      "stream": false
-    }
-  },
-  "limits": {
-    "client_max_size": 20971520
-  },
-  "convert": {
-    "image": {
-      "max_size": "1536x1024",
-      "max_length": 1572864
-    }
-  },
-  "providers": {
-    "groq": {
-      "enabled": true,
-      "npm": "@ai-sdk/groq",
-      "api": "https://api.groq.com/openai/v1",
-      "env": ["GROQ_API_KEY"],
-      "model_map": {
-        "llama-3.1-8b-instant": "llama-3.1-8b-instant",
-        "llama-3.3-70b-versatile": "llama-3.3-70b-versatile",
-        "llama-4-scout-17b-16e-instruct": "meta-llama/llama-4-scout-17b-16e-instruct",
-        "llama-4-maverick-17b-128e-instruct": "meta-llama/llama-4-maverick-17b-128e-instruct",
-        "llama-guard-4-12b": "meta-llama/llama-guard-4-12b",
-        "kimi-k2-instruct": "moonshotai/kimi-k2-instruct",
-        "gpt-oss-20b": "openai/gpt-oss-20b",
-        "gpt-oss-120b": "openai/gpt-oss-120b",
-        "qwen3-32b": "qwen/qwen3-32b"
-      },
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      }
-    },
-    "google_free": {
-      "enabled": true,
-      "npm": "@ai-sdk/google",
-      "env": ["GEMINI_FREE_API_KEY"],
-      "model_map": {
-        "gemini-flash-latest": "gemini-flash-latest",
-        "gemini-flash-lite-latest": "gemini-flash-lite-latest",
-        "gemini-2.5-pro": "gemini-2.5-pro",
-        "gemini-2.5-flash": "gemini-2.5-flash",
-        "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
-      },
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      },
-      "safety_settings": [
-        {
-          "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-          "threshold": "BLOCK_ONLY_HIGH"
-        }
-      ],
-      "thinking_config": {
-        "thinkingBudget": 1024,
-        "includeThoughts": true
-      },
-      "check": {
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "1+1="
-              }
-            ]
-          }
-        ],
-        "max_completion_tokens": 512,
-        "reasoning": {
-          "max_tokens": 128,
-          "reasoning_effort": "low"
+    "defaults": {
+        "headers": {
+            "Content-Type": "application/json",
+            "User-Agent": "llmspy.org/1.0"
         },
-        "stream": false
-      }
-    },
-    "codestral": {
-      "enabled": true,
-      "npm": "codestral",
-      "api": "https://codestral.mistral.ai/v1",
-      "env": ["CODESTRAL_API_KEY"],
-      "model_map": {
-        "codestral-latest": "codestral-latest"
-      },
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      },
-      "check": {
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "1+1="
-              }
+        "text": {
+            "model": "kimi-k2",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": ""
+                        }
+                    ]
+                }
             ]
-          }
-        ],
-        "stream": false
-      }
-    },
-    "github-copilot": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai-compatible",
-      "api": "https://api.githubcopilot.com",
-      "env": ["GITHUB_TOKEN"],
-      "all_models": true,
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      }
-    },
-    "github-models": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai-compatible",
-      "api": "https://models.github.ai/inference",
-      "env": ["GITHUB_TOKEN"],
-      "all_models": true,
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      }
-    },
-    "openrouter_free": {
-      "enabled": true,
-      "npm": "openrouter_free",
-      "api": "https://openrouter.ai/api/v1",
-      "env": ["OPENROUTER_API_KEY"],
-      "all_models": true,
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      }
-    },
-    "ollama": {
-      "enabled": false,
-      "npm": "ollama",
-      "api": "http://localhost:11434",
-      "all_models": true,
-      "default_pricing": {
-        "input": "0",
-        "output": "0"
-      }
-    },
-    "google": {
-      "enabled": true,
-      "npm": "@ai-sdk/google",
-      "env": ["GEMINI_API_KEY"],
-      "model_map": {
-        "gemini-flash-latest": "gemini-flash-latest",
-        "gemini-flash-lite-latest": "gemini-flash-lite-latest",
-        "gemini-2.5-pro": "gemini-2.5-pro",
-        "gemini-2.5-flash": "gemini-2.5-flash",
-        "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
-      },
-      "safety_settings": [
-        {
-          "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-          "threshold": "BLOCK_ONLY_HIGH"
+        },
+        "image": {
+            "model": "qwen2.5vl",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": ""
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Describe the key features of the input image"
+                        }
+                    ]
+                }
+            ]
+        },
+        "audio": {
+            "model": "gpt-4o-audio-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": "",
+                                "format": "mp3"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Please transcribe and summarize this audio file"
+                        }
+                    ]
+                }
+            ]
+        },
+        "file": {
+            "model": "qwen2.5vl",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file": {
+                                "filename": "",
+                                "file_data": ""
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Please summarize this document"
+                        }
+                    ]
+                }
+            ]
+        },
+        "check": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "1+1="
+                        }
+                    ]
+                }
+            ],
+            "max_completion_tokens": 16,
+            "stream": false
         }
-      ],
-      "thinking_config": {
-        "thinkingBudget": 1024,
-        "includeThoughts": true
-      },
-      "check": {
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "1+1="
-              }
-            ]
-          }
-        ],
-        "max_completion_tokens": 512,
-        "reasoning": {
-          "max_tokens": 128,
-          "reasoning_effort": "low"
+    },
+    "limits": {
+        "client_max_size": 20971520
+    },
+    "convert": {
+        "image": {
+            "max_size": "1536x1024",
+            "max_length": 1572864
+        }
+    },
+    "providers": {
+        "groq": {
+            "enabled": true
         },
-        "stream": false
-      }
-    },
-    "anthropic": {
-      "enabled": true,
-      "npm": "@ai-sdk/anthropic",
-      "api": "https://api.anthropic.com/v1",
-      "env": ["ANTHROPIC_API_KEY"],
-      "all_models": true,
-      "check": {
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "1+1="
-              }
-            ]
-          }
-        ],
-        "max_completion_tokens": 512,
-        "reasoning": {
-          "max_tokens": 128,
-          "reasoning_effort": "low"
+        "codestral": {
+            "enabled": true,
+            "id": "codestral",
+            "npm": "codestral",
+            "api": "https://codestral.mistral.ai/v1",
+            "env": [
+                "CODESTRAL_API_KEY"
+            ],
+            "models": {
+                "codestral-latest": {
+                    "id": "codestral-latest",
+                    "name": "Codestral",
+                    "attachment": false,
+                    "reasoning": false,
+                    "tool_call": true,
+                    "temperature": true,
+                    "knowledge": "2024-10",
+                    "release_date": "2024-05-29",
+                    "last_updated": "2025-01-04",
+                    "modalities": {
+                        "input": [
+                            "text"
+                        ],
+                        "output": [
+                            "text"
+                        ]
+                    },
+                    "open_weights": true,
+                    "cost": {
+                        "input": 0.0,
+                        "output": 0.0
+                    },
+                    "limit": {
+                        "context": 256000,
+                        "output": 4096
+                    }
+                }
+            },
+            "check": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "1+1="
+                            }
+                        ]
+                    }
+                ],
+                "stream": false
+            }
         },
-        "stream": false
-      }
-    },
-    "openai": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai",
-      "api": "https://api.openai.com/v1",
-      "env": ["OPENAI_API_KEY"],
-      "all_models": true
-    },
-    "xai": {
-      "enabled": true,
-      "npm": "@ai-sdk/xai",
-      "api": "https://api.x.ai/v1",
-      "env": ["XAI_API_KEY"],
-      "all_models": true
-    },
-    "alibaba": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai-compatible",
-      "api": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-      "env": ["DASHSCOPE_API_KEY"],
-      "model_map": {
-        "qwen3-max": "qwen3-max",
-        "qwen-max": "qwen-max",
-        "qwen-plus": "qwen-plus",
-        "qwen-flash": "qwen-flash",
-        "qwq-plus": "qwq-plus",
-        "qwen-turbo": "qwen-turbo",
-        "qwen-omni-turbo": "qwen-omni-turbo",
-        "qwen3-omni-flash": "qwen3-omni-flash",
-        "qwen3-coder-plus": "qwen3-coder-plus",
-        "qwen3-coder-flash": "qwen3-coder-flash",
-        "qwen3-235b-a22b": "qwen3-235b-a22b",
-        "qwen3-32b": "qwen3-32b",
-        "qwen3-14b": "qwen3-14b",
-        "qwen3-8b": "qwen3-8b",
-        "qwen3-vl-plus": "qwen3-vl-plus",
-        "qwen3-vl-235b-a22b": "qwen3-vl-235b-a22b",
-        "qwen2-5-omni-7b": "qwen2-5-omni-7b"
-      },
-      "enable_thinking": false
-    },
-    "minimax": {
-      "enabled": true,
-      "npm": "@ai-sdk/anthropic",
-      "api": "https://api.minimax.io/anthropic/v1",
-      "env": ["MINIMAX_API_KEY"],
-      "all_models": true,
-      "temperature": 1.0
-    },
-    "zai-coding-plan": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai-compatible",
-      "api": "https://api.z.ai/api/coding/paas/v4",
-      "env": ["ZHIPU_API_KEY"],
-      "all_models": true,
-      "temperature": 0.7
-    },
-    "zai": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai-compatible",
-      "api": "https://api.z.ai/api/paas/v4",
-      "env": ["ZHIPU_API_KEY"],
-      "all_models": true,
-      "temperature": 0.7
-    },
-    "mistral": {
-      "enabled": true,
-      "npm": "@ai-sdk/mistral",
-      "api": "https://api.mistral.ai/v1",
-      "env": ["MISTRAL_API_KEY"],
-      "all_models": true,
-      "check": {
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "1+1="
-              }
-            ]
-          }
-        ],
-        "stream": false
-      }
-    },
-    "chutes": {
-      "enabled": true,
-      "npm": "@ai-sdk/openai-compatible",
-      "api": "https://llm.chutes.ai/v1",
-      "env": ["CHUTES_API_KEY"],
-      "all_models": true
-    },
-    "openrouter": {
-      "enabled": true,
-      "npm": "openrouter",
-      "api": "https://openrouter.ai/api/v1",
-      "env": ["OPENROUTER_API_KEY"],
-      "all_models": true
+        "github-copilot": {
+            "enabled": false
+        },
+        "github-models": {
+            "enabled": false,
+            "check": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "1+1="
+                            }
+                        ]
+                    }
+                ],
+                "stream": false
+            }
+        },
+        "zai-coding-plan": {
+            "enabled": true,
+            "temperature": 0.7
+        },
+        "minimax": {
+            "enabled": true,
+            "temperature": 1.0
+        },
+        "openrouter_free": {
+            "enabled": true,
+            "id": "openrouter",
+            "include_models": ":free$"
+        },
+        "ollama": {
+            "enabled": true,
+            "id": "ollama",
+            "npm": "ollama",
+            "api": "http://localhost:11434"
+        },
+        "lmstudio": {
+            "enabled": true,
+            "npm": "lmstudio",
+            "api": "http://127.0.0.1:1234/v1",
+            "models": {}
+        },
+        "google": {
+            "enabled": true,
+            "map_models": {
+                "gemini-flash-latest": "gemini-flash-latest",
+                "gemini-flash-lite-latest": "gemini-flash-lite-latest",
+                "gemini-2.5-pro": "gemini-2.5-pro",
+                "gemini-2.5-flash": "gemini-2.5-flash",
+                "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
+            },
+            "safety_settings": [
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_ONLY_HIGH"
+                }
+            ],
+            "thinking_config": {
+                "thinkingBudget": 1024,
+                "includeThoughts": true
+            },
+            "check": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "1+1="
+                            }
+                        ]
+                    }
+                ],
+                "max_completion_tokens": 512,
+                "reasoning": {
+                    "max_tokens": 128,
+                    "reasoning_effort": "low"
+                },
+                "stream": false
+            }
+        },
+        "anthropic": {
+            "enabled": true,
+            "check": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "1+1="
+                            }
+                        ]
+                    }
+                ],
+                "max_completion_tokens": 512,
+                "reasoning": {
+                    "max_tokens": 128,
+                    "reasoning_effort": "low"
+                },
+                "stream": false
+            }
+        },
+        "openai": {
+            "enabled": true
+        },
+        "xai": {
+            "enabled": true
+        },
+        "alibaba": {
+            "enabled": true,
+            "enable_thinking": false
+        },
+        "zai": {
+            "enabled": true,
+            "temperature": 0.7
+        },
+        "mistral": {
+            "enabled": true,
+            "check": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "1+1="
+                            }
+                        ]
+                    }
+                ],
+                "stream": false
+            }
+        },
+        "chutes": {
+            "enabled": true
+        },
+        "deepseek": {
+            "enabled": true
+        },
+        "moonshotai": {
+            "enabled": false
+        },
+        "nvidia": {
+            "enabled": true
+        },
+        "huggingface": {
+            "enabled": true
+        },
+        "fireworks-ai": {
+            "enabled": false
+        },
+        "openrouter": {
+            "enabled": true,
+            "id": "openrouter",
+            "exclude_models": ":free$"
+        }
     }
-  }
 }

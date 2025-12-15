@@ -1,4 +1,37 @@
-import { $$, createElement, rightPart } from "@servicestack/client"
+import { $$, createElement, rightPart, pick } from "@servicestack/client"
+
+const cacheUrlInfo = {}
+
+export function getCacheInfo(url) {
+    return cacheUrlInfo[url]
+}
+export async function fetchCacheInfos(urls) {
+    const infos = {}
+    const fetchInfos = []
+    for (const url of urls) {
+        const info = getCacheInfo(url)
+        if (info) {
+            infos[url] = info
+        } else {
+            fetchInfos.push(fetch(url + "?info"))
+        }
+    }
+    const responses = await Promise.all(fetchInfos)
+    for (let i = 0; i < urls.length; i++) {
+        try {
+            const info = await responses[i].json()
+            setCacheInfo(urls[i], info)
+            infos[urls[i]] = info
+        } catch (e) {
+            console.error('Failed to fetch info for', urls[i], e)
+        }
+    }
+    return infos
+}
+
+export function setCacheInfo(url, info) {
+    cacheUrlInfo[url] = info
+}
 
 export function toJsonArray(json) {
     try {
@@ -30,36 +63,75 @@ export function storageObject(key, save) {
     return toJsonObject(localStorage.getItem(key)) ?? {}
 }
 
-export function deepClone(obj) {
-    return JSON.parse(JSON.stringify(obj))
-}
-
 export function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file) //= "data:…;base64,…"
-    reader.onload  = () => {
-        resolve(rightPart(reader.result, ',')) // strip prefix
-    }
-    reader.onerror = err => reject(err)
-  })
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.readAsDataURL(file) //= "data:…;base64,…"
+        reader.onload = () => {
+            resolve(rightPart(reader.result, ',')) // strip prefix
+        }
+        reader.onerror = err => reject(err)
+    })
 }
 
 export function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file) //= "data:…;base64,…"
-    reader.onload  = () => resolve(reader.result)
-    reader.onerror = err => reject(err)
-  })
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.readAsDataURL(file) //= "data:…;base64,…"
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = err => reject(err)
+    })
+}
+
+export async function uploadFile(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+    })
+    if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`)
+    }
+    return response.json()
+}
+
+export function serializedClone(obj) {
+    try {
+        return JSON.parse(JSON.stringify(obj))
+    } catch (e) {
+        console.warn('Deep cloning failed, returning original value:', e)
+        return obj
+    }
+}
+
+export function deepClone(o) {
+    if (o === null || typeof o !== 'object') return o
+
+    // Handle Array objects
+    if (Array.isArray(o)) {
+        return o.map(x => deepClone(x))
+    }
+
+    if (typeof structuredClone === 'function') { // available (modern browsers, Node.js 17+)
+        try {
+            return structuredClone(o)
+        } catch (e) {
+            console.warn('structuredClone failed, falling back to JSON:', e)
+        }
+    }
+
+    // Fallback to JSON stringify/parse for older environments
+    return serializedClone(o)
 }
 
 export function toModelInfo(model) {
     if (!model) return undefined
-    return Object.assign({}, model, { pricing: Object.assign({}, model.pricing) || undefined })
+    const { id, name, provider, cost, modalities } = model
+    return deepClone({ id, name, provider, cost, modalities })
 }
 
-const numFmt = new Intl.NumberFormat(undefined,{style:'currency',currency:'USD', maximumFractionDigits:6})
+const numFmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
 export function tokenCost(price) {
     if (!price) return ''
     var ret = numFmt.format(parseFloat(price))
@@ -123,8 +195,8 @@ export function addCopyButtonToCodeBlocks(sel) {
         if (pre.classList.contains('group')) return
         pre.classList.add('relative', 'group')
 
-        const div = createElement('div', {attrs: {className: 'opacity-0 group-hover:opacity-100 transition-opacity duration-100 flex absolute right-2 -mt-1 select-none'}})
-        const label = createElement('div', {attrs: {className: 'hidden font-sans p-1 px-2 mr-1 rounded-md border border-gray-600 bg-gray-700 text-gray-400'}})
+        const div = createElement('div', { attrs: { className: 'opacity-0 group-hover:opacity-100 transition-opacity duration-100 flex absolute right-2 -mt-1 select-none' } })
+        const label = createElement('div', { attrs: { className: 'hidden font-sans p-1 px-2 mr-1 rounded-md border border-gray-600 bg-gray-700 text-gray-400' } })
         const btn = createElement('button', {
             attrs: {
                 type: 'button',
@@ -147,10 +219,10 @@ export function addCopyButtons() {
  * Returns an ever-increasing unique integer id.
  */
 export const nextId = (() => {
-  let last = 0               // cache of the last id that was handed out
-  return () => {
-    const now = Date.now() // current millisecond timestamp
-    last = (now > last) ? now : last + 1
-    return last
-  }
+    let last = 0               // cache of the last id that was handed out
+    return () => {
+        const now = Date.now() // current millisecond timestamp
+        last = (now > last) ? now : last + 1
+        return last
+    }
 })();

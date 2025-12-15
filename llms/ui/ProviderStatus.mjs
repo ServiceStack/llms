@@ -1,10 +1,10 @@
 import { ref, computed, inject, onMounted, onUnmounted } from "vue"
 
 export default {
-    template:`
+    template: `
         <div v-if="$ai.isAdmin" ref="triggerRef" class="relative" :key="renderKey">
             <button type="button" @click="togglePopover"
-                class="mt-1 flex space-x-2 items-center text-sm font-semibold select-none rounded-sm py-2 px-3 border border-transparent hover:bg-gray-50 dark:hover:bg-gray-700 hover:shadow hover:border-gray-200 dark:hover:border-gray-600">
+                class="flex space-x-2 items-center text-sm font-semibold select-none rounded-md py-2 px-3 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors">
                 <span class="text-gray-600 dark:text-gray-400" :title="models.length + ' models from ' + (config.status.enabled||[]).length + ' enabled providers'">{{models.length}}</span>
                 <div class="cursor-pointer flex items-center" :title="'Enabled:\\n' + (config.status.enabled||[]).map(x => '  ' + x).join('\\n')">
                     <svg class="size-4 text-green-400 dark:text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"/></svg>

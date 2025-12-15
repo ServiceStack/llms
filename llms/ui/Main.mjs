@@ -2,7 +2,7 @@ import { ref, computed, nextTick, watch, onMounted, provide, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useFormatters } from '@servicestack/vue'
 import { useThreadStore } from './threadStore.mjs'
-import { storageObject, addCopyButtons, formatCost, statsTitle } from './utils.mjs'
+import { storageObject, addCopyButtons, formatCost, statsTitle, fetchCacheInfos } from './utils.mjs'
 import { renderMarkdown } from './markdown.mjs'
 import ChatPrompt, { useChatPrompt } from './ChatPrompt.mjs'
 import SignIn from './SignIn.mjs'
@@ -59,9 +59,8 @@ export default {
                         <Welcome />
 
                         <!-- Chat input for new conversation -->
-                        <div class="max-w-2xl mx-auto">
-                            <ChatPrompt :model="selectedModel" :systemPrompt="currentSystemPrompt" />
-                        </div>
+                        <!-- Moved to bottom input area -->
+                        <div class="h-2"></div>
 
                         <!-- Export/Import buttons -->
                         <div class="mt-2 flex space-x-3 justify-center items-center">
@@ -180,7 +179,31 @@ export default {
                                     </div>
                                 </div>
 
-                                <div v-if="message.role !== 'assistant'" class="whitespace-pre-wrap">{{ message.content }}</div>
+            <!-- User Message with separate attachments -->
+            <div v-if="message.role !== 'assistant'">
+                <div v-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
+                
+                <!-- Attachments Grid -->
+                <div v-if="hasAttachments(message)" class="mt-2 flex flex-wrap gap-2">
+                    <template v-for="(part, i) in getAttachments(message)" :key="i">
+                        <!-- Image -->
+                        <div v-if="part.type === 'image_url'" class="group relative cursor-pointer" @click="openLightbox(part.image_url.url)">
+                            <img :src="part.image_url.url" class="max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]" />
+                        </div>
+                        <!-- Audio -->
+                        <div v-else-if="part.type === 'input_audio'" class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                            <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                            <audio controls :src="part.input_audio.data" class="h-8 w-48"></audio>
+                        </div>
+                        <!-- File -->
+                        <a v-else-if="part.type === 'file'" :href="part.file.file_data" target="_blank" 
+                           class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                            <span class="max-w-xs truncate">{{ part.file.filename || 'Attachment' }}</span>
+                        </a>
+                    </template>
+                </div>
+            </div>
                                 <div class="mt-2 text-xs opacity-70">
                                     <span>{{ formatTime(message.timestamp) }}</span>
                                     <span v-if="message.usage" :title="tokensTitle(message.usage)">
@@ -278,33 +301,25 @@ export default {
                     </div>
                 </div>
 
-                <!-- Edit message modal -->
-                <div v-if="editingMessageId" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-2xl w-full mx-4">
-                        <CloseButton @click="cancelEdit" class="" />
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Message</h3>
-                        <textarea
-                            v-model="editingMessageContent"
-                            class="w-full h-40 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            placeholder="Edit your message..."
-                        ></textarea>
-                        <div class="mt-4 flex gap-2 justify-end">
-                            <button type="button" @click="cancelEdit"
-                                class="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                                Cancel
-                            </button>
-                            <button type="button" @click="saveEditedMessage"
-                                class="px-4 py-2 rounded-md bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600 transition-all">
-                                Save
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Input Area - only show when thread is selected -->
-            <div v-if="currentThread" class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-                <ChatPrompt :model="selectedModel" :systemPrompt="currentSystemPrompt" />
+            <!-- Input Area -->
+            <div class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
+                <ChatPrompt :model="selectedModelObj" :systemPrompt="currentSystemPrompt" />
+            </div>
+            
+            <!-- Lightbox -->
+            <div v-if="lightboxUrl" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer" @click="closeLightbox">
+                <div class="relative max-w-full max-h-full">
+                    <img :src="lightboxUrl" class="max-w-full max-h-[90vh] object-contain rounded-sm shadow-2xl" @click.stop />
+                    <button type="button" @click="closeLightbox"
+                        class="absolute -top-12 right-0 text-white/70 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                        title="Close">
+                        <svg class="size-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     `,
@@ -318,7 +333,7 @@ export default {
         const { currentThread } = threads
         const chatPrompt = useChatPrompt()
         const chatSettings = useSettings()
-        const { 
+        const {
             errorStatus,
             isGenerating,
         } = chatPrompt
@@ -340,6 +355,10 @@ export default {
         const prompts = computed(() => [customPrompt, ...config.prompts])
 
         const selectedModel = ref(prefs.model || config.defaults.text.model || '')
+        const selectedModelObj = computed(() => {
+            if (!selectedModel.value || !models) return null
+            return models.find(m => m.name === selectedModel.value) || models.find(m => m.id === selectedModel.value)
+        })
         const selectedPrompt = ref(prefs.systemPrompt || null)
         const currentSystemPrompt = ref('')
         const showSystemPrompt = ref(false)
@@ -348,9 +367,14 @@ export default {
         const isImporting = ref(false)
         const fileInput = ref(null)
         const copying = ref(null)
-        const editingMessageId = ref(null)
-        const editingMessageContent = ref('')
-        const editingMessage = ref(null)
+        const lightboxUrl = ref(null)
+
+        const openLightbox = (url) => {
+            lightboxUrl.value = url
+        }
+        const closeLightbox = () => {
+            lightboxUrl.value = null
+        }
 
         // Auto-scroll to bottom when new messages arrive
         const scrollToBottom = async () => {
@@ -403,7 +427,7 @@ export default {
             // If using a custom prompt, keep whatever is already in currentSystemPrompt
             if (newPrompt && newPrompt.id === '_custom_') return
             const prompt = newPrompt && config.prompts.find(p => p.id === newPrompt.id)
-            currentSystemPrompt.value = prompt ? prompt.value.replace(/\n/g,' ') : ''
+            currentSystemPrompt.value = prompt ? prompt.value.replace(/\n/g, ' ') : ''
         }, { immediate: true })
 
         watch(() => [selectedModel.value, selectedPrompt.value], () => {
@@ -504,8 +528,8 @@ export default {
             try {
                 const text = await file.text()
                 const importData = JSON.parse(text)
-                importType = importData.threads 
-                    ? 'threads' 
+                importType = importData.threads
+                    ? 'threads'
                     : importData.requests
                         ? 'requests'
                         : 'unknown'
@@ -626,17 +650,38 @@ export default {
         }
         const formatReasoning = (r) => typeof r === 'string' ? r : JSON.stringify(r, null, 2)
 
-        // Copy message content to clipboard
         const copyMessageContent = async (message) => {
+            let content = ''
+            if (Array.isArray(message.content)) {
+                content = message.content.map(part => {
+                    if (part.type === 'text') return part.text
+                    if (part.type === 'image_url') {
+                        const name = part.image_url.url.split('/').pop() || 'image'
+                        return `\n![${name}](${part.image_url.url})\n`
+                    }
+                    if (part.type === 'input_audio') {
+                        const name = part.input_audio.data.split('/').pop() || 'audio'
+                        return `\n[${name}](${part.input_audio.data})\n`
+                    }
+                    if (part.type === 'file') {
+                        const name = part.file.filename || part.file.file_data.split('/').pop() || 'file'
+                        return `\n[${name}](${part.file.file_data})`
+                    }
+                    return ''
+                }).join('\n')
+            } else {
+                content = message.content
+            }
+
             try {
                 copying.value = message
-                await navigator.clipboard.writeText(message.content)
+                await navigator.clipboard.writeText(content)
                 // Could add a toast notification here if desired
             } catch (err) {
                 console.error('Failed to copy message content:', err)
                 // Fallback for older browsers
                 const textArea = document.createElement('textarea')
-                textArea.value = message.content
+                textArea.value = content
                 document.body.appendChild(textArea)
                 textArea.select()
                 document.execCommand('copy')
@@ -645,7 +690,57 @@ export default {
             setTimeout(() => { copying.value = null }, 2000)
         }
 
-        // Redo a user message (clear all messages after it and re-run)
+        const getAttachments = (message) => {
+            if (!Array.isArray(message.content)) return []
+            return message.content.filter(c => c.type === 'image_url' || c.type === 'input_audio' || c.type === 'file')
+        }
+        const hasAttachments = (message) => getAttachments(message).length > 0
+
+        // Helper to extract content and files from message
+        const extractMessageState = async (message) => {
+            let text = ''
+            let files = []
+            const getCacheInfos = []
+
+            if (Array.isArray(message.content)) {
+                for (const part of message.content) {
+                    if (part.type === 'text') {
+                        text += part.text
+                    } else if (part.type === 'image_url') {
+                        const url = part.image_url.url
+                        const name = url.split('/').pop() || 'image'
+                        files.push({ name, url, type: 'image/png' }) // Assume image
+                        getCacheInfos.push(url)
+                    } else if (part.type === 'input_audio') {
+                        const url = part.input_audio.data
+                        const name = url.split('/').pop() || 'audio'
+                        files.push({ name, url, type: 'audio/wav' }) // Assume audio
+                        getCacheInfos.push(url)
+                    } else if (part.type === 'file') {
+                        const url = part.file.file_data
+                        const name = part.file.filename || url.split('/').pop() || 'file'
+                        files.push({ name, url })
+                        getCacheInfos.push(url)
+                    }
+                }
+            } else {
+                text = message.content
+            }
+
+            const infos = await fetchCacheInfos(getCacheInfos)
+            // replace name with info.name
+            for (let i = 0; i < files.length; i++) {
+                const url = files[i]?.url
+                const info = infos[url]
+                if (info) {
+                    files[i].name = info.name
+                }
+            }
+
+            return { text, files }
+        }
+
+        // Redo a user message (clear all messages after this one and re-run)
         const redoMessage = async (message) => {
             if (!currentThread.value || message.role !== 'user') return
 
@@ -655,16 +750,13 @@ export default {
                 // Clear all messages after this one
                 await threads.redoMessageFromThread(threadId, message.id)
 
-                // Extract the actual message content (remove media indicators if present)
-                let messageContent = message.content
-                // Remove media indicators like [🖼️ filename] or [🔉 filename] or [📎 filename]
-                messageContent = messageContent.replace(/\n\n\[[🖼️🔉📎] [^\]]+\]$/, '')
+                const state = await extractMessageState(message)
 
                 // Set the message text in the chat prompt
-                chatPrompt.messageText.value = messageContent
+                chatPrompt.messageText.value = state.text
 
-                // Clear any attached files since we're re-running
-                chatPrompt.attachedFiles.value = []
+                // Restore attached files
+                chatPrompt.attachedFiles.value = state.files
 
                 // Trigger send by simulating the send action
                 // We'll use a small delay to ensure the UI updates
@@ -686,68 +778,24 @@ export default {
         }
 
         // Edit a user message
-        const editMessage = (message) => {
+        const editMessage = async (message) => {
             if (!currentThread.value || message.role !== 'user') return
 
-            editingMessage.value = message
-            editingMessageId.value = message.id
-            // Extract the actual message content (remove media indicators if present)
-            let messageContent = message.content
-            messageContent = messageContent.replace(/\n\n\[[🖼️🔉📎] [^\]]+\]$/, '')
-            editingMessageContent.value = messageContent
-        }
+            // set the message in the input box
+            const state = await extractMessageState(message)
+            chatPrompt.messageText.value = state.text
+            chatPrompt.attachedFiles.value = state.files
+            chatPrompt.editingMessageId.value = message.id
 
-        // Save edited message
-        const saveEditedMessage = async () => {
-            if (!currentThread.value || !editingMessage.value || !editingMessageContent.value.trim()) return
-
-            try {
-                const threadId = currentThread.value.id
-                const messageId = editingMessage.value.id
-                const updatedContent = editingMessageContent.value
-
-                // Update the message content
-                editingMessage.value.content = updatedContent
-                await threads.updateMessageInThread(threadId, messageId, { content: updatedContent })
-
-                // Clear editing state
-                editingMessageId.value = null
-                editingMessageContent.value = ''
-                editingMessage.value = null
-
-                // Now redo the message (clear all responses after it and re-run)
-                await nextTick()
-                await threads.redoMessageFromThread(threadId, messageId)
-
-                // Set the message text in the chat prompt
-                chatPrompt.messageText.value = updatedContent
-
-                // Clear any attached files since we're re-running
-                chatPrompt.attachedFiles.value = []
-
-                // Trigger send by simulating the send action
-                await nextTick()
-
-                // Find the send button and click it
-                const sendButton = document.querySelector('button[title*="Send"]')
-                if (sendButton && !sendButton.disabled) {
-                    sendButton.click()
+            // Focus the textarea
+            nextTick(() => {
+                const textarea = document.querySelector('textarea')
+                if (textarea) {
+                    textarea.focus()
+                    // Set cursor to end
+                    textarea.selectionStart = textarea.selectionEnd = textarea.value.length
                 }
-            } catch (error) {
-                console.error('Failed to save edited message:', error)
-                errorStatus.value = {
-                    errorCode: 'Error',
-                    message: 'Failed to save edited message: ' + error.message,
-                    stackTrace: null
-                }
-            }
-        }
-
-        // Cancel editing
-        const cancelEdit = () => {
-            editingMessageId.value = null
-            editingMessageContent.value = ''
-            editingMessage.value = null
+            })
         }
 
         // Cancel pending request
@@ -785,15 +833,13 @@ export default {
             customPromptValue,
             currentThread,
             selectedModel,
+            selectedModelObj,
             selectedPrompt,
             currentSystemPrompt,
             showSystemPrompt,
             messagesContainer,
             errorStatus,
             copying,
-            editingMessageId,
-            editingMessageContent,
-            editingMessage,
             formatTime,
             renderMarkdown,
             isReasoningExpanded,
@@ -802,8 +848,6 @@ export default {
             copyMessageContent,
             redoMessage,
             editMessage,
-            saveEditedMessage,
-            cancelEdit,
             cancelRequest,
             configUpdated,
             exportThreads,
@@ -817,7 +861,13 @@ export default {
             humanifyMs,
             humanifyNumber,
             formatCost,
+            formatCost,
             statsTitle,
+            getAttachments,
+            hasAttachments,
+            lightboxUrl,
+            openLightbox,
+            closeLightbox,
         }
     }
 }

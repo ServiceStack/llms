@@ -12,7 +12,7 @@ let db = null
 // Initialize IndexedDB
 async function initDB() {
     if (db) return db
-    
+
     db = await openDB('LlmsThreads', 3, {
         upgrade(db, _oldVersion, _newVersion, transaction) {
             if (!db.objectStoreNames.contains('threads')) {
@@ -44,7 +44,7 @@ async function initDB() {
             }
         }
     })
-    
+
     return db
 }
 
@@ -59,8 +59,8 @@ async function logRequest(threadId, model, request, response) {
     const usage = response.usage || {}
     const [inputPrice, outputPrice] = metadata.pricing ? metadata.pricing.split('/') : [0, 0]
     const lastUserContent = request.messages?.slice().reverse().find(m => m.role === 'user')?.content
-    const content = Array.isArray(lastUserContent) 
-        ? lastUserContent.filter(c => c?.text).map(c => c.text).join(' ') 
+    const content = Array.isArray(lastUserContent)
+        ? lastUserContent.filter(c => c?.text).map(c => c.text).join(' ')
         : lastUserContent
     const title = content.slice(0, 100) + (content.length > 100 ? '...' : '')
     const inputTokens = usage?.prompt_tokens ?? 0
@@ -87,7 +87,7 @@ async function logRequest(threadId, model, request, response) {
         totalTokens: usage.total_tokens ?? (inputTokens + outputTokens),
         inputPrice,
         outputPrice,
-        cost: (parseFloat(inputPrice) * inputTokens) + (parseFloat(outputPrice) * outputTokens),
+        cost: (parseFloat(inputPrice) * inputTokens / 1_000_000) + (parseFloat(outputPrice) * outputTokens / 1_000_000),
         duration: parseInt(metadata.duration) || 0,
         created: response.created ?? Math.floor(Date.now() / 1000),
         finishReason,
@@ -116,13 +116,18 @@ async function createThread(title = 'New Chat', model = null, systemPrompt = '')
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
     }
-    
-    const tx = db.transaction(['threads'], 'readwrite')
-    await tx.objectStore('threads').add(thread)
-    await tx.complete
-    
-    threads.value.unshift(thread)
-    // Note: currentThread will be set by router navigation
+
+    try {
+        const tx = db.transaction(['threads'], 'readwrite')
+        await tx.objectStore('threads').add(thread)
+        await tx.complete
+
+        threads.value.unshift(thread)
+        // Note: currentThread will be set by router navigation
+
+    } catch (e) {
+        console.error('Error creating thread', e, thread)
+    }
 
     return thread
 }
@@ -130,56 +135,56 @@ async function createThread(title = 'New Chat', model = null, systemPrompt = '')
 // Update thread
 async function updateThread(threadId, updates) {
     await initDB()
-    
+
     const tx = db.transaction(['threads'], 'readwrite')
     const store = tx.objectStore('threads')
-    
+
     const thread = await store.get(threadId)
     if (!thread) throw new Error('Thread not found')
-    
+
     const updatedThread = {
         ...thread,
         ...updates,
         updatedAt: new Date().toISOString()
     }
-    
+
     await store.put(updatedThread)
     await tx.complete
-    
+
     // Update in memory
     const index = threads.value.findIndex(t => t.id === threadId)
     if (index !== -1) {
         threads.value[index] = updatedThread
     }
-    
+
     if (currentThread.value?.id === threadId) {
         currentThread.value = updatedThread
     }
-    
+
     return updatedThread
 }
 
 async function calculateThreadStats(threadId) {
     await initDB()
-    
+
     const tx = db.transaction(['requests'], 'readonly')
     const store = tx.objectStore('requests')
     const index = store.index('threadId')
-    
+
     const requests = await index.getAll(threadId)
-    
+
     let inputTokens = 0
     let outputTokens = 0
     let cost = 0.0
     let duration = 0
-    
+
     requests.forEach(req => {
         inputTokens += req.inputTokens || 0
         outputTokens += req.outputTokens || 0
         cost += req.cost || 0.0
         duration += req.duration || 0
     })
-    
+
     return {
         inputTokens,
         outputTokens,
@@ -193,13 +198,13 @@ async function calculateThreadStats(threadId) {
 async function addMessageToThread(threadId, message, usage) {
     const thread = await getThread(threadId)
     if (!thread) throw new Error('Thread not found')
-    
+
     const newMessage = {
         id: nextId(),
         timestamp: new Date().toISOString(),
         ...message
     }
-    
+
     // Add input and output token usage to previous 'input' message
     if (usage?.prompt_tokens != null) {
         const lastMessage = thread.messages[thread.messages.length - 1]
@@ -219,21 +224,25 @@ async function addMessageToThread(threadId, message, usage) {
     }
 
     const updatedMessages = [...thread.messages, newMessage]
-    
+
     // Auto-generate title from first user message if still "New Chat"
     let title = thread.title
     if (title === 'New Chat' && message.role === 'user' && updatedMessages.length <= 2) {
-        title = message.content.slice(0, 200) + (message.content.length > 200 ? '...' : '')
+        let contentText = message.content
+        if (Array.isArray(contentText)) {
+            contentText = contentText.filter(c => c.type === 'text').map(c => c.text).join(' ')
+        }
+        title = contentText.slice(0, 200) + (contentText.length > 200 ? '...' : '')
     }
 
     const stats = await calculateThreadStats(threadId)
-    
+
     await updateThread(threadId, {
         messages: updatedMessages,
         title: title,
         stats,
     })
-    
+
     return newMessage
 }
 
@@ -279,15 +288,15 @@ async function redoMessageFromThread(threadId, messageId) {
 async function loadThreads() {
     await initDB()
     isLoading.value = true
-    
+
     try {
         const tx = db.transaction(['threads'], 'readonly')
         const store = tx.objectStore('threads')
         const index = store.index('updatedAt')
-        
+
         const allThreads = await index.getAll()
         threads.value = allThreads.reverse() // Most recent first
-        
+
         return threads.value
     } finally {
         isLoading.value = false
@@ -297,23 +306,23 @@ async function loadThreads() {
 // Get single thread
 async function getThread(threadId) {
     await initDB()
-    
+
     const tx = db.transaction(['threads'], 'readonly')
     const thread = await tx.objectStore('threads').get(threadId)
-    
+
     return thread
 }
 
 // Delete thread
 async function deleteThread(threadId) {
     await initDB()
-    
+
     const tx = db.transaction(['threads'], 'readwrite')
     await tx.objectStore('threads').delete(threadId)
     await tx.complete
-    
+
     threads.value = threads.value.filter(t => t.id !== threadId)
-    
+
     if (currentThread.value?.id === threadId) {
         currentThread.value = null
     }
@@ -359,19 +368,19 @@ function getGroupedThreads(total) {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
     const lastMonth = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
-    
+
     const groups = {
         today: [],
         lastWeek: [],
         lastMonth: [],
         older: {}
     }
-    
+
     const takeThreads = threads.value.slice(0, total)
 
     takeThreads.forEach(thread => {
         const threadDate = new Date(thread.updatedAt)
-        
+
         if (threadDate >= today) {
             groups.today.push(thread)
         } else if (threadDate >= lastWeek) {
@@ -382,14 +391,14 @@ function getGroupedThreads(total) {
             const year = threadDate.getFullYear()
             const month = threadDate.toLocaleString('default', { month: 'long' })
             const key = `${month} ${year}`
-            
+
             if (!groups.older[key]) {
                 groups.older[key] = []
             }
             groups.older[key].push(thread)
         }
     })
-    
+
     return groups
 }
 
@@ -416,7 +425,7 @@ async function getRequest(requestId) {
 
 async function getAllRequestIds() {
     await initDB()
-    
+
     const tx = db.transaction(['requests'], 'readonly')
     const store = tx.objectStore('requests')
     const ids = await store.getAllKeys()
@@ -428,7 +437,7 @@ async function getAllThreadIds() {
     const tx = db.transaction(['threads'], 'readonly')
     const store = tx.objectStore('threads')
     const ids = await store.getAllKeys()
-    return ids    
+    return ids
 }
 
 // Query requests with pagination and filtering

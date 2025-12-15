@@ -9,6 +9,8 @@
 import argparse
 import asyncio
 import base64
+from datetime import datetime
+import hashlib
 import json
 import mimetypes
 import os
@@ -34,11 +36,12 @@ try:
 except ImportError:
     HAS_PIL = False
 
-VERSION = "2.0.35"
+VERSION = "3.0.0b1"
 _ROOT = None
 g_config_path = None
 g_ui_path = None
 g_config = None
+g_providers = None
 g_handlers = {}
 g_verbose = False
 g_logprefix = ""
@@ -310,7 +313,7 @@ def convert_image_if_needed(image_bytes, mimetype="image/png"):
         return image_bytes, mimetype
 
 
-async def process_chat(chat):
+async def process_chat(chat, provider_id=None):
     if not chat:
         raise Exception("No chat provided")
     if "stream" not in chat:
@@ -331,6 +334,8 @@ async def process_chat(chat):
                         image_url = item["image_url"]
                         if "url" in image_url:
                             url = image_url["url"]
+                            if url.startswith("/~cache/"):
+                                url = get_cache_path(url[8:])
                             if is_url(url):
                                 _log(f"Downloading image: {url}")
                                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
@@ -377,6 +382,8 @@ async def process_chat(chat):
                         input_audio = item["input_audio"]
                         if "data" in input_audio:
                             url = input_audio["data"]
+                            if url.startswith("/~cache/"):
+                                url = get_cache_path(url[8:])
                             mimetype = get_file_mime_type(get_filename(url))
                             if is_url(url):
                                 _log(f"Downloading audio: {url}")
@@ -388,6 +395,8 @@ async def process_chat(chat):
                                         mimetype = response.headers["Content-Type"]
                                     # convert to base64
                                     input_audio["data"] = base64.b64encode(content).decode("utf-8")
+                                    if provider_id == "alibaba":
+                                        input_audio["data"] = f"data:{mimetype};base64,{input_audio['data']}"
                                     input_audio["format"] = mimetype.rsplit("/", 1)[1]
                             elif is_file_path(url):
                                 _log(f"Reading audio: {url}")
@@ -395,6 +404,8 @@ async def process_chat(chat):
                                     content = f.read()
                                     # convert to base64
                                     input_audio["data"] = base64.b64encode(content).decode("utf-8")
+                                    if provider_id == "alibaba":
+                                        input_audio["data"] = f"data:{mimetype};base64,{input_audio['data']}"
                                     input_audio["format"] = mimetype.rsplit("/", 1)[1]
                             elif is_base_64(url):
                                 pass  # use base64 data as-is
@@ -404,6 +415,8 @@ async def process_chat(chat):
                         file = item["file"]
                         if "file_data" in file:
                             url = file["file_data"]
+                            if url.startswith("/~cache/"):
+                                url = get_cache_path(url[8:])
                             mimetype = get_file_mime_type(get_filename(url))
                             if is_url(url):
                                 _log(f"Downloading file: {url}")
@@ -452,18 +465,23 @@ async def response_json(response):
 class OpenAiCompatible:
     sdk = "@ai-sdk/openai-compatible"
 
-    def __init__(self, api, api_key=None, models=None, all_models=None, **kwargs):
-        if models is None:
-            models = {}
-        self.api = api.strip("/")
-        self.chat_url = f"{api}/chat/completions"
-        self.api_key = api_key
-        self.models = models
-        self.all_models = all_models if all_models is not None else False
+    def __init__(self, **kwargs):
+        required_args = ["id", "api"]
+        for arg in required_args:
+            if arg not in kwargs:
+                raise ValueError(f"Missing required argument: {arg}")
+
+        self.id = kwargs.get("id")
+        self.api = kwargs.get("api").strip("/")
+        self.api_key = kwargs.get("api_key")
+        self.name = kwargs.get("name", self.id.replace("-", " ").title().replace(" ", ""))
+        self.set_models(**kwargs)
+
+        self.chat_url = f"{self.api}/chat/completions"
 
         self.headers = kwargs.get("headers", {"Content-Type": "application/json"})
-        if api_key is not None:
-            self.headers["Authorization"] = f"Bearer {api_key}"
+        if self.api_key is not None:
+            self.headers["Authorization"] = f"Bearer {self.api_key}"
 
         self.frequency_penalty = float(kwargs["frequency_penalty"]) if "frequency_penalty" in kwargs else None
         self.max_completion_tokens = int(kwargs["max_completion_tokens"]) if "max_completion_tokens" in kwargs else None
@@ -483,37 +501,141 @@ class OpenAiCompatible:
         self.verbosity = kwargs.get("verbosity")
         self.stream = bool(kwargs["stream"]) if "stream" in kwargs else None
         self.enable_thinking = bool(kwargs["enable_thinking"]) if "enable_thinking" in kwargs else None
-        self.pricing = kwargs.get("pricing")
-        self.default_pricing = kwargs.get("default_pricing")
         self.check = kwargs.get("check")
 
-    @classmethod
-    def test(cls, api=None, api_key=None, models=None, all_models=None, **kwargs):
-        if models is None:
-            models = {}
-        return api and api_key and (len(models) > 0 or all_models)
+    def set_models(self, **kwargs):
+        models = kwargs.get("models", {})
+        self.map_models = kwargs.get("map_models", {})
+        # if 'map_models' is provided, only include models in `map_models[model_id] = provider_model_id`
+        if self.map_models:
+            self.models = {}
+            for provider_model_id in self.map_models.values():
+                if provider_model_id in models:
+                    self.models[provider_model_id] = models[provider_model_id]
+        else:
+            self.models = models
+
+        include_models = kwargs.get("include_models")  # string regex pattern
+        # only include models that match the regex pattern
+        if include_models:
+            _log(f"Filtering {len(self.models)} models, only including models that match regex: {include_models}")
+            self.models = {k: v for k, v in self.models.items() if re.search(include_models, k)}
+
+        exclude_models = kwargs.get("exclude_models")  # string regex pattern
+        # exclude models that match the regex pattern
+        if exclude_models:
+            _log(f"Filtering {len(self.models)} models, excluding models that match regex: {exclude_models}")
+            self.models = {k: v for k, v in self.models.items() if not re.search(exclude_models, k)}
+
+    def test(self, **kwargs):
+        ret = self.api and self.api_key and (len(self.models) > 0)
+        if not ret:
+            _log(f"Provider {self.name} Missing: {self.api}, {self.api_key}, {len(self.models)}")
+        return ret
 
     async def load(self):
-        if self.all_models:
-            await self.load_models(default_models=self.models)
+        if not self.models:
+            await self.load_models()
 
-    def model_pricing(self, model):
+    def model_cost(self, model):
         provider_model = self.provider_model(model) or model
-        if self.pricing and provider_model in self.pricing:
-            return self.pricing[provider_model]
-        return self.default_pricing or None
+        for model_id, model_info in self.models.items():
+            if model_id.lower() == provider_model.lower():
+                return model_info.get("cost")
+        return None
 
     def provider_model(self, model):
-        if model in self.models:
-            return self.models[model]
+        # convert model to lowercase for case-insensitive comparison
+        model_lower = model.lower()
+
+        # if model is a map model id, return the provider model id
+        for model_id, provider_model in self.map_models.items():
+            if model_id.lower() == model_lower:
+                return provider_model
+
+        # if model is a provider model id, try again with just the model name
+        for provider_model in self.map_models.values():
+            if provider_model.lower() == model_lower:
+                return provider_model
+
+        # if model is a model id, try again with just the model id or name
+        for model_id, provider_model_info in self.models.items():
+            id = provider_model_info.get("id") or model_id
+            if model_id.lower() == model_lower or id.lower() == model_lower:
+                return id
+            name = provider_model_info.get("name")
+            if name and name.lower() == model_lower:
+                return id
+
+        # fallback to trying again with just the model short name
+        for model_id, provider_model_info in self.models.items():
+            id = provider_model_info.get("id") or model_id
+            if "/" in id:
+                model_name = id.split("/")[-1]
+                if model_name.lower() == model_lower:
+                    return id
+
+        # if model is a full provider model id, try again with just the model name
+        if "/" in model:
+            last_part = model.split("/")[-1]
+            return self.provider_model(last_part)
         return None
+
+    def validate_modalities(self, chat):
+        model_id = chat.get("model")
+        if not model_id or not self.models:
+            return
+
+        model_info = None
+        # Try to find model info using provider_model logic (already resolved to ID)
+        if model_id in self.models:
+            model_info = self.models[model_id]
+        else:
+            # Fallback scan
+            for m_id, m_info in self.models.items():
+                if m_id == model_id or m_info.get("id") == model_id:
+                    model_info = m_info
+                    break
+
+        print(f"DEBUG: Validate modalities: model={model_id}, found_info={model_info is not None}")
+        if model_info:
+            print(f"DEBUG: Modalities: {model_info.get('modalities')}")
+
+        if not model_info:
+            return
+
+        modalities = model_info.get("modalities", {})
+        input_modalities = modalities.get("input", [])
+
+        # Check for unsupported modalities
+        has_audio = False
+        has_image = False
+        for message in chat.get("messages", []):
+            content = message.get("content")
+            if isinstance(content, list):
+                for item in content:
+                    type_ = item.get("type")
+                    if type_ == "input_audio" or "input_audio" in item:
+                        has_audio = True
+                    elif type_ == "image_url" or "image_url" in item:
+                        has_image = True
+
+        if has_audio and "audio" not in input_modalities:
+            raise Exception(
+                f"Model '{model_id}' does not support audio input. Supported modalities: {', '.join(input_modalities)}"
+            )
+
+        if has_image and "image" not in input_modalities:
+            raise Exception(
+                f"Model '{model_id}' does not support image input. Supported modalities: {', '.join(input_modalities)}"
+            )
 
     def to_response(self, response, chat, started_at):
         if "metadata" not in response:
             response["metadata"] = {}
         response["metadata"]["duration"] = int((time.time() - started_at) * 1000)
         if chat is not None and "model" in chat:
-            pricing = self.model_pricing(chat["model"])
+            pricing = self.model_cost(chat["model"])
             if pricing and "input" in pricing and "output" in pricing:
                 response["metadata"]["pricing"] = f"{pricing['input']}/{pricing['output']}"
         _log(json.dumps(response, indent=2))
@@ -521,6 +643,8 @@ class OpenAiCompatible:
 
     async def chat(self, chat):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
+
+        self.validate_modalities(chat)
 
         # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
         #     f.write(json.dumps(chat, indent=2))
@@ -560,7 +684,7 @@ class OpenAiCompatible:
         if self.enable_thinking is not None:
             chat["enable_thinking"] = self.enable_thinking
 
-        chat = await process_chat(chat)
+        chat = await process_chat(chat, provider_id=self.id)
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
         # remove metadata if any (conflicts with some providers, e.g. Z.ai)
@@ -577,54 +701,235 @@ class OpenAiCompatible:
 class OpenAiProvider(OpenAiCompatible):
     sdk = "@ai-sdk/openai"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        if "api" not in kwargs:
+            kwargs["api"] = "https://api.openai.com/v1"
+        super().__init__(**kwargs)
 
 
 class AnthropicProvider(OpenAiCompatible):
     sdk = "@ai-sdk/anthropic"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        if "api" not in kwargs:
+            kwargs["api"] = "https://api.anthropic.com/v1"
+        super().__init__(**kwargs)
+
+        # Anthropic uses x-api-key header instead of Authorization
+        if self.api_key:
+            self.headers = self.headers.copy()
+            if "Authorization" in self.headers:
+                del self.headers["Authorization"]
+            self.headers["x-api-key"] = self.api_key
+
+        if "anthropic-version" not in self.headers:
+            self.headers = self.headers.copy()
+            self.headers["anthropic-version"] = "2023-06-01"
+        self.chat_url = f"{self.api}/messages"
+
+    async def chat(self, chat):
+        chat["model"] = self.provider_model(chat["model"]) or chat["model"]
+
+        chat = await process_chat(chat, provider_id=self.id)
+
+        # Transform OpenAI format to Anthropic format
+        anthropic_request = {
+            "model": chat["model"],
+            "messages": [],
+        }
+
+        # Extract system message (Anthropic uses top-level 'system' parameter)
+        system_messages = []
+        for message in chat.get("messages", []):
+            if message.get("role") == "system":
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    system_messages.append(content)
+                elif isinstance(content, list):
+                    for item in content:
+                        if item.get("type") == "text":
+                            system_messages.append(item.get("text", ""))
+
+        if system_messages:
+            anthropic_request["system"] = "\n".join(system_messages)
+
+        # Transform messages (exclude system messages)
+        for message in chat.get("messages", []):
+            if message.get("role") == "system":
+                continue
+
+            anthropic_message = {"role": message.get("role"), "content": []}
+
+            content = message.get("content", "")
+            if isinstance(content, str):
+                anthropic_message["content"] = content
+            elif isinstance(content, list):
+                for item in content:
+                    if item.get("type") == "text":
+                        anthropic_message["content"].append({"type": "text", "text": item.get("text", "")})
+                    elif item.get("type") == "image_url" and "image_url" in item:
+                        # Transform OpenAI image_url format to Anthropic format
+                        image_url = item["image_url"].get("url", "")
+                        if image_url.startswith("data:"):
+                            # Extract media type and base64 data
+                            parts = image_url.split(";base64,", 1)
+                            if len(parts) == 2:
+                                media_type = parts[0].replace("data:", "")
+                                base64_data = parts[1]
+                                anthropic_message["content"].append(
+                                    {
+                                        "type": "image",
+                                        "source": {"type": "base64", "media_type": media_type, "data": base64_data},
+                                    }
+                                )
+
+            anthropic_request["messages"].append(anthropic_message)
+
+        # Handle max_tokens (required by Anthropic, uses max_tokens not max_completion_tokens)
+        if "max_completion_tokens" in chat:
+            anthropic_request["max_tokens"] = chat["max_completion_tokens"]
+        elif "max_tokens" in chat:
+            anthropic_request["max_tokens"] = chat["max_tokens"]
+        else:
+            # Anthropic requires max_tokens, set a default
+            anthropic_request["max_tokens"] = 4096
+
+        # Copy other supported parameters
+        if "temperature" in chat:
+            anthropic_request["temperature"] = chat["temperature"]
+        if "top_p" in chat:
+            anthropic_request["top_p"] = chat["top_p"]
+        if "top_k" in chat:
+            anthropic_request["top_k"] = chat["top_k"]
+        if "stop" in chat:
+            anthropic_request["stop_sequences"] = chat["stop"] if isinstance(chat["stop"], list) else [chat["stop"]]
+        if "stream" in chat:
+            anthropic_request["stream"] = chat["stream"]
+        if "tools" in chat:
+            anthropic_request["tools"] = chat["tools"]
+        if "tool_choice" in chat:
+            anthropic_request["tool_choice"] = chat["tool_choice"]
+
+        _log(f"POST {self.chat_url}")
+        _log(f"Anthropic Request: {json.dumps(anthropic_request, indent=2)}")
+
+        async with aiohttp.ClientSession() as session:
+            started_at = time.time()
+            async with session.post(
+                self.chat_url,
+                headers=self.headers,
+                data=json.dumps(anthropic_request),
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as response:
+                return self.to_response(await response_json(response), chat, started_at)
+
+    def to_response(self, response, chat, started_at):
+        """Convert Anthropic response format to OpenAI-compatible format."""
+        # Transform Anthropic response to OpenAI format
+        openai_response = {
+            "id": response.get("id", ""),
+            "object": "chat.completion",
+            "created": int(started_at),
+            "model": response.get("model", ""),
+            "choices": [],
+            "usage": {},
+        }
+
+        # Transform content blocks to message content
+        content_parts = []
+        thinking_parts = []
+
+        for block in response.get("content", []):
+            if block.get("type") == "text":
+                content_parts.append(block.get("text", ""))
+            elif block.get("type") == "thinking":
+                # Store thinking blocks separately (some models include reasoning)
+                thinking_parts.append(block.get("thinking", ""))
+
+        # Combine all text content
+        message_content = "\n".join(content_parts) if content_parts else ""
+
+        # Create the choice object
+        choice = {
+            "index": 0,
+            "message": {"role": "assistant", "content": message_content},
+            "finish_reason": response.get("stop_reason", "stop"),
+        }
+
+        # Add thinking as metadata if present
+        if thinking_parts:
+            choice["message"]["thinking"] = "\n".join(thinking_parts)
+
+        openai_response["choices"].append(choice)
+
+        # Transform usage
+        if "usage" in response:
+            usage = response["usage"]
+            openai_response["usage"] = {
+                "prompt_tokens": usage.get("input_tokens", 0),
+                "completion_tokens": usage.get("output_tokens", 0),
+                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+            }
+
+        # Add metadata
+        if "metadata" not in openai_response:
+            openai_response["metadata"] = {}
+        openai_response["metadata"]["duration"] = int((time.time() - started_at) * 1000)
+
+        if chat is not None and "model" in chat:
+            cost = self.model_cost(chat["model"])
+            if cost and "input" in cost and "output" in cost:
+                openai_response["metadata"]["pricing"] = f"{cost['input']}/{cost['output']}"
+
+        _log(json.dumps(openai_response, indent=2))
+        return openai_response
 
 
 class MistralProvider(OpenAiCompatible):
     sdk = "@ai-sdk/mistral"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        if "api" not in kwargs:
+            kwargs["api"] = "https://api.mistral.ai/v1"
+        super().__init__(**kwargs)
 
 
 class GroqProvider(OpenAiCompatible):
     sdk = "@ai-sdk/groq"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        if "api" not in kwargs:
+            kwargs["api"] = "https://api.groq.com/openai/v1"
+        super().__init__(**kwargs)
 
 
 class XaiProvider(OpenAiCompatible):
     sdk = "@ai-sdk/xai"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        if "api" not in kwargs:
+            kwargs["api"] = "https://api.x.ai/v1"
+        super().__init__(**kwargs)
 
 
-class CodestralOnlyProvider(OpenAiCompatible):
+class CodestralProvider(OpenAiCompatible):
     sdk = "codestral"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class OllamaProvider(OpenAiCompatible):
     sdk = "ollama"
 
-    def __init__(self, api, models, **kwargs):
-        super().__init__(api=api, models=models, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Ollama's OpenAI-compatible endpoint is at /v1/chat/completions
+        self.chat_url = f"{self.api}/v1/chat/completions"
 
     async def load(self):
-        if self.all_models:
-            await self.load_models(default_models=self.models)
+        if not self.models:
+            await self.load_models()
 
     async def get_models(self):
         ret = {}
@@ -639,59 +944,94 @@ class OllamaProvider(OpenAiCompatible):
                         name = model["model"]
                         if name.endswith(":latest"):
                             name = name[:-7]
-                        ret[name] = name
+                        model_id = name.replace(":", "-")
+                        ret[model_id] = name
                     _log(f"Loaded Ollama models: {ret}")
         except Exception as e:
             _log(f"Error getting Ollama models: {e}")
             # return empty dict if ollama is not available
         return ret
 
-    async def load_models(self, default_models):
+    async def load_models(self):
         """Load models if all_models was requested"""
-        if self.all_models:
-            self.models = await self.get_models()
-        if default_models:
-            self.models = {**default_models, **self.models}
 
-    @classmethod
-    def test(cls, api_key=None, models=None, all_models=None, **kwargs):
-        if models is None:
-            models = {}
-        return api_key is not None and (len(models) > 0 or all_models)
+        # Map models to provider models {model_id:model_id}
+        model_map = await self.get_models()
+        if self.map_models:
+            map_model_values = set(self.map_models.values())
+            to = {}
+            for k, v in model_map.items():
+                if k in self.map_models:
+                    to[k] = v
+                if v in map_model_values:
+                    to[k] = v
+            model_map = to
+        else:
+            self.map_models = model_map
+        models = {}
+        for k, v in model_map.items():
+            models[k] = {
+                "id": k,
+                "name": v.replace(":", " "),
+                "modalities": {"input": ["text"], "output": ["text"]},
+                "cost": {
+                    "input": 0,
+                    "output": 0,
+                },
+            }
+        self.models = models
+
+    def test(self, **kwargs):
+        return True
 
 
-class GoogleOpenAiProvider(OpenAiCompatible):
-    sdk = "google-openai-compatible"
+class LMStudioProvider(OllamaProvider):
+    sdk = "lmstudio"
 
-    def __init__(self, api_key, models, **kwargs):
-        super().__init__(api="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
-        self.chat_url = "https://generativelanguage.googleapis.com/v1beta/chat/completions"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.chat_url = f"{self.api}/chat/completions"
 
-    @classmethod
-    def test(cls, api_key=None, models=None, **kwargs):
-        if models is None:
-            models = {}
-        return api_key and len(models) > 0
+    async def get_models(self):
+        ret = {}
+        try:
+            async with aiohttp.ClientSession() as session:
+                _log(f"GET {self.api}/models")
+                async with session.get(
+                    f"{self.api}/models", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)
+                ) as response:
+                    data = await response_json(response)
+                    for model in data.get("data", []):
+                        id = model["id"]
+                        ret[id] = id
+                    _log(f"Loaded LMStudio models: {ret}")
+        except Exception as e:
+            _log(f"Error getting LMStudio models: {e}")
+            # return empty dict if ollama is not available
+        return ret
 
 
-class GoogleProvider(GoogleOpenAiProvider):
+# class GoogleOpenAiProvider(OpenAiCompatible):
+#     sdk = "google-openai-compatible"
+
+#     def __init__(self, api_key, **kwargs):
+#         super().__init__(api="https://generativelanguage.googleapis.com", api_key=api_key, **kwargs)
+#         self.chat_url = "https://generativelanguage.googleapis.com/v1beta/chat/completions"
+
+
+class GoogleProvider(OpenAiCompatible):
     sdk = "@ai-sdk/google"
 
-    def __init__(self, models, api_key, safety_settings=None, thinking_config=None, curl=False, **kwargs):
-        super().__init__(api="https://generativelanguage.googleapis.com", api_key=api_key, models=models, **kwargs)
-        self.safety_settings = safety_settings
-        self.thinking_config = thinking_config
-        self.curl = curl
+    def __init__(self, **kwargs):
+        new_kwargs = {"api": "https://generativelanguage.googleapis.com", **kwargs}
+        super().__init__(**new_kwargs)
+        self.safety_settings = kwargs.get("safety_settings")
+        self.thinking_config = kwargs.get("thinking_config")
+        self.curl = kwargs.get("curl")
         self.headers = kwargs.get("headers", {"Content-Type": "application/json"})
         # Google fails when using Authorization header, use query string param instead
         if "Authorization" in self.headers:
             del self.headers["Authorization"]
-
-    @classmethod
-    def test(cls, api_key=None, models=None, all_models=None, **kwargs):
-        if models is None:
-            models = {}
-        return api_key is not None and (len(models) > 0 or all_models)
 
     async def chat(self, chat):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
@@ -889,16 +1229,25 @@ class GoogleProvider(GoogleOpenAiProvider):
 
 
 ALL_PROVIDERS = [
+    OpenAiCompatible,
     OpenAiProvider,
     AnthropicProvider,
     MistralProvider,
     GroqProvider,
     XaiProvider,
-    CodestralOnlyProvider,
-    OllamaProvider,
+    CodestralProvider,
     GoogleProvider,
-    GoogleOpenAiProvider,
+    OllamaProvider,
+    LMStudioProvider,
 ]
+
+
+def get_provider_model(model_name):
+    for provider in g_handlers.values():
+        provider_model = provider.provider_model(model_name)
+        if provider_model:
+            return provider_model
+    return None
 
 
 def get_models():
@@ -914,21 +1263,32 @@ def get_models():
 def get_active_models():
     ret = []
     existing_models = set()
-    for id, provider in g_handlers.items():
-        for model in provider.models:
-            if model not in existing_models:
-                existing_models.add(model)
-                provider_model = provider.models[model]
-                pricing = provider.model_pricing(model)
-                ret.append({"id": model, "provider": id, "provider_model": provider_model, "pricing": pricing})
+    for provider_id, provider in g_handlers.items():
+        for model in provider.models.values():
+            name = model.get("name")
+            if not name:
+                _log(f"Provider {provider_id} model {model} has no name")
+                continue
+            if name not in existing_models:
+                existing_models.add(name)
+                item = model.copy()
+                item.update({"provider": provider_id})
+                ret.append(item)
     ret.sort(key=lambda x: x["id"])
+    return ret
+
+
+def api_providers():
+    ret = []
+    for id, provider in g_handlers.items():
+        ret.append({"id": id, "name": provider.name, "models": provider.models})
     return ret
 
 
 async def chat_completion(chat):
     model = chat["model"]
     # get first provider that has the model
-    candidate_providers = [name for name, provider in g_handlers.items() if model in provider.models]
+    candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
     if len(candidate_providers) == 0:
         raise (Exception(f"Model {model} not found"))
 
@@ -1049,15 +1409,18 @@ def config_str(key):
     return key in g_config and g_config[key] or None
 
 
-def load_config(config):
-    global g_config
+def load_config(config, providers, verbose=None):
+    global g_config, g_providers, g_verbose
     g_config = config
+    g_providers = providers
+    if verbose:
+        g_verbose = verbose
 
 
-def init_llms(config):
+def init_llms(config, providers):
     global g_config, g_handlers
 
-    load_config(config)
+    load_config(config, providers)
     g_handlers = {}
     # iterate over config and replace $ENV with env value
     for key, value in g_config.items():
@@ -1068,65 +1431,68 @@ def init_llms(config):
     #     printdump(g_config)
     providers = g_config["providers"]
 
-    for name, orig in providers.items():
+    for id, orig in providers.items():
         definition = orig.copy()
         if "enabled" in definition and not definition["enabled"]:
             continue
 
-        constructor_kwargs = create_provider_kwargs(definition)
-        provider = None
-        if "npm" in definition:
-            provider = create_provider_with_npm_sdk(definition["npm"], **constructor_kwargs)
-        if not provider and "type" in definition:
-            provider = create_provider_with_type(definition["type"], **constructor_kwargs)
+        provider_id = definition.get("id", id)
+        if "id" not in definition:
+            definition["id"] = provider_id
+        provider = g_providers.get(provider_id)
+        constructor_kwargs = create_provider_kwargs(definition, provider)
+        provider = create_provider(constructor_kwargs)
 
         if provider and provider.test(**constructor_kwargs):
-            g_handlers[name] = provider
+            g_handlers[id] = provider
     return g_handlers
 
 
-def create_provider_kwargs(definition):
-    # if not api, look for base_url
-    if "api" not in definition and "base_url" in definition:
-        api = definition["base_url"]
-        # api should include the version prefix (e.g. /v1)
-        # check if api ends with /v{\d} to handle providers with different versions (e.g. z.ai uses /v4)
-        last_segment = api.rsplit("/", 1)[1]
-        if not (last_segment.startswith("v") and last_segment[1:].isdigit()):
-            api += "/v1"
-        definition["api"] = api
+def create_provider_kwargs(definition, provider=None):
+    if provider:
+        provider = provider.copy()
+        provider.update(definition)
+    else:
+        provider = definition.copy()
 
     # Replace API keys with environment variables if they start with $
-    if "api_key" in definition:
-        value = definition["api_key"]
+    if "api_key" in provider:
+        value = provider["api_key"]
         if isinstance(value, str) and value.startswith("$"):
-            definition["api_key"] = os.environ.get(value[1:], "")
+            provider["api_key"] = os.environ.get(value[1:], "")
 
-    if "api_key" not in definition and "env" in definition:
-        for env_var in definition["env"]:
+    if "api_key" not in provider and "env" in provider:
+        for env_var in provider["env"]:
             val = os.environ.get(env_var)
             if val:
-                definition["api_key"] = val
+                provider["api_key"] = val
                 break
 
-    # Create a copy of definition without the 'type' key for constructor kwargs
-    constructor_kwargs = {k: v for k, v in definition.items() if k not in ("type", "enabled", "env")}
+    # Create a copy of provider
+    constructor_kwargs = dict(provider.items())
+    # Create a copy of all list and dict values
+    for key, value in constructor_kwargs.items():
+        if isinstance(value, (list, dict)):
+            constructor_kwargs[key] = value.copy()
     constructor_kwargs["headers"] = g_config["defaults"]["headers"].copy()
     return constructor_kwargs
 
 
-def create_provider_with_npm_sdk(npm_sdk, **kwargs):
-    for provider in ALL_PROVIDERS:
-        if provider.sdk == npm_sdk:
-            return provider(**kwargs)
-    return None
+def create_provider(provider):
+    if not isinstance(provider, dict):
+        return None
+    provider_label = provider.get("id", provider.get("name", "unknown"))
+    npm_sdk = provider.get("npm")
+    if not npm_sdk:
+        _log(f"Provider {provider_label} is missing 'npm' sdk")
+        return None
 
+    for provider_type in ALL_PROVIDERS:
+        if provider_type.sdk == npm_sdk:
+            kwargs = create_provider_kwargs(provider)
+            return provider_type(**kwargs)
 
-def create_provider_with_type(provider_type, **kwargs):
-    for provider in ALL_PROVIDERS:
-        # use name of class
-        if provider.__name__ == provider_type:
-            return provider(**kwargs)
+    _log(f"Could not find provider {provider_label} with npm sdk {npm_sdk}")
     return None
 
 
@@ -1173,6 +1539,23 @@ async def save_default_config(config_path):
     g_config = json.loads(config_json)
 
 
+async def update_providers(home_providers_path):
+    global g_providers
+    text = await get_text("https://models.dev/api.json")
+    all_providers = json.loads(text)
+
+    filtered_providers = {}
+    for id, provider in all_providers.items():
+        if id in g_config["providers"]:
+            filtered_providers[id] = provider
+
+    os.makedirs(os.path.dirname(home_providers_path), exist_ok=True)
+    with open(home_providers_path, "w", encoding="utf-8") as f:
+        json.dump(filtered_providers, f)
+
+    g_providers = filtered_providers
+
+
 def provider_status():
     enabled = list(g_handlers.keys())
     disabled = [provider for provider in g_config["providers"] if provider not in enabled]
@@ -1195,6 +1578,10 @@ def print_status():
 
 def home_llms_path(filename):
     return f"{os.environ.get('HOME')}/.llms/{filename}"
+
+
+def get_cache_path(filename):
+    return home_llms_path(f"cache/{filename}")
 
 
 def get_config_path():
@@ -1234,7 +1621,7 @@ def enable_provider(provider):
             else:
                 msg = f"WARNING: {provider} is not configured with an API Key"
     save_config(g_config)
-    init_llms(g_config)
+    init_llms(g_config, g_providers)
     return provider_config, msg
 
 
@@ -1242,7 +1629,7 @@ def disable_provider(provider):
     provider_config = g_config["providers"][provider]
     provider_config["enabled"] = False
     save_config(g_config)
-    init_llms(g_config)
+    init_llms(g_config, g_providers)
 
 
 def resolve_root():
@@ -1437,7 +1824,8 @@ async def check_models(provider_name, model_names=None):
     else:
         # Check only specified models
         for model_name in model_names:
-            if model_name in provider.models:
+            provider_model = provider.provider_model(model_name)
+            if provider_model:
                 models_to_check.append(model_name)
             else:
                 print(f"Model '{model_name}' not found in provider '{provider_name}'")
@@ -1452,69 +1840,76 @@ async def check_models(provider_name, model_names=None):
 
     # Test each model
     for model in models_to_check:
-        # Create a simple ping chat request
-        chat = (provider.check or g_config["defaults"]["check"]).copy()
-        chat["model"] = model
-
-        started_at = time.time()
-        try:
-            # Try to get a response from the model
-            response = await provider.chat(chat)
-            duration_ms = int((time.time() - started_at) * 1000)
-
-            # Check if we got a valid response
-            if response and "choices" in response and len(response["choices"]) > 0:
-                print(f"  ✓ {model:<40} ({duration_ms}ms)")
-            else:
-                print(f"  ✗ {model:<40} Invalid response format")
-        except HTTPError as e:
-            duration_ms = int((time.time() - started_at) * 1000)
-            error_msg = f"HTTP {e.status}"
-            try:
-                # Try to parse error body for more details
-                error_body = json.loads(e.body) if e.body else {}
-                if "error" in error_body:
-                    error = error_body["error"]
-                    if isinstance(error, dict):
-                        if "message" in error and isinstance(error["message"], str):
-                            # OpenRouter
-                            error_msg = error["message"]
-                            if "code" in error:
-                                error_msg = f"{error['code']} {error_msg}"
-                            if "metadata" in error and "raw" in error["metadata"]:
-                                error_msg += f" - {error['metadata']['raw']}"
-                            if "provider" in error:
-                                error_msg += f" ({error['provider']})"
-                    elif isinstance(error, str):
-                        error_msg = error
-                elif "message" in error_body:
-                    if isinstance(error_body["message"], str):
-                        error_msg = error_body["message"]
-                    elif (
-                        isinstance(error_body["message"], dict)
-                        and "detail" in error_body["message"]
-                        and isinstance(error_body["message"]["detail"], list)
-                    ):
-                        # codestral error format
-                        error_msg = error_body["message"]["detail"][0]["msg"]
-                        if (
-                            "loc" in error_body["message"]["detail"][0]
-                            and len(error_body["message"]["detail"][0]["loc"]) > 0
-                        ):
-                            error_msg += f" (in {' '.join(error_body['message']['detail'][0]['loc'])})"
-            except Exception as parse_error:
-                _log(f"Error parsing error body: {parse_error}")
-                error_msg = e.body[:100] if e.body else f"HTTP {e.status}"
-            print(f"  ✗ {model:<40} {error_msg}")
-        except asyncio.TimeoutError:
-            duration_ms = int((time.time() - started_at) * 1000)
-            print(f"  ✗ {model:<40} Timeout after {duration_ms}ms")
-        except Exception as e:
-            duration_ms = int((time.time() - started_at) * 1000)
-            error_msg = str(e)[:100]
-            print(f"  ✗ {model:<40} {error_msg}")
+        await check_provider_model(provider, model)
 
     print()
+
+
+async def check_provider_model(provider, model):
+    # Create a simple ping chat request
+    chat = (provider.check or g_config["defaults"]["check"]).copy()
+    chat["model"] = model
+
+    success = False
+    started_at = time.time()
+    try:
+        # Try to get a response from the model
+        response = await provider.chat(chat)
+        duration_ms = int((time.time() - started_at) * 1000)
+
+        # Check if we got a valid response
+        if response and "choices" in response and len(response["choices"]) > 0:
+            success = True
+            print(f"  ✓ {model:<40} ({duration_ms}ms)")
+        else:
+            print(f"  ✗ {model:<40} Invalid response format")
+    except HTTPError as e:
+        duration_ms = int((time.time() - started_at) * 1000)
+        error_msg = f"HTTP {e.status}"
+        try:
+            # Try to parse error body for more details
+            error_body = json.loads(e.body) if e.body else {}
+            if "error" in error_body:
+                error = error_body["error"]
+                if isinstance(error, dict):
+                    if "message" in error and isinstance(error["message"], str):
+                        # OpenRouter
+                        error_msg = error["message"]
+                        if "code" in error:
+                            error_msg = f"{error['code']} {error_msg}"
+                        if "metadata" in error and "raw" in error["metadata"]:
+                            error_msg += f" - {error['metadata']['raw']}"
+                        if "provider" in error:
+                            error_msg += f" ({error['provider']})"
+                elif isinstance(error, str):
+                    error_msg = error
+            elif "message" in error_body:
+                if isinstance(error_body["message"], str):
+                    error_msg = error_body["message"]
+                elif (
+                    isinstance(error_body["message"], dict)
+                    and "detail" in error_body["message"]
+                    and isinstance(error_body["message"]["detail"], list)
+                ):
+                    # codestral error format
+                    error_msg = error_body["message"]["detail"][0]["msg"]
+                    if (
+                        "loc" in error_body["message"]["detail"][0]
+                        and len(error_body["message"]["detail"][0]["loc"]) > 0
+                    ):
+                        error_msg += f" (in {' '.join(error_body['message']['detail'][0]['loc'])})"
+        except Exception as parse_error:
+            _log(f"Error parsing error body: {parse_error}")
+            error_msg = e.body[:100] if e.body else f"HTTP {e.status}"
+        print(f"  ✗ {model:<40} {error_msg}")
+    except asyncio.TimeoutError:
+        duration_ms = int((time.time() - started_at) * 1000)
+        print(f"  ✗ {model:<40} Timeout after {duration_ms}ms")
+    except Exception as e:
+        duration_ms = int((time.time() - started_at) * 1000)
+        error_msg = str(e)[:100]
+        print(f"  ✗ {model:<40} {error_msg}")
+    return success
 
 
 def text_from_resource(filename):
@@ -1550,7 +1945,8 @@ async def text_from_resource_or_url(filename):
 async def save_home_configs():
     home_config_path = home_llms_path("llms.json")
     home_ui_path = home_llms_path("ui.json")
-    if os.path.exists(home_config_path) and os.path.exists(home_ui_path):
+    home_providers_path = home_llms_path("providers.json")
+    if os.path.exists(home_config_path) and os.path.exists(home_ui_path) and os.path.exists(home_providers_path):
         return
 
     llms_home = os.path.dirname(home_config_path)
@@ -1567,14 +1963,43 @@ async def save_home_configs():
             with open(home_ui_path, "w", encoding="utf-8") as f:
                 f.write(ui_json)
             _log(f"Created default ui config at {home_ui_path}")
+
+        if not os.path.exists(home_providers_path):
+            providers_json = await text_from_resource_or_url("providers.json")
+            with open(home_providers_path, "w", encoding="utf-8") as f:
+                f.write(providers_json)
+            _log(f"Created default providers config at {home_providers_path}")
     except Exception:
         print("Could not create llms.json. Create one with --init or use --config <path>")
         exit(1)
 
 
+def load_config_json(config_json):
+    if config_json is None:
+        return None
+    config = json.loads(config_json)
+    if not config or "version" not in config or config["version"] < 3:
+        preserve_keys = ["auth", "defaults", "limits", "convert"]
+        new_config = json.loads(text_from_resource("llms.json"))
+        if config:
+            for key in preserve_keys:
+                if key in config:
+                    new_config[key] = config[key]
+        config = new_config
+        # move old config to YYYY-MM-DD.bak
+        new_path = f"{g_config_path}.{datetime.now().strftime('%Y-%m-%d')}.bak"
+        if os.path.exists(new_path):
+            os.remove(new_path)
+        os.rename(g_config_path, new_path)
+        print(f"llms.json migrated. old config moved to {new_path}")
+        # save new config
+        save_config(g_config)
+    return config
+
+
 async def reload_providers():
     global g_config, g_handlers
-    g_handlers = init_llms(g_config)
+    g_handlers = init_llms(g_config, g_providers)
     await load_llms()
     _log(f"{len(g_handlers)} providers loaded")
     return g_handlers
@@ -1635,10 +2060,11 @@ async def watch_config_files(config_path, ui_path, interval=1):
 
 
 def main():
-    global _ROOT, g_verbose, g_default_model, g_logprefix, g_config, g_config_path, g_ui_path
+    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_ui_path
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument("--config", default=None, help="Path to config file", metavar="FILE")
+    parser.add_argument("--providers", default=None, help="Path to models.dev providers file", metavar="FILE")
     parser.add_argument("-m", "--model", default=None, help="Model to use")
 
     parser.add_argument("--chat", default=None, help="OpenAI Chat Completion Request to send", metavar="REQUEST")
@@ -1670,6 +2096,7 @@ def main():
     parser.add_argument("--default", default=None, help="Configure the default model to use", metavar="MODEL")
 
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
+    parser.add_argument("--update", action="store_true", help="Update local models.dev providers.json")
 
     parser.add_argument("--root", default=None, help="Change root directory for UI files", metavar="PATH")
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
@@ -1694,6 +2121,7 @@ def main():
 
     home_config_path = home_llms_path("llms.json")
     home_ui_path = home_llms_path("ui.json")
+    home_providers_path = home_llms_path("providers.json")
 
     if cli_args.init:
         if os.path.exists(home_config_path):
@@ -1707,14 +2135,26 @@ def main():
         else:
             asyncio.run(save_text_url(github_url("ui.json"), home_ui_path))
             print(f"Created default ui config at {home_ui_path}")
+
+        if os.path.exists(home_providers_path):
+            print(f"providers.json already exists at {home_providers_path}")
+        else:
+            asyncio.run(save_text_url(github_url("providers.json"), home_providers_path))
+            print(f"Created default providers config at {home_providers_path}")
         exit(0)
+
+    if cli_args.providers:
+        if not os.path.exists(cli_args.providers):
+            print(f"providers.json not found at {cli_args.providers}")
+            exit(1)
+        g_providers = json.loads(text_from_file(cli_args.providers))
 
     if cli_args.config:
         # read contents
         g_config_path = cli_args.config
         with open(g_config_path, encoding="utf-8") as f:
             config_json = f.read()
-            g_config = json.loads(config_json)
+            g_config = load_config_json(config_json)
 
         config_dir = os.path.dirname(g_config_path)
         # look for ui.json in same directory as config
@@ -1728,12 +2168,24 @@ def main():
                     f.write(ui_json)
                 _log(f"Created default ui config at {home_ui_path}")
             g_ui_path = home_ui_path
+
+        if not g_providers and os.path.exists(os.path.join(config_dir, "providers.json")):
+            g_providers = json.loads(text_from_file(os.path.join(config_dir, "providers.json")))
+
     else:
         # ensure llms.json and ui.json exist in home directory
         asyncio.run(save_home_configs())
         g_config_path = home_config_path
         g_ui_path = home_ui_path
-        g_config = json.loads(text_from_file(g_config_path))
+        g_config = load_config_json(text_from_file(g_config_path))
+
+    if not g_providers:
+        g_providers = json.loads(text_from_file(home_providers_path))
+
+    if cli_args.update:
+        asyncio.run(update_providers(home_providers_path))
+        print(f"Updated {home_providers_path}")
+        exit(0)
 
     asyncio.run(reload_providers())
 
@@ -1751,13 +2203,35 @@ def main():
     if cli_args.list:
         # Show list of enabled providers and their models
         enabled = []
+        provider_count = 0
+        model_count = 0
+
+        max_model_length = 0
         for name, provider in g_handlers.items():
             if len(filter_list) > 0 and name not in filter_list:
                 continue
+            for model in provider.models:
+                max_model_length = max(max_model_length, len(model))
+
+        for name, provider in g_handlers.items():
+            if len(filter_list) > 0 and name not in filter_list:
+                continue
+            provider_count += 1
             print(f"{name}:")
             enabled.append(name)
             for model in provider.models:
-                print(f"  {model}")
+                model_count += 1
+                model_cost_info = None
+                if "cost" in provider.models[model]:
+                    model_cost = provider.models[model]["cost"]
+                    if "input" in model_cost and "output" in model_cost:
+                        if model_cost["input"] == 0 and model_cost["output"] == 0:
+                            model_cost_info = "      0"
+                        else:
+                            model_cost_info = f"{model_cost['input']:5} / {model_cost['output']}"
+                print(f"  {model:{max_model_length}} {model_cost_info or ''}")
+
+        print(f"\n{model_count} models available from {provider_count} providers")
 
         print_status()
         exit(0)
@@ -1872,6 +2346,11 @@ def main():
 
         app.router.add_get("/models", active_models_handler)
 
+        async def active_providers_handler(request):
+            return web.json_response(api_providers())
+
+        app.router.add_get("/providers", active_providers_handler)
+
         async def status_handler(request):
             enabled, disabled = provider_status()
             return web.json_response(
@@ -1906,6 +2385,135 @@ def main():
             )
 
         app.router.add_post("/providers/{provider}", provider_handler)
+
+        async def upload_handler(request):
+            # Check authentication if enabled
+            is_authenticated, user_data = check_auth(request)
+            if not is_authenticated:
+                return web.json_response(
+                    {
+                        "error": {
+                            "message": "Authentication required",
+                            "type": "authentication_error",
+                            "code": "unauthorized",
+                        }
+                    },
+                    status=401,
+                )
+
+            reader = await request.multipart()
+
+            # Read first file field
+            field = await reader.next()
+            while field and field.name != "file":
+                field = await reader.next()
+
+            if not field:
+                return web.json_response({"error": "No file provided"}, status=400)
+
+            filename = field.filename or "file"
+            content = await field.read()
+            mimetype = get_file_mime_type(filename)
+
+            # If image, resize if needed
+            if mimetype.startswith("image/"):
+                content, mimetype = convert_image_if_needed(content, mimetype)
+
+            # Calculate SHA256
+            sha256_hash = hashlib.sha256(content).hexdigest()
+            ext = filename.rsplit(".", 1)[1] if "." in filename else ""
+            if not ext:
+                ext = mimetypes.guess_extension(mimetype) or ""
+                if ext.startswith("."):
+                    ext = ext[1:]
+
+            if not ext:
+                ext = "bin"
+
+            save_filename = f"{sha256_hash}.{ext}" if ext else sha256_hash
+
+            # Use first 2 chars for subdir to avoid too many files in one dir
+            subdir = sha256_hash[:2]
+            relative_path = f"{subdir}/{save_filename}"
+            full_path = get_cache_path(relative_path)
+
+            # if file and its .info.json already exists, return it
+            info_path = os.path.splitext(full_path)[0] + ".info.json"
+            if os.path.exists(full_path) and os.path.exists(info_path):
+                return web.json_response(json.load(open(info_path)))
+
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+            with open(full_path, "wb") as f:
+                f.write(content)
+
+            response_data = {
+                "date": int(time.time()),
+                "url": f"/~cache/{relative_path}",
+                "size": len(content),
+                "type": mimetype,
+                "name": filename,
+            }
+
+            # If image, get dimensions
+            if HAS_PIL and mimetype.startswith("image/"):
+                try:
+                    with Image.open(BytesIO(content)) as img:
+                        response_data["width"] = img.width
+                        response_data["height"] = img.height
+                except Exception:
+                    pass
+
+            # Save metadata
+            info_path = os.path.splitext(full_path)[0] + ".info.json"
+            with open(info_path, "w") as f:
+                json.dump(response_data, f)
+
+            return web.json_response(response_data)
+
+        app.router.add_post("/upload", upload_handler)
+
+        async def cache_handler(request):
+            path = request.match_info["tail"]
+            full_path = get_cache_path(path)
+
+            if "info" in request.query:
+                info_path = os.path.splitext(full_path)[0] + ".info.json"
+                if not os.path.exists(info_path):
+                    return web.Response(text="404: Not Found", status=404)
+
+                # Check for directory traversal for info path
+                try:
+                    cache_root = Path(get_cache_path(""))
+                    requested_path = Path(info_path).resolve()
+                    if not str(requested_path).startswith(str(cache_root)):
+                        return web.Response(text="403: Forbidden", status=403)
+                except Exception:
+                    return web.Response(text="403: Forbidden", status=403)
+
+                with open(info_path, "r") as f:
+                    content = f.read()
+                return web.Response(text=content, content_type="application/json")
+
+            if not os.path.exists(full_path):
+                return web.Response(text="404: Not Found", status=404)
+
+            # Check for directory traversal
+            try:
+                cache_root = Path(get_cache_path(""))
+                requested_path = Path(full_path).resolve()
+                if not str(requested_path).startswith(str(cache_root)):
+                    return web.Response(text="403: Forbidden", status=403)
+            except Exception:
+                return web.Response(text="403: Forbidden", status=403)
+
+            with open(full_path, "rb") as f:
+                content = f.read()
+
+            mimetype = get_file_mime_type(full_path)
+            return web.Response(body=content, content_type=mimetype)
+
+        app.router.add_get("/~cache/{tail:.*}", cache_handler)
 
         # OAuth handlers
         async def github_auth_handler(request):
@@ -2246,10 +2854,9 @@ def main():
 
     if cli_args.default is not None:
         default_model = cli_args.default
-        all_models = get_models()
-        if default_model not in all_models:
+        provider_model = get_provider_model(default_model)
+        if provider_model is None:
             print(f"Model {default_model} not found")
-            print(f"Available models: {', '.join(all_models)}")
             exit(1)
         default_text = g_config["defaults"]["text"]
         default_text["model"] = default_model

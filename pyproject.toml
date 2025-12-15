@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llms-py"
-version = "2.0.35"
+version = "3.0.0b1"
 description = "A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -37,7 +37,7 @@ classifiers = [
 ]
 requires-python = ">=3.7"
 dependencies = [
-    "aiohttp",
+    "aiohttp"
 ]
 
 [project.urls]
@@ -53,7 +53,7 @@ llms = "llms.main:main"
 packages = ["llms"]
 
 [tool.setuptools.package-data]
-llms = ["index.html", "llms.json", "ui.json", "ui/*", "ui/lib/*"]
+llms = ["index.html", "llms.json", "providers.json", "ui.json", "ui/*", "ui/lib/*"]
 
 [tool.ruff]
 # Set the target Python version

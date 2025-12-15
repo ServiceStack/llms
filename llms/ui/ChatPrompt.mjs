@@ -1,7 +1,8 @@
 import { ref, nextTick, inject, unref } from 'vue'
 import { useRouter } from 'vue-router'
 import { lastRightPart } from '@servicestack/client'
-import { deepClone, fileToDataUri, fileToBase64, addCopyButtons, toModelInfo, tokenCost } from './utils.mjs'
+import { deepClone, fileToDataUri, fileToBase64, addCopyButtons, toModelInfo, tokenCost, uploadFile } from './utils.mjs'
+import { toRaw } from 'vue'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
 const audioExts = 'mp3,wav,ogg,flac,m4a,opus,webm'.split(',')
@@ -17,12 +18,15 @@ export function useChatPrompt() {
     const hasFile = () => attachedFiles.value.length > 0
     // const hasText = () => !hasImage() && !hasAudio() && !hasFile()
 
+    const editingMessageId = ref(null)
+
     function reset() {
         // Ensure initial state is ready to accept input
         isGenerating.value = false
         attachedFiles.value = []
         messageText.value = ''
         abortController.value = null
+        editingMessageId.value = null
     }
 
     function cancel() {
@@ -41,6 +45,7 @@ export function useChatPrompt() {
         errorStatus,
         isGenerating,
         abortController,
+        editingMessageId,
         get generating() {
             return isGenerating.value
         },
@@ -54,7 +59,7 @@ export function useChatPrompt() {
 }
 
 export default {
-    template:`
+    template: `
     <div class="mx-auto max-w-3xl">
         <SettingsDialog :isOpen="showSettings" @close="showSettings = false" />
         <div class="flex space-x-2">
@@ -139,8 +144,8 @@ export default {
     `,
     props: {
         model: {
-            type: String,
-            default: ''
+            type: Object,
+            default: null
         },
         systemPrompt: {
             type: String,
@@ -160,7 +165,8 @@ export default {
             errorStatus,
             hasImage,
             hasAudio,
-            hasFile
+            hasFile,
+            editingMessageId
         } = chatPrompt
         const threads = inject('threads')
         const {
@@ -176,9 +182,41 @@ export default {
         const triggerFilePicker = () => {
             if (fileInput.value) fileInput.value.click()
         }
-        const onFilesSelected = (e) => {
+        const onFilesSelected = async (e) => {
             const files = Array.from(e.target?.files || [])
-            if (files.length) attachedFiles.value.push(...files)
+            if (files.length) {
+                // Upload files immediately
+                const uploadedFiles = await Promise.all(files.map(async f => {
+                    try {
+                        const response = await uploadFile(f)
+                        const metadata = {
+                            url: response.url,
+                            name: f.name,
+                            size: response.size,
+                            type: f.type,
+                            width: response.width,
+                            height: response.height,
+                            threadId: currentThread.value?.id,
+                            created: Date.now()
+                        }
+
+                        return {
+                            ...metadata,
+                            file: f // Keep original file for preview/fallback if needed
+                        }
+                    } catch (error) {
+                        console.error('File upload failed:', error)
+                        errorStatus.value = {
+                            errorCode: 'Upload Failed',
+                            message: `Failed to upload ${f.name}: ${error.message}`
+                        }
+                        return null
+                    }
+                }))
+
+                attachedFiles.value.push(...uploadedFiles.filter(f => f))
+            }
+
             // allow re-selecting the same file
             if (fileInput.value) fileInput.value.value = ''
 
@@ -253,7 +291,9 @@ export default {
 
             if (files.length > 0) {
                 e.preventDefault()
-                addFilesAndSetMessage(files)
+                // Reuse the same logic as onFilesSelected for consistency
+                const event = { target: { files: files } }
+                await onFilesSelected(event)
             }
         }
 
@@ -272,14 +312,16 @@ export default {
             isDragging.value = false
         }
 
-        const onDrop = (e) => {
+        const onDrop = async (e) => {
             e.preventDefault()
             e.stopPropagation()
             isDragging.value = false
 
             const files = Array.from(e.dataTransfer?.files || [])
             if (files.length > 0) {
-                addFilesAndSetMessage(files)
+                // Reuse the same logic as onFilesSelected for consistency
+                const event = { target: { files: files } }
+                await onFilesSelected(event)
             }
         }
 
@@ -310,17 +352,27 @@ export default {
             // Clear any existing error message
             errorStatus.value = null
 
-            let message = messageText.value.trim()
-            if (attachedFiles.value.length) {
-                const names = attachedFiles.value.map(f => f.name).join(', ')
-                const mediaType = imageExts.some(ext => names.includes(ext))
-                    ? '🖼️'
-                    : audioExts.some(ext => names.includes(ext))
-                        ? '🔉'
-                        : '📎'
-                message += `\n\n[${mediaType} ${names}]`
-            }
+            // 1. Construct Structured Content (Text + Attachments)
+            let text = messageText.value.trim()
+            let content = []
+
+
             messageText.value = ''
+
+            // Add Text Block
+            content.push({ type: 'text', text: text })
+
+            // Add Attachment Blocks
+            for (const f of attachedFiles.value) {
+                const ext = lastRightPart(f.name, '.')
+                if (imageExts.includes(ext)) {
+                    content.push({ type: 'image_url', image_url: { url: f.url } })
+                } else if (audioExts.includes(ext)) {
+                    content.push({ type: 'input_audio', input_audio: { data: f.url, format: ext } })
+                } else {
+                    content.push({ type: 'file', file: { file_data: f.url, filename: f.name } })
+                }
+            }
 
             // Create AbortController for this request
             const controller = new AbortController()
@@ -339,7 +391,7 @@ export default {
                     threadId = currentThread.value.id
                     // Update the existing thread's model and systemPrompt to match current selection
                     await threads.updateThread(threadId, {
-                        model: props.model.id,
+                        model: props.model.name,
                         info: toModelInfo(props.model),
                         systemPrompt: props.systemPrompt
                     })
@@ -347,120 +399,84 @@ export default {
 
                 // Get the thread to check for duplicates
                 let thread = await threads.getThread(threadId)
-                const lastMessage = thread.messages[thread.messages.length - 1]
-                const isDuplicate = lastMessage && lastMessage.role === 'user' && lastMessage.content === message
 
-                // Add user message only if it's not a duplicate
-                if (!isDuplicate) {
-                    await threads.addMessageToThread(threadId, {
-                        role: 'user',
-                        content: message
-                    })
-                    // Reload thread after adding message
+                // Handle Editing / Redo Logic
+                if (editingMessageId.value) {
+                    // Check if message still exists
+                    const messageExists = thread.messages.find(m => m.id === editingMessageId.value)
+                    if (messageExists) {
+                        // Update the message content
+                        await threads.updateMessageInThread(threadId, editingMessageId.value, { content: content })
+                        // Redo from this message (clears subsequent)
+                        await threads.redoMessageFromThread(threadId, editingMessageId.value)
+
+                        // Clear editing state
+                        editingMessageId.value = null
+                    } else {
+                        // Fallback if message was deleted
+                        editingMessageId.value = null
+                    }
+                    // Refresh thread state
                     thread = await threads.getThread(threadId)
+                } else {
+                    // Regular Send Logic
+                    const lastMessage = thread.messages[thread.messages.length - 1]
+
+                    // Check duplicate based on text content extracted from potential array
+                    const getLastText = (msgContent) => {
+                        if (typeof msgContent === 'string') return msgContent
+                        if (Array.isArray(msgContent)) return msgContent.find(c => c.type === 'text')?.text || ''
+                        return ''
+                    }
+                    const newText = text // content[0].text
+                    const lastText = lastMessage && lastMessage.role === 'user' ? getLastText(lastMessage.content) : null
+
+                    const isDuplicate = lastText === newText
+
+                    // Add user message only if it's not a duplicate
+                    // Note: We are saving the FULL STRUCTURED CONTENT array here
+                    if (!isDuplicate) {
+                        await threads.addMessageToThread(threadId, {
+                            role: 'user',
+                            content: content
+                        })
+                        // Reload thread after adding message
+                        thread = await threads.getThread(threadId)
+                    }
                 }
 
                 isGenerating.value = true
-                const messages = [...thread.messages]
+
+                // Construct API Request from History
+                const chatRequest = {
+                    model: props.model.name,
+                    messages: [],
+                    metadata: {}
+                }
 
                 // Add system prompt if present
                 if (props.systemPrompt?.trim()) {
-                    messages.unshift({
+                    chatRequest.messages.push({
                         role: 'system',
-                        content: [
-                            { type: 'text', text: props.systemPrompt }
-                        ]
+                        content: props.systemPrompt // assuming system prompt is just string
                     })
                 }
 
-                const chatRequest = createChatRequest()
-                chatRequest.model = props.model.id
+                // Add History
+                thread.messages.forEach(m => {
+                    chatRequest.messages.push({
+                        role: m.role,
+                        content: m.content
+                    })
+                })
 
                 // Apply user settings
                 applySettings(chatRequest)
-
-                console.debug('chatRequest', chatRequest, hasImage(), hasAudio(), attachedFiles.value.length, attachedFiles.value)
-
-                function setContentText(chatRequest, text) {
-                    // Replace text message
-                    const textImage = chatRequest.messages.find(m =>
-                        m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'text'))
-                    for (const c of textImage.content) {
-                        if (c.type === 'text') {
-                            c.text = text
-                        }
-                    }
-                }
-
-                if (hasImage()) {
-                    const imageMessage = chatRequest.messages.find(m =>
-                        m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'image_url'))
-                    console.debug('hasImage', chatRequest, imageMessage)
-                    if (imageMessage) {
-                        const imgs = []
-                        let imagePart = deepClone(imageMessage.content.find(c => c.type === 'image_url'))
-                        for (const f of attachedFiles.value) {
-                            if (imageExts.includes(lastRightPart(f.name, '.'))) {
-                                imagePart.image_url.url = await fileToDataUri(f)
-                            }
-                            imgs.push(imagePart)
-                        }
-                        imageMessage.content = imageMessage.content.filter(c => c.type !== 'image_url')
-                        imageMessage.content = [...imgs, ...imageMessage.content]
-                        setContentText(chatRequest, message)
-                    }
-
-                } else if (hasAudio()) {
-                    console.debug('hasAudio', chatRequest)
-                    const audioMessage = chatRequest.messages.find(m =>
-                        m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'input_audio'))
-                    if (audioMessage) {
-                        const audios = []
-                        let audioPart = deepClone(audioMessage.content.find(c => c.type === 'input_audio'))
-                        for (const f of attachedFiles.value) {
-                            if (audioExts.includes(lastRightPart(f.name, '.'))) {
-                                audioPart.input_audio.data = await fileToBase64(f)
-                            }
-                            audios.push(audioPart)
-                        }
-                        audioMessage.content = audioMessage.content.filter(c => c.type !== 'input_audio')
-                        audioMessage.content = [...audios, ...audioMessage.content]
-                        setContentText(chatRequest, message)
-                    }
-                } else if (attachedFiles.value.length) {
-                    console.debug('hasFile', chatRequest)
-                    const fileMessage = chatRequest.messages.find(m =>
-                        m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'file'))
-                    if (fileMessage) {
-                        const files = []
-                        let filePart = deepClone(fileMessage.content.find(c => c.type === 'file'))
-                        for (const f of attachedFiles.value) {
-                            filePart.file.file_data = await fileToDataUri(f)
-                            filePart.file.filename = f.name
-                            files.push(filePart)
-                        }
-                        fileMessage.content = fileMessage.content.filter(c => c.type !== 'file')
-                        fileMessage.content = [...files, ...fileMessage.content]
-                        setContentText(chatRequest, message)
-                    }
-
-                } else {
-                    console.debug('hasText', chatRequest)
-                    // Chat template message needs to be empty
-                    chatRequest.messages = []
-                    messages.forEach(m => chatRequest.messages.push({
-                        role: m.role,
-                        content: typeof m.content === 'string'
-                            ? [{ type: 'text', text: m.content }]
-                            : m.content
-                    }))
-                }
-
-                chatRequest.metadata ??= {}
                 chatRequest.metadata.threadId = threadId
 
-                // Send to API
                 console.debug('chatRequest', chatRequest)
+
+                // Send to API
                 const startTime = Date.now()
                 const response = await ai.post('/v1/chat/completions', {
                     body: JSON.stringify(chatRequest),
@@ -513,8 +529,8 @@ export default {
                         errorCode: 'Error',
                     }
                     errorStatus.value.message = result.error
-                } 
-                
+                }
+
                 if (!errorStatus.value) {
                     // Add assistant response (save entire message including reasoning)
                     const assistantMessage = result.choices?.[0]?.message
@@ -522,13 +538,13 @@ export default {
                     const usage = result.usage
                     if (usage) {
                         if (result.metadata?.pricing) {
-                            const [ input, output ] = result.metadata.pricing.split('/')
+                            const [input, output] = result.metadata.pricing.split('/')
                             usage.duration = result.metadata.duration ?? (Date.now() - startTime)
                             usage.input = input
                             usage.output = output
                             usage.tokens = usage.completion_tokens
                             usage.price = usage.output
-                            usage.cost = tokenCost(usage.prompt_tokens * parseFloat(input) + usage.completion_tokens * parseFloat(output))
+                            usage.cost = tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
                         }
                         await threads.logRequest(threadId, props.model, chatRequest, result)
                     }

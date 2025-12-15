@@ -6,7 +6,7 @@ const headers = { 'Accept': 'application/json' }
 const prefsKey = 'llms.prefs'
 
 export const o = {
-    version: '2.0.35',
+    version: '3.0.0b1',
     base,
     prefsKey,
     welcome: 'Welcome to llms.py',
@@ -15,12 +15,12 @@ export const o = {
     authType: 'apikey',  // 'oauth' or 'apikey' - controls which SignIn component to use
     headers,
     isSidebarOpen: true,  // Shared sidebar state (default open for lg+ screens)
-    
-    resolveUrl(url){
+
+    resolveUrl(url) {
         return url.startsWith('http') || url.startsWith('/v1') ? url : base + url
     },
     get(url, options) {
-        return fetch(this.resolveUrl(url), { 
+        return fetch(this.resolveUrl(url), {
             ...options,
             headers: Object.assign({}, this.headers, options?.headers),
         })
@@ -29,10 +29,10 @@ export const o = {
         return fetch(this.resolveUrl(url), {
             method: 'POST',
             ...options,
-            headers: Object.assign({'Content-Type': 'application/json'}, this.headers, options?.headers),
+            headers: Object.assign({ 'Content-Type': 'application/json' }, this.headers, options?.headers),
         })
     },
-    
+
     async getConfig() {
         return this.get('/config')
     },
@@ -40,14 +40,14 @@ export const o = {
         return this.get('/models')
     },
     async getAuth() {
-        return this.requiresAuth 
+        return this.requiresAuth
             ? this.get('/auth')
-            : new Promise(resolve => resolve({ json: () => ({ responseStatus: { errorCode: '!requiresAuth' } })}))
+            : new Promise(resolve => resolve({ json: () => ({ responseStatus: { errorCode: '!requiresAuth' } }) }))
     },
     get isAdmin() {
         return !this.requiresAuth || this.auth && this.auth.roles?.includes('Admin')
     },
-    
+
     signIn(auth) {
         this.auth = auth
         if (auth?.apiKey) {
@@ -114,7 +114,7 @@ export const o = {
                     const authData = JSON.parse(storedAuth)
                     if (authData.sessionToken) {
                         this.headers['X-Session-Token'] = authData.sessionToken
-                    } 
+                    }
                     // else if (authData.apiKey) {
                     //     this.headers.Authorization = `Bearer ${authData.apiKey}`
                     // }
