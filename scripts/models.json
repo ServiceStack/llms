@@ -12,6 +12,7 @@
       "qwen3-livetranslate-flash-realtime": {
         "id": "qwen3-livetranslate-flash-realtime",
         "name": "Qwen3-LiveTranslate Flash Realtime",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -46,6 +47,7 @@
       "qwen3-asr-flash": {
         "id": "qwen3-asr-flash",
         "name": "Qwen3-ASR Flash",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -74,6 +76,7 @@
       "qwen-omni-turbo": {
         "id": "qwen-omni-turbo",
         "name": "Qwen-Omni Turbo",
+        "family": "qwen-omni",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -108,6 +111,7 @@
       "qwen-vl-max": {
         "id": "qwen-vl-max",
         "name": "Qwen-VL Max",
+        "family": "qwen-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -137,6 +141,7 @@
       "qwen3-next-80b-a3b-instruct": {
         "id": "qwen3-next-80b-a3b-instruct",
         "name": "Qwen3-Next 80B-A3B Instruct",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -165,6 +170,7 @@
       "qwen-turbo": {
         "id": "qwen-turbo",
         "name": "Qwen Turbo",
+        "family": "qwen-turbo",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -194,6 +200,7 @@
       "qwen3-vl-235b-a22b": {
         "id": "qwen3-vl-235b-a22b",
         "name": "Qwen3-VL 235B-A22B",
+        "family": "qwen3-vl",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -224,6 +231,7 @@
       "qwen3-coder-flash": {
         "id": "qwen3-coder-flash",
         "name": "Qwen3 Coder Flash",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -252,6 +260,7 @@
       "qwen3-vl-30b-a3b": {
         "id": "qwen3-vl-30b-a3b",
         "name": "Qwen3-VL 30B-A3B",
+        "family": "qwen3-vl",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -282,6 +291,7 @@
       "qwen3-14b": {
         "id": "qwen3-14b",
         "name": "Qwen3 14B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -311,6 +321,7 @@
       "qvq-max": {
         "id": "qvq-max",
         "name": "QVQ Max",
+        "family": "qvq-max",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -340,6 +351,7 @@
       "qwen-plus-character-ja": {
         "id": "qwen-plus-character-ja",
         "name": "Qwen Plus Character (Japanese)",
+        "family": "qwen-plus",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -368,6 +380,7 @@
       "qwen2-5-14b-instruct": {
         "id": "qwen2-5-14b-instruct",
         "name": "Qwen2.5 14B Instruct",
+        "family": "qwen2.5",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -396,6 +409,7 @@
       "qwq-plus": {
         "id": "qwq-plus",
         "name": "QwQ Plus",
+        "family": "qwq",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -424,6 +438,7 @@
       "qwen3-coder-30b-a3b-instruct": {
         "id": "qwen3-coder-30b-a3b-instruct",
         "name": "Qwen3-Coder 30B-A3B Instruct",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -452,6 +467,7 @@
       "qwen-vl-ocr": {
         "id": "qwen-vl-ocr",
         "name": "Qwen-VL OCR",
+        "family": "qwen-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -481,6 +497,7 @@
       "qwen2-5-72b-instruct": {
         "id": "qwen2-5-72b-instruct",
         "name": "Qwen2.5 72B Instruct",
+        "family": "qwen2.5",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -509,6 +526,7 @@
       "qwen3-omni-flash": {
         "id": "qwen3-omni-flash",
         "name": "Qwen3-Omni Flash",
+        "family": "qwen3-omni",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -543,6 +561,7 @@
       "qwen-flash": {
         "id": "qwen-flash",
         "name": "Qwen Flash",
+        "family": "qwen-flash",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -571,6 +590,7 @@
       "qwen3-8b": {
         "id": "qwen3-8b",
         "name": "Qwen3 8B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -600,6 +620,7 @@
       "qwen3-omni-flash-realtime": {
         "id": "qwen3-omni-flash-realtime",
         "name": "Qwen3-Omni Flash Realtime",
+        "family": "qwen3-omni",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -634,6 +655,7 @@
       "qwen2-5-vl-72b-instruct": {
         "id": "qwen2-5-vl-72b-instruct",
         "name": "Qwen2.5-VL 72B Instruct",
+        "family": "qwen2.5-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -663,6 +685,7 @@
       "qwen3-vl-plus": {
         "id": "qwen3-vl-plus",
         "name": "Qwen3-VL Plus",
+        "family": "qwen3-vl",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -693,6 +716,7 @@
       "qwen-plus": {
         "id": "qwen-plus",
         "name": "Qwen Plus",
+        "family": "qwen-plus",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -722,6 +746,7 @@
       "qwen2-5-32b-instruct": {
         "id": "qwen2-5-32b-instruct",
         "name": "Qwen2.5 32B Instruct",
+        "family": "qwen2.5",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -750,6 +775,7 @@
       "qwen2-5-omni-7b": {
         "id": "qwen2-5-omni-7b",
         "name": "Qwen2.5-Omni 7B",
+        "family": "qwen2.5-omni",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -783,6 +809,7 @@
       "qwen-max": {
         "id": "qwen-max",
         "name": "Qwen Max",
+        "family": "qwen-max",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -811,6 +838,7 @@
       "qwen2-5-7b-instruct": {
         "id": "qwen2-5-7b-instruct",
         "name": "Qwen2.5 7B Instruct",
+        "family": "qwen2.5",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -839,6 +867,7 @@
       "qwen2-5-vl-7b-instruct": {
         "id": "qwen2-5-vl-7b-instruct",
         "name": "Qwen2.5-VL 7B Instruct",
+        "family": "qwen2.5-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -868,6 +897,7 @@
       "qwen3-235b-a22b": {
         "id": "qwen3-235b-a22b",
         "name": "Qwen3 235B-A22B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -897,6 +927,7 @@
       "qwen-omni-turbo-realtime": {
         "id": "qwen-omni-turbo-realtime",
         "name": "Qwen-Omni Turbo Realtime",
+        "family": "qwen-omni",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -930,6 +961,7 @@
       "qwen-mt-turbo": {
         "id": "qwen-mt-turbo",
         "name": "Qwen-MT Turbo",
+        "family": "qwen-mt",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -958,6 +990,7 @@
       "qwen3-coder-480b-a35b-instruct": {
         "id": "qwen3-coder-480b-a35b-instruct",
         "name": "Qwen3-Coder 480B-A35B Instruct",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -986,6 +1019,7 @@
       "qwen-mt-plus": {
         "id": "qwen-mt-plus",
         "name": "Qwen-MT Plus",
+        "family": "qwen-mt",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -1014,6 +1048,7 @@
       "qwen3-max": {
         "id": "qwen3-max",
         "name": "Qwen3 Max",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -1042,6 +1077,7 @@
       "qwen3-coder-plus": {
         "id": "qwen3-coder-plus",
         "name": "Qwen3 Coder Plus",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -1070,6 +1106,7 @@
       "qwen3-next-80b-a3b-thinking": {
         "id": "qwen3-next-80b-a3b-thinking",
         "name": "Qwen3-Next 80B-A3B (Thinking)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -1098,6 +1135,7 @@
       "qwen3-32b": {
         "id": "qwen3-32b",
         "name": "Qwen3 32B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -1127,6 +1165,7 @@
       "qwen-vl-plus": {
         "id": "qwen-vl-plus",
         "name": "Qwen-VL Plus",
+        "family": "qwen-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -1872,6 +1911,7 @@
       "NousResearch/Hermes-4.3-36B": {
         "id": "NousResearch/Hermes-4.3-36B",
         "name": "Hermes 4.3 36B",
+        "family": "hermes",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -1899,6 +1939,7 @@
       "NousResearch/Hermes-4-70B": {
         "id": "NousResearch/Hermes-4-70B",
         "name": "Hermes 4 70B",
+        "family": "hermes",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -1926,6 +1967,7 @@
       "NousResearch/Hermes-4-14B": {
         "id": "NousResearch/Hermes-4-14B",
         "name": "Hermes 4 14B",
+        "family": "hermes",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -1953,6 +1995,7 @@
       "NousResearch/Hermes-4-405B-FP8": {
         "id": "NousResearch/Hermes-4-405B-FP8",
         "name": "Hermes 4 405B FP8",
+        "family": "hermes",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -1980,6 +2023,7 @@
       "NousResearch/DeepHermes-3-Mistral-24B-Preview": {
         "id": "NousResearch/DeepHermes-3-Mistral-24B-Preview",
         "name": "DeepHermes 3 Mistral 24B Preview",
+        "family": "mistral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2007,6 +2051,7 @@
       "rednote-hilab/dots.ocr": {
         "id": "rednote-hilab/dots.ocr",
         "name": "Dots.Ocr",
+        "family": "dots.ocr",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2035,6 +2080,7 @@
       "moonshotai/Kimi-K2-Instruct-0905": {
         "id": "moonshotai/Kimi-K2-Instruct-0905",
         "name": "Kimi K2 Instruct 0905",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2062,6 +2108,7 @@
       "moonshotai/Kimi-K2-Thinking": {
         "id": "moonshotai/Kimi-K2-Thinking",
         "name": "Kimi K2 Thinking",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2089,6 +2136,7 @@
       "MiniMaxAI/MiniMax-M2": {
         "id": "MiniMaxAI/MiniMax-M2",
         "name": "MiniMax M2",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2117,6 +2165,7 @@
       "ArliAI/QwQ-32B-ArliAI-RpR-v1": {
         "id": "ArliAI/QwQ-32B-ArliAI-RpR-v1",
         "name": "QwQ 32B ArliAI RpR V1",
+        "family": "qwq",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -2144,6 +2193,7 @@
       "tngtech/DeepSeek-R1T-Chimera": {
         "id": "tngtech/DeepSeek-R1T-Chimera",
         "name": "DeepSeek R1T Chimera",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -2172,6 +2222,7 @@
       "tngtech/DeepSeek-TNG-R1T2-Chimera": {
         "id": "tngtech/DeepSeek-TNG-R1T2-Chimera",
         "name": "DeepSeek TNG R1T2 Chimera",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2200,6 +2251,7 @@
       "tngtech/TNG-R1T-Chimera-TEE": {
         "id": "tngtech/TNG-R1T-Chimera-TEE",
         "name": "TNG R1T Chimera TEE",
+        "family": "tng-r1t-chimera-tee",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2227,6 +2279,7 @@
       "OpenGVLab/InternVL3-78B": {
         "id": "OpenGVLab/InternVL3-78B",
         "name": "InternVL3 78B",
+        "family": "internvl",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2255,6 +2308,7 @@
       "openai/gpt-oss-20b": {
         "id": "openai/gpt-oss-20b",
         "name": "Gpt Oss 20b",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2282,6 +2336,7 @@
       "openai/gpt-oss-120b": {
         "id": "openai/gpt-oss-120b",
         "name": "GPT OSS 120B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2309,6 +2364,7 @@
       "chutesai/Mistral-Small-3.1-24B-Instruct-2503": {
         "id": "chutesai/Mistral-Small-3.1-24B-Instruct-2503",
         "name": "Mistral Small 3.1 24B Instruct 2503",
+        "family": "mistral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2337,6 +2393,7 @@
       "chutesai/Mistral-Small-3.2-24B-Instruct-2506": {
         "id": "chutesai/Mistral-Small-3.2-24B-Instruct-2506",
         "name": "Mistral Small 3.2 24B Instruct (2506)",
+        "family": "mistral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2365,6 +2422,7 @@
       "Alibaba-NLP/Tongyi-DeepResearch-30B-A3B": {
         "id": "Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
         "name": "Tongyi DeepResearch 30B A3B",
+        "family": "yi",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2392,6 +2450,7 @@
       "mistralai/Devstral-2-123B-Instruct-2512": {
         "id": "mistralai/Devstral-2-123B-Instruct-2512",
         "name": "Devstral 2 123B Instruct 2512",
+        "family": "devstral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2419,6 +2478,7 @@
       "unsloth/Mistral-Nemo-Instruct-2407": {
         "id": "unsloth/Mistral-Nemo-Instruct-2407",
         "name": "Mistral Nemo Instruct 2407",
+        "family": "mistral-nemo",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2446,6 +2506,7 @@
       "unsloth/gemma-3-4b-it": {
         "id": "unsloth/gemma-3-4b-it",
         "name": "Gemma 3 4b It",
+        "family": "gemma-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2474,6 +2535,7 @@
       "unsloth/Mistral-Small-24B-Instruct-2501": {
         "id": "unsloth/Mistral-Small-24B-Instruct-2501",
         "name": "Mistral Small 24B Instruct 2501",
+        "family": "mistral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2502,6 +2564,7 @@
       "unsloth/gemma-3-12b-it": {
         "id": "unsloth/gemma-3-12b-it",
         "name": "Gemma 3 12b It",
+        "family": "gemma-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2530,6 +2593,7 @@
       "unsloth/gemma-3-27b-it": {
         "id": "unsloth/gemma-3-27b-it",
         "name": "Gemma 3 27b It",
+        "family": "gemma-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2558,6 +2622,7 @@
       "Qwen/Qwen3-30B-A3B": {
         "id": "Qwen/Qwen3-30B-A3B",
         "name": "Qwen3 30B A3B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2586,6 +2651,7 @@
       "Qwen/Qwen3-14B": {
         "id": "Qwen/Qwen3-14B",
         "name": "Qwen3 14B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2613,6 +2679,7 @@
       "Qwen/Qwen2.5-VL-32B-Instruct": {
         "id": "Qwen/Qwen2.5-VL-32B-Instruct",
         "name": "Qwen2.5 VL 32B Instruct",
+        "family": "qwen2.5-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2641,6 +2708,7 @@
       "Qwen/Qwen3-235B-A22B-Instruct-2507": {
         "id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
         "name": "Qwen3 235B A22B Instruct 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2669,6 +2737,7 @@
       "Qwen/Qwen2.5-Coder-32B-Instruct": {
         "id": "Qwen/Qwen2.5-Coder-32B-Instruct",
         "name": "Qwen2.5 Coder 32B Instruct",
+        "family": "qwen2.5-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2696,6 +2765,7 @@
       "Qwen/Qwen2.5-72B-Instruct": {
         "id": "Qwen/Qwen2.5-72B-Instruct",
         "name": "Qwen2.5 72B Instruct",
+        "family": "qwen2.5",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2723,6 +2793,7 @@
       "Qwen/Qwen3-Coder-30B-A3B-Instruct": {
         "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
         "name": "Qwen3 Coder 30B A3B Instruct",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2751,6 +2822,7 @@
       "Qwen/Qwen3-235B-A22B": {
         "id": "Qwen/Qwen3-235B-A22B",
         "name": "Qwen3 235B A22B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2778,6 +2850,7 @@
       "Qwen/Qwen2.5-VL-72B-Instruct": {
         "id": "Qwen/Qwen2.5-VL-72B-Instruct",
         "name": "Qwen2.5 VL 72B Instruct",
+        "family": "qwen2.5-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -2806,6 +2879,7 @@
       "Qwen/Qwen3-32B": {
         "id": "Qwen/Qwen3-32B",
         "name": "Qwen3 32B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2833,6 +2907,7 @@
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8": {
         "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
         "name": "Qwen3 Coder 480B A35B Instruct (FP8)",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2860,6 +2935,7 @@
       "Qwen/Qwen3-VL-235B-A22B-Instruct": {
         "id": "Qwen/Qwen3-VL-235B-A22B-Instruct",
         "name": "Qwen3 VL 235B A22B Instruct",
+        "family": "qwen3-vl",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2888,6 +2964,7 @@
       "Qwen/Qwen3-VL-235B-A22B-Thinking": {
         "id": "Qwen/Qwen3-VL-235B-A22B-Thinking",
         "name": "Qwen3 VL 235B A22B Thinking",
+        "family": "qwen3-vl",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2916,6 +2993,7 @@
       "Qwen/Qwen3-30B-A3B-Instruct-2507": {
         "id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
         "name": "Qwen3 30B A3B Instruct 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -2944,6 +3022,7 @@
       "Qwen/Qwen3-235B-A22B-Thinking-2507": {
         "id": "Qwen/Qwen3-235B-A22B-Thinking-2507",
         "name": "Qwen3-235B-A22B-Thinking-2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -2972,6 +3051,7 @@
       "Qwen/Qwen3-Next-80B-A3B-Instruct": {
         "id": "Qwen/Qwen3-Next-80B-A3B-Instruct",
         "name": "Qwen3 Next 80B A3B Instruct",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -3000,6 +3080,7 @@
       "zai-org/GLM-4.6-TEE": {
         "id": "zai-org/GLM-4.6-TEE",
         "name": "GLM 4.6 TEE",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -3027,6 +3108,7 @@
       "zai-org/GLM-4.6V": {
         "id": "zai-org/GLM-4.6V",
         "name": "GLM 4.6V",
+        "family": "glm-4.6v",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3055,6 +3137,7 @@
       "zai-org/GLM-4.5": {
         "id": "zai-org/GLM-4.5",
         "name": "GLM 4.5",
+        "family": "glm-4.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3083,6 +3166,7 @@
       "zai-org/GLM-4.6": {
         "id": "zai-org/GLM-4.6",
         "name": "GLM 4.6",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3111,6 +3195,7 @@
       "zai-org/GLM-4.5-Air": {
         "id": "zai-org/GLM-4.5-Air",
         "name": "GLM 4.5 Air",
+        "family": "glm-4.5-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3139,6 +3224,7 @@
       "deepseek-ai/DeepSeek-R1": {
         "id": "deepseek-ai/DeepSeek-R1",
         "name": "DeepSeek R1",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -3166,6 +3252,7 @@
       "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": {
         "id": "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
         "name": "DeepSeek R1 0528 Qwen3 8B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -3194,6 +3281,7 @@
       "deepseek-ai/DeepSeek-R1-0528": {
         "id": "deepseek-ai/DeepSeek-R1-0528",
         "name": "DeepSeek R1 (0528)",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3221,6 +3309,7 @@
       "deepseek-ai/DeepSeek-V3.1-Terminus": {
         "id": "deepseek-ai/DeepSeek-V3.1-Terminus",
         "name": "DeepSeek V3.1 Terminus",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3249,6 +3338,7 @@
       "deepseek-ai/DeepSeek-V3.2": {
         "id": "deepseek-ai/DeepSeek-V3.2",
         "name": "DeepSeek V3.2",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3277,6 +3367,7 @@
       "deepseek-ai/DeepSeek-V3.2-Speciale-TEE": {
         "id": "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
         "name": "DeepSeek V3.2 Speciale TEE",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -3304,6 +3395,7 @@
       "deepseek-ai/DeepSeek-V3": {
         "id": "deepseek-ai/DeepSeek-V3",
         "name": "DeepSeek V3",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -3331,6 +3423,7 @@
       "deepseek-ai/DeepSeek-R1-Distill-Llama-70B": {
         "id": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
         "name": "DeepSeek R1 Distill Llama 70B",
+        "family": "deepseek-r1-distill-llama",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3359,6 +3452,7 @@
       "deepseek-ai/DeepSeek-V3.1": {
         "id": "deepseek-ai/DeepSeek-V3.1",
         "name": "DeepSeek V3.1",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3386,6 +3480,7 @@
       "deepseek-ai/DeepSeek-V3-0324": {
         "id": "deepseek-ai/DeepSeek-V3-0324",
         "name": "DeepSeek V3 (0324)",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -3426,6 +3521,7 @@
       "deepseek-chat": {
         "id": "deepseek-chat",
         "name": "DeepSeek Chat",
+        "family": "deepseek-chat",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -3455,6 +3551,7 @@
       "deepseek-reasoner": {
         "id": "deepseek-reasoner",
         "name": "DeepSeek Reasoner",
+        "family": "deepseek",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -3499,6 +3596,7 @@
       "accounts/fireworks/models/deepseek-r1-0528": {
         "id": "accounts/fireworks/models/deepseek-r1-0528",
         "name": "Deepseek R1 05/28",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3527,6 +3625,7 @@
       "accounts/fireworks/models/deepseek-v3p1": {
         "id": "accounts/fireworks/models/deepseek-v3p1",
         "name": "DeepSeek V3.1",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3555,6 +3654,7 @@
       "accounts/fireworks/models/minimax-m2": {
         "id": "accounts/fireworks/models/minimax-m2",
         "name": "MiniMax-M2",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3583,6 +3683,7 @@
       "accounts/fireworks/models/deepseek-v3-0324": {
         "id": "accounts/fireworks/models/deepseek-v3-0324",
         "name": "Deepseek V3 03-24",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -3611,6 +3712,7 @@
       "accounts/fireworks/models/kimi-k2-thinking": {
         "id": "accounts/fireworks/models/kimi-k2-thinking",
         "name": "Kimi K2 Thinking",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3638,6 +3740,7 @@
       "accounts/fireworks/models/kimi-k2-instruct": {
         "id": "accounts/fireworks/models/kimi-k2-instruct",
         "name": "Kimi K2 Instruct",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -3666,6 +3769,7 @@
       "accounts/fireworks/models/qwen3-235b-a22b": {
         "id": "accounts/fireworks/models/qwen3-235b-a22b",
         "name": "Qwen3 235B-A22B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3694,6 +3798,7 @@
       "accounts/fireworks/models/gpt-oss-20b": {
         "id": "accounts/fireworks/models/gpt-oss-20b",
         "name": "GPT OSS 20B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3721,6 +3826,7 @@
       "accounts/fireworks/models/gpt-oss-120b": {
         "id": "accounts/fireworks/models/gpt-oss-120b",
         "name": "GPT OSS 120B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3748,6 +3854,7 @@
       "accounts/fireworks/models/glm-4p5-air": {
         "id": "accounts/fireworks/models/glm-4p5-air",
         "name": "GLM 4.5 Air",
+        "family": "glm-4-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3776,6 +3883,7 @@
       "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct": {
         "id": "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct",
         "name": "Qwen3 Coder 480B A35B Instruct",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -3803,6 +3911,7 @@
       "accounts/fireworks/models/glm-4p5": {
         "id": "accounts/fireworks/models/glm-4p5",
         "name": "GLM 4.5",
+        "family": "glm-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3843,6 +3952,7 @@
       "gemini-2.0-flash-001": {
         "id": "gemini-2.0-flash-001",
         "name": "Gemini 2.0 Flash",
+        "family": "gemini-flash",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -3875,6 +3985,7 @@
       "claude-opus-4": {
         "id": "claude-opus-4",
         "name": "Claude Opus 4",
+        "family": "claude-opus",
         "attachment": true,
         "reasoning": true,
         "tool_call": false,
@@ -3905,6 +4016,7 @@
       "grok-code-fast-1": {
         "id": "grok-code-fast-1",
         "name": "Grok Code Fast 1",
+        "family": "grok",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3933,6 +4045,7 @@
       "gpt-5.1-codex": {
         "id": "gpt-5.1-codex",
         "name": "GPT-5.1-Codex",
+        "family": "gpt-5-codex",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -3962,6 +4075,7 @@
       "claude-haiku-4.5": {
         "id": "claude-haiku-4.5",
         "name": "Claude Haiku 4.5",
+        "family": "claude-haiku",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -3991,6 +4105,7 @@
       "gemini-3-pro-preview": {
         "id": "gemini-3-pro-preview",
         "name": "Gemini 3 Pro Preview",
+        "family": "gemini-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4023,6 +4138,7 @@
       "oswe-vscode-prime": {
         "id": "oswe-vscode-prime",
         "name": "Raptor Mini (Preview)",
+        "family": "oswe-vscode-prime",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4052,6 +4168,7 @@
       "claude-3.5-sonnet": {
         "id": "claude-3.5-sonnet",
         "name": "Claude Sonnet 3.5",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -4082,6 +4199,7 @@
       "gpt-5.1-codex-mini": {
         "id": "gpt-5.1-codex-mini",
         "name": "GPT-5.1-Codex-mini",
+        "family": "gpt-5-codex-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4111,6 +4229,7 @@
       "o3-mini": {
         "id": "o3-mini",
         "name": "o3-mini",
+        "family": "o3-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -4140,6 +4259,7 @@
       "gpt-5.1": {
         "id": "gpt-5.1",
         "name": "GPT-5.1",
+        "family": "gpt-5",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4169,6 +4289,7 @@
       "gpt-5-codex": {
         "id": "gpt-5-codex",
         "name": "GPT-5-Codex",
+        "family": "gpt-5-codex",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4198,6 +4319,7 @@
       "gpt-4o": {
         "id": "gpt-4o",
         "name": "GPT-4o",
+        "family": "gpt-4o",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -4227,6 +4349,7 @@
       "gpt-4.1": {
         "id": "gpt-4.1",
         "name": "GPT-4.1",
+        "family": "gpt-4.1",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -4256,6 +4379,7 @@
       "o4-mini": {
         "id": "o4-mini",
         "name": "o4-mini (Preview)",
+        "family": "o4-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -4285,6 +4409,7 @@
       "claude-opus-41": {
         "id": "claude-opus-41",
         "name": "Claude Opus 4.1",
+        "family": "claude-opus",
         "attachment": true,
         "reasoning": true,
         "tool_call": false,
@@ -4314,6 +4439,7 @@
       "gpt-5-mini": {
         "id": "gpt-5-mini",
         "name": "GPT-5-mini",
+        "family": "gpt-5-mini",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4343,6 +4469,7 @@
       "claude-3.7-sonnet": {
         "id": "claude-3.7-sonnet",
         "name": "Claude Sonnet 3.7",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -4373,6 +4500,7 @@
       "gemini-2.5-pro": {
         "id": "gemini-2.5-pro",
         "name": "Gemini 2.5 Pro",
+        "family": "gemini-pro",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -4404,6 +4532,7 @@
       "gpt-5.1-codex-max": {
         "id": "gpt-5.1-codex-max",
         "name": "GPT-5.1-Codex-max",
+        "family": "gpt-5-codex-max",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4433,6 +4562,7 @@
       "o3": {
         "id": "o3",
         "name": "o3 (Preview)",
+        "family": "o3",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4463,6 +4593,7 @@
       "claude-sonnet-4": {
         "id": "claude-sonnet-4",
         "name": "Claude Sonnet 4",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4492,6 +4623,7 @@
       "gpt-5": {
         "id": "gpt-5",
         "name": "GPT-5",
+        "family": "gpt-5",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4521,6 +4653,7 @@
       "claude-3.7-sonnet-thought": {
         "id": "claude-3.7-sonnet-thought",
         "name": "Claude Sonnet 3.7 Thinking",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4551,6 +4684,7 @@
       "claude-opus-4.5": {
         "id": "claude-opus-4.5",
         "name": "Claude Opus 4.5",
+        "family": "claude-opus",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4580,6 +4714,7 @@
       "gpt-5.2": {
         "id": "gpt-5.2",
         "name": "GPT-5.2",
+        "family": "gpt-5",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4609,6 +4744,7 @@
       "claude-sonnet-4.5": {
         "id": "claude-sonnet-4.5",
         "name": "Claude Sonnet 4.5",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -4650,6 +4786,7 @@
       "core42/jais-30b-chat": {
         "id": "core42/jais-30b-chat",
         "name": "JAIS 30b Chat",
+        "family": "jais",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4678,6 +4815,7 @@
       "xai/grok-3": {
         "id": "xai/grok-3",
         "name": "Grok 3",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4706,6 +4844,7 @@
       "xai/grok-3-mini": {
         "id": "xai/grok-3-mini",
         "name": "Grok 3 Mini",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4734,6 +4873,7 @@
       "cohere/cohere-command-r-08-2024": {
         "id": "cohere/cohere-command-r-08-2024",
         "name": "Cohere Command R 08-2024",
+        "family": "command-r",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4762,6 +4902,7 @@
       "cohere/cohere-command-a": {
         "id": "cohere/cohere-command-a",
         "name": "Cohere Command A",
+        "family": "command-a",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4790,6 +4931,7 @@
       "cohere/cohere-command-r-plus-08-2024": {
         "id": "cohere/cohere-command-r-plus-08-2024",
         "name": "Cohere Command R+ 08-2024",
+        "family": "command-r-plus",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4818,6 +4960,7 @@
       "cohere/cohere-command-r": {
         "id": "cohere/cohere-command-r",
         "name": "Cohere Command R",
+        "family": "command-r",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4846,6 +4989,7 @@
       "cohere/cohere-command-r-plus": {
         "id": "cohere/cohere-command-r-plus",
         "name": "Cohere Command R+",
+        "family": "command-r-plus",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4874,6 +5018,7 @@
       "deepseek/deepseek-r1-0528": {
         "id": "deepseek/deepseek-r1-0528",
         "name": "DeepSeek-R1-0528",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4902,6 +5047,7 @@
       "deepseek/deepseek-r1": {
         "id": "deepseek/deepseek-r1",
         "name": "DeepSeek-R1",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4930,6 +5076,7 @@
       "deepseek/deepseek-v3-0324": {
         "id": "deepseek/deepseek-v3-0324",
         "name": "DeepSeek-V3-0324",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4958,6 +5105,7 @@
       "mistral-ai/mistral-medium-2505": {
         "id": "mistral-ai/mistral-medium-2505",
         "name": "Mistral Medium 3 (25.05)",
+        "family": "mistral-medium",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -4987,6 +5135,7 @@
       "mistral-ai/ministral-3b": {
         "id": "mistral-ai/ministral-3b",
         "name": "Ministral 3B",
+        "family": "ministral-3b",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5015,6 +5164,7 @@
       "mistral-ai/mistral-nemo": {
         "id": "mistral-ai/mistral-nemo",
         "name": "Mistral Nemo",
+        "family": "mistral-nemo",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5043,6 +5193,7 @@
       "mistral-ai/mistral-large-2411": {
         "id": "mistral-ai/mistral-large-2411",
         "name": "Mistral Large 24.11",
+        "family": "mistral-large",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5071,6 +5222,7 @@
       "mistral-ai/codestral-2501": {
         "id": "mistral-ai/codestral-2501",
         "name": "Codestral 25.01",
+        "family": "codestral",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5099,6 +5251,7 @@
       "mistral-ai/mistral-small-2503": {
         "id": "mistral-ai/mistral-small-2503",
         "name": "Mistral Small 3.1",
+        "family": "mistral-small",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5128,6 +5281,7 @@
       "microsoft/phi-3-medium-128k-instruct": {
         "id": "microsoft/phi-3-medium-128k-instruct",
         "name": "Phi-3-medium instruct (128k)",
+        "family": "phi-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5156,6 +5310,7 @@
       "microsoft/phi-3-mini-4k-instruct": {
         "id": "microsoft/phi-3-mini-4k-instruct",
         "name": "Phi-3-mini instruct (4k)",
+        "family": "phi-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5184,6 +5339,7 @@
       "microsoft/phi-3-small-128k-instruct": {
         "id": "microsoft/phi-3-small-128k-instruct",
         "name": "Phi-3-small instruct (128k)",
+        "family": "phi-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5212,6 +5368,7 @@
       "microsoft/phi-3.5-vision-instruct": {
         "id": "microsoft/phi-3.5-vision-instruct",
         "name": "Phi-3.5-vision instruct (128k)",
+        "family": "phi-3.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5241,6 +5398,7 @@
       "microsoft/phi-4": {
         "id": "microsoft/phi-4",
         "name": "Phi-4",
+        "family": "phi-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5269,6 +5427,7 @@
       "microsoft/phi-4-mini-reasoning": {
         "id": "microsoft/phi-4-mini-reasoning",
         "name": "Phi-4-mini-reasoning",
+        "family": "phi-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5297,6 +5456,7 @@
       "microsoft/phi-3-small-8k-instruct": {
         "id": "microsoft/phi-3-small-8k-instruct",
         "name": "Phi-3-small instruct (8k)",
+        "family": "phi-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5325,6 +5485,7 @@
       "microsoft/phi-3.5-mini-instruct": {
         "id": "microsoft/phi-3.5-mini-instruct",
         "name": "Phi-3.5-mini instruct (128k)",
+        "family": "phi-3.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5353,6 +5514,7 @@
       "microsoft/phi-4-multimodal-instruct": {
         "id": "microsoft/phi-4-multimodal-instruct",
         "name": "Phi-4-multimodal-instruct",
+        "family": "phi-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5383,6 +5545,7 @@
       "microsoft/phi-3-mini-128k-instruct": {
         "id": "microsoft/phi-3-mini-128k-instruct",
         "name": "Phi-3-mini instruct (128k)",
+        "family": "phi-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5411,6 +5574,7 @@
       "microsoft/phi-3.5-moe-instruct": {
         "id": "microsoft/phi-3.5-moe-instruct",
         "name": "Phi-3.5-MoE instruct (128k)",
+        "family": "phi-3.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5439,6 +5603,7 @@
       "microsoft/phi-4-mini-instruct": {
         "id": "microsoft/phi-4-mini-instruct",
         "name": "Phi-4-mini-instruct",
+        "family": "phi-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5467,6 +5632,7 @@
       "microsoft/phi-3-medium-4k-instruct": {
         "id": "microsoft/phi-3-medium-4k-instruct",
         "name": "Phi-3-medium instruct (4k)",
+        "family": "phi-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5495,6 +5661,7 @@
       "microsoft/phi-4-reasoning": {
         "id": "microsoft/phi-4-reasoning",
         "name": "Phi-4-Reasoning",
+        "family": "phi-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5523,6 +5690,7 @@
       "microsoft/mai-ds-r1": {
         "id": "microsoft/mai-ds-r1",
         "name": "MAI-DS-R1",
+        "family": "mai-ds-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5551,6 +5719,7 @@
       "openai/gpt-4.1-nano": {
         "id": "openai/gpt-4.1-nano",
         "name": "GPT-4.1-nano",
+        "family": "gpt-4.1-nano",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -5580,6 +5749,7 @@
       "openai/gpt-4.1-mini": {
         "id": "openai/gpt-4.1-mini",
         "name": "GPT-4.1-mini",
+        "family": "gpt-4.1-mini",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -5609,6 +5779,7 @@
       "openai/o1-preview": {
         "id": "openai/o1-preview",
         "name": "OpenAI o1-preview",
+        "family": "o1-preview",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -5637,6 +5808,7 @@
       "openai/o3-mini": {
         "id": "openai/o3-mini",
         "name": "OpenAI o3-mini",
+        "family": "o3-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -5665,6 +5837,7 @@
       "openai/gpt-4o": {
         "id": "openai/gpt-4o",
         "name": "GPT-4o",
+        "family": "gpt-4o",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -5695,6 +5868,7 @@
       "openai/gpt-4.1": {
         "id": "openai/gpt-4.1",
         "name": "GPT-4.1",
+        "family": "gpt-4.1",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -5724,6 +5898,7 @@
       "openai/o4-mini": {
         "id": "openai/o4-mini",
         "name": "OpenAI o4-mini",
+        "family": "o4-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -5753,6 +5928,7 @@
       "openai/o1": {
         "id": "openai/o1",
         "name": "OpenAI o1",
+        "family": "o1",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -5782,6 +5958,7 @@
       "openai/o1-mini": {
         "id": "openai/o1-mini",
         "name": "OpenAI o1-mini",
+        "family": "o1-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -5810,6 +5987,7 @@
       "openai/o3": {
         "id": "openai/o3",
         "name": "OpenAI o3",
+        "family": "o3",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -5839,6 +6017,7 @@
       "openai/gpt-4o-mini": {
         "id": "openai/gpt-4o-mini",
         "name": "GPT-4o mini",
+        "family": "gpt-4o-mini",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -5869,6 +6048,7 @@
       "meta/llama-3.2-11b-vision-instruct": {
         "id": "meta/llama-3.2-11b-vision-instruct",
         "name": "Llama-3.2-11B-Vision-Instruct",
+        "family": "llama-3.2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5899,6 +6079,7 @@
       "meta/meta-llama-3.1-405b-instruct": {
         "id": "meta/meta-llama-3.1-405b-instruct",
         "name": "Meta-Llama-3.1-405B-Instruct",
+        "family": "llama-3.1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5927,6 +6108,7 @@
       "meta/llama-4-maverick-17b-128e-instruct-fp8": {
         "id": "meta/llama-4-maverick-17b-128e-instruct-fp8",
         "name": "Llama 4 Maverick 17B 128E Instruct FP8",
+        "family": "llama-4-maverick",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5956,6 +6138,7 @@
       "meta/meta-llama-3-70b-instruct": {
         "id": "meta/meta-llama-3-70b-instruct",
         "name": "Meta-Llama-3-70B-Instruct",
+        "family": "llama-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -5984,6 +6167,7 @@
       "meta/meta-llama-3.1-70b-instruct": {
         "id": "meta/meta-llama-3.1-70b-instruct",
         "name": "Meta-Llama-3.1-70B-Instruct",
+        "family": "llama-3.1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6012,6 +6196,7 @@
       "meta/llama-3.3-70b-instruct": {
         "id": "meta/llama-3.3-70b-instruct",
         "name": "Llama-3.3-70B-Instruct",
+        "family": "llama-3.3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6040,6 +6225,7 @@
       "meta/llama-3.2-90b-vision-instruct": {
         "id": "meta/llama-3.2-90b-vision-instruct",
         "name": "Llama-3.2-90B-Vision-Instruct",
+        "family": "llama-3.2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6070,6 +6256,7 @@
       "meta/meta-llama-3-8b-instruct": {
         "id": "meta/meta-llama-3-8b-instruct",
         "name": "Meta-Llama-3-8B-Instruct",
+        "family": "llama-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6098,6 +6285,7 @@
       "meta/llama-4-scout-17b-16e-instruct": {
         "id": "meta/llama-4-scout-17b-16e-instruct",
         "name": "Llama 4 Scout 17B 16E Instruct",
+        "family": "llama-4-scout",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6127,6 +6315,7 @@
       "meta/meta-llama-3.1-8b-instruct": {
         "id": "meta/meta-llama-3.1-8b-instruct",
         "name": "Meta-Llama-3.1-8B-Instruct",
+        "family": "llama-3.1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6155,6 +6344,7 @@
       "ai21-labs/ai21-jamba-1.5-large": {
         "id": "ai21-labs/ai21-jamba-1.5-large",
         "name": "AI21 Jamba 1.5 Large",
+        "family": "jamba-1.5-large",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6183,6 +6373,7 @@
       "ai21-labs/ai21-jamba-1.5-mini": {
         "id": "ai21-labs/ai21-jamba-1.5-mini",
         "name": "AI21 Jamba 1.5 Mini",
+        "family": "jamba-1.5-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6223,6 +6414,7 @@
       "gemini-embedding-001": {
         "id": "gemini-embedding-001",
         "name": "Gemini Embedding 001",
+        "family": "gemini",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -6563,6 +6755,7 @@
       "gemini-live-2.5-flash-preview-native-audio": {
         "id": "gemini-live-2.5-flash-preview-native-audio",
         "name": "Gemini Live 2.5 Flash Preview Native Audio",
+        "family": "gemini-flash",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -6701,6 +6894,7 @@
       "gemini-live-2.5-flash": {
         "id": "gemini-live-2.5-flash",
         "name": "Gemini Live 2.5 Flash",
+        "family": "gemini-flash",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -6872,6 +7066,7 @@
       "gemini-2.5-pro-preview-tts": {
         "id": "gemini-2.5-pro-preview-tts",
         "name": "Gemini 2.5 Pro Preview TTS",
+        "family": "gemini-flash-tts",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -7080,6 +7275,7 @@
       "llama-3.1-8b-instant": {
         "id": "llama-3.1-8b-instant",
         "name": "Llama 3.1 8B Instant",
+        "family": "llama-3.1",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7108,6 +7304,7 @@
       "mistral-saba-24b": {
         "id": "mistral-saba-24b",
         "name": "Mistral Saba 24B",
+        "family": "mistral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7137,6 +7334,7 @@
       "llama3-8b-8192": {
         "id": "llama3-8b-8192",
         "name": "Llama 3 8B",
+        "family": "llama",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7166,6 +7364,7 @@
       "qwen-qwq-32b": {
         "id": "qwen-qwq-32b",
         "name": "Qwen QwQ 32B",
+        "family": "qwq",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7194,6 +7393,7 @@
       "llama3-70b-8192": {
         "id": "llama3-70b-8192",
         "name": "Llama 3 70B",
+        "family": "llama",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7223,6 +7423,7 @@
       "deepseek-r1-distill-llama-70b": {
         "id": "deepseek-r1-distill-llama-70b",
         "name": "DeepSeek R1 Distill Llama 70B",
+        "family": "deepseek-r1-distill-llama",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7252,6 +7453,7 @@
       "llama-guard-3-8b": {
         "id": "llama-guard-3-8b",
         "name": "Llama Guard 3 8B",
+        "family": "llama",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -7280,6 +7482,7 @@
       "gemma2-9b-it": {
         "id": "gemma2-9b-it",
         "name": "Gemma 2 9B",
+        "family": "gemma-2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7309,6 +7512,7 @@
       "llama-3.3-70b-versatile": {
         "id": "llama-3.3-70b-versatile",
         "name": "Llama 3.3 70B Versatile",
+        "family": "llama-3.3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7337,6 +7541,7 @@
       "moonshotai/kimi-k2-instruct-0905": {
         "id": "moonshotai/kimi-k2-instruct-0905",
         "name": "Kimi K2 Instruct 0905",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7365,6 +7570,7 @@
       "moonshotai/kimi-k2-instruct": {
         "id": "moonshotai/kimi-k2-instruct",
         "name": "Kimi K2 Instruct",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7394,6 +7600,7 @@
       "openai/gpt-oss-20b": {
         "id": "openai/gpt-oss-20b",
         "name": "GPT OSS 20B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7421,6 +7628,7 @@
       "openai/gpt-oss-120b": {
         "id": "openai/gpt-oss-120b",
         "name": "GPT OSS 120B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7448,6 +7656,7 @@
       "qwen/qwen3-32b": {
         "id": "qwen/qwen3-32b",
         "name": "Qwen3 32B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7476,6 +7685,7 @@
       "meta-llama/llama-4-scout-17b-16e-instruct": {
         "id": "meta-llama/llama-4-scout-17b-16e-instruct",
         "name": "Llama 4 Scout 17B",
+        "family": "llama-4-scout",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7505,6 +7715,7 @@
       "meta-llama/llama-4-maverick-17b-128e-instruct": {
         "id": "meta-llama/llama-4-maverick-17b-128e-instruct",
         "name": "Llama 4 Maverick 17B",
+        "family": "llama-4-maverick",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7534,6 +7745,7 @@
       "meta-llama/llama-guard-4-12b": {
         "id": "meta-llama/llama-guard-4-12b",
         "name": "Llama Guard 4 12B",
+        "family": "llama",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -7574,6 +7786,7 @@
       "moonshotai/Kimi-K2-Instruct": {
         "id": "moonshotai/Kimi-K2-Instruct",
         "name": "Kimi-K2-Instruct",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7602,6 +7815,7 @@
       "moonshotai/Kimi-K2-Instruct-0905": {
         "id": "moonshotai/Kimi-K2-Instruct-0905",
         "name": "Kimi-K2-Instruct-0905",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7630,6 +7844,7 @@
       "MiniMaxAI/MiniMax-M2": {
         "id": "MiniMaxAI/MiniMax-M2",
         "name": "MiniMax-M2",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7658,6 +7873,7 @@
       "Qwen/Qwen3-Embedding-8B": {
         "id": "Qwen/Qwen3-Embedding-8B",
         "name": "Qwen 3 Embedding 4B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -7686,6 +7902,7 @@
       "Qwen/Qwen3-Embedding-4B": {
         "id": "Qwen/Qwen3-Embedding-4B",
         "name": "Qwen 3 Embedding 4B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -7714,6 +7931,7 @@
       "Qwen/Qwen3-Coder-480B-A35B-Instruct": {
         "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
         "name": "Qwen3-Coder-480B-A35B-Instruct",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7742,6 +7960,7 @@
       "Qwen/Qwen3-235B-A22B-Thinking-2507": {
         "id": "Qwen/Qwen3-235B-A22B-Thinking-2507",
         "name": "Qwen3-235B-A22B-Thinking-2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7770,6 +7989,7 @@
       "Qwen/Qwen3-Next-80B-A3B-Instruct": {
         "id": "Qwen/Qwen3-Next-80B-A3B-Instruct",
         "name": "Qwen3-Next-80B-A3B-Instruct",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7798,6 +8018,7 @@
       "Qwen/Qwen3-Next-80B-A3B-Thinking": {
         "id": "Qwen/Qwen3-Next-80B-A3B-Thinking",
         "name": "Qwen3-Next-80B-A3B-Thinking",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7826,6 +8047,7 @@
       "zai-org/GLM-4.5": {
         "id": "zai-org/GLM-4.5",
         "name": "GLM-4.5",
+        "family": "glm-4.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7854,6 +8076,7 @@
       "zai-org/GLM-4.6": {
         "id": "zai-org/GLM-4.6",
         "name": "GLM-4.6",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7883,6 +8106,7 @@
       "zai-org/GLM-4.5-Air": {
         "id": "zai-org/GLM-4.5-Air",
         "name": "GLM-4.5-Air",
+        "family": "glm-4.5-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7911,6 +8135,7 @@
       "deepseek-ai/Deepseek-V3-0324": {
         "id": "deepseek-ai/Deepseek-V3-0324",
         "name": "DeepSeek-V3-0324",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -7939,6 +8164,7 @@
       "deepseek-ai/DeepSeek-R1-0528": {
         "id": "deepseek-ai/DeepSeek-R1-0528",
         "name": "DeepSeek-R1-0528",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -7979,6 +8205,7 @@
       "openai/gpt-oss-20b": {
         "id": "openai/gpt-oss-20b",
         "name": "GPT OSS 20B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -8006,6 +8233,7 @@
       "qwen/qwen3-30b-a3b-2507": {
         "id": "qwen/qwen3-30b-a3b-2507",
         "name": "Qwen3 30B A3B 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8034,6 +8262,7 @@
       "qwen/qwen3-coder-30b": {
         "id": "qwen/qwen3-coder-30b",
         "name": "Qwen3 Coder 30B",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8074,6 +8303,7 @@
       "MiniMax-M2": {
         "id": "MiniMax-M2",
         "name": "MiniMax-M2",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -8112,6 +8342,7 @@
       "devstral-medium-2507": {
         "id": "devstral-medium-2507",
         "name": "Devstral Medium",
+        "family": "devstral-medium",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8140,6 +8371,7 @@
       "mistral-large-2512": {
         "id": "mistral-large-2512",
         "name": "Mistral Large 3",
+        "family": "mistral-large",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -8169,6 +8401,7 @@
       "open-mixtral-8x22b": {
         "id": "open-mixtral-8x22b",
         "name": "Mixtral 8x22B",
+        "family": "mixtral-8x22b",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8197,6 +8430,7 @@
       "ministral-8b-latest": {
         "id": "ministral-8b-latest",
         "name": "Ministral 8B",
+        "family": "ministral-8b",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8225,6 +8459,7 @@
       "pixtral-large-latest": {
         "id": "pixtral-large-latest",
         "name": "Pixtral Large",
+        "family": "pixtral-large",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -8254,6 +8489,7 @@
       "mistral-small-2506": {
         "id": "mistral-small-2506",
         "name": "Mistral Small 3.2",
+        "family": "mistral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8283,6 +8519,7 @@
       "ministral-3b-latest": {
         "id": "ministral-3b-latest",
         "name": "Ministral 3B",
+        "family": "ministral-3b",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8311,6 +8548,7 @@
       "pixtral-12b": {
         "id": "pixtral-12b",
         "name": "Pixtral 12B",
+        "family": "pixtral",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -8340,6 +8578,7 @@
       "mistral-medium-2505": {
         "id": "mistral-medium-2505",
         "name": "Mistral Medium 3",
+        "family": "mistral-medium",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -8369,6 +8608,7 @@
       "labs-devstral-small-2512": {
         "id": "labs-devstral-small-2512",
         "name": "Devstral Small 2",
+        "family": "devstral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8398,6 +8638,7 @@
       "devstral-medium-latest": {
         "id": "devstral-medium-latest",
         "name": "Devstral 2",
+        "family": "devstral-medium",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8426,6 +8667,7 @@
       "devstral-small-2505": {
         "id": "devstral-small-2505",
         "name": "Devstral Small 2505",
+        "family": "devstral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8454,6 +8696,7 @@
       "mistral-medium-2508": {
         "id": "mistral-medium-2508",
         "name": "Mistral Medium 3.1",
+        "family": "mistral-medium",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -8483,6 +8726,7 @@
       "mistral-embed": {
         "id": "mistral-embed",
         "name": "Mistral Embed",
+        "family": "mistral-embed",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -8510,6 +8754,7 @@
       "mistral-small-latest": {
         "id": "mistral-small-latest",
         "name": "Mistral Small",
+        "family": "mistral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8539,6 +8784,7 @@
       "magistral-small": {
         "id": "magistral-small",
         "name": "Magistral Small",
+        "family": "magistral-small",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -8567,6 +8813,7 @@
       "devstral-small-2507": {
         "id": "devstral-small-2507",
         "name": "Devstral Small",
+        "family": "devstral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8595,6 +8842,7 @@
       "codestral-latest": {
         "id": "codestral-latest",
         "name": "Codestral",
+        "family": "codestral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8623,6 +8871,7 @@
       "open-mixtral-8x7b": {
         "id": "open-mixtral-8x7b",
         "name": "Mixtral 8x7B",
+        "family": "mixtral-8x7b",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8651,6 +8900,7 @@
       "mistral-nemo": {
         "id": "mistral-nemo",
         "name": "Mistral Nemo",
+        "family": "mistral-nemo",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8679,6 +8929,7 @@
       "open-mistral-7b": {
         "id": "open-mistral-7b",
         "name": "Mistral 7B",
+        "family": "mistral-7b",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8707,6 +8958,7 @@
       "mistral-large-latest": {
         "id": "mistral-large-latest",
         "name": "Mistral Large",
+        "family": "mistral-large",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -8736,6 +8988,7 @@
       "mistral-medium-latest": {
         "id": "mistral-medium-latest",
         "name": "Mistral Medium",
+        "family": "mistral-medium",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8765,6 +9018,7 @@
       "mistral-large-2411": {
         "id": "mistral-large-2411",
         "name": "Mistral Large 2.1",
+        "family": "mistral-large",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8793,6 +9047,7 @@
       "magistral-medium-latest": {
         "id": "magistral-medium-latest",
         "name": "Magistral Medium",
+        "family": "magistral-medium",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -8833,6 +9088,7 @@
       "kimi-k2-thinking-turbo": {
         "id": "kimi-k2-thinking-turbo",
         "name": "Kimi K2 Thinking Turbo",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -8862,6 +9118,7 @@
       "kimi-k2-turbo-preview": {
         "id": "kimi-k2-turbo-preview",
         "name": "Kimi K2 Turbo",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8891,6 +9148,7 @@
       "kimi-k2-0711-preview": {
         "id": "kimi-k2-0711-preview",
         "name": "Kimi K2 0711",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8920,6 +9178,7 @@
       "kimi-k2-thinking": {
         "id": "kimi-k2-thinking",
         "name": "Kimi K2 Thinking",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -8949,6 +9208,7 @@
       "kimi-k2-0905-preview": {
         "id": "kimi-k2-0905-preview",
         "name": "Kimi K2 0905",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -8990,6 +9250,7 @@
       "moonshotai/kimi-k2-instruct-0905": {
         "id": "moonshotai/kimi-k2-instruct-0905",
         "name": "Kimi K2 0905",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -9018,6 +9279,7 @@
       "moonshotai/kimi-k2-thinking": {
         "id": "moonshotai/kimi-k2-thinking",
         "name": "Kimi K2 Thinking",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9050,6 +9312,7 @@
       "moonshotai/kimi-k2-instruct": {
         "id": "moonshotai/kimi-k2-instruct",
         "name": "Kimi K2 Instruct",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9078,6 +9341,7 @@
       "nvidia/nvidia-nemotron-nano-9b-v2": {
         "id": "nvidia/nvidia-nemotron-nano-9b-v2",
         "name": "nvidia-nemotron-nano-9b-v2",
+        "family": "nemotron",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9106,6 +9370,7 @@
       "nvidia/cosmos-nemotron-34b": {
         "id": "nvidia/cosmos-nemotron-34b",
         "name": "Cosmos Nemotron 34B",
+        "family": "nemotron",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -9136,6 +9401,7 @@
       "nvidia/llama-embed-nemotron-8b": {
         "id": "nvidia/llama-embed-nemotron-8b",
         "name": "Llama Embed Nemotron 8B",
+        "family": "llama",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -9164,6 +9430,7 @@
       "nvidia/parakeet-tdt-0.6b-v2": {
         "id": "nvidia/parakeet-tdt-0.6b-v2",
         "name": "Parakeet TDT 0.6B v2",
+        "family": "parakeet-tdt-0.6b",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -9192,6 +9459,7 @@
       "nvidia/nemoretriever-ocr-v1": {
         "id": "nvidia/nemoretriever-ocr-v1",
         "name": "NeMo Retriever OCR v1",
+        "family": "nemoretriever-ocr",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -9220,6 +9488,7 @@
       "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
         "id": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
         "name": "Llama-3.1-Nemotron-Ultra-253B-v1",
+        "family": "llama-3.1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9248,6 +9517,7 @@
       "minimaxai/minimax-m2": {
         "id": "minimaxai/minimax-m2",
         "name": "MiniMax-M2",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9276,6 +9546,7 @@
       "google/gemma-3-27b-it": {
         "id": "google/gemma-3-27b-it",
         "name": "Gemma-3-27B-IT",
+        "family": "gemma-3",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -9305,6 +9576,7 @@
       "microsoft/phi-4-mini-instruct": {
         "id": "microsoft/phi-4-mini-instruct",
         "name": "Phi-4-Mini",
+        "family": "phi-4",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -9335,6 +9607,7 @@
       "openai/whisper-large-v3": {
         "id": "openai/whisper-large-v3",
         "name": "Whisper Large v3",
+        "family": "whisper-large",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -9363,6 +9636,7 @@
       "openai/gpt-oss-120b": {
         "id": "openai/gpt-oss-120b",
         "name": "GPT-OSS-120B",
+        "family": "gpt-oss",
         "attachment": true,
         "reasoning": true,
         "tool_call": false,
@@ -9391,6 +9665,7 @@
       "qwen/qwen3-next-80b-a3b-instruct": {
         "id": "qwen/qwen3-next-80b-a3b-instruct",
         "name": "Qwen3-Next-80B-A3B-Instruct",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -9419,6 +9694,7 @@
       "qwen/qwen3-235b-a22b": {
         "id": "qwen/qwen3-235b-a22b",
         "name": "Qwen3-235B-A22B",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9447,6 +9723,7 @@
       "qwen/qwen3-coder-480b-a35b-instruct": {
         "id": "qwen/qwen3-coder-480b-a35b-instruct",
         "name": "Qwen3 Coder 480B A35B Instruct",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -9475,6 +9752,7 @@
       "qwen/qwen3-next-80b-a3b-thinking": {
         "id": "qwen/qwen3-next-80b-a3b-thinking",
         "name": "Qwen3-Next-80B-A3B-Thinking",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9503,6 +9781,7 @@
       "mistralai/devstral-2-123b-instruct-2512": {
         "id": "mistralai/devstral-2-123b-instruct-2512",
         "name": "Devstral-2-123B-Instruct-2512",
+        "family": "devstral",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -9532,6 +9811,7 @@
       "mistralai/mistral-large-3-675b-instruct-2512": {
         "id": "mistralai/mistral-large-3-675b-instruct-2512",
         "name": "Mistral Large 3 675B Instruct 2512",
+        "family": "mistral-large",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9562,6 +9842,7 @@
       "mistralai/ministral-14b-instruct-2512": {
         "id": "mistralai/ministral-14b-instruct-2512",
         "name": "Ministral 3 14B Instruct 2512",
+        "family": "ministral",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9592,6 +9873,7 @@
       "deepseek-ai/deepseek-v3.1-terminus": {
         "id": "deepseek-ai/deepseek-v3.1-terminus",
         "name": "DeepSeek V3.1 Terminus",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9620,6 +9902,7 @@
       "deepseek-ai/deepseek-v3.1": {
         "id": "deepseek-ai/deepseek-v3.1",
         "name": "DeepSeek V3.1",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -9648,6 +9931,7 @@
       "black-forest-labs/flux.1-dev": {
         "id": "black-forest-labs/flux.1-dev",
         "name": "FLUX.1-dev",
+        "family": "flux",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -9688,6 +9972,7 @@
       "gpt-4.1-nano": {
         "id": "gpt-4.1-nano",
         "name": "GPT-4.1 nano",
+        "family": "gpt-4.1-nano",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9719,6 +10004,7 @@
       "text-embedding-3-small": {
         "id": "text-embedding-3-small",
         "name": "text-embedding-3-small",
+        "family": "text-embedding-3-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -9747,6 +10033,7 @@
       "gpt-4": {
         "id": "gpt-4",
         "name": "GPT-4",
+        "family": "gpt-4",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9776,6 +10063,7 @@
       "o1-pro": {
         "id": "o1-pro",
         "name": "o1-pro",
+        "family": "o1-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -9806,6 +10094,7 @@
       "gpt-4o-2024-05-13": {
         "id": "gpt-4o-2024-05-13",
         "name": "GPT-4o (2024-05-13)",
+        "family": "gpt-4o",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9868,6 +10157,7 @@
       "gpt-4o-2024-08-06": {
         "id": "gpt-4o-2024-08-06",
         "name": "GPT-4o (2024-08-06)",
+        "family": "gpt-4o",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9899,6 +10189,7 @@
       "gpt-4.1-mini": {
         "id": "gpt-4.1-mini",
         "name": "GPT-4.1 mini",
+        "family": "gpt-4.1-mini",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -9930,6 +10221,7 @@
       "o3-deep-research": {
         "id": "o3-deep-research",
         "name": "o3-deep-research",
+        "family": "o3",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -9960,6 +10252,7 @@
       "gpt-3.5-turbo": {
         "id": "gpt-3.5-turbo",
         "name": "GPT-3.5-turbo",
+        "family": "gpt-3.5-turbo",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -10021,6 +10314,7 @@
       "text-embedding-3-large": {
         "id": "text-embedding-3-large",
         "name": "text-embedding-3-large",
+        "family": "text-embedding-3-large",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -10049,6 +10343,7 @@
       "gpt-4-turbo": {
         "id": "gpt-4-turbo",
         "name": "GPT-4 Turbo",
+        "family": "gpt-4-turbo",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -10079,6 +10374,7 @@
       "o1-preview": {
         "id": "o1-preview",
         "name": "o1-preview",
+        "family": "o1-preview",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -10141,6 +10437,7 @@
       "o3-mini": {
         "id": "o3-mini",
         "name": "o3-mini",
+        "family": "o3-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -10234,6 +10531,7 @@
       "codex-mini-latest": {
         "id": "codex-mini-latest",
         "name": "Codex Mini",
+        "family": "codex",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -10327,6 +10625,7 @@
       "gpt-4o": {
         "id": "gpt-4o",
         "name": "GPT-4o",
+        "family": "gpt-4o",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -10358,6 +10657,7 @@
       "gpt-4.1": {
         "id": "gpt-4.1",
         "name": "GPT-4.1",
+        "family": "gpt-4.1",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -10389,6 +10689,7 @@
       "o4-mini": {
         "id": "o4-mini",
         "name": "o4-mini",
+        "family": "o4-mini",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -10420,6 +10721,7 @@
       "o1": {
         "id": "o1",
         "name": "o1",
+        "family": "o1",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -10483,6 +10785,7 @@
       "o1-mini": {
         "id": "o1-mini",
         "name": "o1-mini",
+        "family": "o1-mini",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -10513,6 +10816,7 @@
       "text-embedding-ada-002": {
         "id": "text-embedding-ada-002",
         "name": "text-embedding-ada-002",
+        "family": "text-embedding-ada",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -10541,6 +10845,7 @@
       "o3-pro": {
         "id": "o3-pro",
         "name": "o3-pro",
+        "family": "o3-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -10571,6 +10876,7 @@
       "gpt-4o-2024-11-20": {
         "id": "gpt-4o-2024-11-20",
         "name": "GPT-4o (2024-11-20)",
+        "family": "gpt-4o",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -10634,6 +10940,7 @@
       "o3": {
         "id": "o3",
         "name": "o3",
+        "family": "o3",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -10665,6 +10972,7 @@
       "o4-mini-deep-research": {
         "id": "o4-mini-deep-research",
         "name": "o4-mini-deep-research",
+        "family": "o4-mini",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -10726,6 +11034,7 @@
       "gpt-4o-mini": {
         "id": "gpt-4o-mini",
         "name": "GPT-4o mini",
+        "family": "gpt-4o-mini",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -10895,6 +11204,7 @@
       "moonshotai/kimi-k2": {
         "id": "moonshotai/kimi-k2",
         "name": "Kimi K2",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -10923,6 +11233,7 @@
       "moonshotai/kimi-k2-0905": {
         "id": "moonshotai/kimi-k2-0905",
         "name": "Kimi K2 Instruct 0905",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -10951,6 +11262,7 @@
       "moonshotai/kimi-dev-72b:free": {
         "id": "moonshotai/kimi-dev-72b:free",
         "name": "Kimi Dev 72b (free)",
+        "family": "kimi",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -10979,6 +11291,7 @@
       "moonshotai/kimi-k2-thinking": {
         "id": "moonshotai/kimi-k2-thinking",
         "name": "Kimi K2 Thinking",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11014,6 +11327,7 @@
       "moonshotai/kimi-k2-0905:exacto": {
         "id": "moonshotai/kimi-k2-0905:exacto",
         "name": "Kimi K2 Instruct 0905 (exacto)",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -11042,6 +11356,7 @@
       "moonshotai/kimi-k2:free": {
         "id": "moonshotai/kimi-k2:free",
         "name": "Kimi K2 (free)",
+        "family": "kimi-k2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -11070,6 +11385,7 @@
       "thudm/glm-z1-32b:free": {
         "id": "thudm/glm-z1-32b:free",
         "name": "GLM Z1 32B (free)",
+        "family": "glm-z1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11098,6 +11414,7 @@
       "nousresearch/hermes-4-70b": {
         "id": "nousresearch/hermes-4-70b",
         "name": "Hermes 4 70B",
+        "family": "hermes",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11126,6 +11443,7 @@
       "nousresearch/hermes-4-405b": {
         "id": "nousresearch/hermes-4-405b",
         "name": "Hermes 4 405B",
+        "family": "hermes",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11154,6 +11472,7 @@
       "nousresearch/deephermes-3-llama-3-8b-preview": {
         "id": "nousresearch/deephermes-3-llama-3-8b-preview",
         "name": "DeepHermes 3 Llama 3 8B Preview",
+        "family": "llama-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11182,6 +11501,7 @@
       "nvidia/nemotron-nano-9b-v2": {
         "id": "nvidia/nemotron-nano-9b-v2",
         "name": "nvidia-nemotron-nano-9b-v2",
+        "family": "nemotron",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11210,6 +11530,7 @@
       "x-ai/grok-4": {
         "id": "x-ai/grok-4",
         "name": "Grok 4",
+        "family": "grok-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11240,6 +11561,7 @@
       "x-ai/grok-code-fast-1": {
         "id": "x-ai/grok-code-fast-1",
         "name": "Grok Code Fast 1",
+        "family": "grok",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11269,6 +11591,7 @@
       "x-ai/grok-3": {
         "id": "x-ai/grok-3",
         "name": "Grok 3",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -11299,6 +11622,7 @@
       "x-ai/grok-4-fast": {
         "id": "x-ai/grok-4-fast",
         "name": "Grok 4 Fast",
+        "family": "grok-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11330,6 +11654,7 @@
       "x-ai/grok-3-beta": {
         "id": "x-ai/grok-3-beta",
         "name": "Grok 3 Beta",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -11360,6 +11685,7 @@
       "x-ai/grok-3-mini-beta": {
         "id": "x-ai/grok-3-mini-beta",
         "name": "Grok 3 Mini Beta",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11390,6 +11716,7 @@
       "x-ai/grok-3-mini": {
         "id": "x-ai/grok-3-mini",
         "name": "Grok 3 Mini",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11420,6 +11747,7 @@
       "x-ai/grok-4.1-fast": {
         "id": "x-ai/grok-4.1-fast",
         "name": "Grok 4.1 Fast",
+        "family": "grok-4",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11451,6 +11779,7 @@
       "kwaipilot/kat-coder-pro:free": {
         "id": "kwaipilot/kat-coder-pro:free",
         "name": "Kat Coder Pro (free)",
+        "family": "kat-coder-pro",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -11479,6 +11808,7 @@
       "cognitivecomputations/dolphin3.0-mistral-24b": {
         "id": "cognitivecomputations/dolphin3.0-mistral-24b",
         "name": "Dolphin3.0 Mistral 24B",
+        "family": "mistral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -11507,6 +11837,7 @@
       "cognitivecomputations/dolphin3.0-r1-mistral-24b": {
         "id": "cognitivecomputations/dolphin3.0-r1-mistral-24b",
         "name": "Dolphin3.0 R1 Mistral 24B",
+        "family": "mistral",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11535,6 +11866,7 @@
       "deepseek/deepseek-chat-v3.1": {
         "id": "deepseek/deepseek-chat-v3.1",
         "name": "DeepSeek-V3.1",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11563,6 +11895,7 @@
       "deepseek/deepseek-r1:free": {
         "id": "deepseek/deepseek-r1:free",
         "name": "R1 (free)",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11591,6 +11924,7 @@
       "deepseek/deepseek-v3.2-speciale": {
         "id": "deepseek/deepseek-v3.2-speciale",
         "name": "DeepSeek V3.2 Speciale",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11619,6 +11953,7 @@
       "deepseek/deepseek-v3-base:free": {
         "id": "deepseek/deepseek-v3-base:free",
         "name": "DeepSeek V3 Base (free)",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -11647,6 +11982,7 @@
       "deepseek/deepseek-v3.1-terminus": {
         "id": "deepseek/deepseek-v3.1-terminus",
         "name": "DeepSeek V3.1 Terminus",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11675,6 +12011,7 @@
       "deepseek/deepseek-r1-0528-qwen3-8b:free": {
         "id": "deepseek/deepseek-r1-0528-qwen3-8b:free",
         "name": "Deepseek R1 0528 Qwen3 8B (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11703,6 +12040,7 @@
       "deepseek/deepseek-chat-v3-0324": {
         "id": "deepseek/deepseek-chat-v3-0324",
         "name": "DeepSeek V3 0324",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -11731,6 +12069,7 @@
       "deepseek/deepseek-r1-0528:free": {
         "id": "deepseek/deepseek-r1-0528:free",
         "name": "R1 0528 (free)",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11759,6 +12098,7 @@
       "deepseek/deepseek-r1-distill-llama-70b": {
         "id": "deepseek/deepseek-r1-distill-llama-70b",
         "name": "DeepSeek R1 Distill Llama 70B",
+        "family": "deepseek-r1-distill-llama",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -11787,6 +12127,7 @@
       "deepseek/deepseek-r1-distill-qwen-14b": {
         "id": "deepseek/deepseek-r1-distill-qwen-14b",
         "name": "DeepSeek R1 Distill Qwen 14B",
+        "family": "qwen",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -11815,6 +12156,7 @@
       "deepseek/deepseek-v3.1-terminus:exacto": {
         "id": "deepseek/deepseek-v3.1-terminus:exacto",
         "name": "DeepSeek V3.1 Terminus (exacto)",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11843,6 +12185,7 @@
       "deepseek/deepseek-v3.2": {
         "id": "deepseek/deepseek-v3.2",
         "name": "DeepSeek V3.2",
+        "family": "deepseek-v3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11874,6 +12217,7 @@
       "featherless/qwerky-72b": {
         "id": "featherless/qwerky-72b",
         "name": "Qwerky 72B",
+        "family": "qwerky",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -11902,6 +12246,7 @@
       "tngtech/deepseek-r1t2-chimera:free": {
         "id": "tngtech/deepseek-r1t2-chimera:free",
         "name": "DeepSeek R1T2 Chimera (free)",
+        "family": "deepseek-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -11930,6 +12275,7 @@
       "minimax/minimax-m1": {
         "id": "minimax/minimax-m1",
         "name": "MiniMax M1",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11957,6 +12303,7 @@
       "minimax/minimax-m2": {
         "id": "minimax/minimax-m2",
         "name": "MiniMax M2",
+        "family": "minimax",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -11992,6 +12339,7 @@
       "minimax/minimax-01": {
         "id": "minimax/minimax-01",
         "name": "MiniMax-01",
+        "family": "minimax",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12020,6 +12368,7 @@
       "google/gemini-2.0-flash-001": {
         "id": "google/gemini-2.0-flash-001",
         "name": "Gemini 2.0 Flash",
+        "family": "gemini-flash",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12053,6 +12402,7 @@
       "google/gemma-2-9b-it:free": {
         "id": "google/gemma-2-9b-it:free",
         "name": "Gemma 2 9B (free)",
+        "family": "gemma-2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -12081,6 +12431,7 @@
       "google/gemini-3-pro-preview": {
         "id": "google/gemini-3-pro-preview",
         "name": "Gemini 3 Pro Preview",
+        "family": "gemini-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12119,6 +12470,7 @@
       "google/gemini-2.5-flash": {
         "id": "google/gemini-2.5-flash",
         "name": "Gemini 2.5 Flash",
+        "family": "gemini-flash",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12152,6 +12504,7 @@
       "google/gemini-2.5-pro-preview-05-06": {
         "id": "google/gemini-2.5-pro-preview-05-06",
         "name": "Gemini 2.5 Pro Preview 05-06",
+        "family": "gemini-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12185,6 +12538,7 @@
       "google/gemma-3n-e4b-it": {
         "id": "google/gemma-3n-e4b-it",
         "name": "Gemma 3n E4B IT",
+        "family": "gemma-3",
         "attachment": true,
         "reasoning": false,
         "tool_call": false,
@@ -12215,6 +12569,7 @@
       "google/gemini-2.5-flash-lite": {
         "id": "google/gemini-2.5-flash-lite",
         "name": "Gemini 2.5 Flash Lite",
+        "family": "gemini-flash-lite",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12248,6 +12603,7 @@
       "google/gemini-2.5-pro-preview-06-05": {
         "id": "google/gemini-2.5-pro-preview-06-05",
         "name": "Gemini 2.5 Pro Preview 06-05",
+        "family": "gemini-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12281,6 +12637,7 @@
       "google/gemini-2.5-flash-preview-09-2025": {
         "id": "google/gemini-2.5-flash-preview-09-2025",
         "name": "Gemini 2.5 Flash Preview 09-25",
+        "family": "gemini-flash",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12314,6 +12671,7 @@
       "google/gemini-2.5-pro": {
         "id": "google/gemini-2.5-pro",
         "name": "Gemini 2.5 Pro",
+        "family": "gemini-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12347,6 +12705,7 @@
       "google/gemma-3-12b-it": {
         "id": "google/gemma-3-12b-it",
         "name": "Gemma 3 12B IT",
+        "family": "gemma-3",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12376,6 +12735,7 @@
       "google/gemma-3n-e4b-it:free": {
         "id": "google/gemma-3n-e4b-it:free",
         "name": "Gemma 3n 4B (free)",
+        "family": "gemma-3",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12406,6 +12766,7 @@
       "google/gemini-2.5-flash-lite-preview-09-2025": {
         "id": "google/gemini-2.5-flash-lite-preview-09-2025",
         "name": "Gemini 2.5 Flash Lite Preview 09-25",
+        "family": "gemini-flash-lite",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12439,6 +12800,7 @@
       "google/gemini-2.0-flash-exp:free": {
         "id": "google/gemini-2.0-flash-exp:free",
         "name": "Gemini 2.0 Flash Experimental (free)",
+        "family": "gemini-flash",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12468,6 +12830,7 @@
       "google/gemma-3-27b-it": {
         "id": "google/gemma-3-27b-it",
         "name": "Gemma 3 27B IT",
+        "family": "gemma-3",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12497,6 +12860,7 @@
       "microsoft/mai-ds-r1:free": {
         "id": "microsoft/mai-ds-r1:free",
         "name": "MAI DS R1 (free)",
+        "family": "mai-ds-r1",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -12525,6 +12889,7 @@
       "openai/gpt-oss-safeguard-20b": {
         "id": "openai/gpt-oss-safeguard-20b",
         "name": "GPT OSS Safeguard 20B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -12552,6 +12917,7 @@
       "openai/gpt-5.1-codex": {
         "id": "openai/gpt-5.1-codex",
         "name": "GPT-5.1-Codex",
+        "family": "gpt-5-codex",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12583,6 +12949,7 @@
       "openai/gpt-4.1-mini": {
         "id": "openai/gpt-4.1-mini",
         "name": "GPT-4.1 Mini",
+        "family": "gpt-4.1-mini",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12613,6 +12980,7 @@
       "openai/gpt-5-chat": {
         "id": "openai/gpt-5-chat",
         "name": "GPT-5 Chat (latest)",
+        "family": "gpt-5-chat",
         "attachment": true,
         "reasoning": true,
         "tool_call": false,
@@ -12673,6 +13041,7 @@
       "openai/gpt-5.1-codex-mini": {
         "id": "openai/gpt-5.1-codex-mini",
         "name": "GPT-5.1-Codex-Mini",
+        "family": "gpt-5-codex-mini",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12736,6 +13105,7 @@
       "openai/gpt-5.1": {
         "id": "openai/gpt-5.1",
         "name": "GPT-5.1",
+        "family": "gpt-5",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12767,6 +13137,7 @@
       "openai/gpt-5-nano": {
         "id": "openai/gpt-5-nano",
         "name": "GPT-5 Nano",
+        "family": "gpt-5-nano",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12796,6 +13167,7 @@
       "openai/gpt-5-codex": {
         "id": "openai/gpt-5-codex",
         "name": "GPT-5 Codex",
+        "family": "gpt-5-codex",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12826,6 +13198,7 @@
       "openai/gpt-4.1": {
         "id": "openai/gpt-4.1",
         "name": "GPT-4.1",
+        "family": "gpt-4.1",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -12856,6 +13229,7 @@
       "openai/gpt-oss-120b:exacto": {
         "id": "openai/gpt-oss-120b:exacto",
         "name": "GPT OSS 120B (exacto)",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -12883,6 +13257,7 @@
       "openai/o4-mini": {
         "id": "openai/o4-mini",
         "name": "o4 Mini",
+        "family": "o4-mini",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12913,6 +13288,7 @@
       "openai/gpt-5.1-chat": {
         "id": "openai/gpt-5.1-chat",
         "name": "GPT-5.1 Chat",
+        "family": "gpt-5-chat",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12944,6 +13320,7 @@
       "openai/gpt-5-mini": {
         "id": "openai/gpt-5-mini",
         "name": "GPT-5 Mini",
+        "family": "gpt-5-mini",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -12973,6 +13350,7 @@
       "openai/gpt-5-image": {
         "id": "openai/gpt-5-image",
         "name": "GPT-5 Image",
+        "family": "gpt-5",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -13005,6 +13383,7 @@
       "openai/gpt-oss-20b": {
         "id": "openai/gpt-oss-20b",
         "name": "GPT OSS 20B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13032,6 +13411,7 @@
       "openai/gpt-oss-120b": {
         "id": "openai/gpt-oss-120b",
         "name": "GPT OSS 120B",
+        "family": "gpt-oss",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13059,6 +13439,7 @@
       "openai/gpt-4o-mini": {
         "id": "openai/gpt-4o-mini",
         "name": "GPT-4o-mini",
+        "family": "gpt-4o-mini",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -13089,6 +13470,7 @@
       "openai/gpt-5": {
         "id": "openai/gpt-5",
         "name": "GPT-5",
+        "family": "gpt-5",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -13118,6 +13500,7 @@
       "openai/gpt-5-pro": {
         "id": "openai/gpt-5-pro",
         "name": "GPT-5 Pro",
+        "family": "gpt-5-pro",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -13175,9 +13558,70 @@
           "output": 128000
         }
       },
+      "openrouter/sherlock-think-alpha": {
+        "id": "openrouter/sherlock-think-alpha",
+        "name": "Sherlock Think Alpha",
+        "family": "sherlock",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2025-11",
+        "release_date": "2025-11-15",
+        "last_updated": "2025-12-14",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "cost": {
+          "input": 0,
+          "output": 0
+        },
+        "limit": {
+          "context": 1840000,
+          "output": 0
+        }
+      },
+      "openrouter/sherlock-dash-alpha": {
+        "id": "openrouter/sherlock-dash-alpha",
+        "name": "Sherlock Dash Alpha",
+        "family": "sherlock",
+        "attachment": true,
+        "reasoning": false,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2025-11",
+        "release_date": "2025-11-15",
+        "last_updated": "2025-12-14",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "cost": {
+          "input": 0,
+          "output": 0
+        },
+        "limit": {
+          "context": 1840000,
+          "output": 0
+        }
+      },
       "z-ai/glm-4.5": {
         "id": "z-ai/glm-4.5",
         "name": "GLM 4.5",
+        "family": "glm-4.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13206,6 +13650,7 @@
       "z-ai/glm-4.5-air": {
         "id": "z-ai/glm-4.5-air",
         "name": "GLM 4.5 Air",
+        "family": "glm-4.5-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13234,6 +13679,7 @@
       "z-ai/glm-4.5v": {
         "id": "z-ai/glm-4.5v",
         "name": "GLM 4.5V",
+        "family": "glm-4.5v",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -13264,6 +13710,7 @@
       "z-ai/glm-4.6": {
         "id": "z-ai/glm-4.6",
         "name": "GLM 4.6",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13293,6 +13740,7 @@
       "z-ai/glm-4.6:exacto": {
         "id": "z-ai/glm-4.6:exacto",
         "name": "GLM 4.6 (exacto)",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13322,6 +13770,7 @@
       "z-ai/glm-4.5-air:free": {
         "id": "z-ai/glm-4.5-air:free",
         "name": "GLM 4.5 Air (free)",
+        "family": "glm-4.5-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": false,
@@ -13350,6 +13799,7 @@
       "qwen/qwen3-coder": {
         "id": "qwen/qwen3-coder",
         "name": "Qwen3 Coder",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13378,6 +13828,7 @@
       "qwen/qwen3-32b:free": {
         "id": "qwen/qwen3-32b:free",
         "name": "Qwen3 32B (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13406,6 +13857,7 @@
       "qwen/qwen3-next-80b-a3b-instruct": {
         "id": "qwen/qwen3-next-80b-a3b-instruct",
         "name": "Qwen3 Next 80B A3B Instruct",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13434,6 +13886,7 @@
       "qwen/qwen-2.5-coder-32b-instruct": {
         "id": "qwen/qwen-2.5-coder-32b-instruct",
         "name": "Qwen2.5 Coder 32B Instruct",
+        "family": "qwen",
         "attachment": false,
         "reasoning": false,
         "tool_call": false,
@@ -13462,6 +13915,7 @@
       "qwen/qwen3-235b-a22b:free": {
         "id": "qwen/qwen3-235b-a22b:free",
         "name": "Qwen3 235B A22B (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13490,6 +13944,7 @@
       "qwen/qwen3-coder-flash": {
         "id": "qwen/qwen3-coder-flash",
         "name": "Qwen3 Coder Flash",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13519,6 +13974,7 @@
       "qwen/qwq-32b:free": {
         "id": "qwen/qwq-32b:free",
         "name": "QwQ 32B (free)",
+        "family": "qwq",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13547,6 +14003,7 @@
       "qwen/qwen3-30b-a3b-thinking-2507": {
         "id": "qwen/qwen3-30b-a3b-thinking-2507",
         "name": "Qwen3 30B A3B Thinking 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13575,6 +14032,7 @@
       "qwen/qwen3-30b-a3b:free": {
         "id": "qwen/qwen3-30b-a3b:free",
         "name": "Qwen3 30B A3B (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13603,6 +14061,7 @@
       "qwen/qwen2.5-vl-72b-instruct": {
         "id": "qwen/qwen2.5-vl-72b-instruct",
         "name": "Qwen2.5 VL 72B Instruct",
+        "family": "qwen2.5-vl",
         "attachment": true,
         "reasoning": false,
         "tool_call": false,
@@ -13632,6 +14091,7 @@
       "qwen/qwen3-14b:free": {
         "id": "qwen/qwen3-14b:free",
         "name": "Qwen3 14B (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13660,6 +14120,7 @@
       "qwen/qwen3-30b-a3b-instruct-2507": {
         "id": "qwen/qwen3-30b-a3b-instruct-2507",
         "name": "Qwen3 30B A3B Instruct 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13688,6 +14149,7 @@
       "qwen/qwen3-235b-a22b-thinking-2507": {
         "id": "qwen/qwen3-235b-a22b-thinking-2507",
         "name": "Qwen3 235B A22B Thinking 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13716,6 +14178,7 @@
       "qwen/qwen2.5-vl-32b-instruct:free": {
         "id": "qwen/qwen2.5-vl-32b-instruct:free",
         "name": "Qwen2.5 VL 32B Instruct (free)",
+        "family": "qwen2.5-vl",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -13746,6 +14209,7 @@
       "qwen/qwen2.5-vl-72b-instruct:free": {
         "id": "qwen/qwen2.5-vl-72b-instruct:free",
         "name": "Qwen2.5 VL 72B Instruct (free)",
+        "family": "qwen2.5-vl",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -13775,6 +14239,7 @@
       "qwen/qwen3-235b-a22b-07-25:free": {
         "id": "qwen/qwen3-235b-a22b-07-25:free",
         "name": "Qwen3 235B A22B Instruct 2507 (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13803,6 +14268,7 @@
       "qwen/qwen3-coder:free": {
         "id": "qwen/qwen3-coder:free",
         "name": "Qwen3 Coder 480B A35B Instruct (free)",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13831,6 +14297,7 @@
       "qwen/qwen3-235b-a22b-07-25": {
         "id": "qwen/qwen3-235b-a22b-07-25",
         "name": "Qwen3 235B A22B Instruct 2507",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13859,6 +14326,7 @@
       "qwen/qwen3-8b:free": {
         "id": "qwen/qwen3-8b:free",
         "name": "Qwen3 8B (free)",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13887,6 +14355,7 @@
       "qwen/qwen3-max": {
         "id": "qwen/qwen3-max",
         "name": "Qwen3 Max",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13914,6 +14383,7 @@
       "qwen/qwen3-next-80b-a3b-thinking": {
         "id": "qwen/qwen3-next-80b-a3b-thinking",
         "name": "Qwen3 Next 80B A3B Thinking",
+        "family": "qwen3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -13942,6 +14412,7 @@
       "qwen/qwen3-coder:exacto": {
         "id": "qwen/qwen3-coder:exacto",
         "name": "Qwen3 Coder (exacto)",
+        "family": "qwen3-coder",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13970,6 +14441,7 @@
       "mistralai/devstral-medium-2507": {
         "id": "mistralai/devstral-medium-2507",
         "name": "Devstral Medium",
+        "family": "devstral-medium",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -13998,6 +14470,7 @@
       "mistralai/devstral-2512:free": {
         "id": "mistralai/devstral-2512:free",
         "name": "Devstral 2 2512 (free)",
+        "family": "devstral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14026,6 +14499,7 @@
       "mistralai/devstral-2512": {
         "id": "mistralai/devstral-2512",
         "name": "Devstral 2 2512",
+        "family": "devstral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14054,6 +14528,7 @@
       "mistralai/codestral-2508": {
         "id": "mistralai/codestral-2508",
         "name": "Codestral 2508",
+        "family": "codestral",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14082,6 +14557,7 @@
       "mistralai/mistral-7b-instruct:free": {
         "id": "mistralai/mistral-7b-instruct:free",
         "name": "Mistral 7B Instruct (free)",
+        "family": "mistral-7b",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14110,6 +14586,7 @@
       "mistralai/devstral-small-2505": {
         "id": "mistralai/devstral-small-2505",
         "name": "Devstral Small",
+        "family": "devstral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14138,6 +14615,7 @@
       "mistralai/mistral-small-3.2-24b-instruct": {
         "id": "mistralai/mistral-small-3.2-24b-instruct",
         "name": "Mistral Small 3.2 24B Instruct",
+        "family": "mistral-small",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14167,6 +14645,7 @@
       "mistralai/devstral-small-2505:free": {
         "id": "mistralai/devstral-small-2505:free",
         "name": "Devstral Small 2505 (free)",
+        "family": "devstral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14195,6 +14674,7 @@
       "mistralai/mistral-small-3.2-24b-instruct:free": {
         "id": "mistralai/mistral-small-3.2-24b-instruct:free",
         "name": "Mistral Small 3.2 24B (free)",
+        "family": "mistral-small",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14224,6 +14704,7 @@
       "mistralai/mistral-medium-3": {
         "id": "mistralai/mistral-medium-3",
         "name": "Mistral Medium 3",
+        "family": "mistral-medium",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14253,6 +14734,7 @@
       "mistralai/mistral-small-3.1-24b-instruct": {
         "id": "mistralai/mistral-small-3.1-24b-instruct",
         "name": "Mistral Small 3.1 24B Instruct",
+        "family": "mistral-small",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14282,6 +14764,7 @@
       "mistralai/devstral-small-2507": {
         "id": "mistralai/devstral-small-2507",
         "name": "Devstral Small 1.1",
+        "family": "devstral-small",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14310,6 +14793,7 @@
       "mistralai/mistral-medium-3.1": {
         "id": "mistralai/mistral-medium-3.1",
         "name": "Mistral Medium 3.1",
+        "family": "mistral-medium",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14339,6 +14823,7 @@
       "mistralai/mistral-nemo:free": {
         "id": "mistralai/mistral-nemo:free",
         "name": "Mistral Nemo (free)",
+        "family": "mistral-nemo",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14367,6 +14852,7 @@
       "rekaai/reka-flash-3": {
         "id": "rekaai/reka-flash-3",
         "name": "Reka Flash 3",
+        "family": "reka-flash",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -14395,6 +14881,7 @@
       "meta-llama/llama-3.2-11b-vision-instruct": {
         "id": "meta-llama/llama-3.2-11b-vision-instruct",
         "name": "Llama 3.2 11B Vision Instruct",
+        "family": "llama-3.2",
         "attachment": true,
         "reasoning": false,
         "tool_call": false,
@@ -14424,6 +14911,7 @@
       "meta-llama/llama-3.3-70b-instruct:free": {
         "id": "meta-llama/llama-3.3-70b-instruct:free",
         "name": "Llama 3.3 70B Instruct (free)",
+        "family": "llama-3.3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14452,6 +14940,7 @@
       "meta-llama/llama-4-scout:free": {
         "id": "meta-llama/llama-4-scout:free",
         "name": "Llama 4 Scout (free)",
+        "family": "llama-4-scout",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14481,6 +14970,7 @@
       "anthropic/claude-opus-4": {
         "id": "anthropic/claude-opus-4",
         "name": "Claude Opus 4",
+        "family": "claude-opus",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14513,6 +15003,7 @@
       "anthropic/claude-haiku-4.5": {
         "id": "anthropic/claude-haiku-4.5",
         "name": "Claude Haiku 4.5",
+        "family": "claude-haiku",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14545,6 +15036,7 @@
       "anthropic/claude-opus-4.1": {
         "id": "anthropic/claude-opus-4.1",
         "name": "Claude Opus 4.1",
+        "family": "claude-opus",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14577,6 +15069,7 @@
       "anthropic/claude-3.7-sonnet": {
         "id": "anthropic/claude-3.7-sonnet",
         "name": "Claude Sonnet 3.7",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14609,6 +15102,7 @@
       "anthropic/claude-3.5-haiku": {
         "id": "anthropic/claude-3.5-haiku",
         "name": "Claude Haiku 3.5",
+        "family": "claude-haiku",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14641,6 +15135,7 @@
       "anthropic/claude-sonnet-4": {
         "id": "anthropic/claude-sonnet-4",
         "name": "Claude Sonnet 4",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14679,6 +15174,7 @@
       "anthropic/claude-opus-4.5": {
         "id": "anthropic/claude-opus-4.5",
         "name": "Claude Opus 4.5",
+        "family": "claude-opus",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14711,6 +15207,7 @@
       "anthropic/claude-sonnet-4.5": {
         "id": "anthropic/claude-sonnet-4.5",
         "name": "Claude Sonnet 4.5",
+        "family": "claude-sonnet",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -14749,6 +15246,7 @@
       "sarvamai/sarvam-m:free": {
         "id": "sarvamai/sarvam-m:free",
         "name": "Sarvam-M (free)",
+        "family": "sarvam-m",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -14789,6 +15287,7 @@
       "grok-4-fast-non-reasoning": {
         "id": "grok-4-fast-non-reasoning",
         "name": "Grok 4 Fast (Non-Reasoning)",
+        "family": "grok",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14819,6 +15318,7 @@
       "grok-3-fast": {
         "id": "grok-3-fast",
         "name": "Grok 3 Fast",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14848,6 +15348,7 @@
       "grok-4": {
         "id": "grok-4",
         "name": "Grok 4",
+        "family": "grok",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -14878,6 +15379,7 @@
       "grok-2-vision": {
         "id": "grok-2-vision",
         "name": "Grok 2 Vision",
+        "family": "grok-2",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -14908,6 +15410,7 @@
       "grok-code-fast-1": {
         "id": "grok-code-fast-1",
         "name": "Grok Code Fast 1",
+        "family": "grok",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -14937,6 +15440,7 @@
       "grok-2": {
         "id": "grok-2",
         "name": "Grok 2",
+        "family": "grok-2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -14966,6 +15470,7 @@
       "grok-3-mini-fast-latest": {
         "id": "grok-3-mini-fast-latest",
         "name": "Grok 3 Mini Fast Latest",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -14996,6 +15501,7 @@
       "grok-2-vision-1212": {
         "id": "grok-2-vision-1212",
         "name": "Grok 2 Vision (1212)",
+        "family": "grok-2",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -15026,6 +15532,7 @@
       "grok-3": {
         "id": "grok-3",
         "name": "Grok 3",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -15055,6 +15562,7 @@
       "grok-4-fast": {
         "id": "grok-4-fast",
         "name": "Grok 4 Fast",
+        "family": "grok",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -15085,6 +15593,7 @@
       "grok-2-latest": {
         "id": "grok-2-latest",
         "name": "Grok 2 Latest",
+        "family": "grok-2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -15114,6 +15623,7 @@
       "grok-4-1-fast": {
         "id": "grok-4-1-fast",
         "name": "Grok 4.1 Fast",
+        "family": "grok",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -15144,6 +15654,7 @@
       "grok-2-1212": {
         "id": "grok-2-1212",
         "name": "Grok 2 (1212)",
+        "family": "grok-2",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -15173,6 +15684,7 @@
       "grok-3-fast-latest": {
         "id": "grok-3-fast-latest",
         "name": "Grok 3 Fast Latest",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -15202,6 +15714,7 @@
       "grok-3-latest": {
         "id": "grok-3-latest",
         "name": "Grok 3 Latest",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -15231,6 +15744,7 @@
       "grok-2-vision-latest": {
         "id": "grok-2-vision-latest",
         "name": "Grok 2 Vision Latest",
+        "family": "grok-2",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -15261,6 +15775,7 @@
       "grok-vision-beta": {
         "id": "grok-vision-beta",
         "name": "Grok Vision Beta",
+        "family": "grok-vision",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -15291,6 +15806,7 @@
       "grok-3-mini": {
         "id": "grok-3-mini",
         "name": "Grok 3 Mini",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15321,6 +15837,7 @@
       "grok-beta": {
         "id": "grok-beta",
         "name": "Grok Beta",
+        "family": "grok-beta",
         "attachment": false,
         "reasoning": false,
         "tool_call": true,
@@ -15350,6 +15867,7 @@
       "grok-3-mini-latest": {
         "id": "grok-3-mini-latest",
         "name": "Grok 3 Mini Latest",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15380,6 +15898,7 @@
       "grok-4-1-fast-non-reasoning": {
         "id": "grok-4-1-fast-non-reasoning",
         "name": "Grok 4.1 Fast (Non-Reasoning)",
+        "family": "grok",
         "attachment": true,
         "reasoning": false,
         "tool_call": true,
@@ -15410,6 +15929,7 @@
       "grok-3-mini-fast": {
         "id": "grok-3-mini-fast",
         "name": "Grok 3 Mini Fast",
+        "family": "grok-3",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15452,6 +15972,7 @@
       "glm-4.5-flash": {
         "id": "glm-4.5-flash",
         "name": "GLM-4.5-Flash",
+        "family": "glm-4.5-flash",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15482,6 +16003,7 @@
       "glm-4.5": {
         "id": "glm-4.5",
         "name": "GLM-4.5",
+        "family": "glm-4.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15512,6 +16034,7 @@
       "glm-4.5-air": {
         "id": "glm-4.5-air",
         "name": "GLM-4.5-Air",
+        "family": "glm-4.5-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15542,6 +16065,7 @@
       "glm-4.5v": {
         "id": "glm-4.5v",
         "name": "GLM-4.5V",
+        "family": "glm-4.5v",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -15572,6 +16096,7 @@
       "glm-4.6": {
         "id": "glm-4.6",
         "name": "GLM-4.6",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15602,6 +16127,7 @@
       "glm-4.6v": {
         "id": "glm-4.6v",
         "name": "GLM-4.6V",
+        "family": "glm-4.6v",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -15644,6 +16170,7 @@
       "glm-4.5-flash": {
         "id": "glm-4.5-flash",
         "name": "GLM-4.5-Flash",
+        "family": "glm-4.5-flash",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15674,6 +16201,7 @@
       "glm-4.5": {
         "id": "glm-4.5",
         "name": "GLM-4.5",
+        "family": "glm-4.5",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15704,6 +16232,7 @@
       "glm-4.5-air": {
         "id": "glm-4.5-air",
         "name": "GLM-4.5-Air",
+        "family": "glm-4.5-air",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15734,6 +16263,7 @@
       "glm-4.5v": {
         "id": "glm-4.5v",
         "name": "GLM-4.5V",
+        "family": "glm-4.5v",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
@@ -15764,6 +16294,7 @@
       "glm-4.6": {
         "id": "glm-4.6",
         "name": "GLM-4.6",
+        "family": "glm-4.6",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -15794,6 +16325,7 @@
       "glm-4.6v": {
         "id": "glm-4.6v",
         "name": "GLM-4.6V",
+        "family": "glm-4.6v",
         "attachment": true,
         "reasoning": true,
         "tool_call": true,
