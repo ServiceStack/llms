@@ -304,7 +304,7 @@ export default {
             </div>
 
             <!-- Input Area -->
-            <div class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
+            <div v-if="!($ai.requiresAuth && !$ai.auth)" class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
                 <ChatPrompt :model="selectedModelObj" :systemPrompt="currentSystemPrompt" />
             </div>
             
