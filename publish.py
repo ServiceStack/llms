@@ -155,6 +155,8 @@ def main():
         create_release()
         return
 
+    # revert ollama and lmstudio to disabled before release
+    run_command("./llms.sh --disable ollama lmstudio")
     check_dependencies()
     clean_build()
     build_package()
