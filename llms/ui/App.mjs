@@ -6,7 +6,8 @@ export default {
     components: {
         Sidebar,
     },
-    setup() {
+    props: ['config', 'models'],
+    setup(props) {
         const router = useRouter()
         const route = useRoute()
 
