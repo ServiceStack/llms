@@ -16,6 +16,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
 import site
 import subprocess
 import sys
@@ -2282,6 +2283,23 @@ def main():
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
 
+    parser.add_argument(
+        "--add",
+        nargs="?",
+        const="ls",
+        default=None,
+        help="Install an extension (lists available extensions if no name provided)",
+        metavar="EXTENSION",
+    )
+    parser.add_argument(
+        "--remove",
+        nargs="?",
+        const="ls",
+        default=None,
+        help="Remove an extension (lists installed extensions if no name provided)",
+        metavar="EXTENSION",
+    )
+
     # Load parser extensions, go through all extensions and load their parser arguments
     init_extensions(parser)
 
@@ -2370,6 +2388,101 @@ def main():
     if cli_args.update:
         asyncio.run(update_providers(home_providers_path))
         print(f"Updated {home_providers_path}")
+        exit(0)
+
+    if cli_args.add is not None:
+        if cli_args.add == "ls":
+
+            async def list_extensions():
+                print("\nAvailable extensions:")
+                text = await get_text("https://api.github.com/orgs/llmspy/repos?per_page=100&sort=updated")
+                repos = json.loads(text)
+                max_name_length = 0
+                for repo in repos:
+                    max_name_length = max(max_name_length, len(repo["name"]))
+
+                for repo in repos:
+                    print(f"  {repo['name']:<{max_name_length + 2}} {repo['description']}")
+
+                print("\nUsage:")
+                print("  llms --add <extension>")
+                print("  llms --add <github-user>/<repo>")
+
+            asyncio.run(list_extensions())
+            exit(0)
+
+        async def install_extension(name):
+            # Determine git URL and target directory name
+            if "/" in name:
+                git_url = f"https://github.com/{name}"
+                target_name = name.split("/")[-1]
+            else:
+                git_url = f"https://github.com/llmspy/{name}"
+                target_name = name
+
+            # check extension is not already installed
+            extensions_path = get_extensions_path()
+            target_path = os.path.join(extensions_path, target_name)
+
+            if os.path.exists(target_path):
+                print(f"Extension {target_name} is already installed at {target_path}")
+                return
+
+            print(f"Installing extension: {name}")
+            print(f"Cloning from {git_url} to {target_path}...")
+
+            try:
+                subprocess.run(["git", "clone", git_url, target_path], check=True)
+
+                # Check for requirements.txt
+                requirements_path = os.path.join(target_path, "requirements.txt")
+                if os.path.exists(requirements_path):
+                    print(f"Installing dependencies from {requirements_path}...")
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], cwd=target_path, check=True
+                    )
+                    print("Dependencies installed successfully.")
+
+                print(f"Extension {target_name} installed successfully.")
+
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to install extension: {e}")
+                # cleanup if clone failed but directory was created (unlikely with simple git clone but good practice)
+                if os.path.exists(target_path) and not os.listdir(target_path):
+                    os.rmdir(target_path)
+
+        asyncio.run(install_extension(cli_args.add))
+        exit(0)
+
+    if cli_args.remove is not None:
+        if cli_args.remove == "ls":
+            # List installed extensions
+            extensions_path = get_extensions_path()
+            extensions = os.listdir(extensions_path)
+            if len(extensions) == 0:
+                print("No extensions installed.")
+                exit(0)
+            print("Installed extensions:")
+            for extension in extensions:
+                print(f"  {extension}")
+            exit(0)
+        # Remove an extension
+        extension_name = cli_args.remove
+        extensions_path = get_extensions_path()
+        target_path = os.path.join(extensions_path, extension_name)
+
+        if not os.path.exists(target_path):
+            print(f"Extension {extension_name} not found at {target_path}")
+            exit(1)
+
+        print(f"Removing extension: {extension_name}...")
+        try:
+            shutil.rmtree(target_path)
+            print(f"Extension {extension_name} removed successfully.")
+        except Exception as e:
+            print(f"Failed to remove extension: {e}")
+            exit(1)
+
         exit(0)
 
     asyncio.run(reload_providers())
