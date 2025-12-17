@@ -118,6 +118,7 @@ export function deepClone(o) {
             return structuredClone(o)
         } catch (e) {
             console.warn('structuredClone failed, falling back to JSON:', e)
+            console.log(JSON.stringify(o, undefined, 2))
         }
     }
 
