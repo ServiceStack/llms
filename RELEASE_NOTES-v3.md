@@ -145,7 +145,39 @@ The provider configuration is now closely aligned with the `models.dev` npm conf
 ### 6. Ecosystem Compatibility
 By standardizing on `models.dev` definitions, the project now shares a compatible configuration model with other AI tools like **OpenCode**. This includes the standardization of environment variables using the `"env"` property, ensuring simpler and more portable configuration across different tools.
 
-## Optimized `--update`
+## Extensions
+To keep the core lightweight while enabling limitless enhancements, we've introduced a flexible Extensions system. This allows you to add features, integrate with new services, and customize the UI without bloating the base application.
+
+### Installation
+Extensions can be installed from GitHub or by creating a local folder:
+- **GitHub**: Clone extensions into `~/.llms/extensions` (e.g., `git clone https://github.com/user/repo ~/.llms/extensions/my_extension`).
+- **Local**: Simply create a folder in `~/.llms/extensions/my_extension`.
+
+### How it Works (Server)
+Extensions are Python modules that plug into the server lifecycle using special hooks defined in their `__init__.py`:
+
+- **`__parser__(parser)`**: Add custom CLI arguments.
+- **`__install__(ctx)`**: Enhance the server instance (e.g., add routes, register filters). `ctx` gives you access to the `ExtensionContext`.
+- **`__run__(ctx)`**: Execute custom logic when running in CLI mode.
+
+### How it Works (UI)
+Extensions can also include a frontend component.
+1.  **Placement**: Add a `ui` folder within your extension directory.
+2.  **Access**: Files in this folder are automatically served at `/ext/<extension_name>/*`.
+3.  **Integration**: Create a `ui/index.mjs` file. This is the entry point and must export an `install` function:
+
+```javascript
+// ui/index.mjs
+export default {
+    install(ctx) {
+        // Register components, add routes, etc.
+        ctx.components({ MyComponent })
+    }
+}
+```
+
+### Example: [`system_prompts`](https://github.com/llmspy/system_prompts)
+The `system_prompts` extension demonstrates these capabilities by allowing users to manage custom system prompts. It uses `__install__` to register an API endpoint and a UI extension to provide a management interface.
 The `--update` command provides an optimal way to fetch the latest provider list from `models.dev` but saves only a subset to your local `providers.json`. It filters and saves only the providers that are referenced in your `llms.json`. This optimization keeps your local configuration file lightweight and focused on the providers you actually use.
 
 ## Image Cache & Optimization
