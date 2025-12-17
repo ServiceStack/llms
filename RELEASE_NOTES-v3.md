@@ -178,6 +178,45 @@ export default {
 
 ### Example: [`system_prompts`](https://github.com/llmspy/system_prompts)
 The `system_prompts` extension demonstrates these capabilities by allowing users to manage custom system prompts. It uses `__install__` to register an API endpoint and a UI extension to provide a management interface.
+
+### Installing Extensions
+
+List available extensions:
+
+```bash
+llms --add
+```
+
+Install extension:
+
+```bash
+llms --add system_prompts
+```
+
+Install 3rd Party extension:
+
+```bash
+llms --add my_user/my_extension
+```
+
+> clones GitHub Repo into `~/.llms/extensions/my_extension` and installs any `requirements.txt` dependencies
+
+### Removing Extensions
+
+List installed extensions:
+
+```bash
+llms --remove
+```
+
+Remove extension:
+
+```bash
+llms --remove system_prompts
+```
+
+
+## Optimized `--update`
 The `--update` command provides an optimal way to fetch the latest provider list from `models.dev` but saves only a subset to your local `providers.json`. It filters and saves only the providers that are referenced in your `llms.json`. This optimization keeps your local configuration file lightweight and focused on the providers you actually use.
 
 ## Image Cache & Optimization
