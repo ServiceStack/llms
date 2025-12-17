@@ -47,42 +47,12 @@ export default {
     setup(props, { emit }) {
         const ai = inject('ai')
         const errorMessage = ref(null)
-        
+
         function signInWithGitHub() {
             // Redirect to GitHub OAuth endpoint
             window.location.href = '/auth/github'
         }
-        
-        // Check for session token in URL (after OAuth callback redirect)
-        onMounted(async () => {
-            const urlParams = new URLSearchParams(window.location.search)
-            const sessionToken = urlParams.get('session')
-            
-            if (sessionToken) {
-                try {
-                    // Validate session with server
-                    const response = await ai.get(`/auth/session?session=${sessionToken}`)
-                    
-                    if (response.ok) {
-                        const sessionData = await response.json()
-                        
-                        // Clean up URL
-                        const url = new URL(window.location.href)
-                        url.searchParams.delete('session')
-                        window.history.replaceState({}, '', url.toString())
-                        
-                        // Emit done event with session data
-                        emit('done', sessionData)
-                    } else {
-                        errorMessage.value = 'Failed to validate session'
-                    }
-                } catch (error) {
-                    console.error('Session validation error:', error)
-                    errorMessage.value = 'Failed to validate session'
-                }
-            }
-        })
-        
+
         return {
             signInWithGitHub,
             errorMessage,

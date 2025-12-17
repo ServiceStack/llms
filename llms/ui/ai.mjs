@@ -16,6 +16,10 @@ export const o = {
     headers,
     isSidebarOpen: true,  // Shared sidebar state (default open for lg+ screens)
 
+    get hasAccess() {
+        return !this.requiresAuth || this.auth
+    },
+
     resolveUrl(url) {
         return url.startsWith('http') || url.startsWith('/v1') ? url : base + url
     },
@@ -52,38 +56,21 @@ export const o = {
         this.auth = auth
         if (auth?.apiKey) {
             this.headers.Authorization = `Bearer ${auth.apiKey}`
-            //localStorage.setItem('llms:auth', JSON.stringify({ apiKey: auth.apiKey }))
-        } else if (auth?.sessionToken) {
-            this.headers['X-Session-Token'] = auth.sessionToken
-            localStorage.setItem('llms:auth', JSON.stringify({ sessionToken: auth.sessionToken }))
         } else {
             if (this.headers.Authorization) {
                 delete this.headers.Authorization
             }
-            if (this.headers['X-Session-Token']) {
-                delete this.headers['X-Session-Token']
-            }
         }
     },
     async signOut() {
-        if (this.auth?.sessionToken) {
-            // Call logout endpoint for OAuth sessions
-            try {
-                await this.post('/auth/logout', {
-                    headers: {
-                        'X-Session-Token': this.auth.sessionToken
-                    }
-                })
-            } catch (error) {
-                console.error('Logout error:', error)
-            }
+        try {
+            await this.post('/auth/logout')
+        } catch (error) {
+            console.error('Logout error:', error)
         }
         this.auth = null
         if (this.headers.Authorization) {
             delete this.headers.Authorization
-        }
-        if (this.headers['X-Session-Token']) {
-            delete this.headers['X-Session-Token']
         }
         localStorage.removeItem('llms:auth')
     },
@@ -104,25 +91,6 @@ export const o = {
         }
         if (config.authType != null) {
             this.authType = config.authType
-        }
-
-        // Try to restore session from localStorage
-        if (this.requiresAuth) {
-            const storedAuth = localStorage.getItem('llms:auth')
-            if (storedAuth) {
-                try {
-                    const authData = JSON.parse(storedAuth)
-                    if (authData.sessionToken) {
-                        this.headers['X-Session-Token'] = authData.sessionToken
-                    }
-                    // else if (authData.apiKey) {
-                    //     this.headers.Authorization = `Bearer ${authData.apiKey}`
-                    // }
-                } catch (e) {
-                    console.error('Failed to restore auth from localStorage:', e)
-                    localStorage.removeItem('llms:auth')
-                }
-            }
         }
 
         // Get auth status

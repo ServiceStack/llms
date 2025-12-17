@@ -2223,11 +2223,19 @@ def main():
 
             # Expand environment variables
             if client_id.startswith("$"):
-                client_id = os.environ.get(client_id[1:], "")
+                client_id = client_id[1:]
             if client_secret.startswith("$"):
-                client_secret = os.environ.get(client_secret[1:], "")
+                client_secret = client_secret[1:]
 
-            if not client_id or not client_secret:
+            client_id = os.environ.get(client_id, client_id)
+            client_secret = os.environ.get(client_secret, client_secret)
+
+            if (
+                not client_id
+                or not client_secret
+                or client_id == "GITHUB_CLIENT_ID"
+                or client_secret == "GITHUB_CLIENT_SECRET"
+            ):
                 print("ERROR: Authentication is enabled but GitHub OAuth is not properly configured.")
                 print("Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables,")
                 print("or disable authentication by setting 'auth.enabled' to false in llms.json")
@@ -2248,7 +2256,7 @@ def main():
                 return True, None
 
             # Check for OAuth session token
-            session_token = request.query.get("session") or request.headers.get("X-Session-Token")
+            session_token = get_session_token(request)
             if session_token and session_token in g_sessions:
                 return True, g_sessions[session_token]
 
@@ -2476,9 +2484,12 @@ def main():
 
             # Expand environment variables
             if client_id.startswith("$"):
-                client_id = os.environ.get(client_id[1:], "")
+                client_id = client_id[1:]
             if redirect_uri.startswith("$"):
-                redirect_uri = os.environ.get(redirect_uri[1:], "")
+                redirect_uri = redirect_uri[1:]
+
+            client_id = os.environ.get(client_id, client_id)
+            redirect_uri = os.environ.get(redirect_uri, redirect_uri)
 
             if not client_id:
                 return web.json_response({"error": "GitHub client_id not configured"}, status=500)
@@ -2511,7 +2522,9 @@ def main():
 
             # Expand environment variables
             if restrict_to.startswith("$"):
-                restrict_to = os.environ.get(restrict_to[1:], "")
+                restrict_to = restrict_to[1:]
+
+            restrict_to = os.environ.get(restrict_to, None if restrict_to == "GITHUB_USERS" else restrict_to)
 
             # If restrict_to is configured, validate the user
             if restrict_to:
@@ -2531,6 +2544,14 @@ def main():
             """Handle GitHub OAuth callback"""
             code = request.query.get("code")
             state = request.query.get("state")
+
+            # Handle malformed URLs where query params are appended with & instead of ?
+            if not code and "tail" in request.match_info:
+                tail = request.match_info["tail"]
+                if tail.startswith("&"):
+                    params = parse_qs(tail[1:])
+                    code = params.get("code", [None])[0]
+                    state = params.get("state", [None])[0]
 
             if not code or not state:
                 return web.Response(text="Missing code or state parameter", status=400)
@@ -2552,10 +2573,15 @@ def main():
             # Expand environment variables
             if client_id.startswith("$"):
                 client_id = os.environ.get(client_id[1:], "")
+                client_id = client_id[1:]
             if client_secret.startswith("$"):
-                client_secret = os.environ.get(client_secret[1:], "")
+                client_secret = client_secret[1:]
             if redirect_uri.startswith("$"):
-                redirect_uri = os.environ.get(redirect_uri[1:], "")
+                redirect_uri = redirect_uri[1:]
+
+            client_id = os.environ.get(client_id, client_id)
+            client_secret = os.environ.get(client_secret, client_secret)
+            redirect_uri = os.environ.get(redirect_uri, redirect_uri)
 
             if not client_id or not client_secret:
                 return web.json_response({"error": "GitHub OAuth credentials not configured"}, status=500)
@@ -2604,10 +2630,13 @@ def main():
 
             # Redirect to UI with session token
             return web.HTTPFound(f"/?session={session_token}")
+            response = web.HTTPFound(f"/?session={session_token}")
+            response.set_cookie("llms-token", session_token, httponly=True, path="/", max_age=86400)
+            return response
 
         async def session_handler(request):
             """Validate and return session info"""
-            session_token = request.query.get("session") or request.headers.get("X-Session-Token")
+            session_token = get_session_token(request)
 
             if not session_token or session_token not in g_sessions:
                 return web.json_response({"error": "Invalid or expired session"}, status=401)
@@ -2624,17 +2653,19 @@ def main():
 
         async def logout_handler(request):
             """End OAuth session"""
-            session_token = request.query.get("session") or request.headers.get("X-Session-Token")
+            session_token = get_session_token(request)
 
             if session_token and session_token in g_sessions:
                 del g_sessions[session_token]
 
-            return web.json_response({"success": True})
+            response = web.json_response({"success": True})
+            response.del_cookie("llms-token")
+            return response
 
         async def auth_handler(request):
             """Check authentication status and return user info"""
             # Check for OAuth session token
-            session_token = request.query.get("session") or request.headers.get("X-Session-Token")
+            session_token = get_session_token(request)
 
             if session_token and session_token in g_sessions:
                 session_data = g_sessions[session_token]
@@ -2671,6 +2702,7 @@ def main():
         app.router.add_get("/auth", auth_handler)
         app.router.add_get("/auth/github", github_auth_handler)
         app.router.add_get("/auth/github/callback", github_callback_handler)
+        app.router.add_get("/auth/github/callback{tail:.*}", github_callback_handler)
         app.router.add_get("/auth/session", session_handler)
         app.router.add_post("/auth/logout", logout_handler)
 
