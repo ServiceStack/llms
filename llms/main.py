@@ -38,7 +38,7 @@ try:
 except ImportError:
     HAS_PIL = False
 
-VERSION = "3.0.0b1"
+VERSION = "3.0.0b2"
 _ROOT = None
 DEBUG = True  # os.getenv("PYPI_SERVICESTACK") is not None
 g_config_path = None
