@@ -362,6 +362,8 @@ export default {
     `,
     setup() {
         const ctx = inject('ctx')
+        const models = ctx.state.models
+        const config = ctx.state.config
         const router = useRouter()
         const route = useRoute()
         const threads = useThreadStore()
@@ -375,8 +377,6 @@ export default {
         provide('threads', threads)
         provide('chatPrompt', chatPrompt)
         provide('chatSettings', chatSettings)
-        const models = inject('models')
-        const config = inject('config')
 
         const prefs = ctx.getPrefs()
 

@@ -4,7 +4,7 @@ import { useThreadStore } from './threadStore.mjs'
 import { renderMarkdown } from './markdown.mjs'
 
 const RecentResults = {
-    template:`
+    template: `
         <div class="flex-1 overflow-y-auto" @scroll="onScroll">
             <div class="mx-auto max-w-6xl px-4 py-4">
                 <div class="text-sm text-gray-600 dark:text-gray-400 mb-3" v-if="threads.length">
@@ -46,9 +46,10 @@ const RecentResults = {
         q: String
     },
     setup(props) {
-        const ai = inject('ai')
+        const ctx = inject('ctx')
+        const ai = ctx.ai
+        const config = ctx.state.config
         const router = useRouter()
-        const config = inject('config')
         const { threads, loadThreads } = useThreadStore()
         let defaultVisibleCount = 25
         const visibleCount = ref(defaultVisibleCount)
@@ -106,19 +107,19 @@ const RecentResults = {
         const snippet = (t) => {
             const highlight = (s) => clean(s).replace(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), `<mark>$1</mark>`)
             const query = normalized(props.q)
-            if (!query) return (t.messages && t.messages.length) ? highlight(t.messages[t.messages.length-1].content) : ''
+            if (!query) return (t.messages && t.messages.length) ? highlight(t.messages[t.messages.length - 1].content) : ''
             if (normalized(t.title).includes(query)) return highlight(t.title)
-            if (Array.isArray(t.messages)){
-                for (const m of t.messages){
+            if (Array.isArray(t.messages)) {
+                for (const m of t.messages) {
                     const c = normalized(m?.content)
-                    if (c.includes(query)){
+                    if (c.includes(query)) {
                         // return small excerpt around first match
                         const idx = c.indexOf(query)
                         const orig = (m?.content || '')
                         const start = Math.max(0, idx - 40)
                         const end = Math.min(orig.length, idx + query.length + 60)
-                        const prefix = start>0 ? '…' : ''
-                        const suffix = end<orig.length ? '…' : ''
+                        const prefix = start > 0 ? '…' : ''
+                        const suffix = end < orig.length ? '…' : ''
                         const snippet = prefix + orig.slice(start, end) + suffix
                         // return snippet
                         return highlight(snippet)

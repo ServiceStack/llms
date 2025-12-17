@@ -1,7 +1,7 @@
 import { computed, inject, ref, onMounted, onUnmounted } from "vue"
 
 export default {
-    template:`
+    template: `
         <div v-if="$ai.auth?.profileUrl" class="relative" ref="avatarContainer">
             <img
                 @click.stop="toggleMenu"
@@ -31,7 +31,8 @@ export default {
         </div>
     `,
     setup() {
-        const ai = inject('ai')
+        const ctx = inject('ctx')
+        const ai = ctx.ai
         const showMenu = ref(false)
         const avatarContainer = ref(null)
 

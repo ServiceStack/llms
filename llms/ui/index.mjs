@@ -54,18 +54,19 @@ class AppExtension {
 }
 
 class AppContext {
-    constructor({ app, config, models, routes, ai, router, threadStore, exts, modules }) {
+    constructor({ app, config, models, extensions, routes, ai, router, threadStore, modules }) {
         this.app = app
-        this.config = config
-        this.models = models
+        this.state = reactive({
+            config,
+            models,
+            extensions,
+        })
         this.routes = routes
         this.ai = ai
         this.router = router
         this.threadStore = threadStore
-        this.exts = exts
         this.modules = modules
         this.events = new EventBus()
-        this.state = reactive({})
         this.modalComponents = {}
         this.extensions = []
         this.layout = reactive(storageObject(`llms.layout`))
@@ -157,9 +158,6 @@ export async function createContext() {
 
     app.use(router)
     app.use(ServiceStackVue)
-    app.provide('ai', ai)
-    app.provide('config', config)
-    app.provide('models', models)
     Object.keys(Components).forEach(name => {
         app.component(name, Components[name])
     })

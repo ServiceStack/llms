@@ -11,8 +11,8 @@ export default {
         const router = useRouter()
         const route = useRoute()
 
-        const ai = inject('ai')
         const ctx = inject('ctx')
+        const ai = ctx.ai
         const isMobile = ref(false)
         const modal = ref()
 
@@ -58,7 +58,7 @@ export default {
 
         watch(() => route.query.open, (newVal) => {
             modal.value = ctx.modalComponents[newVal]
-            console.log('open', newVal, modal.value)
+            console.log('open', newVal)
         })
 
         return { ai, modal, isMobile, toggleSidebar, closeSidebar, closeModal }

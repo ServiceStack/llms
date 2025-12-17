@@ -45,7 +45,6 @@ export default {
     `,
     emits: ['done'],
     setup(props, { emit }) {
-        const ai = inject('ai')
         const errorMessage = ref(null)
 
         function signInWithGitHub() {

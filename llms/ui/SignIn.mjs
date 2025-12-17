@@ -32,12 +32,13 @@ export default {
     `,
     emits: ['done'],
     setup(props, { emit }) {
-        const ai = inject('ai')
+        const ctx = inject('ctx')
+        const ai = ctx.ai
         const apiKey = ref('')
         const errorSummary = ref()
         async function submit() {
             const r = await ai.get('/auth', {
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${apiKey.value}`
                 },
             })
@@ -48,13 +49,13 @@ export default {
                 json.apiKey = apiKey.value
                 emit('done', json)
             } else {
-                errorSummary.value = json.responseStatus || { 
-                    errorCode: "Unauthorized", 
-                    message: 'Invalid API Key' 
+                errorSummary.value = json.responseStatus || {
+                    errorCode: "Unauthorized",
+                    message: 'Invalid API Key'
                 }
             }
         }
-        
+
         return {
             apiKey,
             submit,

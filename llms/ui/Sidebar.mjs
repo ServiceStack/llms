@@ -189,7 +189,8 @@ const Sidebar = {
     `,
     emits: ['thread-selected', 'toggle-sidebar'],
     setup(props, { emit }) {
-        const ai = inject('ai')
+        const ctx = inject('ctx')
+        const ai = ctx.ai
         const router = useRouter()
         const threadStore = useThreadStore()
         const {

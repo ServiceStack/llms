@@ -31,9 +31,10 @@ export default {
     `,
     emits: ['updated'],
     setup(props, { emit }) {
-        const ai = inject('ai')
-        const config = inject('config')
-        const models = inject('models')
+        const ctx = inject('ctx')
+        const ai = ctx.ai
+        const config = ctx.state.config
+        const models = ctx.state.models
         const showPopover = ref(false)
         const triggerRef = ref(null)
         const popoverRef = ref(null)
@@ -62,11 +63,9 @@ export default {
                         ai.getConfig(),
                         ai.getModels(),
                     ])
-                    const newConfig = await configRes.json()
-                    const newModels = await modelsRes.json()
-                    Object.assign(config, newConfig)
-                    models.length = 0
-                    newModels.forEach(m => models.push(m))
+                    const config = await configRes.json()
+                    const models = await modelsRes.json()
+                    Object.assign(ctx.state, { config, models })
                     emit('updated')
                     renderKey.value++
                 } catch (e) {

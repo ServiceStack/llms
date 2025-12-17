@@ -150,10 +150,10 @@ export default {
     },
     setup(props) {
         const ctx = inject('ctx')
-        const ai = inject('ai')
+        const config = ctx.state.config
+        const ai = ctx.ai
         const chatSettings = inject('chatSettings')
         const router = useRouter()
-        const config = inject('config')
         const chatPrompt = inject('chatPrompt')
         const {
             messageText,
