@@ -2,25 +2,63 @@ import { ref, computed, nextTick, watch, onMounted, provide, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useFormatters } from '@servicestack/vue'
 import { useThreadStore } from './threadStore.mjs'
-import { storageObject, addCopyButtons, formatCost, statsTitle, fetchCacheInfos } from './utils.mjs'
+import { addCopyButtons, formatCost, statsTitle, fetchCacheInfos } from './utils.mjs'
 import { renderMarkdown } from './markdown.mjs'
 import ChatPrompt, { useChatPrompt } from './ChatPrompt.mjs'
 import SignIn from './SignIn.mjs'
 import OAuthSignIn from './OAuthSignIn.mjs'
 import Avatar from './Avatar.mjs'
-import ModelSelector from './ModelSelector.mjs'
-import SystemPromptSelector from './SystemPromptSelector.mjs'
-import SystemPromptEditor from './SystemPromptEditor.mjs'
 import { useSettings } from "./SettingsDialog.mjs"
 import Welcome from './Welcome.mjs'
 
 const { humanifyMs, humanifyNumber } = useFormatters()
 
+const TopBar = {
+    template: `
+        <div class="flex space-x-2">
+            <div v-for="(ext, index) in extensions" :key="ext.id" class="relative flex items-center justify-center">
+                <component :is="ext.topBarIcon" 
+                    class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 block"
+                    :class="{ 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded' : ext.isActive($layout.top) }" 
+                    @mouseenter="tooltip = ext.name"
+                    @mouseleave="tooltip = ''"
+                    />
+                <div v-if="tooltip === ext.name" 
+                    class="absolute top-full mt-2 px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-800 rounded shadow-md z-50 whitespace-nowrap pointer-events-none"
+                    :class="index <= extensions.length - 1 ? 'right-0' : 'left-1/2 -translate-x-1/2'">
+                    {{ext.name}}
+                </div>    
+            </div>
+        </div>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const tooltip = ref('')
+        const extensions = computed(() => ctx.extensions.filter(x => x.topBarIcon))
+        return {
+            extensions,
+            tooltip,
+        }
+    }
+}
+
+const TopPanel = {
+    template: `
+        <component v-if="component" :is="component" />
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const component = computed(() => ctx.component(ctx.layout.top))
+        return {
+            component,
+        }
+    }
+}
+
 export default {
     components: {
-        ModelSelector,
-        SystemPromptSelector,
-        SystemPromptEditor,
+        TopBar,
+        TopPanel,
         ChatPrompt,
         SignIn,
         OAuthSignIn,
@@ -29,28 +67,26 @@ export default {
     },
     template: `
         <div class="flex flex-col h-full w-full">
-            <!-- Header with model and prompt selectors (hidden when auth required and not authenticated) -->
-            <div v-if="!($ai.requiresAuth && !$ai.auth)" 
+            <!-- Header with model selectors -->
+            <div v-if="$ai.hasAccess" 
                 :class="!$ai.isSidebarOpen ? 'pl-6' : ''"
-                class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-2 w-full min-h-16">
+                class="flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 w-full min-h-16">
                 <div class="flex flex-wrap items-center justify-between w-full">
                     <ModelSelector :models="models" v-model="selectedModel" @updated="configUpdated" />
 
                     <div class="flex items-center space-x-2 pl-4">
-                        <SystemPromptSelector :prompts="prompts" v-model="selectedPrompt"
-                            :show="showSystemPrompt" @toggle="showSystemPrompt = !showSystemPrompt" />
+                        <TopBar />
                         <Avatar />
                     </div>
                 </div>
             </div>
 
-            <SystemPromptEditor v-if="showSystemPrompt && !($ai.requiresAuth && !$ai.auth)"
-                v-model="currentSystemPrompt" :prompts="prompts" :selected="selectedPrompt" />
+            <TopPanel />
 
             <!-- Messages Area -->
             <div class="flex-1 overflow-y-auto" ref="messagesContainer">
                 <div class="mx-auto max-w-6xl px-4 py-6">
-                    <div v-if="$ai.requiresAuth && !$ai.auth">
+                    <div v-if="!$ai.hasAccess">
                         <OAuthSignIn v-if="$ai.authType === 'oauth'" @done="$ai.signIn($event)" />
                         <SignIn v-else @done="$ai.signIn($event)" />
                     </div>
@@ -179,31 +215,32 @@ export default {
                                     </div>
                                 </div>
 
-            <!-- User Message with separate attachments -->
-            <div v-if="message.role !== 'assistant'">
-                <div v-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
-                
-                <!-- Attachments Grid -->
-                <div v-if="hasAttachments(message)" class="mt-2 flex flex-wrap gap-2">
-                    <template v-for="(part, i) in getAttachments(message)" :key="i">
-                        <!-- Image -->
-                        <div v-if="part.type === 'image_url'" class="group relative cursor-pointer" @click="openLightbox(part.image_url.url)">
-                            <img :src="part.image_url.url" class="max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]" />
-                        </div>
-                        <!-- Audio -->
-                        <div v-else-if="part.type === 'input_audio'" class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                            <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-                            <audio controls :src="part.input_audio.data" class="h-8 w-48"></audio>
-                        </div>
-                        <!-- File -->
-                        <a v-else-if="part.type === 'file'" :href="part.file.file_data" target="_blank" 
-                           class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                            <span class="max-w-xs truncate">{{ part.file.filename || 'Attachment' }}</span>
-                        </a>
-                    </template>
-                </div>
-            </div>
+                                <!-- User Message with separate attachments -->
+                                <div v-if="message.role !== 'assistant'">
+                                    <div v-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
+                                    
+                                    <!-- Attachments Grid -->
+                                    <div v-if="hasAttachments(message)" class="mt-2 flex flex-wrap gap-2">
+                                        <template v-for="(part, i) in getAttachments(message)" :key="i">
+                                            <!-- Image -->
+                                            <div v-if="part.type === 'image_url'" class="group relative cursor-pointer" @click="openLightbox(part.image_url.url)">
+                                                <img :src="part.image_url.url" class="max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]" />
+                                            </div>
+                                            <!-- Audio -->
+                                            <div v-else-if="part.type === 'input_audio'" class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                                                <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                                                <audio controls :src="part.input_audio.data" class="h-8 w-48"></audio>
+                                            </div>
+                                            <!-- File -->
+                                            <a v-else-if="part.type === 'file'" :href="part.file.file_data" target="_blank" 
+                                            class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                                                <span class="max-w-xs truncate">{{ part.file.filename || 'Attachment' }}</span>
+                                            </a>
+                                        </template>
+                                    </div>
+                                </div>
+
                                 <div class="mt-2 text-xs opacity-70">
                                     <span>{{ formatTime(message.timestamp) }}</span>
                                     <span v-if="message.usage" :title="tokensTitle(message.usage)">
@@ -304,8 +341,8 @@ export default {
             </div>
 
             <!-- Input Area -->
-            <div v-if="!($ai.requiresAuth && !$ai.auth)" class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-                <ChatPrompt :model="selectedModelObj" :systemPrompt="currentSystemPrompt" />
+            <div v-if="$ai.hasAccess" class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
+                <ChatPrompt :model="selectedModelObj" />
             </div>
             
             <!-- Lightbox -->
@@ -323,10 +360,8 @@ export default {
             </div>
         </div>
     `,
-    props: {
-    },
-    setup(props) {
-        const ai = inject('ai')
+    setup() {
+        const ctx = inject('ctx')
         const router = useRouter()
         const route = useRoute()
         const threads = useThreadStore()
@@ -343,25 +378,13 @@ export default {
         const models = inject('models')
         const config = inject('config')
 
-        const prefs = storageObject(ai.prefsKey)
-
-        const customPromptValue = ref('')
-        const customPrompt = {
-            id: '_custom_',
-            name: 'Custom...',
-            value: ''
-        }
-
-        const prompts = computed(() => [customPrompt, ...config.prompts])
+        const prefs = ctx.getPrefs()
 
         const selectedModel = ref(prefs.model || config.defaults.text.model || '')
         const selectedModelObj = computed(() => {
             if (!selectedModel.value || !models) return null
             return models.find(m => m.name === selectedModel.value) || models.find(m => m.id === selectedModel.value)
         })
-        const selectedPrompt = ref(prefs.systemPrompt || null)
-        const currentSystemPrompt = ref('')
-        const showSystemPrompt = ref(false)
         const messagesContainer = ref(null)
         const isExporting = ref(false)
         const isImporting = ref(false)
@@ -396,45 +419,16 @@ export default {
                 selectedModel.value = thread.model
             }
 
-            // Sync System Prompt selection from thread
-            if (thread) {
-                const norm = s => (s || '').replace(/\s+/g, ' ').trim()
-                const tsp = norm(thread.systemPrompt || '')
-                if (tsp) {
-                    const match = config.prompts.find(p => norm(p.value) === tsp)
-                    if (match) {
-                        selectedPrompt.value = match
-                        currentSystemPrompt.value = match.value.replace(/\n/g, ' ')
-                    } else {
-                        selectedPrompt.value = customPrompt
-                        currentSystemPrompt.value = thread.systemPrompt
-                    }
-                } else {
-                    // Preserve existing selected prompt
-                    // selectedPrompt.value = null
-                    // currentSystemPrompt.value = ''
-                }
-            }
-
             if (!newId) {
                 chatPrompt.reset()
             }
             nextTick(addCopyButtons)
         }, { immediate: true })
 
-        // Watch selectedPrompt and update currentSystemPrompt
-        watch(selectedPrompt, (newPrompt) => {
-            // If using a custom prompt, keep whatever is already in currentSystemPrompt
-            if (newPrompt && newPrompt.id === '_custom_') return
-            const prompt = newPrompt && config.prompts.find(p => p.id === newPrompt.id)
-            currentSystemPrompt.value = prompt ? prompt.value.replace(/\n/g, ' ') : ''
-        }, { immediate: true })
-
-        watch(() => [selectedModel.value, selectedPrompt.value], () => {
-            localStorage.setItem(ai.prefsKey, JSON.stringify({
+        watch(() => [selectedModel.value], () => {
+            ctx.setPrefs({
                 model: selectedModel.value,
-                systemPrompt: selectedPrompt.value
-            }))
+            })
         })
 
         async function exportThreads() {
@@ -828,15 +822,10 @@ export default {
             config,
             models,
             threads,
-            prompts,
             isGenerating,
-            customPromptValue,
             currentThread,
             selectedModel,
             selectedModelObj,
-            selectedPrompt,
-            currentSystemPrompt,
-            showSystemPrompt,
             messagesContainer,
             errorStatus,
             copying,

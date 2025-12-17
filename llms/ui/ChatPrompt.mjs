@@ -146,13 +146,10 @@ export default {
         model: {
             type: Object,
             default: null
-        },
-        systemPrompt: {
-            type: String,
-            default: ''
         }
     },
     setup(props) {
+        const ctx = inject('ctx')
         const ai = inject('ai')
         const chatSettings = inject('chatSettings')
         const router = useRouter()
@@ -325,20 +322,6 @@ export default {
             }
         }
 
-        function createChatRequest() {
-            if (hasImage()) {
-                return deepClone(config.defaults.image)
-            }
-            if (hasAudio()) {
-                return deepClone(config.defaults.audio)
-            }
-            if (attachedFiles.value.length) {
-                return deepClone(config.defaults.file)
-            }
-            const text = deepClone(config.defaults.text)
-            return text
-        }
-
         function getTextContent(chat) {
             const textMessage = chat.messages.find(m =>
                 m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'text'))
@@ -383,17 +366,20 @@ export default {
 
                 // Create thread if none exists
                 if (!currentThread.value) {
-                    const newThread = await threads.createThread('New Chat', props.model, props.systemPrompt)
+                    const newThread = await threads.createThread({
+                        title: 'New Chat',
+                        model: props.model.id,
+                        info: toModelInfo(props.model),
+                    })
                     threadId = newThread.id
                     // Navigate to the new thread URL
                     router.push(`${ai.base}/c/${newThread.id}`)
                 } else {
                     threadId = currentThread.value.id
-                    // Update the existing thread's model and systemPrompt to match current selection
+                    // Update the existing thread's model to match current selection
                     await threads.updateThread(threadId, {
                         model: props.model.name,
                         info: toModelInfo(props.model),
-                        systemPrompt: props.systemPrompt
                     })
                 }
 
@@ -448,51 +434,49 @@ export default {
                 isGenerating.value = true
 
                 // Construct API Request from History
-                const chatRequest = {
+                const request = {
                     model: props.model.name,
                     messages: [],
                     metadata: {}
                 }
 
-                // Add system prompt if present
-                if (props.systemPrompt?.trim()) {
-                    chatRequest.messages.push({
-                        role: 'system',
-                        content: props.systemPrompt // assuming system prompt is just string
-                    })
-                }
-
                 // Add History
                 thread.messages.forEach(m => {
-                    chatRequest.messages.push({
+                    request.messages.push({
                         role: m.role,
                         content: m.content
                     })
                 })
 
                 // Apply user settings
-                applySettings(chatRequest)
-                chatRequest.metadata.threadId = threadId
+                applySettings(request)
+                request.metadata.threadId = threadId
 
-                console.debug('chatRequest', chatRequest)
+                const ctxRequest = {
+                    request,
+                    thread,
+                }
+                ctx.chatRequestFilters.forEach(f => f(ctxRequest))
+
+                console.debug('chatRequest', request)
 
                 // Send to API
                 const startTime = Date.now()
-                const response = await ai.post('/v1/chat/completions', {
-                    body: JSON.stringify(chatRequest),
+                const res = await ai.post('/v1/chat/completions', {
+                    body: JSON.stringify(request),
                     signal: controller.signal
                 })
 
-                let result = null
-                if (!response.ok) {
+                let response = null
+                if (!res.ok) {
                     errorStatus.value = {
-                        errorCode: `HTTP ${response.status} ${response.statusText}`,
+                        errorCode: `HTTP ${res.status} ${res.statusText}`,
                         message: null,
                         stackTrace: null
                     }
                     let errorBody = null
                     try {
-                        errorBody = await response.text()
+                        errorBody = await res.text()
                         if (errorBody) {
                             // Try to parse as JSON for better formatting
                             try {
@@ -513,8 +497,13 @@ export default {
                     }
                 } else {
                     try {
-                        result = await response.json()
-                        console.debug('chatResponse', JSON.stringify(result, null, 2))
+                        response = await res.json()
+                        const ctxResponse = {
+                            response,
+                            thread,
+                        }
+                        ctx.chatResponseFilters.forEach(f => f(ctxResponse))
+                        console.debug('chatResponse', JSON.stringify(response, null, 2))
                     } catch (e) {
                         errorStatus.value = {
                             errorCode: 'Error',
@@ -524,29 +513,29 @@ export default {
                     }
                 }
 
-                if (result?.error) {
+                if (response?.error) {
                     errorStatus.value ??= {
                         errorCode: 'Error',
                     }
-                    errorStatus.value.message = result.error
+                    errorStatus.value.message = response.error
                 }
 
                 if (!errorStatus.value) {
                     // Add assistant response (save entire message including reasoning)
-                    const assistantMessage = result.choices?.[0]?.message
+                    const assistantMessage = response.choices?.[0]?.message
 
-                    const usage = result.usage
+                    const usage = response.usage
                     if (usage) {
-                        if (result.metadata?.pricing) {
-                            const [input, output] = result.metadata.pricing.split('/')
-                            usage.duration = result.metadata.duration ?? (Date.now() - startTime)
+                        if (response.metadata?.pricing) {
+                            const [input, output] = response.metadata.pricing.split('/')
+                            usage.duration = response.metadata.duration ?? (Date.now() - startTime)
                             usage.input = input
                             usage.output = output
                             usage.tokens = usage.completion_tokens
                             usage.price = usage.output
                             usage.cost = tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
                         }
-                        await threads.logRequest(threadId, props.model, chatRequest, result)
+                        await threads.logRequest(threadId, props.model, request, response)
                     }
                     await threads.addMessageToThread(threadId, assistantMessage, usage)
 
@@ -554,6 +543,8 @@ export default {
 
                     attachedFiles.value = []
                     // Error will be cleared when user sends next message (no auto-timeout)
+                } else {
+                    ctx.chatErrorFilters.forEach(f => f(errorStatus.value))
                 }
             } catch (error) {
                 // Check if the error is due to abort

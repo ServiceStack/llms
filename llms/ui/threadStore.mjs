@@ -8,6 +8,13 @@ const currentThread = ref(null)
 const isLoading = ref(false)
 
 let db = null
+let ctx = null
+
+export default {
+    install(context) {
+        ctx = context
+    }
+}
 
 // Initialize IndexedDB
 async function initDB() {
@@ -103,19 +110,21 @@ async function logRequest(threadId, model, request, response) {
 }
 
 // Create a new thread
-async function createThread(title = 'New Chat', model = null, systemPrompt = '') {
+async function createThread(args = {}) {
     await initDB()
 
     const thread = {
         id: generateThreadId(),
-        title: title,
-        model: model?.id ?? '',
-        info: toModelInfo(model),
-        systemPrompt: systemPrompt,
         messages: [],
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        ...args
     }
+    if (!thread.title) {
+        thread.title = 'New Chat'
+    }
+
+    ctx.createThreadFilters.forEach(f => f(thread))
 
     try {
         const tx = db.transaction(['threads'], 'readwrite')
@@ -147,6 +156,8 @@ async function updateThread(threadId, updates) {
         ...updates,
         updatedAt: new Date().toISOString()
     }
+
+    ctx.updateThreadFilters.forEach(f => f(updatedThread))
 
     await store.put(updatedThread)
     await tx.complete

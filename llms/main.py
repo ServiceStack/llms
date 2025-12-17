@@ -9,8 +9,8 @@
 import argparse
 import asyncio
 import base64
-from datetime import datetime
 import hashlib
+import importlib.util
 import json
 import mimetypes
 import os
@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import traceback
+from datetime import datetime
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
@@ -38,6 +39,7 @@ except ImportError:
 
 VERSION = "3.0.0b1"
 _ROOT = None
+DEBUG = True  # os.getenv("PYPI_SERVICESTACK") is not None
 g_config_path = None
 g_ui_path = None
 g_config = None
@@ -48,12 +50,23 @@ g_logprefix = ""
 g_default_model = ""
 g_sessions = {}  # OAuth session storage: {session_token: {userId, userName, displayName, profileUrl, email, created}}
 g_oauth_states = {}  # CSRF protection: {state: {created, redirect_uri}}
+g_app = None  # ExtensionsContext Singleton
 
 
 def _log(message):
-    """Helper method for logging from the global polling task."""
     if g_verbose:
         print(f"{g_logprefix}{message}", flush=True)
+
+
+def _dbg(message):
+    if DEBUG:
+        print(f"DEBUG: {message}", flush=True)
+
+
+def _err(message, e):
+    print(f"ERROR: {message}: {e}", flush=True)
+    if g_verbose:
+        print(traceback.format_exc(), flush=True)
 
 
 def printdump(obj):
@@ -1177,20 +1190,6 @@ class GoogleProvider(OpenAiCompatible):
             return self.to_response(response, chat, started_at)
 
 
-ALL_PROVIDERS = [
-    OpenAiCompatible,
-    OpenAiProvider,
-    AnthropicProvider,
-    MistralProvider,
-    GroqProvider,
-    XaiProvider,
-    CodestralProvider,
-    GoogleProvider,
-    OllamaProvider,
-    LMStudioProvider,
-]
-
-
 def get_provider_model(model_name):
     for provider in g_handlers.values():
         provider_model = provider.provider_model(model_name)
@@ -1436,7 +1435,7 @@ def create_provider(provider):
         _log(f"Provider {provider_label} is missing 'npm' sdk")
         return None
 
-    for provider_type in ALL_PROVIDERS:
+    for provider_type in g_app.all_providers:
         if provider_type.sdk == npm_sdk:
             kwargs = create_provider_kwargs(provider)
             return provider_type(**kwargs)
@@ -2008,8 +2007,240 @@ async def watch_config_files(config_path, ui_path, interval=1):
                 pass
 
 
+def get_session_token(request):
+    return request.query.get("session") or request.headers.get("X-Session-Token") or request.cookies.get("llms-token")
+
+
+class AppExtensions:
+    """
+    APIs extensions can use to extend the app
+    """
+
+    def __init__(self, cli_args, extra_args):
+        self.cli_args = cli_args
+        self.extra_args = extra_args
+        self.ui_extensions = []
+        self.chat_request_filters = []
+        self.chat_response_filters = []
+        self.server_add_get = []
+        self.server_add_post = []
+        self.all_providers = [
+            OpenAiCompatible,
+            OpenAiProvider,
+            AnthropicProvider,
+            MistralProvider,
+            GroqProvider,
+            XaiProvider,
+            CodestralProvider,
+            GoogleProvider,
+            OllamaProvider,
+            LMStudioProvider,
+        ]
+
+
+class ExtensionContext:
+    def __init__(self, app, path):
+        self.app = app
+        self.path = path
+        self.name = os.path.basename(path)
+        self.ext_prefix = f"/ext/{self.name}"
+
+    def log(self, message):
+        print(f"[{self.name}] {message}", flush=True)
+
+    def dbg(self, message):
+        if DEBUG:
+            print(f"DEBUG [{self.name}]: {message}", flush=True)
+
+    def err(self, message, e):
+        print(f"ERROR [{self.name}]: {message}", e)
+        if g_verbose:
+            print(traceback.format_exc(), flush=True)
+
+    def add_provider(self, provider):
+        self.log(f"Registered provider: {provider}")
+        self.app.all_providers.append(provider)
+
+    def register_ui_extension(self, index):
+        path = os.path.join(self.ext_prefix, index)
+        self.log(f"Registered UI extension: {path}")
+        self.app.ui_extensions.append({"id": self.name, "path": path})
+
+    def register_chat_request_filter(self, handler):
+        self.log(f"Registered chat request filter: {handler}")
+        self.app.chat_request_filters.append(handler)
+
+    def register_chat_response_filter(self, handler):
+        self.log(f"Registered chat response filter: {handler}")
+        self.app.chat_response_filters.append(handler)
+
+    def add_static_files(self, ext_dir):
+        self.log(f"Registered static files: {ext_dir}")
+
+        async def serve_static(request):
+            path = request.match_info["path"]
+            file_path = os.path.join(ext_dir, path)
+            if os.path.exists(file_path):
+                return web.FileResponse(file_path)
+            return web.Response(status=404)
+
+        self.app.server_add_get.append((os.path.join(self.ext_prefix, "{path:.*}"), serve_static, {}))
+
+    def add_get(self, path, handler, **kwargs):
+        self.dbg(f"Registered GET: {os.path.join(self.ext_prefix, path)}")
+        self.app.server_add_get.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def add_post(self, path, handler, **kwargs):
+        self.dbg(f"Registered POST: {os.path.join(self.ext_prefix, path)}")
+        self.app.server_add_post.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def get_config(self):
+        return g_config
+
+    def chat_completion(self, chat):
+        return chat_completion(chat)
+
+    def get_providers(self):
+        return g_handlers
+
+    def get_provider(self, name):
+        return g_handlers.get(name)
+
+    def get_session(self, request):
+        session_token = get_session_token(request)
+
+        if not session_token or session_token not in g_sessions:
+            return None
+
+        session_data = g_sessions[session_token]
+        return session_data
+
+    def get_username(self, request):
+        session = self.get_session(request)
+        if session:
+            return session.get("userName")
+        return None
+
+
+def get_extensions_path():
+    return os.path.join(Path.home(), ".llms", "extensions")
+
+
+def init_extensions(parser):
+    extensions_path = get_extensions_path()
+    os.makedirs(extensions_path, exist_ok=True)
+
+    for item in os.listdir(extensions_path):
+        item_path = os.path.join(extensions_path, item)
+        if os.path.isdir(item_path):
+            try:
+                # check for __parser__ function if exists in __init.__.py and call it with parser
+                init_file = os.path.join(item_path, "__init__.py")
+                if os.path.exists(init_file):
+                    spec = importlib.util.spec_from_file_location(item, init_file)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        sys.modules[item] = module
+                        spec.loader.exec_module(module)
+
+                        parser_func = getattr(module, "__parser__", None)
+                        if callable(parser_func):
+                            parser_func(parser)
+                            _log(f"Extension {item} parser loaded")
+            except Exception as e:
+                _err(f"Failed to load extension {item} parser", e)
+
+
+def install_extensions():
+    """
+    Scans ensure ~/.llms/extensions/ for directories with __init__.py and loads them as extensions.
+    Calls the `__install__(ctx)` function in the extension module.
+    """
+    extensions_path = get_extensions_path()
+    os.makedirs(extensions_path, exist_ok=True)
+
+    ext_count = len(os.listdir(extensions_path))
+    if ext_count == 0:
+        _log("No extensions found")
+        return
+
+    _log(f"Installing {ext_count} extension{'' if ext_count == 1 else 's'}...")
+
+    sys.path.append(extensions_path)
+
+    for item in os.listdir(extensions_path):
+        item_path = os.path.join(extensions_path, item)
+        if os.path.isdir(item_path):
+            init_file = os.path.join(item_path, "__init__.py")
+            if os.path.exists(init_file):
+                ctx = ExtensionContext(g_app, item_path)
+                try:
+                    spec = importlib.util.spec_from_file_location(item, init_file)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        sys.modules[item] = module
+                        spec.loader.exec_module(module)
+
+                        install_func = getattr(module, "__install__", None)
+                        if callable(install_func):
+                            install_func(ctx)
+                            _log(f"Extension {item} installed")
+                        else:
+                            _dbg(f"Extension {item} has no __install__ function")
+                    else:
+                        _dbg(f"Extension {item} has no __init__.py")
+
+                    # if ui folder exists, serve as static files at /ext/{item}/
+                    ui_path = os.path.join(item_path, "ui")
+                    if os.path.exists(ui_path):
+                        ctx.add_static_files(ui_path)
+
+                        # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
+                        if os.path.exists(os.path.join(ui_path, "index.mjs")):
+                            ctx.register_ui_extension("index.mjs")
+
+                except Exception as e:
+                    _err(f"Failed to install extension {item}", e)
+            else:
+                _dbg(f"Extension {init_file} not found")
+        else:
+            _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
+
+
+def run_extension_cli():
+    """
+    Run the CLI for an extension.
+    """
+    extensions_path = get_extensions_path()
+    os.makedirs(extensions_path, exist_ok=True)
+
+    for item in os.listdir(extensions_path):
+        item_path = os.path.join(extensions_path, item)
+        if os.path.isdir(item_path):
+            init_file = os.path.join(item_path, "__init__.py")
+            if os.path.exists(init_file):
+                ctx = ExtensionContext(g_app, item_path)
+                try:
+                    spec = importlib.util.spec_from_file_location(item, init_file)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        sys.modules[item] = module
+                        spec.loader.exec_module(module)
+
+                    # Check for __run__ function if exists in __init__.py and call it with ctx
+                    run_func = getattr(module, "__run__", None)
+                    if callable(run_func):
+                        handled = run_func(ctx)
+                        _log(f"Extension {item} was run")
+                        return handled
+
+                except Exception as e:
+                    _err(f"Failed to run extension {item}", e)
+                    return False
+
+
 def main():
-    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_ui_path
+    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_ui_path, g_app
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument("--config", default=None, help="Path to config file", metavar="FILE")
@@ -2051,7 +2282,12 @@ def main():
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
 
+    # Load parser extensions, go through all extensions and load their parser arguments
+    init_extensions(parser)
+
     cli_args, extra_args = parser.parse_known_args()
+
+    g_app = AppExtensions(cli_args, extra_args)
 
     # Check for verbose mode from CLI argument or environment variables
     verbose_env = os.environ.get("VERBOSE", "").lower()
@@ -2137,6 +2373,8 @@ def main():
         exit(0)
 
     asyncio.run(reload_providers())
+
+    install_extensions()
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")
@@ -2286,12 +2524,31 @@ def main():
 
             try:
                 chat = await request.json()
+
+                # Apply pre-chat filters
+                context = {"request": request}
+                # Apply pre-chat filters
+                context = {"request": request}
+                for filter_func in g_app.chat_request_filters:
+                    chat = await filter_func(chat, context)
+
                 response = await chat_completion(chat)
+
+                # Apply post-chat filters
+                # Apply post-chat filters
+                for filter_func in g_app.chat_response_filters:
+                    response = await filter_func(response, context)
+
                 return web.json_response(response)
             except Exception as e:
                 return web.json_response({"error": str(e)}, status=500)
 
         app.router.add_post("/v1/chat/completions", chat_handler)
+
+        async def extensions_handler(request):
+            return web.json_response(g_app.ui_extensions)
+
+        app.router.add_get("/ext", extensions_handler)
 
         async def models_handler(request):
             return web.json_response(get_models())
@@ -2448,7 +2705,7 @@ def main():
                 except Exception:
                     return web.Response(text="403: Forbidden", status=403)
 
-                with open(info_path, "r") as f:
+                with open(info_path) as f:
                     content = f.read()
                 return web.Response(text=content, content_type="application/json")
 
@@ -2572,7 +2829,6 @@ def main():
 
             # Expand environment variables
             if client_id.startswith("$"):
-                client_id = os.environ.get(client_id[1:], "")
                 client_id = client_id[1:]
             if client_secret.startswith("$"):
                 client_secret = client_secret[1:]
@@ -2629,7 +2885,6 @@ def main():
             }
 
             # Redirect to UI with session token
-            return web.HTTPFound(f"/?session={session_token}")
             response = web.HTTPFound(f"/?session={session_token}")
             response.set_cookie("llms-token", session_token, httponly=True, path="/", max_age=86400)
             return response
@@ -2756,6 +3011,12 @@ def main():
 
         app.router.add_get("/favicon.ico", not_found_handler)
 
+        # go through and register all g_app extensions
+        for handler in g_app.server_add_get:
+            app.router.add_get(handler[0], handler[1], **handler[2])
+        for handler in g_app.server_add_post:
+            app.router.add_post(handler[0], handler[1], **handler[2])
+
         # Serve index.html from root
         async def index_handler(request):
             index_content = read_resource_file_bytes("index.html")
@@ -2775,6 +3036,8 @@ def main():
             asyncio.create_task(watch_config_files(g_config_path, g_ui_path))
 
         app.on_startup.append(start_background_tasks)
+
+        # go through and register all g_app extensions
 
         print(f"Starting server on port {port}...")
         web.run_app(app, host="0.0.0.0", port=port, print=_log)
@@ -2903,8 +3166,11 @@ def main():
                 traceback.print_exc()
             exit(1)
 
-    # show usage from ArgumentParser
-    parser.print_help()
+    handled = run_extension_cli()
+
+    if not handled:
+        # show usage from ArgumentParser
+        parser.print_help()
 
 
 if __name__ == "__main__":

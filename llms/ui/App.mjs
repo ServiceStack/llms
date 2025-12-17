@@ -1,4 +1,5 @@
-import { inject, ref, onMounted, onUnmounted } from "vue"
+import { inject, ref, watch, onMounted, onUnmounted } from "vue"
+import { useRouter, useRoute } from "vue-router"
 import Sidebar from "./Sidebar.mjs"
 
 export default {
@@ -6,8 +7,13 @@ export default {
         Sidebar,
     },
     setup() {
+        const router = useRouter()
+        const route = useRoute()
+
         const ai = inject('ai')
+        const ctx = inject('ctx')
         const isMobile = ref(false)
+        const modal = ref()
 
         const checkMobile = () => {
             const wasMobile = isMobile.value
@@ -36,13 +42,25 @@ export default {
         onMounted(() => {
             checkMobile()
             window.addEventListener('resize', checkMobile)
+            if (route.query.open) {
+                modal.value = ctx.openModal(route.query.open)
+            }
         })
 
         onUnmounted(() => {
             window.removeEventListener('resize', checkMobile)
         })
 
-        return { ai, isMobile, toggleSidebar, closeSidebar }
+        function closeModal() {
+            ctx.closeModal(route.query.open)
+        }
+
+        watch(() => route.query.open, (newVal) => {
+            modal.value = ctx.modalComponents[newVal]
+            console.log('open', newVal, modal.value)
+        })
+
+        return { ai, modal, isMobile, toggleSidebar, closeSidebar, closeModal }
     },
     template: `
         <div class="flex h-screen bg-white dark:bg-gray-900">
@@ -92,6 +110,8 @@ export default {
 
                 <RouterView />
             </div>
+
+            <component v-if="modal" :is="modal" @done="closeModal" />
         </div>
     `,
 }

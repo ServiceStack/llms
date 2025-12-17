@@ -1,18 +1,22 @@
 <html>
+
 <head>
     <title>llms.py</title>
     <link rel="stylesheet" href="/ui/app.css">
     <link rel="stylesheet" href="/ui/typography.css">
     <link rel="icon" type="image/svg" href="/ui/fav.svg">
     <style>
-        [type='button'],button[type='submit']{cursor:pointer}
-        [type='checkbox'].switch:checked:hover, 
+        [type='button'],
+        button[type='submit'] {
+            cursor: pointer
+        }
+
+        [type='checkbox'].switch:checked:hover,
         [type='checkbox'].switch:checked:focus,
         [type='checkbox'].switch:checked,
         [type='checkbox'].switch:focus,
-        [type='checkbox'].switch
-        {
-            border: none; 
+        [type='checkbox'].switch {
+            border: none;
             background: none;
             outline: none;
             box-shadow: none;
@@ -35,66 +39,31 @@
         }
     }
 </script>
+
 <body>
-<div id="app"></div>
+    <div id="app"></div>
 </body>
 <script>
-let colorScheme = location.search === "?dark"
+    let colorScheme = location.search === "?dark"
         ? "dark"
         : location.search === "?light"
             ? "light"
             : localStorage.getItem('color-scheme')
-let darkMode = colorScheme != null
-    ? colorScheme === 'dark'
-    : window.matchMedia('(prefers-color-scheme: dark)').matches
-let html = document.documentElement
-html.classList.toggle('dark', darkMode)
-html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
-if (localStorage.getItem('color-scheme') === null) {
-    localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
-}    
+    let darkMode = colorScheme != null
+        ? colorScheme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches
+    let html = document.documentElement
+    html.classList.toggle('dark', darkMode)
+    html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
+    if (localStorage.getItem('color-scheme') === null) {
+        localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
+    }    
 </script>
 <script type="module">
-import { createApp, defineAsyncComponent } from 'vue'
-import { createWebHistory, createRouter } from "vue-router"
-import ServiceStackVue from "@servicestack/vue"
-import App from '/ui/App.mjs'
-import ai from '/ui/ai.mjs'
-import SettingsDialog from '/ui/SettingsDialog.mjs'
+    import { createContext } from '/ui/index.mjs'
 
-const { config, models } = await ai.init()
-const MainComponent = defineAsyncComponent(() => import(ai.base + '/ui/Main.mjs'))
-const RecentsComponent = defineAsyncComponent(() => import(ai.base + '/ui/Recents.mjs'))
-const AnalyticsComponent = defineAsyncComponent(() => import(ai.base + '/ui/Analytics.mjs'))
-
-const Components = {
-    SettingsDialog,
-}
-
-const routes = [
-    { path: '/', component: MainComponent },
-    { path: '/c/:id', component: MainComponent },
-    { path: '/recents', component: RecentsComponent  },
-    { path: '/analytics', component: AnalyticsComponent  },
-    { path: '/:fallback(.*)*', component: MainComponent }
-]
-routes.forEach(r => r.path = ai.base + r.path)
-const router = createRouter({
-    history: createWebHistory(),
-    routes,
-})
-const app = createApp(App, { config, models })
-app.use(router)
-app.use(ServiceStackVue)
-app.provide('ai', ai)
-app.provide('config', config)
-app.provide('models', models)
-Object.keys(Components).forEach(name => {
-    app.component(name, Components[name])
-})
-
-window.ai = app.config.globalProperties.$ai = ai
-
-app.mount('#app')
+    const context = await createContext()
+    context.app.mount('#app')
 </script>
+
 </html>
