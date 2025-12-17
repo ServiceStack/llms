@@ -904,11 +904,10 @@ class OllamaProvider(OpenAiCompatible):
                 ) as response:
                     data = await response_json(response)
                     for model in data.get("models", []):
-                        name = model["model"]
-                        if name.endswith(":latest"):
-                            name = name[:-7]
-                        model_id = name.replace(":", "-")
-                        ret[model_id] = name
+                        model_id = model["model"]
+                        if model_id.endswith(":latest"):
+                            model_id = model_id[:-7]
+                        ret[model_id] = model_id
                     _log(f"Loaded Ollama models: {ret}")
         except Exception as e:
             _log(f"Error getting Ollama models: {e}")
