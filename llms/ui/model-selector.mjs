@@ -1,5 +1,4 @@
-import { ref, computed, watch, inject, onMounted } from "vue"
-import ProviderStatus from "./ProviderStatus.mjs"
+import { ref, computed, watch, inject, onMounted, onUnmounted } from "vue"
 import ProviderIcon from "./ProviderIcon.mjs"
 import { storageObject } from "./utils.mjs"
 
@@ -62,8 +61,109 @@ function getModelModalities(model) {
     return Array.from(mods).filter(m => m !== 'text' && allowed.includes(m)).sort()
 }
 
+const ProviderStatus = {
+    template: `
+        <div v-if="$ai.isAdmin" ref="triggerRef" class="relative" :key="renderKey">
+            <button type="button" @click="togglePopover"
+                class="flex space-x-2 items-center text-sm font-semibold select-none rounded-md py-2 px-3 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors">
+                <span class="text-gray-600 dark:text-gray-400" :title="$state.models.length + ' models from ' + ($state.config.status.enabled||[]).length + ' enabled providers'">{{$state.models.length}}</span>
+                <div class="cursor-pointer flex items-center" :title="'Enabled:\\n' + ($state.config.status.enabled||[]).map(x => '  ' + x).join('\\n')">
+                    <svg class="size-4 text-green-400 dark:text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"/></svg>
+                    <span class="text-green-700 dark:text-green-400">{{($state.config.status.enabled||[]).length}}</span>
+                </div>
+                <div class="cursor-pointer flex items-center" :title="'Disabled:\\n' + ($state.config.status.disabled||[]).map(x => '  ' + x).join('\\n')">
+                    <svg class="size-4 text-red-400 dark:text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"/></svg>
+                    <span class="text-red-700 dark:text-red-400">{{($state.config.status.disabled||[]).length}}</span>
+                </div>
+            </button>
+            <div v-if="showPopover" ref="popoverRef" class="absolute right-0 mt-2 w-72 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-10">
+                <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                    <div v-for="p in allProviders" :key="p" class="flex items-center justify-between px-3 py-2">
+                        <label :for="'chk_' + p" class="cursor-pointer text-sm text-gray-900 dark:text-gray-100 truncate mr-2" :title="p">{{ p }}</label>
+                        <div @click="onToggle(p, !isEnabled(p))" class="cursor-pointer group relative inline-flex h-5 w-10 shrink-0 items-center justify-center rounded-full outline-offset-2 outline-green-600 has-focus-visible:outline-2">
+                            <span class="absolute mx-auto h-4 w-9 rounded-full bg-gray-200 dark:bg-gray-700 inset-ring inset-ring-gray-900/5 dark:inset-ring-gray-100/5 transition-colors duration-200 ease-in-out group-has-checked:bg-green-600 dark:group-has-checked:bg-green-500" />
+                            <span class="absolute left-0 size-5 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-200 shadow-xs transition-transform duration-200 ease-in-out group-has-checked:translate-x-5" />
+                            <input :id="'chk_' + p" type="checkbox" :checked="isEnabled(p)" class="switch cursor-pointer absolute inset-0 appearance-none focus:outline-hidden" aria-label="Use setting" name="setting" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    emits: ['updated'],
+    setup(props, { emit }) {
+        const ctx = inject('ctx')
+        const showPopover = ref(false)
+        const triggerRef = ref(null)
+        const popoverRef = ref(null)
+        const pending = ref({})
+        const renderKey = ref(0)
+        const allProviders = computed(() => ctx.state.config.status?.all)
+        const isEnabled = (p) => ctx.state.config.status.enabled.includes(p)
+        const togglePopover = () => showPopover.value = !showPopover.value
+
+        const onToggle = async (provider, enable) => {
+            pending.value = { ...pending.value, [provider]: true }
+            try {
+                const res = await ai.post(`/providers/${encodeURIComponent(provider)}`, {
+                    body: JSON.stringify(enable ? { enable: true } : { disable: true })
+                })
+                if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
+                const json = await res.json()
+                ctx.state.config.status.enabled = json.enabled || []
+                ctx.state.config.status.disabled = json.disabled || []
+                if (json.feedback) {
+                    alert(json.feedback)
+                }
+
+                try {
+                    const [configRes, modelsRes] = await Promise.all([
+                        ctx.ai.getConfig(),
+                        ctx.ai.getModels(),
+                    ])
+                    const [config, models] = await Promise.all([
+                        configRes.json(),
+                        modelsRes.json(),
+                    ])
+                    Object.assign(ctx.state, { config, models })
+                    renderKey.value++
+                    emit('updated')
+                } catch (e) {
+                    alert(`Failed to reload config: ${e.message}`)
+                }
+
+            } catch (e) {
+                alert(`Failed to ${enable ? 'enable' : 'disable'} ${provider}: ${e.message}`)
+            } finally {
+                pending.value = { ...pending.value, [provider]: false }
+            }
+        }
+
+        const onDocClick = (e) => {
+            const t = e.target
+            if (triggerRef.value?.contains(t)) return
+            if (popoverRef.value?.contains(t)) return
+            showPopover.value = false
+        }
+        onMounted(() => document.addEventListener('click', onDocClick))
+        onUnmounted(() => document.removeEventListener('click', onDocClick))
+        return {
+            renderKey,
+            showPopover,
+            triggerRef,
+            popoverRef,
+            allProviders,
+            isEnabled,
+            togglePopover,
+            onToggle,
+            pending,
+        }
+    }
+}
+
 const ModelSelectorModal = {
     components: {
+        ProviderStatus,
         ProviderIcon,
     },
     template: `
@@ -78,12 +178,15 @@ const ModelSelectorModal = {
                     <!-- Header -->
                     <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                         <div class="flex items-center justify-between mb-4">
-                            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Select Model</h2>
-                            <button type="button" @click="closeDialog" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                                <svg class="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                    <path fill="currentColor" d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12z"/>
-                                </svg>
-                            </button>
+                                <h2 class="mr-4 text-xl font-semibold text-gray-900 dark:text-gray-100">Select Model</h2>
+                            <div class="flex items-center gap-4">
+                                <ProviderStatus @updated="renderKey++" />
+                                <button type="button" @click="closeDialog" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                                    <svg class="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                        <path fill="currentColor" d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12z"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                         
                         <!-- Search and Controls -->
@@ -140,7 +243,7 @@ const ModelSelectorModal = {
                                 :class="[
                                     'flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
                                     activeTab === 'favorites'
-                                        ? 'bg-yellow-500 text-white'
+                                        ? 'bg-fuchsia-600 text-white'
                                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                                 ]">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-3.5">
@@ -292,6 +395,7 @@ const ModelSelectorModal = {
         const searchInput = ref(null)
 
         // Load preferences
+        const renderKey = ref(0)
         const prefs = storageObject(STORAGE_KEY)
         const sortBy = ref(prefs.sortBy || 'name')
         const sortAsc = ref(prefs.sortAsc !== false)
@@ -526,6 +630,7 @@ const ModelSelectorModal = {
         })
 
         return {
+            renderKey,
             models,
             searchQuery,
             searchInput,
@@ -613,7 +718,6 @@ const ModelTooltip = {
 
 const ModelSelector = {
     components: {
-        ProviderStatus,
         ProviderIcon,
         ModelSelectorModal,
         ModelTooltip,
@@ -635,7 +739,6 @@ const ModelSelector = {
             <!-- Info Tooltip (on hover) -->
             <ModelTooltip v-if="showTooltip" :model="selectedModel" />
 
-            <ProviderStatus @updated="$emit('updated', $event)" />
         </div>
     `,
     emits: ['updated', 'update:modelValue'],

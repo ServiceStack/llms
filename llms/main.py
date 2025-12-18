@@ -487,6 +487,7 @@ class OpenAiCompatible:
 
         self.id = kwargs.get("id")
         self.api = kwargs.get("api").strip("/")
+        self.env = kwargs.get("env", [])
         self.api_key = kwargs.get("api_key")
         self.name = kwargs.get("name", self.id.replace("-", " ").title().replace(" ", ""))
         self.set_models(**kwargs)
@@ -541,11 +542,18 @@ class OpenAiCompatible:
             _log(f"Filtering {len(self.models)} models, excluding models that match regex: {exclude_models}")
             self.models = {k: v for k, v in self.models.items() if not re.search(exclude_models, k)}
 
+    def validate(self, **kwargs):
+        if not self.api_key:
+            api_keys = ", ".join(self.env)
+            return f"Provider '{self.name}' requires API Key {api_keys}"
+        return None
+
     def test(self, **kwargs):
-        ret = self.api and self.api_key and (len(self.models) > 0)
-        if not ret:
-            _log(f"Provider {self.name} Missing: {self.api}, {self.api_key}, {len(self.models)}")
-        return ret
+        error_msg = self.validate(**kwargs)
+        if error_msg:
+            _log(error_msg)
+            return False
+        return True
 
     async def load(self):
         if not self.models:
@@ -943,8 +951,8 @@ class OllamaProvider(OpenAiCompatible):
             }
         self.models = models
 
-    def test(self, **kwargs):
-        return True
+    def validate(self, **kwargs):
+        return None
 
 
 class LMStudioProvider(OllamaProvider):
@@ -1380,20 +1388,24 @@ def init_llms(config, providers):
     providers = g_config["providers"]
 
     for id, orig in providers.items():
-        definition = orig.copy()
-        if "enabled" in definition and not definition["enabled"]:
+        if "enabled" in orig and not orig["enabled"]:
             continue
 
-        provider_id = definition.get("id", id)
-        if "id" not in definition:
-            definition["id"] = provider_id
-        provider = g_providers.get(provider_id)
-        constructor_kwargs = create_provider_kwargs(definition, provider)
-        provider = create_provider(constructor_kwargs)
-
+        provider, constructor_kwargs = create_provider_from_definition(id, orig)
         if provider and provider.test(**constructor_kwargs):
             g_handlers[id] = provider
     return g_handlers
+
+
+def create_provider_from_definition(id, orig):
+    definition = orig.copy()
+    provider_id = definition.get("id", id)
+    if "id" not in definition:
+        definition["id"] = provider_id
+    provider = g_providers.get(provider_id)
+    constructor_kwargs = create_provider_kwargs(definition, provider)
+    provider = create_provider(constructor_kwargs)
+    return provider, constructor_kwargs
 
 
 def create_provider_kwargs(definition, provider=None):
@@ -1559,15 +1571,15 @@ def get_ui_path():
 def enable_provider(provider):
     msg = None
     provider_config = g_config["providers"][provider]
+    if not provider_config:
+        return None, f"Provider {provider} not found"
+
+    provider, constructor_kwargs = create_provider_from_definition(provider, provider_config)
+    msg = provider.validate(**constructor_kwargs)
+    if msg:
+        return None, msg
+
     provider_config["enabled"] = True
-    if "api_key" in provider_config:
-        api_key = provider_config["api_key"]
-        if isinstance(api_key, str):
-            if api_key.startswith("$"):
-                if not os.environ.get(api_key[1:], ""):
-                    msg = f"WARNING: {provider} requires missing API Key in Environment Variable {api_key}"
-            else:
-                msg = f"WARNING: {provider} is not configured with an API Key"
     save_config(g_config)
     init_llms(g_config, g_providers)
     return provider_config, msg
@@ -2696,8 +2708,9 @@ def main():
             if provider:
                 if data.get("enable", False):
                     provider_config, msg = enable_provider(provider)
-                    _log(f"Enabled provider {provider}")
-                    await load_llms()
+                    _log(f"Enabled provider {provider} {msg}")
+                    if not msg:
+                        await load_llms()
                 elif data.get("disable", False):
                     disable_provider(provider)
                     _log(f"Disabled provider {provider}")
