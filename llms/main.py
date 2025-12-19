@@ -2417,8 +2417,11 @@ def main():
         and (time.time() - os.path.getmtime(home_providers_path)) > 86400
         and os.environ.get("LLMS_DISABLE_UPDATE", "") != "1"
     ):
-        asyncio.run(update_providers(home_providers_path))
-        _log(f"Updated {home_providers_path}")
+        try:
+            asyncio.run(update_providers(home_providers_path))
+            _log(f"Updated {home_providers_path}")
+        except Exception as e:
+            _err("Failed to update providers", e)
 
     if cli_args.add is not None:
         if cli_args.add == "ls":
