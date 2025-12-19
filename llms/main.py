@@ -2288,7 +2288,8 @@ def main():
     parser.add_argument("--default", default=None, help="Configure the default model to use", metavar="MODEL")
 
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
-    parser.add_argument("--update", action="store_true", help="Update local models.dev providers.json")
+    parser.add_argument("--update-providers", action="store_true", help="Update local models.dev providers.json")
+    parser.add_argument("--update-extensions", action="store_true", help="Update installed extensions")
 
     parser.add_argument("--root", default=None, help="Change root directory for UI files", metavar="PATH")
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
@@ -2308,6 +2309,15 @@ def main():
         const="ls",
         default=None,
         help="Remove an extension (lists installed extensions if no name provided)",
+        metavar="EXTENSION",
+    )
+
+    parser.add_argument(
+        "--update",
+        nargs="?",
+        const="ls",
+        default=None,
+        help="Update an extension (use 'all' to update all extensions)",
         metavar="EXTENSION",
     )
 
@@ -2396,10 +2406,19 @@ def main():
     if not g_providers:
         g_providers = json.loads(text_from_file(home_providers_path))
 
-    if cli_args.update:
+    if cli_args.update_providers:
         asyncio.run(update_providers(home_providers_path))
         print(f"Updated {home_providers_path}")
         exit(0)
+
+    # if home_providers_path is older than 1 day, update providers list
+    if (
+        os.path.exists(home_providers_path)
+        and (time.time() - os.path.getmtime(home_providers_path)) > 86400
+        and os.environ.get("LLMS_DISABLE_UPDATE", "") != "1"
+    ):
+        asyncio.run(update_providers(home_providers_path))
+        _log(f"Updated {home_providers_path}")
 
     if cli_args.add is not None:
         if cli_args.add == "ls":
@@ -2494,6 +2513,40 @@ def main():
             print(f"Failed to remove extension: {e}")
             exit(1)
 
+        exit(0)
+
+    if cli_args.update:
+        if cli_args.update == "ls":
+            # List installed extensions
+            extensions_path = get_extensions_path()
+            extensions = os.listdir(extensions_path)
+            if len(extensions) == 0:
+                print("No extensions installed.")
+                exit(0)
+            print("Installed extensions:")
+            for extension in extensions:
+                print(f"  {extension}")
+
+            print("\nUsage:")
+            print("  llms --update <extension>")
+            print("  llms --update all")
+            exit(0)
+
+        async def update_extensions(extension_name):
+            extensions_path = get_extensions_path()
+            for extension in os.listdir(extensions_path):
+                extension_path = os.path.join(extensions_path, extension)
+                if os.path.isdir(extension_path):
+                    if extension_name != "all" and extension != extension_name:
+                        continue
+                    result = subprocess.run(["git", "pull"], cwd=extension_path, capture_output=True)
+                    if result.returncode != 0:
+                        print(f"Failed to update extension {extension}: {result.stderr.decode('utf-8')}")
+                        continue
+                    print(f"Updated extension {extension}")
+                    _log(result.stdout.decode("utf-8"))
+
+        asyncio.run(update_extensions(cli_args.update))
         exit(0)
 
     asyncio.run(reload_providers())
