@@ -1,4 +1,4 @@
-import { ref, computed, nextTick, watch, onMounted, inject } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 export default {
@@ -740,9 +740,12 @@ export default {
             return title.join('\n')
         }
 
+        let sub
         onMounted(() => {
+            sub = ctx.events.subscribe(`keydown:Escape`, closeLightbox)
             setTimeout(ctx.chat.addCopyButtons, 1)
         })
+        onUnmounted(() => sub?.unsubscribe())
 
         return {
             config,

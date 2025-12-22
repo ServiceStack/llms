@@ -147,6 +147,7 @@ export class AppContext {
             if (modal) {
                 this.closeModal(modal)
             }
+            this.events.publish(`keydown:Escape`, e)
         }
     }
     setState(o) {

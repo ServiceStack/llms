@@ -161,6 +161,10 @@ export function useChatPrompt(ctx) {
         })
     }
 
+    function getProviderForModel(model) {
+        return getModel(model)?.provider
+    }
+
     return {
         messageText,
         attachedFiles,
@@ -182,6 +186,7 @@ export function useChatPrompt(ctx) {
         getModel,
         getSelectedModel,
         setSelectedModel,
+        getProviderForModel,
     }
 }
 
