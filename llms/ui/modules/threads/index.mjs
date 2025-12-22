@@ -163,7 +163,7 @@ const ThreadsSidebar = {
                         </button>
                     </div>
 
-                    <GroupedThreads :currentThread="currentThread" :groupedThreads="$threads.getGroupedThreads(18)"
+                    <GroupedThreads :currentThread="currentThread" :groupedThreads="$threads.getGroupedThreads(50)"
                         @select="selectThread" @delete="deleteThread" />
                 </div>
             </div>

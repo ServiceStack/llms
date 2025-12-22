@@ -71,7 +71,11 @@ export default {
                     <!-- Messages -->
                     <div v-else class="space-y-6">
                         <div v-if="currentThread.messages.length && currentThread.model" class="absolute -mt-2">
-                            <span @click="$chat.setSelectedModel({ name: currentThread.model})" class="cursor-pointer px-1.5 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">{{currentThread.model}}</span>
+                            <span @click="$chat.setSelectedModel({ name: currentThread.model})" 
+                                class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors border hover:border-gray-300 dark:hover:border-gray-700">
+                                <ProviderIcon class="size-4 mr-1" :provider="$chat.getProviderForModel(currentThread.model)" />
+                                {{currentThread.model}}
+                            </span>
                         </div>
                         <div
                             v-for="message in currentThread.messages"
@@ -279,7 +283,8 @@ export default {
             </div>
             
             <!-- Lightbox -->
-            <div v-if="lightboxUrl" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer" @click="closeLightbox">
+            <div v-if="lightboxUrl" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer" 
+                @click="closeLightbox">
                 <button type="button" @click="closeLightbox"
                     class="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-[101]"
                     title="Close">
