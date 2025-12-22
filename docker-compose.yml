@@ -20,11 +20,11 @@ services:
       - VERBOSE=1
     volumes:
       # Maintain user-modifiable config files outside the container
-      # llms.json and ui.json will be auto-created on first run
+      # llms.json and providers.json will be auto-created on first run
       - ~/.llms:/home/llms/.llms
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()" ]
       interval: 30s
       timeout: 10s
       retries: 3

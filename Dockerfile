@@ -51,7 +51,7 @@ ENV HOME=/home/llms
 EXPOSE 8000
 
 # Volume for persistent configuration and data
-# Mount this to customize llms.json and ui.json or persist analytics data
+# Mount this to customize llms.json and providers.json or persist analytics data
 VOLUME ["/home/llms/.llms"]
 
 # Health check

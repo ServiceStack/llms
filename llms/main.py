@@ -1385,14 +1385,6 @@ def get_config_path():
     return None
 
 
-def get_ui_path():
-    ui_paths = [home_llms_path("ui.json"), "ui.json"]
-    for ui_path in ui_paths:
-        if os.path.exists(ui_path):
-            return ui_path
-    return None
-
-
 def enable_provider(provider):
     msg = None
     provider_config = g_config["providers"][provider]
@@ -2271,7 +2263,7 @@ def main():
             g_providers = json.loads(text_from_file(os.path.join(config_dir, "providers.json")))
 
     else:
-        # ensure llms.json and ui.json exist in home directory
+        # ensure llms.json and providers.json exist in home directory
         asyncio.run(save_home_configs())
         g_config_path = home_config_path
         g_config = load_config_json(text_from_file(g_config_path))

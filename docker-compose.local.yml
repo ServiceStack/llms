@@ -22,20 +22,15 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
     volumes:
       # Persist configuration and analytics data
-      # The container will auto-create llms.json and ui.json on first run
+      # The container will auto-create llms.json and providers.json on first run
       - llms-data:/home/llms/.llms
-
       # Alternative: Mount a local directory to use custom config files
       # Uncomment the line below and comment out the line above to use local configs
-      # Place your custom llms.json and ui.json in ./config/ directory
+      # Place your custom llms.json and providers.json in ./config/ directory
       # - ./config:/home/llms/.llms
-
-      # Alternative: Mount individual config files (read-only recommended)
-      # - ./my-llms.json:/home/llms/.llms/llms.json:ro
-      # - ./my-ui.json:/home/llms/.llms/ui.json:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -44,4 +39,3 @@ services:
 volumes:
   llms-data:
     driver: local
-

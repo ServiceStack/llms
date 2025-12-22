@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to extract default llms.json and ui.json from the Docker container
+# Script to extract default llms.json and providers.json from the Docker container
 # Usage: ./docker-extract-configs.sh [output-directory]
 
 set -e
@@ -44,11 +44,21 @@ docker cp "$CONTAINER_ID:/home/llms/.llms/llms.json" "$OUTPUT_DIR/llms.json" 2>/
     }
 }
 
-echo "Copying ui.json..."
-docker cp "$CONTAINER_ID:/home/llms/.llms/ui.json" "$OUTPUT_DIR/ui.json" 2>/dev/null || {
-    echo "Warning: Could not extract ui.json from container, trying alternative method..."
-    docker run --rm -v "$(pwd)/$OUTPUT_DIR:/output" "$IMAGE" sh -c "llms --init && cp /home/llms/.llms/ui.json /output/ui.json" || {
-        echo "Error: Could not extract ui.json"
+echo "Copying providers.json..."
+docker cp "$CONTAINER_ID:/home/llms/.llms/providers.json" "$OUTPUT_DIR/providers.json" 2>/dev/null || {
+    echo "Warning: Could not extract providers.json from container, trying alternative method..."
+    docker run --rm -v "$(pwd)/$OUTPUT_DIR:/output" "$IMAGE" sh -c "llms --init && cp /home/llms/.llms/providers.json /output/providers.json" || {
+        echo "Error: Could not extract providers.json"
+        docker rm -f "$CONTAINER_ID" 2>/dev/null || true
+        exit 1
+    }
+}
+
+echo "Copying providers-extra.json..."
+docker cp "$CONTAINER_ID:/home/llms/.llms/providers-extra.json" "$OUTPUT_DIR/providers-extra.json" 2>/dev/null || {
+    echo "Warning: Could not extract providers-extra.json from container, trying alternative method..."
+    docker run --rm -v "$(pwd)/$OUTPUT_DIR:/output" "$IMAGE" sh -c "llms --init && cp /home/llms/.llms/providers-extra.json /output/providers-extra.json" || {
+        echo "Error: Could not extract providers-extra.json"
         docker rm -f "$CONTAINER_ID" 2>/dev/null || true
         exit 1
     }
@@ -63,7 +73,8 @@ echo "Configuration files extracted successfully!"
 echo ""
 echo "Files created:"
 echo "  - $OUTPUT_DIR/llms.json"
-echo "  - $OUTPUT_DIR/ui.json"
+echo "  - $OUTPUT_DIR/providers.json"
+echo "  - $OUTPUT_DIR/providers-extra.json"
 echo ""
 echo "You can now edit these files and mount them in your container:"
 echo ""

@@ -1,6 +1,6 @@
 # Custom Configuration Example
 
-This directory shows how to use custom `llms.json` and `ui.json` configuration files with the Docker container.
+This directory shows how to use custom `llms.json` and `providers.json` configuration files with the Docker container.
 
 ## Quick Start
 
@@ -32,7 +32,7 @@ docker run --rm -v $(pwd)/config:/home/llms/.llms \
 
 ### With docker-compose
 
-1. Place your `llms.json` and `ui.json` in a directory (e.g., `./config`)
+1. Place your `llms.json` and `providers.json` in a directory (e.g., `./config`)
 
 2. Update `docker-compose.yml`:
 
@@ -161,12 +161,9 @@ Add a custom OpenAI-compatible provider:
 - **Pricing**: Add custom pricing information for cost tracking
 - **Provider-specific settings**: Configure timeouts, retries, etc.
 
-### In ui.json
+### In providers-extra.json
 
-- **UI theme**: Customize colors, fonts, layout
-- **Default selections**: Set default model, provider preferences
-- **Feature toggles**: Enable/disable UI features
-- **Custom branding**: Add your own branding elements
+- **Additional providers and models**: Add new providers and models to the models.dev list of providers
 
 ## Tips
 
@@ -180,7 +177,7 @@ Add a custom OpenAI-compatible provider:
 
 ### Config not loading
 
-- Ensure files are named exactly `llms.json` and `ui.json`
+- Ensure files are named exactly `llms.json` and `providers.json`
 - Check file permissions (should be readable by UID 1000)
 - Verify JSON syntax is valid (use a JSON validator)
 
@@ -193,7 +190,7 @@ Add a custom OpenAI-compatible provider:
 
 ```bash
 # Fix permissions
-chmod 644 config/llms.json config/ui.json
+chmod 644 config/llms.json config/providers.json
 ```
 
 ## More Information

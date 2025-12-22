@@ -201,7 +201,7 @@ docker-compose -f docker-compose.local.yml up -d --build
 
 The container stores configuration and analytics data in `/home/llms/.llms`.
 
-On first run, the container will automatically create default `llms.json` and `ui.json` files in this directory.
+On first run, the container will automatically create default `llms.json` and `providers.json` files in this directory.
 
 ### Named Volume (Recommended)
 
@@ -223,14 +223,14 @@ docker run -p 8000:8000 \
 
 ## Custom Configuration Files
 
-You can customize the behavior of llms-py by providing your own `llms.json` and `ui.json` configuration files.
+You can customize the behavior of llms-py by providing your own `llms.json` and `providers.json` configuration files.
 
 ### Method 1: Mount a Local Directory (Recommended)
 
 1. Create a local directory with your custom config files:
 
 ```bash
-# Option A: Use the provided extraction script (easiest)
+# Option A: Use the provided extraction script (easiest)  
 ./docker-extract-configs.sh config
 
 # Option B: Manual extraction
@@ -240,7 +240,7 @@ docker run --rm -v $(pwd)/config:/home/llms/.llms \
   llms --init
 ```
 
-2. Edit `config/llms.json` and `config/ui.json` to your preferences
+2. Edit `config/llms.json` and `config/providers.json` to your preferences
 
 3. Mount the directory when running the container:
 
@@ -265,7 +265,8 @@ Mount specific config files (read-only recommended to prevent accidental changes
 ```bash
 docker run -p 8000:8000 \
   -v $(pwd)/my-llms.json:/home/llms/.llms/llms.json:ro \
-  -v $(pwd)/my-ui.json:/home/llms/.llms/ui.json:ro \
+  -v $(pwd)/my-providers.json:/home/llms/.llms/providers.json:ro \
+  -v $(pwd)/my-providers-extra.json:/home/llms/.llms/providers-extra.json:ro \
   -e OPENROUTER_API_KEY="your-key" \
   ghcr.io/servicestack/llms:latest
 ```
@@ -275,7 +276,8 @@ Or with docker-compose:
 ```yaml
 volumes:
   - ./my-llms.json:/home/llms/.llms/llms.json:ro
-  - ./my-ui.json:/home/llms/.llms/ui.json:ro
+  - ./my-providers.json:/home/llms/.llms/providers.json:ro
+  - ./my-providers-extra.json:/home/llms/.llms/providers-extra.json:ro
 ```
 
 ### Method 3: Initialize and Extract Configs
@@ -295,7 +297,8 @@ docker run --rm \
 # Create a temporary container to copy files
 docker run -d --name llms-temp -v llms-data:/home/llms/.llms ghcr.io/servicestack/llms:latest sleep 60
 docker cp llms-temp:/home/llms/.llms/llms.json ./llms.json
-docker cp llms-temp:/home/llms/.llms/ui.json ./ui.json
+docker cp llms-temp:/home/llms/.llms/providers.json ./providers.json
+docker cp llms-temp:/home/llms/.llms/providers-extra.json ./providers-extra.json
 docker rm -f llms-temp
 ```
 
@@ -305,7 +308,8 @@ docker rm -f llms-temp
 # After editing, copy back
 docker run -d --name llms-temp -v llms-data:/home/llms/.llms ghcr.io/servicestack/llms:latest sleep 60
 docker cp ./llms.json llms-temp:/home/llms/.llms/llms.json
-docker cp ./ui.json llms-temp:/home/llms/.llms/ui.json
+docker cp ./providers.json llms-temp:/home/llms/.llms/providers.json
+docker cp ./providers-extra.json llms-temp:/home/llms/.llms/providers-extra.json
 docker rm -f llms-temp
 ```
 
@@ -319,11 +323,8 @@ docker rm -f llms-temp
 - Customize default chat templates
 - Configure provider-specific settings
 
-**In `ui.json`:**
-- UI theme and appearance
-- Default model selections
-- UI feature toggles
-- Custom UI configurations
+**In `providers-extra.json`:**
+- additional list of providers and models
 
 ### Example: Custom Provider Configuration
 
@@ -348,12 +349,6 @@ Create a custom `llms.json` with only the providers you want:
   "providers": {
     "groq": {
       "enabled": true,
-      "type": "OpenAiProvider",
-      "base_url": "https://api.groq.com/openai",
-      "api_key": "$GROQ_API_KEY",
-      "models": {
-        "llama3.3:70b": "llama-3.3-70b-versatile"
-      }
     }
   }
 }

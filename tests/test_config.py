@@ -24,10 +24,10 @@ class TestHomeLlmsPath(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertTrue(result.endswith("/.llms/llms.json"))
 
-    def test_home_llms_path_ui(self):
-        result = home_llms_path("ui.json")
+    def test_home_llms_path_providers(self):
+        result = home_llms_path("providers.json")
         self.assertIsInstance(result, str)
-        self.assertTrue(result.endswith("/.llms/ui.json"))
+        self.assertTrue(result.endswith("/.llms/providers.json"))
 
 
 class TestProviderStatus(unittest.TestCase):

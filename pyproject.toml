@@ -53,7 +53,7 @@ llms = "llms.main:main"
 packages = ["llms"]
 
 [tool.setuptools.package-data]
-llms = ["index.html", "llms.json", "providers.json", "ui.json", "ui/*", "ui/lib/*"]
+llms = ["index.html", "llms.json", "providers.json", "providers-extra.json", "providers/*", "ui/*", "ui/modules/*", "ui/lib/*"]
 
 [tool.ruff]
 # Set the target Python version

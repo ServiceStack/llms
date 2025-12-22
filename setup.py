@@ -33,8 +33,9 @@ setup(
             "index.html",
             "llms.json",
             "providers.json",
-            "ui.json",
+            "providers-extra.json",
             "ui/*",
+            "ui/modules/*",
             "ui/lib/*",
         ]
     },
