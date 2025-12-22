@@ -69,8 +69,8 @@ export default {
                     </div>
 
                     <!-- Messages -->
-                    <div v-else class="space-y-6">
-                        <div v-if="currentThread.messages.length && currentThread.model" class="absolute -mt-2">
+                    <div v-else class="space-y-2">
+                        <div v-if="currentThread?.messages.length && currentThread?.model" class="flex items-center justify-center select-none">
                             <span @click="$chat.setSelectedModel({ name: currentThread.model})" 
                                 class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors border hover:border-gray-300 dark:hover:border-gray-700">
                                 <ProviderIcon class="size-4 mr-1" :provider="$chat.getProviderForModel(currentThread.model)" />
@@ -178,7 +178,8 @@ export default {
                                     </div>
                                 </div>
 
-                                <div class="mt-2 text-xs opacity-70">
+                                <div class="mt-2 text-xs opacity-70">                                        
+                                    <span v-if="message.model" @click="$chat.setSelectedModel({ name: message.model })" title="Select model"><span class="cursor-pointer hover:underline">{{ message.model }}</span> &#8226; </span>
                                     <span>{{ $fmt.time(message.timestamp) }}</span>
                                     <span v-if="message.usage" :title="tokensTitle(message.usage)">
                                         &#8226;

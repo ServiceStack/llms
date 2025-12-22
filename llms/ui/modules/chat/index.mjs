@@ -560,7 +560,8 @@ const ChatPrompt = {
                     if (!isDuplicate) {
                         await threads.addMessageToThread(threadId, {
                             role: 'user',
-                            content: content
+                            content: content,
+                            model: props.model.name,
                         })
                         // Reload thread after adding message
                         thread = await threads.getThread(threadId)
@@ -681,6 +682,7 @@ const ChatPrompt = {
                         }
                         await threads.logRequest(threadId, props.model, request, response)
                     }
+                    assistantMessage.model = props.model.name
                     await threads.addMessageToThread(threadId, assistantMessage, usage)
 
                     nextTick(addCopyButtons)
