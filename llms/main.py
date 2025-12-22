@@ -41,8 +41,10 @@ except ImportError:
 VERSION = "3.0.0b2"
 _ROOT = None
 DEBUG = True  # os.getenv("PYPI_SERVICESTACK") is not None
+MOCK = False
+MOCK_DIR = os.getenv("MOCK_DIR")
+MOCK = os.getenv("MOCK") == "1"
 g_config_path = None
-g_ui_path = None
 g_config = None
 g_providers = None
 g_handlers = {}
@@ -99,17 +101,6 @@ def chat_summary(chat):
                     data = item["file"]["file_data"]
                     prefix = data.split(",", 1)[0]
                     item["file"]["file_data"] = prefix + f",({len(data) - len(prefix)})"
-    return json.dumps(clone, indent=2)
-
-
-def gemini_chat_summary(gemini_chat):
-    """Summarize Gemini chat completion request for logging. Replace inline_data with size of content only"""
-    clone = json.loads(json.dumps(gemini_chat))
-    for content in clone["contents"]:
-        for part in content["parts"]:
-            if "inline_data" in part:
-                data = part["inline_data"]["data"]
-                part["inline_data"]["data"] = f"({len(data)})"
     return json.dumps(clone, indent=2)
 
 
@@ -204,6 +195,10 @@ def is_base_64(data):
         return True
     except Exception:
         return False
+
+
+def id_to_name(id):
+    return id.replace("-", " ").title()
 
 
 def get_file_mime_type(filename):
@@ -467,6 +462,61 @@ class HTTPError(Exception):
         super().__init__(f"HTTP {status} {reason}")
 
 
+def save_image_to_cache(base64_data, filename, image_info):
+    ext = filename.split(".")[-1]
+    mimetype = get_file_mime_type(filename)
+    content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
+    save_filename = f"{sha256_hash}.{ext}" if ext else sha256_hash
+
+    # Use first 2 chars for subdir to avoid too many files in one dir
+    subdir = sha256_hash[:2]
+    relative_path = f"{subdir}/{save_filename}"
+    full_path = get_cache_path(relative_path)
+
+    url = f"~cache/{relative_path}"
+
+    # if file and its .info.json already exists, return it
+    info_path = os.path.splitext(full_path)[0] + ".info.json"
+    if os.path.exists(full_path) and os.path.exists(info_path):
+        return url, json.load(open(info_path))
+
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+    with open(full_path, "wb") as f:
+        f.write(content)
+    info = {
+        "date": int(time.time()),
+        "url": url,
+        "size": len(content),
+        "type": mimetype,
+        "name": filename,
+    }
+    info.update(image_info)
+
+    # If image, get dimensions
+    if HAS_PIL and mimetype.startswith("image/"):
+        try:
+            with Image.open(BytesIO(content)) as img:
+                info["width"] = img.width
+                info["height"] = img.height
+        except Exception:
+            pass
+
+    if "width" in info and "height" in info:
+        _log(f"Saved image to cache: {full_path} ({len(content)} bytes) {info['width']}x{info['height']}")
+    else:
+        _log(f"Saved image to cache: {full_path} ({len(content)} bytes)")
+
+    # Save metadata
+    info_path = os.path.splitext(full_path)[0] + ".info.json"
+    with open(info_path, "w") as f:
+        json.dump(info, f)
+
+    return url, info
+
+
 async def response_json(response):
     text = await response.text()
     if response.status >= 400:
@@ -474,6 +524,120 @@ async def response_json(response):
     response.raise_for_status()
     body = json.loads(text)
     return body
+
+
+def chat_to_prompt(chat):
+    prompt = ""
+    if "messages" in chat:
+        for message in chat["messages"]:
+            if message["role"] == "user":
+                # if content is string
+                if isinstance(message["content"], str):
+                    if prompt:
+                        prompt += "\n"
+                    prompt += message["content"]
+                elif isinstance(message["content"], list):
+                    # if content is array of objects
+                    for part in message["content"]:
+                        if part["type"] == "text":
+                            if prompt:
+                                prompt += "\n"
+                            prompt += part["text"]
+    return prompt
+
+
+def last_user_prompt(chat):
+    prompt = ""
+    if "messages" in chat:
+        for message in chat["messages"]:
+            if message["role"] == "user":
+                # if content is string
+                if isinstance(message["content"], str):
+                    prompt = message["content"]
+                elif isinstance(message["content"], list):
+                    # if content is array of objects
+                    for part in message["content"]:
+                        if part["type"] == "text":
+                            prompt = part["text"]
+    return prompt
+
+
+# Image Generator Providers
+class GeneratorBase:
+    def __init__(self, **kwargs):
+        self.id = kwargs.get("id")
+        self.api = kwargs.get("api")
+        self.api_key = kwargs.get("api_key")
+        self.headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        self.chat_url = f"{self.api}/chat/completions"
+        self.default_content = "I've generated the image for you."
+
+    def validate(self, **kwargs):
+        if not self.api_key:
+            api_keys = ", ".join(self.env)
+            return f"Provider '{self.name}' requires API Key {api_keys}"
+        return None
+
+    def test(self, **kwargs):
+        error_msg = self.validate(**kwargs)
+        if error_msg:
+            _log(error_msg)
+            return False
+        return True
+
+    async def load(self):
+        pass
+
+    def gen_summary(self, gen):
+        """Summarize gen response for logging."""
+        clone = json.loads(json.dumps(gen))
+        return json.dumps(clone, indent=2)
+
+    def chat_summary(self, chat):
+        return chat_summary(chat)
+
+    def process_chat(self, chat, provider_id=None):
+        return process_chat(chat, provider_id)
+
+    async def response_json(self, response):
+        return await response_json(response)
+
+    def get_headers(self, provider, chat):
+        headers = self.headers.copy()
+        if provider is not None:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
+        elif self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def to_response(self, response, chat, started_at):
+        raise NotImplementedError
+
+    async def chat(self, chat, provider=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Not Implemented",
+                        "images": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJjdXJyZW50Q29sb3IiIGQ9Ik0xMiAyMGE4IDggMCAxIDAgMC0xNmE4IDggMCAwIDAgMCAxNm0wIDJDNi40NzcgMjIgMiAxNy41MjMgMiAxMlM2LjQ3NyAyIDEyIDJzMTAgNC40NzcgMTAgMTBzLTQuNDc3IDEwLTEwIDEwbS0xLTZoMnYyaC0yem0wLTEwaDJ2OGgtMnoiLz48L3N2Zz4=",
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+
+
+# OpenAI Providers
 
 
 class OpenAiCompatible:
@@ -489,7 +653,7 @@ class OpenAiCompatible:
         self.api = kwargs.get("api").strip("/")
         self.env = kwargs.get("env", [])
         self.api_key = kwargs.get("api_key")
-        self.name = kwargs.get("name", self.id.replace("-", " ").title().replace(" ", ""))
+        self.name = kwargs.get("name", id_to_name(self.id))
         self.set_models(**kwargs)
 
         self.chat_url = f"{self.api}/chat/completions"
@@ -517,6 +681,7 @@ class OpenAiCompatible:
         self.stream = bool(kwargs["stream"]) if "stream" in kwargs else None
         self.enable_thinking = bool(kwargs["enable_thinking"]) if "enable_thinking" in kwargs else None
         self.check = kwargs.get("check")
+        self.modalities = kwargs.get("modalities", {})
 
     def set_models(self, **kwargs):
         models = kwargs.get("models", {})
@@ -601,7 +766,11 @@ class OpenAiCompatible:
         if "/" in model:
             last_part = model.split("/")[-1]
             return self.provider_model(last_part)
+
         return None
+
+    def response_json(self, response):
+        return response_json(response)
 
     def to_response(self, response, chat, started_at):
         if "metadata" not in response:
@@ -611,11 +780,27 @@ class OpenAiCompatible:
             pricing = self.model_cost(chat["model"])
             if pricing and "input" in pricing and "output" in pricing:
                 response["metadata"]["pricing"] = f"{pricing['input']}/{pricing['output']}"
-        _log(json.dumps(response, indent=2))
         return response
+
+    def chat_summary(self, chat):
+        return chat_summary(chat)
+
+    def process_chat(self, chat, provider_id=None):
+        return process_chat(chat, provider_id)
 
     async def chat(self, chat):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
+
+        if "modalities" in chat:
+            for modality in chat["modalities"]:
+                # use default implementation for text modalities
+                if modality == "text":
+                    continue
+                modality_provider = self.modalities.get(modality)
+                if modality_provider:
+                    return await modality_provider.chat(chat, self)
+                else:
+                    raise Exception(f"Provider {self.name} does not support '{modality}' modality")
 
         # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
         #     f.write(json.dumps(chat, indent=2))
@@ -667,193 +852,6 @@ class OpenAiCompatible:
                 self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)
             ) as response:
                 return self.to_response(await response_json(response), chat, started_at)
-
-
-class OpenAiProvider(OpenAiCompatible):
-    sdk = "@ai-sdk/openai"
-
-    def __init__(self, **kwargs):
-        if "api" not in kwargs:
-            kwargs["api"] = "https://api.openai.com/v1"
-        super().__init__(**kwargs)
-
-
-class AnthropicProvider(OpenAiCompatible):
-    sdk = "@ai-sdk/anthropic"
-
-    def __init__(self, **kwargs):
-        if "api" not in kwargs:
-            kwargs["api"] = "https://api.anthropic.com/v1"
-        super().__init__(**kwargs)
-
-        # Anthropic uses x-api-key header instead of Authorization
-        if self.api_key:
-            self.headers = self.headers.copy()
-            if "Authorization" in self.headers:
-                del self.headers["Authorization"]
-            self.headers["x-api-key"] = self.api_key
-
-        if "anthropic-version" not in self.headers:
-            self.headers = self.headers.copy()
-            self.headers["anthropic-version"] = "2023-06-01"
-        self.chat_url = f"{self.api}/messages"
-
-    async def chat(self, chat):
-        chat["model"] = self.provider_model(chat["model"]) or chat["model"]
-
-        chat = await process_chat(chat, provider_id=self.id)
-
-        # Transform OpenAI format to Anthropic format
-        anthropic_request = {
-            "model": chat["model"],
-            "messages": [],
-        }
-
-        # Extract system message (Anthropic uses top-level 'system' parameter)
-        system_messages = []
-        for message in chat.get("messages", []):
-            if message.get("role") == "system":
-                content = message.get("content", "")
-                if isinstance(content, str):
-                    system_messages.append(content)
-                elif isinstance(content, list):
-                    for item in content:
-                        if item.get("type") == "text":
-                            system_messages.append(item.get("text", ""))
-
-        if system_messages:
-            anthropic_request["system"] = "\n".join(system_messages)
-
-        # Transform messages (exclude system messages)
-        for message in chat.get("messages", []):
-            if message.get("role") == "system":
-                continue
-
-            anthropic_message = {"role": message.get("role"), "content": []}
-
-            content = message.get("content", "")
-            if isinstance(content, str):
-                anthropic_message["content"] = content
-            elif isinstance(content, list):
-                for item in content:
-                    if item.get("type") == "text":
-                        anthropic_message["content"].append({"type": "text", "text": item.get("text", "")})
-                    elif item.get("type") == "image_url" and "image_url" in item:
-                        # Transform OpenAI image_url format to Anthropic format
-                        image_url = item["image_url"].get("url", "")
-                        if image_url.startswith("data:"):
-                            # Extract media type and base64 data
-                            parts = image_url.split(";base64,", 1)
-                            if len(parts) == 2:
-                                media_type = parts[0].replace("data:", "")
-                                base64_data = parts[1]
-                                anthropic_message["content"].append(
-                                    {
-                                        "type": "image",
-                                        "source": {"type": "base64", "media_type": media_type, "data": base64_data},
-                                    }
-                                )
-
-            anthropic_request["messages"].append(anthropic_message)
-
-        # Handle max_tokens (required by Anthropic, uses max_tokens not max_completion_tokens)
-        if "max_completion_tokens" in chat:
-            anthropic_request["max_tokens"] = chat["max_completion_tokens"]
-        elif "max_tokens" in chat:
-            anthropic_request["max_tokens"] = chat["max_tokens"]
-        else:
-            # Anthropic requires max_tokens, set a default
-            anthropic_request["max_tokens"] = 4096
-
-        # Copy other supported parameters
-        if "temperature" in chat:
-            anthropic_request["temperature"] = chat["temperature"]
-        if "top_p" in chat:
-            anthropic_request["top_p"] = chat["top_p"]
-        if "top_k" in chat:
-            anthropic_request["top_k"] = chat["top_k"]
-        if "stop" in chat:
-            anthropic_request["stop_sequences"] = chat["stop"] if isinstance(chat["stop"], list) else [chat["stop"]]
-        if "stream" in chat:
-            anthropic_request["stream"] = chat["stream"]
-        if "tools" in chat:
-            anthropic_request["tools"] = chat["tools"]
-        if "tool_choice" in chat:
-            anthropic_request["tool_choice"] = chat["tool_choice"]
-
-        _log(f"POST {self.chat_url}")
-        _log(f"Anthropic Request: {json.dumps(anthropic_request, indent=2)}")
-
-        async with aiohttp.ClientSession() as session:
-            started_at = time.time()
-            async with session.post(
-                self.chat_url,
-                headers=self.headers,
-                data=json.dumps(anthropic_request),
-                timeout=aiohttp.ClientTimeout(total=120),
-            ) as response:
-                return self.to_response(await response_json(response), chat, started_at)
-
-    def to_response(self, response, chat, started_at):
-        """Convert Anthropic response format to OpenAI-compatible format."""
-        # Transform Anthropic response to OpenAI format
-        openai_response = {
-            "id": response.get("id", ""),
-            "object": "chat.completion",
-            "created": int(started_at),
-            "model": response.get("model", ""),
-            "choices": [],
-            "usage": {},
-        }
-
-        # Transform content blocks to message content
-        content_parts = []
-        thinking_parts = []
-
-        for block in response.get("content", []):
-            if block.get("type") == "text":
-                content_parts.append(block.get("text", ""))
-            elif block.get("type") == "thinking":
-                # Store thinking blocks separately (some models include reasoning)
-                thinking_parts.append(block.get("thinking", ""))
-
-        # Combine all text content
-        message_content = "\n".join(content_parts) if content_parts else ""
-
-        # Create the choice object
-        choice = {
-            "index": 0,
-            "message": {"role": "assistant", "content": message_content},
-            "finish_reason": response.get("stop_reason", "stop"),
-        }
-
-        # Add thinking as metadata if present
-        if thinking_parts:
-            choice["message"]["thinking"] = "\n".join(thinking_parts)
-
-        openai_response["choices"].append(choice)
-
-        # Transform usage
-        if "usage" in response:
-            usage = response["usage"]
-            openai_response["usage"] = {
-                "prompt_tokens": usage.get("input_tokens", 0),
-                "completion_tokens": usage.get("output_tokens", 0),
-                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
-            }
-
-        # Add metadata
-        if "metadata" not in openai_response:
-            openai_response["metadata"] = {}
-        openai_response["metadata"]["duration"] = int((time.time() - started_at) * 1000)
-
-        if chat is not None and "model" in chat:
-            cost = self.model_cost(chat["model"])
-            if cost and "input" in cost and "output" in cost:
-                openai_response["metadata"]["pricing"] = f"{cost['input']}/{cost['output']}"
-
-        _log(json.dumps(openai_response, indent=2))
-        return openai_response
 
 
 class MistralProvider(OpenAiCompatible):
@@ -979,223 +977,6 @@ class LMStudioProvider(OllamaProvider):
             _log(f"Error getting LMStudio models: {e}")
             # return empty dict if ollama is not available
         return ret
-
-
-# class GoogleOpenAiProvider(OpenAiCompatible):
-#     sdk = "google-openai-compatible"
-
-#     def __init__(self, api_key, **kwargs):
-#         super().__init__(api="https://generativelanguage.googleapis.com", api_key=api_key, **kwargs)
-#         self.chat_url = "https://generativelanguage.googleapis.com/v1beta/chat/completions"
-
-
-class GoogleProvider(OpenAiCompatible):
-    sdk = "@ai-sdk/google"
-
-    def __init__(self, **kwargs):
-        new_kwargs = {"api": "https://generativelanguage.googleapis.com", **kwargs}
-        super().__init__(**new_kwargs)
-        self.safety_settings = kwargs.get("safety_settings")
-        self.thinking_config = kwargs.get("thinking_config")
-        self.curl = kwargs.get("curl")
-        self.headers = kwargs.get("headers", {"Content-Type": "application/json"})
-        # Google fails when using Authorization header, use query string param instead
-        if "Authorization" in self.headers:
-            del self.headers["Authorization"]
-
-    async def chat(self, chat):
-        chat["model"] = self.provider_model(chat["model"]) or chat["model"]
-
-        chat = await process_chat(chat)
-        generation_config = {}
-
-        # Filter out system messages and convert to proper Gemini format
-        contents = []
-        system_prompt = None
-
-        async with aiohttp.ClientSession() as session:
-            for message in chat["messages"]:
-                if message["role"] == "system":
-                    content = message["content"]
-                    if isinstance(content, list):
-                        for item in content:
-                            if "text" in item:
-                                system_prompt = item["text"]
-                                break
-                    elif isinstance(content, str):
-                        system_prompt = content
-                elif "content" in message:
-                    if isinstance(message["content"], list):
-                        parts = []
-                        for item in message["content"]:
-                            if "type" in item:
-                                if item["type"] == "image_url" and "image_url" in item:
-                                    image_url = item["image_url"]
-                                    if "url" not in image_url:
-                                        continue
-                                    url = image_url["url"]
-                                    if not url.startswith("data:"):
-                                        raise (Exception("Image was not downloaded: " + url))
-                                    # Extract mime type from data uri
-                                    mimetype = url.split(";", 1)[0].split(":", 1)[1] if ";" in url else "image/png"
-                                    base64_data = url.split(",", 1)[1]
-                                    parts.append({"inline_data": {"mime_type": mimetype, "data": base64_data}})
-                                elif item["type"] == "input_audio" and "input_audio" in item:
-                                    input_audio = item["input_audio"]
-                                    if "data" not in input_audio:
-                                        continue
-                                    data = input_audio["data"]
-                                    format = input_audio["format"]
-                                    mimetype = f"audio/{format}"
-                                    parts.append({"inline_data": {"mime_type": mimetype, "data": data}})
-                                elif item["type"] == "file" and "file" in item:
-                                    file = item["file"]
-                                    if "file_data" not in file:
-                                        continue
-                                    data = file["file_data"]
-                                    if not data.startswith("data:"):
-                                        raise (Exception("File was not downloaded: " + data))
-                                    # Extract mime type from data uri
-                                    mimetype = (
-                                        data.split(";", 1)[0].split(":", 1)[1]
-                                        if ";" in data
-                                        else "application/octet-stream"
-                                    )
-                                    base64_data = data.split(",", 1)[1]
-                                    parts.append({"inline_data": {"mime_type": mimetype, "data": base64_data}})
-                            if "text" in item:
-                                text = item["text"]
-                                parts.append({"text": text})
-                        if len(parts) > 0:
-                            contents.append(
-                                {
-                                    "role": message["role"]
-                                    if "role" in message and message["role"] == "user"
-                                    else "model",
-                                    "parts": parts,
-                                }
-                            )
-                    else:
-                        content = message["content"]
-                        contents.append(
-                            {
-                                "role": message["role"] if "role" in message and message["role"] == "user" else "model",
-                                "parts": [{"text": content}],
-                            }
-                        )
-
-            gemini_chat = {
-                "contents": contents,
-            }
-
-            if self.safety_settings:
-                gemini_chat["safetySettings"] = self.safety_settings
-
-            # Add system instruction if present
-            if system_prompt is not None:
-                gemini_chat["systemInstruction"] = {"parts": [{"text": system_prompt}]}
-
-            if "max_completion_tokens" in chat:
-                generation_config["maxOutputTokens"] = chat["max_completion_tokens"]
-            if "stop" in chat:
-                generation_config["stopSequences"] = [chat["stop"]]
-            if "temperature" in chat:
-                generation_config["temperature"] = chat["temperature"]
-            if "top_p" in chat:
-                generation_config["topP"] = chat["top_p"]
-            if "top_logprobs" in chat:
-                generation_config["topK"] = chat["top_logprobs"]
-
-            if "thinkingConfig" in chat:
-                generation_config["thinkingConfig"] = chat["thinkingConfig"]
-            elif self.thinking_config:
-                generation_config["thinkingConfig"] = self.thinking_config
-
-            if len(generation_config) > 0:
-                gemini_chat["generationConfig"] = generation_config
-
-            started_at = int(time.time() * 1000)
-            gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
-
-            _log(f"POST {gemini_chat_url}")
-            _log(gemini_chat_summary(gemini_chat))
-            started_at = time.time()
-
-            if self.curl:
-                curl_args = [
-                    "curl",
-                    "-X",
-                    "POST",
-                    "-H",
-                    "Content-Type: application/json",
-                    "-d",
-                    json.dumps(gemini_chat),
-                    gemini_chat_url,
-                ]
-                try:
-                    o = subprocess.run(curl_args, check=True, capture_output=True, text=True, timeout=120)
-                    obj = json.loads(o.stdout)
-                except Exception as e:
-                    raise Exception(f"Error executing curl: {e}") from e
-            else:
-                async with session.post(
-                    gemini_chat_url,
-                    headers=self.headers,
-                    data=json.dumps(gemini_chat),
-                    timeout=aiohttp.ClientTimeout(total=120),
-                ) as res:
-                    obj = await response_json(res)
-                    _log(f"google response:\n{json.dumps(obj, indent=2)}")
-
-            response = {
-                "id": f"chatcmpl-{started_at}",
-                "created": started_at,
-                "model": obj.get("modelVersion", chat["model"]),
-            }
-            choices = []
-            if "error" in obj:
-                _log(f"Error: {obj['error']}")
-                raise Exception(obj["error"]["message"])
-            for i, candidate in enumerate(obj["candidates"]):
-                role = "assistant"
-                if "content" in candidate and "role" in candidate["content"]:
-                    role = "assistant" if candidate["content"]["role"] == "model" else candidate["content"]["role"]
-
-                # Safely extract content from all text parts
-                content = ""
-                reasoning = ""
-                if "content" in candidate and "parts" in candidate["content"]:
-                    text_parts = []
-                    reasoning_parts = []
-                    for part in candidate["content"]["parts"]:
-                        if "text" in part:
-                            if "thought" in part and part["thought"]:
-                                reasoning_parts.append(part["text"])
-                            else:
-                                text_parts.append(part["text"])
-                    content = " ".join(text_parts)
-                    reasoning = " ".join(reasoning_parts)
-
-                choice = {
-                    "index": i,
-                    "finish_reason": candidate.get("finishReason", "stop"),
-                    "message": {
-                        "role": role,
-                        "content": content,
-                    },
-                }
-                if reasoning:
-                    choice["message"]["reasoning"] = reasoning
-                choices.append(choice)
-            response["choices"] = choices
-            if "usageMetadata" in obj:
-                usage = obj["usageMetadata"]
-                response["usage"] = {
-                    "completion_tokens": usage["candidatesTokenCount"],
-                    "total_tokens": usage["totalTokenCount"],
-                    "prompt_tokens": usage["promptTokenCount"],
-                }
-            return self.to_response(response, chat, started_at)
 
 
 def get_provider_model(model_name):
@@ -1345,8 +1126,29 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
             print(json.dumps(response, indent=2))
             exit(0)
         else:
-            answer = response["choices"][0]["message"]["content"]
-            print(answer)
+            msg = response["choices"][0]["message"]
+            if "answer" in msg:
+                answer = msg["content"]
+                print(answer)
+
+            generated_files = []
+            for choice in response["choices"]:
+                if "message" in choice:
+                    msg = choice["message"]
+                    if "images" in msg:
+                        for image in msg["images"]:
+                            image_url = image["image_url"]["url"]
+                            generated_files.append(image_url)
+
+            if len(generated_files) > 0:
+                print("\nSaved files:")
+                for file in generated_files:
+                    if file.startswith("~cache"):
+                        print(get_cache_path(file[7:]))
+                        _log(f"http://localhost:8000/{file}")
+                    else:
+                        print(file)
+
     except HTTPError as e:
         # HTTP error (4xx, 5xx)
         print(f"{e}:\n{e.body}")
@@ -1435,6 +1237,15 @@ def create_provider_kwargs(definition, provider=None):
         if isinstance(value, (list, dict)):
             constructor_kwargs[key] = value.copy()
     constructor_kwargs["headers"] = g_config["defaults"]["headers"].copy()
+
+    if "modalities" in definition:
+        constructor_kwargs["modalities"] = {}
+        for modality, modality_definition in definition["modalities"].items():
+            modality_provider = create_provider(modality_definition)
+            if not modality_provider:
+                return None
+            constructor_kwargs["modalities"][modality] = modality_provider
+
     return constructor_kwargs
 
 
@@ -1450,6 +1261,8 @@ def create_provider(provider):
     for provider_type in g_app.all_providers:
         if provider_type.sdk == npm_sdk:
             kwargs = create_provider_kwargs(provider)
+            if kwargs is None:
+                kwargs = provider
             return provider_type(**kwargs)
 
     _log(f"Could not find provider {provider_label} with npm sdk {npm_sdk}")
@@ -1503,11 +1316,23 @@ async def update_providers(home_providers_path):
     global g_providers
     text = await get_text("https://models.dev/api.json")
     all_providers = json.loads(text)
+    extra_providers = {}
+    extra_providers_path = home_providers_path.replace("providers.json", "providers-extra.json")
+    if os.path.exists(extra_providers_path):
+        with open(extra_providers_path) as f:
+            extra_providers = json.load(f)
 
     filtered_providers = {}
     for id, provider in all_providers.items():
         if id in g_config["providers"]:
             filtered_providers[id] = provider
+            if id in extra_providers and "models" in extra_providers[id]:
+                for model_id, model in extra_providers[id]["models"].items():
+                    if "id" not in model:
+                        model["id"] = model_id
+                    if "name" not in model:
+                        model["name"] = id_to_name(model["id"])
+                    filtered_providers[id]["models"][model_id] = model
 
     os.makedirs(os.path.dirname(home_providers_path), exist_ok=True)
     with open(home_providers_path, "w", encoding="utf-8") as f:
@@ -1904,9 +1729,14 @@ async def text_from_resource_or_url(filename):
 
 async def save_home_configs():
     home_config_path = home_llms_path("llms.json")
-    home_ui_path = home_llms_path("ui.json")
     home_providers_path = home_llms_path("providers.json")
-    if os.path.exists(home_config_path) and os.path.exists(home_ui_path) and os.path.exists(home_providers_path):
+    home_providers_extra_path = home_llms_path("providers-extra.json")
+
+    if (
+        os.path.exists(home_config_path)
+        and os.path.exists(home_providers_path)
+        and os.path.exists(home_providers_extra_path)
+    ):
         return
 
     llms_home = os.path.dirname(home_config_path)
@@ -1918,17 +1748,17 @@ async def save_home_configs():
                 f.write(config_json)
             _log(f"Created default config at {home_config_path}")
 
-        if not os.path.exists(home_ui_path):
-            ui_json = await text_from_resource_or_url("ui.json")
-            with open(home_ui_path, "w", encoding="utf-8") as f:
-                f.write(ui_json)
-            _log(f"Created default ui config at {home_ui_path}")
-
         if not os.path.exists(home_providers_path):
             providers_json = await text_from_resource_or_url("providers.json")
             with open(home_providers_path, "w", encoding="utf-8") as f:
                 f.write(providers_json)
             _log(f"Created default providers config at {home_providers_path}")
+
+        if not os.path.exists(home_providers_extra_path):
+            extra_json = await text_from_resource_or_url("providers-extra.json")
+            with open(home_providers_extra_path, "w", encoding="utf-8") as f:
+                f.write(extra_json)
+            _log(f"Created default extra providers config at {home_providers_extra_path}")
     except Exception:
         print("Could not create llms.json. Create one with --init or use --config <path>")
         exit(1)
@@ -1965,58 +1795,51 @@ async def reload_providers():
     return g_handlers
 
 
-async def watch_config_files(config_path, ui_path, interval=1):
+async def watch_config_files(config_path, providers_path, interval=1):
     """Watch config files and reload providers when they change"""
     global g_config
 
     config_path = Path(config_path)
-    ui_path = Path(ui_path) if ui_path else None
+    providers_path = Path(providers_path)
 
-    file_mtimes = {}
+    _log(f"Watching config file: {config_path}")
+    _log(f"Watching providers file: {providers_path}")
 
-    _log(f"Watching config files: {config_path}" + (f", {ui_path}" if ui_path else ""))
+    def get_latest_mtime():
+        ret = 0
+        name = "llms.json"
+        if config_path.is_file():
+            ret = config_path.stat().st_mtime
+            name = config_path.name
+        if providers_path.is_file() and providers_path.stat().st_mtime > ret:
+            ret = providers_path.stat().st_mtime
+            name = providers_path.name
+        return ret, name
+
+    latest_mtime, name = get_latest_mtime()
 
     while True:
         await asyncio.sleep(interval)
 
         # Check llms.json
         try:
-            if config_path.is_file():
-                mtime = config_path.stat().st_mtime
+            new_mtime, name = get_latest_mtime()
+            if new_mtime > latest_mtime:
+                _log(f"Config file changed: {name}")
+                latest_mtime = new_mtime
 
-                if str(config_path) not in file_mtimes:
-                    file_mtimes[str(config_path)] = mtime
-                elif file_mtimes[str(config_path)] != mtime:
-                    _log(f"Config file changed: {config_path.name}")
-                    file_mtimes[str(config_path)] = mtime
+                try:
+                    # Reload llms.json
+                    with open(config_path) as f:
+                        g_config = json.load(f)
 
-                    try:
-                        # Reload llms.json
-                        with open(config_path) as f:
-                            g_config = json.load(f)
-
-                        # Reload providers
-                        await reload_providers()
-                        _log("Providers reloaded successfully")
-                    except Exception as e:
-                        _log(f"Error reloading config: {e}")
+                    # Reload providers
+                    await reload_providers()
+                    _log("Providers reloaded successfully")
+                except Exception as e:
+                    _log(f"Error reloading config: {e}")
         except FileNotFoundError:
             pass
-
-        # Check ui.json
-        if ui_path:
-            try:
-                if ui_path.is_file():
-                    mtime = ui_path.stat().st_mtime
-
-                    if str(ui_path) not in file_mtimes:
-                        file_mtimes[str(ui_path)] = mtime
-                    elif file_mtimes[str(ui_path)] != mtime:
-                        _log(f"Config file changed: {ui_path.name}")
-                        file_mtimes[str(ui_path)] = mtime
-                        _log("ui.json reloaded - reload page to update")
-            except FileNotFoundError:
-                pass
 
 
 def get_session_token(request):
@@ -2038,16 +1861,25 @@ class AppExtensions:
         self.server_add_post = []
         self.all_providers = [
             OpenAiCompatible,
-            OpenAiProvider,
-            AnthropicProvider,
             MistralProvider,
             GroqProvider,
             XaiProvider,
             CodestralProvider,
-            GoogleProvider,
             OllamaProvider,
             LMStudioProvider,
         ]
+        self.aspect_ratios = {
+            "1:1": "1024×1024",
+            "2:3": "832×1248",
+            "3:2": "1248×832",
+            "3:4": "864×1184",
+            "4:3": "1184×864",
+            "4:5": "896×1152",
+            "5:4": "1152×896",
+            "9:16": "768×1344",
+            "16:9": "1344×768",
+            "21:9": "1536×672",
+        }
 
 
 class ExtensionContext:
@@ -2055,18 +1887,43 @@ class ExtensionContext:
         self.app = app
         self.path = path
         self.name = os.path.basename(path)
+        if self.name.endswith(".py"):
+            self.name = self.name[:-3]
         self.ext_prefix = f"/ext/{self.name}"
+        self.MOCK = MOCK
+        self.MOCK_DIR = MOCK_DIR
+        self.debug = DEBUG
+        self.verbose = g_verbose
+
+    def chat_to_prompt(self, chat):
+        return chat_to_prompt(chat)
+
+    def last_user_prompt(self, chat):
+        return last_user_prompt(chat)
+
+    def save_image_to_cache(self, base64_data, filename, image_info):
+        return save_image_to_cache(base64_data, filename, image_info)
+
+    def text_from_file(self, path):
+        return text_from_file(path)
 
     def log(self, message):
-        print(f"[{self.name}] {message}", flush=True)
+        if self.verbose:
+            print(f"[{self.name}] {message}", flush=True)
+        return message
+
+    def log_json(self, obj):
+        if self.verbose:
+            print(f"[{self.name}] {json.dumps(obj, indent=2)}", flush=True)
+        return obj
 
     def dbg(self, message):
-        if DEBUG:
+        if self.debug:
             print(f"DEBUG [{self.name}]: {message}", flush=True)
 
     def err(self, message, e):
         print(f"ERROR [{self.name}]: {message}", e)
-        if g_verbose:
+        if self.verbose:
             print(traceback.format_exc(), flush=True)
 
     def add_provider(self, provider):
@@ -2132,6 +1989,33 @@ class ExtensionContext:
         if session:
             return session.get("userName")
         return None
+
+
+def load_builtin_extensions():
+    providers_path = _ROOT / "providers"
+    if not providers_path.exists():
+        return
+
+    for item in os.listdir(providers_path):
+        if not item.endswith(".py") or item == "__init__.py":
+            continue
+
+        item_path = providers_path / item
+        module_name = item[:-3]
+
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, item_path)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[f"llms.providers.{module_name}"] = module
+                spec.loader.exec_module(module)
+
+                install_func = getattr(module, "__install__", None)
+                if callable(install_func):
+                    install_func(ExtensionContext(g_app, item_path))
+                    _log(f"Loaded builtin extension: {module_name}")
+        except Exception as e:
+            _err(f"Failed to load builtin extension {module_name}", e)
 
 
 def get_extensions_path():
@@ -2252,7 +2136,7 @@ def run_extension_cli():
 
 
 def main():
-    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_ui_path, g_app
+    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_app
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument("--config", default=None, help="Path to config file", metavar="FILE")
@@ -2266,6 +2150,7 @@ def main():
     parser.add_argument("--image", default=None, help="Image input to use in chat completion")
     parser.add_argument("--audio", default=None, help="Audio input to use in chat completion")
     parser.add_argument("--file", default=None, help="File input to use in chat completion")
+    parser.add_argument("--out", default=None, help="Image or Video Generation Request", metavar="MODALITY")
     parser.add_argument(
         "--args",
         default=None,
@@ -2344,8 +2229,8 @@ def main():
         exit(1)
 
     home_config_path = home_llms_path("llms.json")
-    home_ui_path = home_llms_path("ui.json")
     home_providers_path = home_llms_path("providers.json")
+    home_providers_extra_path = home_llms_path("providers-extra.json")
 
     if cli_args.init:
         if os.path.exists(home_config_path):
@@ -2354,17 +2239,17 @@ def main():
             asyncio.run(save_default_config(home_config_path))
             print(f"Created default config at {home_config_path}")
 
-        if os.path.exists(home_ui_path):
-            print(f"ui.json already exists at {home_ui_path}")
-        else:
-            asyncio.run(save_text_url(github_url("ui.json"), home_ui_path))
-            print(f"Created default ui config at {home_ui_path}")
-
         if os.path.exists(home_providers_path):
             print(f"providers.json already exists at {home_providers_path}")
         else:
             asyncio.run(save_text_url(github_url("providers.json"), home_providers_path))
             print(f"Created default providers config at {home_providers_path}")
+
+        if os.path.exists(home_providers_extra_path):
+            print(f"providers-extra.json already exists at {home_providers_extra_path}")
+        else:
+            asyncio.run(save_text_url(github_url("providers-extra.json"), home_providers_extra_path))
+            print(f"Created default extra providers config at {home_providers_extra_path}")
         exit(0)
 
     if cli_args.providers:
@@ -2381,17 +2266,6 @@ def main():
             g_config = load_config_json(config_json)
 
         config_dir = os.path.dirname(g_config_path)
-        # look for ui.json in same directory as config
-        ui_path = os.path.join(config_dir, "ui.json")
-        if os.path.exists(ui_path):
-            g_ui_path = ui_path
-        else:
-            if not os.path.exists(home_ui_path):
-                ui_json = text_from_resource("ui.json")
-                with open(home_ui_path, "w", encoding="utf-8") as f:
-                    f.write(ui_json)
-                _log(f"Created default ui config at {home_ui_path}")
-            g_ui_path = home_ui_path
 
         if not g_providers and os.path.exists(os.path.join(config_dir, "providers.json")):
             g_providers = json.loads(text_from_file(os.path.join(config_dir, "providers.json")))
@@ -2400,7 +2274,6 @@ def main():
         # ensure llms.json and ui.json exist in home directory
         asyncio.run(save_home_configs())
         g_config_path = home_config_path
-        g_ui_path = home_ui_path
         g_config = load_config_json(text_from_file(g_config_path))
 
     if not g_providers:
@@ -2552,6 +2425,8 @@ def main():
         asyncio.run(update_extensions(cli_args.update))
         exit(0)
 
+    load_builtin_extensions()
+
     asyncio.run(reload_providers())
 
     install_extensions()
@@ -2627,10 +2502,6 @@ def main():
 
         # Start server
         port = int(cli_args.serve)
-
-        if not os.path.exists(g_ui_path):
-            print(f"UI not found at {g_ui_path}")
-            exit(1)
 
         # Validate auth configuration if enabled
         auth_enabled = g_config.get("auth", {}).get("enabled", False)
@@ -3173,19 +3044,18 @@ def main():
 
         app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
 
-        async def ui_config_handler(request):
-            with open(g_ui_path, encoding="utf-8") as f:
-                ui = json.load(f)
-                if "defaults" not in ui:
-                    ui["defaults"] = g_config["defaults"]
-                enabled, disabled = provider_status()
-                ui["status"] = {"all": list(g_config["providers"].keys()), "enabled": enabled, "disabled": disabled}
-                # Add auth configuration
-                ui["requiresAuth"] = auth_enabled
-                ui["authType"] = "oauth" if auth_enabled else "apikey"
-                return web.json_response(ui)
+        async def config_handler(request):
+            ret = {}
+            if "defaults" not in ret:
+                ret["defaults"] = g_config["defaults"]
+            enabled, disabled = provider_status()
+            ret["status"] = {"all": list(g_config["providers"].keys()), "enabled": enabled, "disabled": disabled}
+            # Add auth configuration
+            ret["requiresAuth"] = auth_enabled
+            ret["authType"] = "oauth" if auth_enabled else "apikey"
+            return web.json_response(ret)
 
-        app.router.add_get("/config", ui_config_handler)
+        app.router.add_get("/config", config_handler)
 
         async def not_found_handler(request):
             return web.Response(text="404: Not Found", status=404)
@@ -3214,7 +3084,7 @@ def main():
         async def start_background_tasks(app):
             """Start background tasks when the app starts"""
             # Start watching config files in the background
-            asyncio.create_task(watch_config_files(g_config_path, g_ui_path))
+            asyncio.create_task(watch_config_files(g_config_path, home_providers_path))
 
         app.on_startup.append(start_background_tasks)
 
@@ -3294,6 +3164,7 @@ def main():
         or cli_args.image is not None
         or cli_args.audio is not None
         or cli_args.file is not None
+        or cli_args.out is not None
         or len(extra_args) > 0
     ):
         try:
@@ -3304,6 +3175,12 @@ def main():
                 chat = g_config["defaults"]["audio"]
             elif cli_args.file is not None:
                 chat = g_config["defaults"]["file"]
+            elif cli_args.out is not None:
+                template = f"out:{cli_args.out}"
+                if template not in g_config["defaults"]:
+                    print(f"Template for output modality '{cli_args.out}' not found")
+                    exit(1)
+                chat = g_config["defaults"][template]
             if cli_args.chat is not None:
                 chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
@@ -3355,4 +3232,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if MOCK or DEBUG:
+        print(f"MOCK={MOCK} or DEBUG={DEBUG}")
     main()

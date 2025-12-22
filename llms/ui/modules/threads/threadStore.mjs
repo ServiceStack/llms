@@ -1,6 +1,6 @@
 import { ref, computed, unref } from 'vue'
 import { openDB } from 'idb'
-import { nextId, toModelInfo } from './utils.mjs'
+import { nextId } from '../../utils.mjs'
 
 // Thread store for managing chat threads with IndexedDB
 const threads = ref([])
@@ -9,12 +9,6 @@ const isLoading = ref(false)
 
 let db = null
 let ctx = null
-
-export default {
-    install(context) {
-        ctx = context
-    }
-}
 
 // Initialize IndexedDB
 async function initDB() {
@@ -579,5 +573,14 @@ export function useThreadStore() {
         deleteRequest,
         getAllRequestIds,
         getAllThreadIds,
+    }
+}
+
+export default {
+    install(context) {
+        ctx = context
+        ctx.setGlobals({
+            threads: useThreadStore()
+        })
     }
 }

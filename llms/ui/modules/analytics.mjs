@@ -1,29 +1,24 @@
-import { ref, onMounted, watch, nextTick, computed } from 'vue'
+import { ref, onMounted, watch, nextTick, computed, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useFormatters } from "@servicestack/vue"
 import { leftPart } from '@servicestack/client'
 import { Chart, registerables } from "chart.js"
-import { useThreadStore } from './threadStore.mjs'
-import { formatCost } from './utils.mjs'
 Chart.register(...registerables)
 
-const { humanifyNumber, humanifyMs } = useFormatters()
-
 export const colors = [
-    { background: 'rgba(54, 162, 235, 0.2)',  border: 'rgb(54, 162, 235)' }, //blue
-    { background: 'rgba(255, 99, 132, 0.2)',  border: 'rgb(255, 99, 132)' },
+    { background: 'rgba(54, 162, 235, 0.2)', border: 'rgb(54, 162, 235)' }, //blue
+    { background: 'rgba(255, 99, 132, 0.2)', border: 'rgb(255, 99, 132)' },
     { background: 'rgba(153, 102, 255, 0.2)', border: 'rgb(153, 102, 255)' },
-    { background: 'rgba(54, 162, 235, 0.2)',  border: 'rgb(54, 162, 235)' },
-    { background: 'rgba(255, 159, 64, 0.2)',  border: 'rgb(255, 159, 64)' },
-    { background: 'rgba(67, 56, 202, 0.2)',   border: 'rgb(67, 56, 202)' },
-    { background: 'rgba(255, 99, 132, 0.2)',  border: 'rgb(255, 99, 132)' },
-    { background: 'rgba(14, 116, 144, 0.2)',  border: 'rgb(14, 116, 144)' },
-    { background: 'rgba(162, 28, 175, 0.2)',  border: 'rgb(162, 28, 175)' },
+    { background: 'rgba(54, 162, 235, 0.2)', border: 'rgb(54, 162, 235)' },
+    { background: 'rgba(255, 159, 64, 0.2)', border: 'rgb(255, 159, 64)' },
+    { background: 'rgba(67, 56, 202, 0.2)', border: 'rgb(67, 56, 202)' },
+    { background: 'rgba(255, 99, 132, 0.2)', border: 'rgb(255, 99, 132)' },
+    { background: 'rgba(14, 116, 144, 0.2)', border: 'rgb(14, 116, 144)' },
+    { background: 'rgba(162, 28, 175, 0.2)', border: 'rgb(162, 28, 175)' },
     { background: 'rgba(201, 203, 207, 0.2)', border: 'rgb(201, 203, 207)' },
 ]
 
 const MonthSelector = {
-    template:`
+    template: `
     <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 items-stretch sm:items-center w-full sm:w-auto">
         <!-- Months Row -->
         <div class="flex gap-1 sm:gap-2 flex-wrap justify-center overflow-x-auto">
@@ -109,10 +104,7 @@ const MonthSelector = {
     }
 }
 
-export default {
-    components: {
-        MonthSelector,
-    },
+export const Analytics = {
     template: `
         <div class="flex flex-col h-full w-full">
             <!-- Header -->
@@ -165,7 +157,7 @@ export default {
                     <div v-if="activeTab !== 'activity'" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                             <div class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Cost</div>
-                            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{{ formatCost(totalCost) }}</div>
+                            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{{ $fmt.cost(totalCost) }}</div>
                         </div>
                         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                             <div class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Requests</div>
@@ -173,11 +165,11 @@ export default {
                         </div>
                         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                             <div class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Input Tokens</div>
-                            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{{ humanifyNumber(totalInputTokens) }}</div>
+                            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{{ $fmt.humanifyNumber(totalInputTokens) }}</div>
                         </div>
                         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                             <div class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Output Tokens</div>
-                            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{{ humanifyNumber(totalOutputTokens) }}</div>
+                            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{{ $fmt.humanifyNumber(totalOutputTokens) }}</div>
                         </div>
                     </div>
 
@@ -224,11 +216,11 @@ export default {
                             {{ new Date(selectedDay).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}
                         </div>
                         <div class="flex flex-wrap gap-x-2 gap-y-1">
-                           <span>{{ formatCost(allDailyData[selectedDay]?.cost || 0) }}</span>
+                           <span>{{ $fmt.cost(allDailyData[selectedDay]?.cost || 0) }}</span>
                            <span>&#183;</span>
                            <span>{{ allDailyData[selectedDay]?.requests || 0 }} Requests</span>
                            <span>&#183;</span>
-                           <span>{{ humanifyNumber(allDailyData[selectedDay]?.inputTokens || 0) }} -> {{ humanifyNumber(allDailyData[selectedDay]?.outputTokens || 0) }} Tokens</span>
+                           <span>{{ $fmt.humanifyNumber(allDailyData[selectedDay]?.inputTokens || 0) }} -> {{ $fmt.humanifyNumber(allDailyData[selectedDay]?.outputTokens || 0) }} Tokens</span>
                         </div>
                     </div>
 
@@ -363,18 +355,18 @@ export default {
                                             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                                                 <div :title="request.cost">
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Cost</div>
-                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatCost(request.cost) }}</div>
+                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $fmt.costLong(request.cost) }}</div>
                                                 </div>
                                                 <div class="col-span-2 sm:col-span-1">
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Tokens</div>
                                                     <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                                        {{ humanifyNumber(request.inputTokens) }} -> {{ humanifyNumber(request.outputTokens) }}
-                                                        <span v-if="request.inputCachedTokens" class="ml-1 text-xs text-gray-500 dark:text-gray-400">({{ humanifyNumber(request.inputCachedTokens) }} cached)</span>
+                                                        {{ $fmt.humanifyNumber(request.inputTokens) }} -> {{ $fmt.humanifyNumber(request.outputTokens) }}
+                                                        <span v-if="request.inputCachedTokens" class="ml-1 text-xs text-gray-500 dark:text-gray-400">({{ $fmt.humanifyNumber(request.inputCachedTokens) }} cached)</span>
                                                     </div>
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Duration</div>
-                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.duration ? humanifyMs(request.duration) : '—' }}</div>
+                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.duration ? $fmt.humanifyMs(request.duration) : '—' }}</div>
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Speed</div>
@@ -408,9 +400,10 @@ export default {
         </div>
     `,
     setup() {
+        const ctx = inject('ctx')
+        const threads = ctx.threads
         const router = useRouter()
         const route = useRoute()
-        const threads = useThreadStore()
         const { initDB } = threads
 
         // Initialize activeTab from URL query parameter, default to 'cost'
@@ -802,7 +795,7 @@ export default {
                 costChartInstance.destroy()
             }
 
-            const ctx = costChartCanvas.value.getContext('2d')
+            const ctx2d = costChartCanvas.value.getContext('2d')
             const chartTypeValue = costChartType.value
 
             // Find the index of the selected day
@@ -833,7 +826,7 @@ export default {
                 }]
             }
 
-            costChartInstance = new Chart(ctx, {
+            costChartInstance = new Chart(ctx2d, {
                 type: chartTypeValue,
                 data: chartDataWithColors,
                 options: {
@@ -859,14 +852,14 @@ export default {
                         },
                         tooltip: {
                             callbacks: {
-                                title: function(context) {
+                                title: function (context) {
                                     const index = context[0].dataIndex
                                     const dateKey = chartData.value.dateKeys[index]
                                     const date = new Date(dateKey + 'T00:00:00Z')
                                     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
                                 },
-                                label: function(context) {
-                                    return `Cost: ${formatCost(context.parsed.y)}`
+                                label: function (context) {
+                                    return `Cost: ${ctx.fmt.cost(context.parsed.y)}`
                                 }
                             }
                         }
@@ -875,7 +868,7 @@ export default {
                         y: {
                             beginAtZero: true,
                             ticks: {
-                                callback: function(value) {
+                                callback: function (value) {
                                     return '$' + value.toFixed(4)
                                 }
                             }
@@ -893,7 +886,7 @@ export default {
                 tokenChartInstance.destroy()
             }
 
-            const ctx = tokenChartCanvas.value.getContext('2d')
+            const ctx2d = tokenChartCanvas.value.getContext('2d')
 
             // Find the index of the selected day
             const selectedDayIndex = tokenChartData.value.dateKeys.indexOf(selectedDay.value)
@@ -944,7 +937,7 @@ export default {
                 ]
             }
 
-            tokenChartInstance = new Chart(ctx, {
+            tokenChartInstance = new Chart(ctx2d, {
                 type: 'bar',
                 data: chartDataWithColors,
                 options: {
@@ -972,8 +965,8 @@ export default {
                             stacked: true,
                             beginAtZero: true,
                             ticks: {
-                                callback: function(value) {
-                                    return humanifyNumber(value)
+                                callback: function (value) {
+                                    return ctx.fmt.humanifyNumber(value)
                                 }
                             }
                         }
@@ -985,14 +978,14 @@ export default {
                         },
                         tooltip: {
                             callbacks: {
-                                title: function(context) {
+                                title: function (context) {
                                     const index = context[0].dataIndex
                                     const dateKey = tokenChartData.value.dateKeys[index]
                                     const date = new Date(dateKey + 'T00:00:00Z')
                                     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
                                 },
-                                label: function(context) {
-                                    return `${context.dataset.label}: ${humanifyNumber(context.parsed.y)}`
+                                label: function (context) {
+                                    return `${context.dataset.label}: ${ctx.fmt.humanifyNumber(context.parsed.y)}`
                                 }
                             }
                         }
@@ -1009,7 +1002,7 @@ export default {
                 modelPieChartInstance.destroy()
             }
 
-            const ctx = modelPieCanvas.value.getContext('2d')
+            const ctx2d = modelPieCanvas.value.getContext('2d')
 
             // Custom plugin to draw percentage labels on pie slices
             const percentagePlugin = {
@@ -1036,7 +1029,7 @@ export default {
                 }
             }
 
-            modelPieChartInstance = new Chart(ctx, {
+            modelPieChartInstance = new Chart(ctx2d, {
                 type: 'pie',
                 data: modelPieData.value,
                 options: {
@@ -1049,8 +1042,8 @@ export default {
                         },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${formatCost(context.parsed)}`
+                                label: function (context) {
+                                    return `${context.label}: ${ctx.fmt.cost(context.parsed)}`
                                 }
                             }
                         }
@@ -1068,7 +1061,7 @@ export default {
                 providerPieChartInstance.destroy()
             }
 
-            const ctx = providerPieCanvas.value.getContext('2d')
+            const ctx2d = providerPieCanvas.value.getContext('2d')
 
             // Custom plugin to draw percentage labels on pie slices
             const percentagePlugin = {
@@ -1095,7 +1088,7 @@ export default {
                 }
             }
 
-            providerPieChartInstance = new Chart(ctx, {
+            providerPieChartInstance = new Chart(ctx2d, {
                 type: 'pie',
                 data: providerPieData.value,
                 options: {
@@ -1108,8 +1101,8 @@ export default {
                         },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${formatCost(context.parsed)}`
+                                label: function (context) {
+                                    return `${context.label}: ${ctx.fmt.cost(context.parsed)}`
                                 }
                             }
                         }
@@ -1127,7 +1120,7 @@ export default {
                 tokenModelPieChartInstance.destroy()
             }
 
-            const ctx = tokenModelPieCanvas.value.getContext('2d')
+            const ctx2d = tokenModelPieCanvas.value.getContext('2d')
 
             // Custom plugin to draw percentage labels on pie slices
             const percentagePlugin = {
@@ -1154,7 +1147,7 @@ export default {
                 }
             }
 
-            tokenModelPieChartInstance = new Chart(ctx, {
+            tokenModelPieChartInstance = new Chart(ctx2d, {
                 type: 'pie',
                 data: tokenModelPieData.value,
                 options: {
@@ -1167,8 +1160,8 @@ export default {
                         },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${humanifyNumber(context.parsed)}`
+                                label: function (context) {
+                                    return `${context.label}: ${ctx.fmt.humanifyNumber(context.parsed)}`
                                 }
                             }
                         }
@@ -1186,7 +1179,7 @@ export default {
                 tokenProviderPieChartInstance.destroy()
             }
 
-            const ctx = tokenProviderPieCanvas.value.getContext('2d')
+            const ctx2d = tokenProviderPieCanvas.value.getContext('2d')
 
             // Custom plugin to draw percentage labels on pie slices
             const percentagePlugin = {
@@ -1213,7 +1206,7 @@ export default {
                 }
             }
 
-            tokenProviderPieChartInstance = new Chart(ctx, {
+            tokenProviderPieChartInstance = new Chart(ctx2d, {
                 type: 'pie',
                 data: tokenProviderPieData.value,
                 options: {
@@ -1226,8 +1219,8 @@ export default {
                         },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${humanifyNumber(context.parsed)}`
+                                label: function (context) {
+                                    return `${context.label}: ${ctx.fmt.humanifyNumber(context.parsed)}`
                                 }
                             }
                         }
@@ -1339,9 +1332,9 @@ export default {
 
         const formatActivityDate = (timestamp) => {
             const date = new Date(timestamp * 1000)
-            return date.toLocaleTimeString(undefined, { hour12: false }) + ' ' 
-                + date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) 
-                
+            return date.toLocaleTimeString(undefined, { hour12: false }) + ' '
+                + date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+
         }
 
         const openThread = (threadId) => {
@@ -1497,9 +1490,6 @@ export default {
             totalRequests,
             totalInputTokens,
             totalOutputTokens,
-            formatCost,
-            humanifyNumber,
-            humanifyMs,
             // Month/Year selection
             selectedMonth,
             selectedYear,
@@ -1524,5 +1514,27 @@ export default {
             loadActivityFilterOptions,
             loadActivityRequests,
         }
+    }
+}
+
+export default {
+    install(ctx) {
+        ctx.components({
+            MonthSelector,
+            Analytics,
+        })
+
+        ctx.setLeftIcons({
+            analytics: {
+                component: {
+                    template: `<svg @click="$ctx.togglePath('/analytics')" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M5 22a1 1 0 0 1-1-1v-8a1 1 0 0 1 2 0v8a1 1 0 0 1-1 1m5 0a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1m5 0a1 1 0 0 1-1-1V9a1 1 0 0 1 2 0v12a1 1 0 0 1-1 1m5 0a1 1 0 0 1-1-1v-4a1 1 0 0 1 2 0v4a1 1 0 0 1-1 1"/></svg>`
+                },
+                isActive({ path }) {
+                    return path === '/analytics'
+                }
+            }
+        })
+
+        ctx.routes.push({ path: '/analytics', component: Analytics, meta: { title: 'Analytics' } })
     }
 }

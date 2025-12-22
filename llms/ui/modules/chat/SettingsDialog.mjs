@@ -1,5 +1,5 @@
 import { ref, computed, watch, inject } from 'vue'
-import { storageObject } from './utils.mjs'
+import { storageObject } from '../../utils.mjs'
 
 const settingsKey = 'llms.settings'
 
@@ -40,7 +40,7 @@ export function useSettings() {
     ]
 
     let settings = ref(storageObject(settingsKey))
-    
+
     function validSettings(localSettings) {
         const to = {}
         intFields.forEach(f => {
@@ -65,9 +65,9 @@ export function useSettings() {
         })
         listFields.forEach(f => {
             if (localSettings[f] != null && localSettings[f] !== '') {
-                to[f] = Array.isArray(localSettings[f]) 
+                to[f] = Array.isArray(localSettings[f])
                     ? localSettings[f]
-                    : typeof localSettings[f] == 'string' 
+                    : typeof localSettings[f] == 'string'
                         ? localSettings[f].split(',').map(x => x.trim())
                         : []
             }
@@ -88,7 +88,7 @@ export function useSettings() {
     function resetSettings() {
         return saveSettings({})
     }
-    
+
     function saveSettings(localSettings) {
         // console.log('saveSettings', JSON.stringify(localSettings, undefined, 2))
         settings.value = validSettings(localSettings)
@@ -337,9 +337,9 @@ export default {
     },
     emits: ['close'],
     setup(props, { emit }) {
-        const chatSettings = inject('chatSettings')
-        const { settings, saveSettings, resetSettings } = chatSettings
-        
+        const ctx = inject('ctx')
+        const { settings, saveSettings, resetSettings } = ctx.chat.settings
+
         // Local copy for editing
         const localSettings = ref(Object.assign({}, settings.value))
 

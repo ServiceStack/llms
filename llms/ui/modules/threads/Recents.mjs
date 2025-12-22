@@ -1,7 +1,6 @@
 import { ref, onMounted, watch, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useThreadStore } from './threadStore.mjs'
-import { renderMarkdown } from './markdown.mjs'
 
 const RecentResults = {
     template: `
@@ -140,7 +139,6 @@ const RecentResults = {
             snippet,
             open,
             formatDate,
-            renderMarkdown,
             onScroll,
         }
     }

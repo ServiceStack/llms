@@ -1,88 +1,9 @@
-import { ref, computed, nextTick, watch, onMounted, provide, inject } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useFormatters } from '@servicestack/vue'
-import { useThreadStore } from './threadStore.mjs'
-import { addCopyButtons, formatCost, statsTitle, fetchCacheInfos } from './utils.mjs'
-import { renderMarkdown } from './markdown.mjs'
-import ChatPrompt, { useChatPrompt } from './ChatPrompt.mjs'
-import SignIn from './SignIn.mjs'
-import OAuthSignIn from './OAuthSignIn.mjs'
-import Avatar from './Avatar.mjs'
-import { useSettings } from "./SettingsDialog.mjs"
-import Welcome from './Welcome.mjs'
-
-const { humanifyMs, humanifyNumber } = useFormatters()
-
-const TopBar = {
-    template: `
-        <div class="flex space-x-2">
-            <div v-for="(ext, index) in extensions" :key="ext.id" class="relative flex items-center justify-center">
-                <component :is="ext.topBarIcon" 
-                    class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 block"
-                    :class="{ 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded' : ext.isActive($layout.top) }" 
-                    @mouseenter="tooltip = ext.name"
-                    @mouseleave="tooltip = ''"
-                    />
-                <div v-if="tooltip === ext.name" 
-                    class="absolute top-full mt-2 px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-800 rounded shadow-md z-50 whitespace-nowrap pointer-events-none"
-                    :class="index <= extensions.length - 1 ? 'right-0' : 'left-1/2 -translate-x-1/2'">
-                    {{ext.name}}
-                </div>    
-            </div>
-        </div>
-    `,
-    setup() {
-        const ctx = inject('ctx')
-        const tooltip = ref('')
-        const extensions = computed(() => ctx.extensions.filter(x => x.topBarIcon))
-        return {
-            extensions,
-            tooltip,
-        }
-    }
-}
-
-const TopPanel = {
-    template: `
-        <component v-if="component" :is="component" />
-    `,
-    setup() {
-        const ctx = inject('ctx')
-        const component = computed(() => ctx.component(ctx.layout.top))
-        return {
-            component,
-        }
-    }
-}
 
 export default {
-    components: {
-        TopBar,
-        TopPanel,
-        ChatPrompt,
-        SignIn,
-        OAuthSignIn,
-        Avatar,
-        Welcome,
-    },
     template: `
-        <div class="flex flex-col h-full w-full">
-            <!-- Header with model selectors -->
-            <div v-if="$ai.hasAccess" 
-                :class="!$ai.isSidebarOpen ? 'pl-6' : ''"
-                class="flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 w-full min-h-16">
-                <div class="flex flex-wrap items-center justify-between w-full">
-                    <ModelSelector :models="models" v-model="selectedModel" @updated="configUpdated" />
-
-                    <div class="flex items-center space-x-2 pl-4">
-                        <TopBar />
-                        <Avatar />
-                    </div>
-                </div>
-            </div>
-
-            <TopPanel />
-
+        <div class="flex flex-col h-full">
             <!-- Messages Area -->
             <div class="flex-1 overflow-y-auto" ref="messagesContainer">
                 <div class="mx-auto max-w-6xl px-4 py-6">
@@ -149,6 +70,9 @@ export default {
 
                     <!-- Messages -->
                     <div v-else class="space-y-6">
+                        <div v-if="currentThread.messages.length && currentThread.model" class="absolute -mt-2">
+                            <span @click="$chat.setSelectedModel({ name: currentThread.model})" class="cursor-pointer px-1.5 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">{{currentThread.model}}</span>
+                        </div>
                         <div
                             v-for="message in currentThread.messages"
                             :key="message.id"
@@ -199,7 +123,7 @@ export default {
 
                                 <div
                                     v-if="message.role === 'assistant'"
-                                    v-html="renderMarkdown(message.content)"
+                                    v-html="$fmt.markdown(message.content)"
                                     class="prose prose-sm max-w-none dark:prose-invert"
                                 ></div>
 
@@ -210,14 +134,23 @@ export default {
                                         <span>{{ isReasoningExpanded(message.id) ? 'Hide reasoning' : 'Show reasoning' }}</span>
                                     </button>
                                     <div v-if="isReasoningExpanded(message.id)" class="mt-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
-                                        <div v-if="typeof message.reasoning === 'string'" v-html="renderMarkdown(message.reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
+                                        <div v-if="typeof message.reasoning === 'string'" v-html="$fmt.markdown(message.reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
                                         <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto text-gray-900 dark:text-gray-100">{{ formatReasoning(message.reasoning) }}</pre>
                                     </div>
                                 </div>
 
+                                <!-- Assistant Images -->
+                                <div v-if="message.images && message.images.length > 0" class="mt-2 flex flex-wrap gap-2">
+                                    <template v-for="(img, i) in message.images" :key="i">
+                                        <div v-if="img.type === 'image_url'" class="group relative cursor-pointer" @click="openLightbox(resolveUrl(img.image_url.url))">
+                                            <img :src="resolveUrl(img.image_url.url)" class="max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]" />
+                                        </div>
+                                    </template>
+                                </div>
+
                                 <!-- User Message with separate attachments -->
                                 <div v-if="message.role !== 'assistant'">
-                                    <div v-html="renderMarkdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
+                                    <div v-html="$fmt.markdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
                                     
                                     <!-- Attachments Grid -->
                                     <div v-if="hasAttachments(message)" class="mt-2 flex flex-wrap gap-2">
@@ -242,12 +175,12 @@ export default {
                                 </div>
 
                                 <div class="mt-2 text-xs opacity-70">
-                                    <span>{{ formatTime(message.timestamp) }}</span>
+                                    <span>{{ $fmt.time(message.timestamp) }}</span>
                                     <span v-if="message.usage" :title="tokensTitle(message.usage)">
                                         &#8226;
-                                        {{ humanifyNumber(message.usage.tokens) }} tokens
+                                        {{ $fmt.humanifyNumber(message.usage.tokens) }} tokens
                                         <span v-if="message.usage.cost">&#183; {{ message.usage.cost }}</span>
-                                        <span v-if="message.usage.duration"> in {{ humanifyMs(message.usage.duration) }}</span>
+                                        <span v-if="message.usage.duration"> in {{ $fmt.humanifyMs(message.usage.duration) }}</span>
                                     </span>
                                 </div>
                             </div>
@@ -274,8 +207,8 @@ export default {
                         </div>
 
                         <div v-if="currentThread.stats && currentThread.stats.outputTokens" class="text-center text-gray-500 dark:text-gray-400 text-sm">
-                            <span :title="statsTitle(currentThread.stats)">
-                                {{ currentThread.stats.cost ? formatCost(currentThread.stats.cost) + '  for ' : '' }} {{ humanifyNumber(currentThread.stats.inputTokens) }} → {{ humanifyNumber(currentThread.stats.outputTokens) }} tokens over {{ currentThread.stats.requests }} request{{currentThread.stats.requests===1?'':'s'}} in {{ humanifyMs(currentThread.stats.duration) }}
+                            <span :title="$fmt.statsTitle(currentThread.stats)">
+                                {{ currentThread.stats.cost ? $fmt.costLong(currentThread.stats.cost) + '  for ' : '' }} {{ $fmt.humanifyNumber(currentThread.stats.inputTokens) }} → {{ $fmt.humanifyNumber(currentThread.stats.outputTokens) }} tokens over {{ currentThread.stats.requests }} request{{currentThread.stats.requests===1?'':'s'}} in {{ $fmt.humanifyMs(currentThread.stats.duration) }}
                             </span>
                         </div>
 
@@ -342,20 +275,20 @@ export default {
 
             <!-- Input Area -->
             <div v-if="$ai.hasAccess" class="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-                <ChatPrompt :model="selectedModelObj" />
+                <ChatPrompt :model="$chat.getSelectedModel()" />
             </div>
             
             <!-- Lightbox -->
             <div v-if="lightboxUrl" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer" @click="closeLightbox">
+                <button type="button" @click="closeLightbox"
+                    class="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-[101]"
+                    title="Close">
+                    <svg class="size-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
                 <div class="relative max-w-full max-h-full">
                     <img :src="lightboxUrl" class="max-w-full max-h-[90vh] object-contain rounded-sm shadow-2xl" @click.stop />
-                    <button type="button" @click="closeLightbox"
-                        class="absolute -top-12 right-0 text-white/70 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                        title="Close">
-                        <svg class="size-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
                 </div>
             </div>
         </div>
@@ -364,19 +297,13 @@ export default {
         const ctx = inject('ctx')
         const models = ctx.state.models
         const config = ctx.state.config
+        const threads = ctx.threads
+        const chatPrompt = ctx.chat
+        const { currentThread } = threads
+        const { errorStatus, isGenerating } = ctx.chat
+
         const router = useRouter()
         const route = useRoute()
-        const threads = useThreadStore()
-        const { currentThread } = threads
-        const chatPrompt = useChatPrompt()
-        const chatSettings = useSettings()
-        const {
-            errorStatus,
-            isGenerating,
-        } = chatPrompt
-        provide('threads', threads)
-        provide('chatPrompt', chatPrompt)
-        provide('chatSettings', chatSettings)
 
         const prefs = ctx.getPrefs()
 
@@ -397,6 +324,13 @@ export default {
         }
         const closeLightbox = () => {
             lightboxUrl.value = null
+        }
+
+        const resolveUrl = (url) => {
+            if (url && url.startsWith('~')) {
+                return '/' + url
+            }
+            return ctx.ai.resolveUrl(url)
         }
 
         // Auto-scroll to bottom when new messages arrive
@@ -422,7 +356,7 @@ export default {
             if (!newId) {
                 chatPrompt.reset()
             }
-            nextTick(addCopyButtons)
+            nextTick(ctx.chat.addCopyButtons)
         }, { immediate: true })
 
         watch(() => [selectedModel.value], () => {
@@ -622,14 +556,6 @@ export default {
             }
         }
 
-        // Format timestamp
-        const formatTime = (timestamp) => {
-            return new Date(timestamp).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-            })
-        }
-
         // Reasoning collapse state and helpers
         const expandedReasoning = ref(new Set())
         const isReasoningExpanded = (id) => expandedReasoning.value.has(id)
@@ -721,7 +647,7 @@ export default {
                 text = message.content
             }
 
-            const infos = await fetchCacheInfos(getCacheInfos)
+            const infos = await ctx.ai.fetchCacheInfos(getCacheInfos)
             // replace name with info.name
             for (let i = 0; i < files.length; i++) {
                 const url = files[i]?.url
@@ -801,21 +727,16 @@ export default {
             let title = []
             if (usage.tokens && usage.price) {
                 const msg = parseFloat(usage.price) > 0
-                    ? `${usage.tokens} tokens @ ${usage.price} = ${tokenCost(usage.price, usage.tokens)}`
+                    ? `${usage.tokens} tokens @ ${usage.price} = ${ctx.fmt.tokenCostLong(usage.price, usage.tokens)}`
                     : `${usage.tokens} tokens`
                 const duration = usage.duration ? ` in ${usage.duration}ms` : ''
                 title.push(msg + duration)
             }
             return title.join('\n')
         }
-        const numFmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 6 })
-        function tokenCost(price, tokens) {
-            if (!price || !tokens) return ''
-            return numFmt.format(parseFloat(price) * tokens)
-        }
 
         onMounted(() => {
-            setTimeout(addCopyButtons, 1)
+            setTimeout(ctx.chat.addCopyButtons, 1)
         })
 
         return {
@@ -829,8 +750,6 @@ export default {
             messagesContainer,
             errorStatus,
             copying,
-            formatTime,
-            renderMarkdown,
             isReasoningExpanded,
             toggleReasoning,
             formatReasoning,
@@ -847,16 +766,12 @@ export default {
             isImporting,
             fileInput,
             tokensTitle,
-            humanifyMs,
-            humanifyNumber,
-            formatCost,
-            formatCost,
-            statsTitle,
             getAttachments,
             hasAttachments,
             lightboxUrl,
             openLightbox,
             closeLightbox,
+            resolveUrl,
         }
     }
 }

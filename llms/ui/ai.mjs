@@ -1,5 +1,4 @@
 import { reactive } from "vue"
-import { useThreadStore } from "./threadStore.mjs"
 
 const base = ''
 const headers = { 'Accept': 'application/json' }
@@ -15,6 +14,7 @@ export const o = {
     authType: 'apikey',  // 'oauth' or 'apikey' - controls which SignIn component to use
     headers,
     isSidebarOpen: true,  // Shared sidebar state (default open for lg+ screens)
+    cacheUrlInfo: {},
 
     get hasAccess() {
         return !this.requiresAuth || this.auth
@@ -29,12 +29,34 @@ export const o = {
             headers: Object.assign({}, this.headers, options?.headers),
         })
     },
+    async getJson(url, options) {
+        const res = await this.get(url, options)
+        let txt = ''
+        try {
+            txt = await res.text()
+            return JSON.parse(txt)
+        } catch (e) {
+            console.error('Failed to parse JSON from GET', url, e, txt)
+            return { responseStatus: { errorCode: 'Error', message: `GET failed: ${e.message ?? e}` } }
+        }
+    },
     post(url, options) {
         return fetch(this.resolveUrl(url), {
             method: 'POST',
             ...options,
             headers: Object.assign({ 'Content-Type': 'application/json' }, this.headers, options?.headers),
         })
+    },
+    async postJson(url, options) {
+        const res = await this.post(url, options)
+        let txt = ''
+        try {
+            txt = await res.text()
+            return JSON.parse(txt)
+        } catch (e) {
+            console.error('Failed to parse JSON from POST', url, e, txt)
+            return { responseStatus: { errorCode: 'Error', message: `POST failed: ${e.message ?? e}` } }
+        }
     },
 
     async getConfig() {
@@ -72,18 +94,17 @@ export const o = {
         if (this.headers.Authorization) {
             delete this.headers.Authorization
         }
-        localStorage.removeItem('llms:auth')
     },
-    async init() {
+    async init(ctx) {
         // Load models and prompts
-        const { initDB } = useThreadStore()
-        const [_, configRes, modelsRes] = await Promise.all([
-            initDB(),
+        const [configRes, modelsRes, extensionsRes] = await Promise.all([
             this.getConfig(),
             this.getModels(),
+            this.get('/ext'),
         ])
         const config = await configRes.json()
         const models = await modelsRes.json()
+        const extensions = await extensionsRes.json()
 
         // Update auth settings from server config
         if (config.requiresAuth != null) {
@@ -100,14 +121,59 @@ export const o = {
             : null
         if (auth?.responseStatus?.errorCode) {
             console.error(auth.responseStatus.errorCode, auth.responseStatus.message)
-            // Clear invalid session from localStorage
-            localStorage.removeItem('llms:auth')
         } else {
             this.signIn(auth)
         }
-        return { config, models, auth }
+        return { config, models, extensions, auth }
+    },
+
+
+    async uploadFile(file) {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await fetch(this.resolveUrl('/upload'), {
+            method: 'POST',
+            body: formData
+        })
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`)
+        }
+        return response.json()
+    },
+
+
+    getCacheInfo(url) {
+        return this.cacheUrlInfo[url]
+    },
+    async fetchCacheInfos(urls) {
+        const infos = {}
+        const fetchInfos = []
+        for (const url of urls) {
+            const info = this.getCacheInfo(url)
+            if (info) {
+                infos[url] = info
+            } else {
+                fetchInfos.push(fetch(this.resolveUrl(url + "?info")))
+            }
+        }
+        const responses = await Promise.all(fetchInfos)
+        for (let i = 0; i < urls.length; i++) {
+            try {
+                const info = await responses[i].json()
+                this.setCacheInfo(urls[i], info)
+                infos[urls[i]] = info
+            } catch (e) {
+                console.error('Failed to fetch info for', urls[i], e)
+            }
+        }
+        return infos
+    },
+    setCacheInfo(url, info) {
+        this.cacheUrlInfo[url] = info
     }
+
 }
+
 
 let ai = reactive(o)
 export default ai

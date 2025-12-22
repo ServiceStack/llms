@@ -1,13 +1,115 @@
-import { ref, nextTick, inject, unref } from 'vue'
+
+import { ref, computed, watch, nextTick, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { lastRightPart } from '@servicestack/client'
-import { deepClone, fileToDataUri, fileToBase64, addCopyButtons, toModelInfo, tokenCost, uploadFile } from './utils.mjs'
-import { toRaw } from 'vue'
+import { $$, createElement, lastRightPart } from "@servicestack/client"
+import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
+import ChatBody from './ChatBody.mjs'
+import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
 const audioExts = 'mp3,wav,ogg,flac,m4a,opus,webm'.split(',')
 
-export function useChatPrompt() {
+/* Example image generation request: https://openrouter.ai/docs/guides/overview/multimodal/image-generation
+{
+    "model": "google/gemini-2.5-flash-image-preview",
+    "messages": [
+        {
+            "role": "user",
+            "content": "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"
+        }
+    ],
+    "modalities": ["image", "text"],
+    "image_config": {
+        "aspect_ratio": "16:9"
+    }
+}
+Example response:
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "I've generated a beautiful sunset image for you.",
+        "images": [
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+*/
+const imageAspectRatios = {
+    '1024×1024': '1:1',
+    '832×1248': '2:3',
+    '1248×832': '3:2',
+    '864×1184': '3:4',
+    '1184×864': '4:3',
+    '896×1152': '4:5',
+    '1152×896': '5:4',
+    '768×1344': '9:16',
+    '1344×768': '16:9',
+    '1536×672': '21:9',
+}
+
+const svg = {
+    clipboard: `<svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none"><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3m2 4H10m0 0l3-3m-3 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></g></svg>`,
+    check: `<svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`,
+}
+
+function copyBlock(btn) {
+    // console.log('copyBlock',btn)
+    const label = btn.previousElementSibling
+    const code = btn.parentElement.nextElementSibling
+    label.classList.remove('hidden')
+    label.innerHTML = 'copied'
+    btn.classList.add('border-gray-600', 'bg-gray-700')
+    btn.classList.remove('border-gray-700')
+    btn.innerHTML = svg.check
+    navigator.clipboard.writeText(code.innerText)
+    setTimeout(() => {
+        label.classList.add('hidden')
+        label.innerHTML = ''
+        btn.innerHTML = svg.clipboard
+        btn.classList.remove('border-gray-600', 'bg-gray-700')
+        btn.classList.add('border-gray-700')
+    }, 2000)
+}
+
+function addCopyButtonToCodeBlocks(sel) {
+    globalThis.copyBlock ??= copyBlock
+    //console.log('addCopyButtonToCodeBlocks', sel, [...$$(sel)].length)
+
+    $$(sel).forEach(code => {
+        let pre = code.parentElement;
+        if (pre.classList.contains('group')) return
+        pre.classList.add('relative', 'group')
+
+        const div = createElement('div', { attrs: { className: 'opacity-0 group-hover:opacity-100 transition-opacity duration-100 flex absolute right-2 -mt-1 select-none' } })
+        const label = createElement('div', { attrs: { className: 'hidden font-sans p-1 px-2 mr-1 rounded-md border border-gray-600 bg-gray-700 text-gray-400' } })
+        const btn = createElement('button', {
+            attrs: {
+                type: 'button',
+                className: 'p-1 rounded-md border block text-gray-500 hover:text-gray-400 border-gray-700 hover:border-gray-600',
+                onclick: 'copyBlock(this)'
+            }
+        })
+        btn.innerHTML = svg.clipboard
+        div.appendChild(label)
+        div.appendChild(btn)
+        pre.insertBefore(div, code)
+    })
+}
+
+export function addCopyButtons() {
+    addCopyButtonToCodeBlocks('.prose pre>code')
+}
+
+export function useChatPrompt(ctx) {
     const messageText = ref('')
     const attachedFiles = ref([])
     const isGenerating = ref(false)
@@ -39,6 +141,26 @@ export function useChatPrompt() {
         abortController.value = null
     }
 
+    const settings = useSettings()
+
+    function getModel(name) {
+        return ctx.state.models.find(x => x.name === name) ?? ctx.state.models.find(x => x.id === name)
+    }
+
+    function getSelectedModel() {
+        const candidates = [ctx.state.selectedModel, ctx.state.config.defaults.text.model]
+        return candidates.map(name => name && getModel(name)).find(x => !!x)
+    }
+
+    function setSelectedModel(model) {
+        ctx.setState({
+            selectedModel: model.name
+        })
+        ctx.setPrefs({
+            model: model.name
+        })
+    }
+
     return {
         messageText,
         attachedFiles,
@@ -55,10 +177,15 @@ export function useChatPrompt() {
         // hasText,
         reset,
         cancel,
+        settings,
+        addCopyButtons,
+        getModel,
+        getSelectedModel,
+        setSelectedModel,
     }
 }
 
-export default {
+const ChatPrompt = {
     template: `
     <div class="mx-auto max-w-3xl">
         <SettingsDialog :isOpen="showSettings" @close="showSettings = false" />
@@ -125,20 +252,31 @@ export default {
                     </button>
                 </div>
 
-                <!-- Attached files preview -->
-                <div v-if="attachedFiles.length" class="mt-2 flex flex-wrap gap-2">
-                    <div v-for="(f,i) in attachedFiles" :key="i" class="flex items-center gap-2 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800">
-                        <span class="truncate max-w-48" :title="f.name">{{ f.name }}</span>
-                        <button type="button" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="removeAttachment(i)" title="Remove Attachment">
-                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                        </button>
+                <!-- Attachments & Image Options -->
+                <div class="mt-2 flex justify-between items-start gap-2">
+                    <div class="flex flex-wrap gap-2">
+                        <div v-for="(f,i) in attachedFiles" :key="i" class="flex items-center gap-2 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800">
+                            <span class="truncate max-w-48" :title="f.name">{{ f.name }}</span>
+                            <button type="button" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="removeAttachment(i)" title="Remove Attachment">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Image Aspect Ratio Selector -->
+                    <div v-if="canGenerateImages" class="min-w-[120px]">
+                        <select name="aspect_ratio" v-model="$state.selectedAspectRatio" 
+                                class="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300 pl-2 pr-6 py-1 focus:ring-blue-500 focus:border-blue-500">
+                            <option v-for="(ratio, size) in imageAspectRatios" :key="size" :value="size">
+                                {{ size }} ({{ ratio }})
+                            </option>
+                        </select>
                     </div>
                 </div>
 
                 <div v-if="!model" class="mt-2 text-sm text-red-600 dark:text-red-400">
                     Please select a model
                 </div>
-            </div>
         </div>
     </div>    
     `,
@@ -152,9 +290,8 @@ export default {
         const ctx = inject('ctx')
         const config = ctx.state.config
         const ai = ctx.ai
-        const chatSettings = inject('chatSettings')
         const router = useRouter()
-        const chatPrompt = inject('chatPrompt')
+        const chatPrompt = ctx.chat
         const {
             messageText,
             attachedFiles,
@@ -163,17 +300,21 @@ export default {
             hasImage,
             hasAudio,
             hasFile,
-            editingMessageId
+            editingMessageId,
         } = chatPrompt
-        const threads = inject('threads')
+        const threads = ctx.threads
         const {
             currentThread,
-        } = threads
+        } = ctx.threads
 
         const fileInput = ref(null)
         const refMessage = ref(null)
         const showSettings = ref(false)
-        const { applySettings } = chatSettings
+        const { applySettings } = ctx.chat.settings
+
+        const canGenerateImages = computed(() => {
+            return props.model?.modalities?.output?.includes('image')
+        })
 
         // File attachments (+) handlers
         const triggerFilePicker = () => {
@@ -185,7 +326,7 @@ export default {
                 // Upload files immediately
                 const uploadedFiles = await Promise.all(files.map(async f => {
                     try {
-                        const response = await uploadFile(f)
+                        const response = await ctx.ai.uploadFile(f)
                         const metadata = {
                             url: response.url,
                             name: f.name,
@@ -229,24 +370,6 @@ export default {
         }
         const removeAttachment = (i) => {
             attachedFiles.value.splice(i, 1)
-        }
-
-        // Helper function to add files and set default message
-        const addFilesAndSetMessage = (files) => {
-            if (files.length === 0) return
-
-            attachedFiles.value.push(...files)
-
-            // Set default message text if empty
-            if (!messageText.value.trim()) {
-                if (hasImage()) {
-                    messageText.value = getTextContent(config.defaults.image)
-                } else if (hasAudio()) {
-                    messageText.value = getTextContent(config.defaults.audio)
-                } else {
-                    messageText.value = getTextContent(config.defaults.file)
-                }
-            }
         }
 
         // Handle paste events for clipboard images, audio, and files
@@ -328,9 +451,16 @@ export default {
             return textMessage?.content.find(c => c.type === 'text')?.text || ''
         }
 
+        function toModelInfo(model) {
+            if (!model) return undefined
+            const { id, name, provider, cost, modalities } = model
+            return ctx.utils.deepClone({ id, name, provider, cost, modalities })
+        }
+
         // Send message
         const sendMessage = async () => {
-            if (!messageText.value.trim() || isGenerating.value || !props.model) return
+            if (!messageText.value.trim() && !hasImage() && !hasAudio() && !hasFile()) return
+            if (isGenerating.value || !props.model) return
 
             // Clear any existing error message
             errorStatus.value = null
@@ -360,6 +490,7 @@ export default {
             // Create AbortController for this request
             const controller = new AbortController()
             chatPrompt.abortController.value = controller
+            const model = props.model.name
 
             try {
                 let threadId
@@ -368,7 +499,7 @@ export default {
                 if (!currentThread.value) {
                     const newThread = await threads.createThread({
                         title: 'New Chat',
-                        model: props.model.id,
+                        model,
                         info: toModelInfo(props.model),
                     })
                     threadId = newThread.id
@@ -378,7 +509,7 @@ export default {
                     threadId = currentThread.value.id
                     // Update the existing thread's model to match current selection
                     await threads.updateThread(threadId, {
-                        model: props.model.name,
+                        model,
                         info: toModelInfo(props.model),
                     })
                 }
@@ -435,7 +566,7 @@ export default {
 
                 // Construct API Request from History
                 const request = {
-                    model: props.model.name,
+                    model,
                     messages: [],
                     metadata: {}
                 }
@@ -450,6 +581,14 @@ export default {
 
                 // Apply user settings
                 applySettings(request)
+
+                if (canGenerateImages.value) {
+                    request.image_config = {
+                        aspect_ratio: imageAspectRatios[ctx.state.selectedAspectRatio] || '1:1'
+                    }
+                    request.modalities = ["image", "text"]
+                }
+
                 request.metadata.threadId = threadId
 
                 const ctxRequest = {
@@ -533,7 +672,7 @@ export default {
                             usage.output = output
                             usage.tokens = usage.completion_tokens
                             usage.price = usage.output
-                            usage.cost = tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
+                            usage.cost = ctx.fmt.tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
                         }
                         await threads.logRequest(threadId, props.model, request, response)
                     }
@@ -574,6 +713,10 @@ export default {
             //messageText.value += '\n'
         }
 
+        watch(() => ctx.state.selectedAspectRatio, newValue => {
+            ctx.setPrefs({ aspectRatio: newValue })
+        })
+
         return {
             isGenerating,
             attachedFiles,
@@ -592,6 +735,52 @@ export default {
             sendMessage,
             cancelRequest,
             addNewLine,
+            imageAspectRatios,
+            canGenerateImages,
         }
+    }
+}
+
+export default {
+    /**@param {AppContext} ctx */
+    install(ctx) {
+        const Home = ChatBody
+        ctx.components({
+            SettingsDialog,
+            ChatPrompt,
+            ChatBody,
+            Home,
+        })
+        ctx.setGlobals({
+            chat: useChatPrompt(ctx)
+        })
+
+        ctx.setLeftIcons({
+            chat: {
+                component: {
+                    template: `<svg @click="$ctx.togglePath('/')" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2.19c3.13 0 5.68 2.25 5.68 5s-2.55 5-5.68 5a5.7 5.7 0 0 1-1.89-.29l-.75-.26l-.56.56a14 14 0 0 1-2 1.55a.13.13 0 0 1-.07 0v-.06a6.58 6.58 0 0 0 .15-4.29a5.25 5.25 0 0 1-.55-2.16c0-2.77 2.55-5 5.68-5M8 .94c-3.83 0-6.93 2.81-6.93 6.27a6.4 6.4 0 0 0 .64 2.64a5.53 5.53 0 0 1-.18 3.48a1.32 1.32 0 0 0 2 1.5a15 15 0 0 0 2.16-1.71a6.8 6.8 0 0 0 2.31.36c3.83 0 6.93-2.81 6.93-6.27S11.83.94 8 .94"/><ellipse cx="5.2" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="10.8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/></svg>`,
+                },
+                isActive({ path }) {
+                    return path === '/' || path.startsWith('/c/')
+                }
+            }
+        })
+
+        const title = 'Chat'
+        ctx.setState({
+            title
+        })
+
+        const meta = { title }
+        ctx.routes.push(...[
+            { path: '/', component: Home, meta },
+            { path: '/c/:id', component: ChatBody, meta },
+        ])
+
+        const prefs = ctx.getPrefs()
+        if (prefs.model) {
+            ctx.state.selectedModel = prefs.model
+        }
+        ctx.state.selectedAspectRatio = prefs.aspectRatio || '1:1'
     }
 }

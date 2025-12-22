@@ -1,11 +1,7 @@
 import { onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { useFormatters } from '@servicestack/vue'
-import { useThreadStore } from './threadStore.mjs'
-import Brand from './Brand.mjs'
-import { statsTitle, formatCost } from './utils.mjs'
-
-const { humanifyNumber, humanifyMs } = useFormatters()
+import ThreadStore from './threadStore.mjs'
+import Recents from './Recents.mjs'
 
 // Thread Item Component
 const ThreadItem = {
@@ -21,10 +17,10 @@ const ThreadItem = {
                         {{ thread.title }}
                     </div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        <span>{{ formatRelativeTime(thread.updatedAt) }} • {{ thread.messages.length }} msgs</span>
-                        <span v-if="thread.stats?.inputTokens" :title="statsTitle(thread.stats)">
-                            &#8226; {{ humanifyNumber(thread.stats.inputTokens + thread.stats.outputTokens) }} toks
-                            {{ thread.stats.cost ? ' ' + formatCost(thread.stats.cost) : '' }}
+                        <span>{{ $fmt.relativeTime(thread.updatedAt) }} • {{ thread.messages.length }} msgs</span>
+                        <span v-if="thread.stats?.inputTokens" :title="$fmt.statsTitle(thread.stats)">
+                            &#8226; {{ $fmt.humanifyNumber(thread.stats.inputTokens + thread.stats.outputTokens) }} toks
+                            {{ thread.stats.cost ? ' ' + $fmt.cost(thread.stats.cost) : '' }}
                         </span>
                     </div>
                     <div v-if="thread.model" class="text-xs text-blue-600 dark:text-blue-400 truncate">
@@ -60,32 +56,12 @@ const ThreadItem = {
     emits: ['select', 'delete'],
 
     setup() {
-        const formatRelativeTime = (timestamp) => {
-            const now = new Date()
-            const date = new Date(timestamp)
-            const diffInSeconds = Math.floor((now - date) / 1000)
-
-            if (diffInSeconds < 60) return 'Just now'
-            if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
-            if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
-            if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
-
-            return date.toLocaleDateString()
-        }
-
         return {
-            formatRelativeTime,
-            humanifyNumber,
-            statsTitle,
-            formatCost,
         }
     }
 }
 
 const GroupedThreads = {
-    components: {
-        ThreadItem,
-    },
     template: `
     <!-- Today -->
     <div v-if="groupedThreads.today.length > 0" class="mb-4">
@@ -156,15 +132,10 @@ const GroupedThreads = {
     emits: ['select', 'delete'],
 }
 
-const Sidebar = {
-    components: {
-        Brand,
-        GroupedThreads,
-        ThreadItem,
-    },
+const ThreadsSidebar = {
     template: `
-        <div class="flex flex-col h-full bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
-            <Brand @home="goToInitialState" @new="createNewThread" @analytics="goToAnalytics" @toggle-sidebar="$emit('toggle-sidebar')" />
+        <div class="flex flex-col h-full">
+            <Brand @home="goToInitialState" @toggle-sidebar="$emit('toggle-sidebar')" />
             <!-- Thread List -->
             <div class="flex-1 overflow-y-auto">
                 <div v-if="isLoading" class="p-4 text-center text-gray-500 dark:text-gray-400">
@@ -180,8 +151,19 @@ const Sidebar = {
                     <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Start a new chat to begin</p>
                 </div>
 
-                <div v-else class="py-2">
-                    <GroupedThreads :currentThread="currentThread" :groupedThreads="threadStore.getGroupedThreads(18)"
+                <div v-else class="relative py-2">
+
+                    <div class="flex items-center space-x-2 absolute top-2 right-2">
+                        <button type="button"
+                            @click="createNewThread"
+                            class="text-gray-900 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
+                            title="New Chat"
+                        >
+                            <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></g></svg>
+                        </button>
+                    </div>
+
+                    <GroupedThreads :currentThread="currentThread" :groupedThreads="$threads.getGroupedThreads(18)"
                         @select="selectThread" @delete="deleteThread" />
                 </div>
             </div>
@@ -192,7 +174,6 @@ const Sidebar = {
         const ctx = inject('ctx')
         const ai = ctx.ai
         const router = useRouter()
-        const threadStore = useThreadStore()
         const {
             threads,
             currentThread,
@@ -202,7 +183,7 @@ const Sidebar = {
             createThread,
             deleteThread: deleteThreadFromStore,
             clearCurrentThread
-        } = threadStore
+        } = ctx.threads
 
         onMounted(async () => {
             await loadThreads()
@@ -241,7 +222,6 @@ const Sidebar = {
         }
 
         return {
-            threadStore,
             threads,
             currentThread,
             isLoading,
@@ -255,4 +235,26 @@ const Sidebar = {
     }
 }
 
-export default Sidebar
+export default {
+    install(ctx) {
+        ctx.components({
+            ThreadsSidebar,
+            ThreadItem,
+            GroupedThreads,
+            Recents,
+        })
+        ctx.routes.push(...[
+            { path: '/recents', component: Recents },
+        ])
+        ThreadStore.install(ctx)
+
+        ctx.setLayout({
+            left: 'ThreadsSidebar',
+        })
+    },
+
+    async load(ctx) {
+        const { initDB } = ctx.threads
+        await initDB()
+    }
+}

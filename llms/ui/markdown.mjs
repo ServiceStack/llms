@@ -198,3 +198,9 @@ function toggleThink(id) {
         icon.classList.remove('rotate-180')
     }
 }
+
+export function markdownFormatters() {
+    return {
+        markdown: renderMarkdown
+    }
+}

@@ -1,37 +1,4 @@
-import { $$, createElement, rightPart, pick } from "@servicestack/client"
-
-const cacheUrlInfo = {}
-
-export function getCacheInfo(url) {
-    return cacheUrlInfo[url]
-}
-export async function fetchCacheInfos(urls) {
-    const infos = {}
-    const fetchInfos = []
-    for (const url of urls) {
-        const info = getCacheInfo(url)
-        if (info) {
-            infos[url] = info
-        } else {
-            fetchInfos.push(fetch(url + "?info"))
-        }
-    }
-    const responses = await Promise.all(fetchInfos)
-    for (let i = 0; i < urls.length; i++) {
-        try {
-            const info = await responses[i].json()
-            setCacheInfo(urls[i], info)
-            infos[urls[i]] = info
-        } catch (e) {
-            console.error('Failed to fetch info for', urls[i], e)
-        }
-    }
-    return infos
-}
-
-export function setCacheInfo(url, info) {
-    cacheUrlInfo[url] = info
-}
+import { rightPart } from "@servicestack/client"
 
 export function toJsonArray(json) {
     try {
@@ -83,19 +50,6 @@ export function fileToDataUri(file) {
     })
 }
 
-export async function uploadFile(file) {
-    const formData = new FormData()
-    formData.append('file', file)
-    const response = await fetch('/upload', {
-        method: 'POST',
-        body: formData
-    })
-    if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`)
-    }
-    return response.json()
-}
-
 export function serializedClone(obj) {
     try {
         return JSON.parse(JSON.stringify(obj))
@@ -104,6 +58,7 @@ export function serializedClone(obj) {
         return obj
     }
 }
+
 
 export function deepClone(o) {
     if (o === null || typeof o !== 'object') return o
@@ -126,94 +81,82 @@ export function deepClone(o) {
     return serializedClone(o)
 }
 
-export function toModelInfo(model) {
-    if (!model) return undefined
-    const { id, name, provider, cost, modalities } = model
-    return deepClone({ id, name, provider, cost, modalities })
-}
+const currFmt2 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
+const currFmt6 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
 
-const numFmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
-export function tokenCost(price) {
+export function tokenCost(price, tokens = 1) {
     if (!price) return ''
-    var ret = numFmt.format(parseFloat(price))
+    var ret = currFmt2.format(parseFloat(price) * tokens)
     return ret.endsWith('.00') ? ret.slice(0, -3) : ret
+}
+export function tokenCostLong(price, tokens = 1) {
+    if (!price) return ''
+    const ret = currFmt6.format(parseFloat(price) * tokens)
+    return ret.endsWith('.000000') ? ret.slice(0, -7) : ret
 }
 export function formatCost(cost) {
     if (!cost) return ''
-    return numFmt.format(parseFloat(cost))
-}
-export function statsTitle(stats) {
-    let title = []
-    // Each stat on its own line
-    if (stats.cost) {
-        title.push(`Total Cost: ${formatCost(stats.cost)}`)
-    }
-    if (stats.inputTokens) {
-        title.push(`Input Tokens: ${stats.inputTokens}`)
-    }
-    if (stats.outputTokens) {
-        title.push(`Output Tokens: ${stats.outputTokens}`)
-    }
-    if (stats.requests) {
-        title.push(`Requests: ${stats.requests}`)
-    }
-    if (stats.duration) {
-        title.push(`Duration: ${stats.duration}ms`)
-    }
-    return title.join('\n')
+    return currFmt2.format(parseFloat(cost))
 }
 
-const svg = {
-    clipboard: `<svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none"><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3m2 4H10m0 0l3-3m-3 3l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></g></svg>`,
-    check: `<svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`,
-}
+// Accessible in views via $fmt
+export function utilsFormatters() {
+    function relativeTime(timestamp) {
+        const now = new Date()
+        const date = new Date(timestamp)
+        const diffInSeconds = Math.floor((now - date) / 1000)
 
-function copyBlock(btn) {
-    // console.log('copyBlock',btn)
-    const label = btn.previousElementSibling
-    const code = btn.parentElement.nextElementSibling
-    label.classList.remove('hidden')
-    label.innerHTML = 'copied'
-    btn.classList.add('border-gray-600', 'bg-gray-700')
-    btn.classList.remove('border-gray-700')
-    btn.innerHTML = svg.check
-    navigator.clipboard.writeText(code.innerText)
-    setTimeout(() => {
-        label.classList.add('hidden')
-        label.innerHTML = ''
-        btn.innerHTML = svg.clipboard
-        btn.classList.remove('border-gray-600', 'bg-gray-700')
-        btn.classList.add('border-gray-700')
-    }, 2000)
-}
+        if (diffInSeconds < 60) return 'Just now'
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
+        if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
 
-export function addCopyButtonToCodeBlocks(sel) {
-    globalThis.copyBlock ??= copyBlock
-    //console.log('addCopyButtonToCodeBlocks', sel, [...$$(sel)].length)
+        return date.toLocaleDateString()
+    }
+    function costLong(cost) {
+        if (!cost) return ''
+        const ret = currFmt6.format(parseFloat(cost))
+        return ret.endsWith('.000000') ? ret.slice(0, -7) : ret
+    }
+    function statsTitle(stats) {
+        let title = []
+        // Each stat on its own line
+        if (stats.cost) {
+            title.push(`Total Cost: ${costLong(stats.cost)}`)
+        }
+        if (stats.inputTokens) {
+            title.push(`Input Tokens: ${stats.inputTokens}`)
+        }
+        if (stats.outputTokens) {
+            title.push(`Output Tokens: ${stats.outputTokens}`)
+        }
+        if (stats.requests) {
+            title.push(`Requests: ${stats.requests}`)
+        }
+        if (stats.duration) {
+            title.push(`Duration: ${stats.duration}ms`)
+        }
+        return title.join('\n')
+    }
 
-    $$(sel).forEach(code => {
-        let pre = code.parentElement;
-        if (pre.classList.contains('group')) return
-        pre.classList.add('relative', 'group')
-
-        const div = createElement('div', { attrs: { className: 'opacity-0 group-hover:opacity-100 transition-opacity duration-100 flex absolute right-2 -mt-1 select-none' } })
-        const label = createElement('div', { attrs: { className: 'hidden font-sans p-1 px-2 mr-1 rounded-md border border-gray-600 bg-gray-700 text-gray-400' } })
-        const btn = createElement('button', {
-            attrs: {
-                type: 'button',
-                className: 'p-1 rounded-md border block text-gray-500 hover:text-gray-400 border-gray-700 hover:border-gray-600',
-                onclick: 'copyBlock(this)'
-            }
+    function time(timestamp) {
+        return new Date(timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
         })
-        btn.innerHTML = svg.clipboard
-        div.appendChild(label)
-        div.appendChild(btn)
-        pre.insertBefore(div, code)
-    })
-}
+    }
 
-export function addCopyButtons() {
-    addCopyButtonToCodeBlocks('.prose pre>code')
+
+    return {
+        currFmt: currFmt2,
+        tokenCost,
+        tokenCostLong,
+        cost: formatCost,
+        costLong,
+        statsTitle,
+        relativeTime,
+        time,
+    }
 }
 
 /**
@@ -227,3 +170,19 @@ export const nextId = (() => {
         return last
     }
 })();
+
+export function utilsFunctions() {
+    return {
+        nextId,
+        deepClone,
+        toJsonArray,
+        toJsonObject,
+        storageArray,
+        storageObject,
+        fileToBase64,
+        fileToDataUri,
+        serializedClone,
+        deepClone,
+    }
+}
+

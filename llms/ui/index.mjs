@@ -1,176 +1,49 @@
 
-import { createApp, reactive, defineAsyncComponent } from 'vue'
+import { createApp } from 'vue'
 import { createWebHistory, createRouter } from "vue-router"
-import { EventBus, humanize } from "@servicestack/client"
-import ServiceStackVue from "@servicestack/vue"
-import App from '/ui/App.mjs'
-import ai from '/ui/ai.mjs'
-import threadStore, { useThreadStore } from './threadStore.mjs'
-import SettingsDialog from '/ui/SettingsDialog.mjs'
-import ModelSelectorInstaller from '/ui/model-selector.mjs'
-import { storageObject } from './utils.mjs'
-
-const { config, models } = await ai.init()
-const MainComponent = defineAsyncComponent(() => import(ai.base + '/ui/Main.mjs'))
-const RecentsComponent = defineAsyncComponent(() => import(ai.base + '/ui/Recents.mjs'))
-const AnalyticsComponent = defineAsyncComponent(() => import(ai.base + '/ui/Analytics.mjs'))
+import ServiceStackVue, { useFormatters } from "@servicestack/vue"
+import App from './App.mjs'
+import ai from './ai.mjs'
+import LayoutModule from './modules/layout.mjs'
+import ChatModule from './modules/chat/index.mjs'
+import ThreadsModule from './modules/threads/index.mjs'
+import ModelSelectorModule from './modules/model-selector.mjs'
+import AnalyticsModule from './modules/analytics.mjs'
+import { utilsFunctions, utilsFormatters } from './utils.mjs'
+import { markdownFormatters } from './markdown.mjs'
+import { AppContext } from './ctx.mjs'
 
 const Components = {
-    SettingsDialog,
 }
 
-const BuiltInModules = [
-    ModelSelectorInstaller,
-    threadStore,
-]
-
-const routes = [
-    { path: '/', component: MainComponent },
-    { path: '/c/:id', component: MainComponent },
-    { path: '/recents', component: RecentsComponent },
-    { path: '/analytics', component: AnalyticsComponent },
-    { path: '/:fallback(.*)*', component: MainComponent }
-]
-routes.forEach(r => r.path = ai.base + r.path)
-const router = createRouter({
-    history: createWebHistory(),
-    routes,
-})
-
-
-class AppExtension {
-    constructor(ctx, ext) {
-        this.ctx = ctx
-        Object.assign(this, ext)
-        this.baseUrl = `${ctx.ai.base}/ext/${this.id}`
-        this.storageKey = `llms.${this.id}`
-        if (!this.name) {
-            this.name = humanize(this.id)
-        }
-    }
-    storageObject(o) {
-        return storageObject(this.storageKey, o)
-    }
+const BuiltInModules = {
+    LayoutModule,
+    ChatModule,
+    ThreadsModule,
+    ModelSelectorModule,
+    AnalyticsModule,
 }
 
-class AppContext {
-    constructor({ app, config, models, extensions, routes, ai, router, threadStore, modules }) {
-        this.app = app
-        this.state = reactive({
-            config,
-            models,
-            extensions,
-        })
-        this.routes = routes
-        this.ai = ai
-        this.router = router
-        this.threadStore = threadStore
-        this.modules = modules
-        this.events = new EventBus()
-        this.modalComponents = {}
-        this.extensions = []
-        this.layout = reactive(storageObject(`llms.layout`))
-        this.chatRequestFilters = []
-        this.chatResponseFilters = []
-        this.chatErrorFilters = []
-        this.createThreadFilters = []
-        this.updateThreadFilters = []
-
-        app.config.globalProperties.$ctx = this
-        app.config.globalProperties.$state = this.state
-        app.config.globalProperties.$layout = this.layout
-        document.addEventListener('keydown', (e) => this.handleKeydown(e))
-    }
-    component(name, component) {
-        if (!name) return name
-        if (component) {
-            this.app.component(name, component)
-        }
-        return component || this.app.component(name)
-    }
-    components(components) {
-        Object.keys(components).forEach(name => {
-            this.app.component(name, components[name])
-        })
-    }
-    extension(extension) {
-        const ext = new AppExtension(this, extension)
-        this.extensions.push(ext)
-        return ext
-    }
-    modals(modals) {
-        Object.keys(modals).forEach(name => {
-            this.modalComponents[name] = modals[name]
-            this.component(name, modals[name])
-        })
-    }
-    openModal(name) {
-        const component = this.modalComponents[name]
-        if (!component) {
-            console.error(`Modal ${name} not found`)
-            return
-        }
-        console.debug('openModal', name)
-        this.router.push({ query: { open: name } })
-        this.events.publish('modal:open', name)
-        return component
-    }
-    closeModal(name) {
-        console.debug('closeModal', name)
-        this.router.push({ query: { open: undefined } })
-        this.events.publish('modal:close', name)
-    }
-    handleKeydown(e) {
-        if (e.key === 'Escape') {
-            const modal = this.router.currentRoute.value?.query?.open
-            if (modal) {
-                this.closeModal(modal)
-            }
-        }
-    }
-    setState(o) {
-        Object.assign(this.state, o)
-        //this.events.publish('update:state', this.state)
-    }
-    setLayout(o) {
-        Object.assign(this.layout, o)
-        storageObject(`llms.layout`, this.layout)
-    }
-    getPrefs() {
-        return storageObject(this.ai.prefsKey)
-    }
-    setPrefs(o) {
-        storageObject(this.ai.prefsKey, o)
-    }
-    toggleLayout(o) {
-        Object.keys(o).forEach(key => {
-            this.layout[key] = this.layout[key] == o[key] ? undefined : o[key]
-        })
-        storageObject(`llms.layout`, this.layout)
-    }
-    getCurrentThread() {
-        return this.threadStore.currentThread.value
-    }
-}
 
 export async function createContext() {
-    const app = createApp(App, { config, models })
+    const app = createApp(App)
 
-    app.use(router)
     app.use(ServiceStackVue)
     Object.keys(Components).forEach(name => {
         app.component(name, Components[name])
     })
 
+    const fmt = Object.assign({}, useFormatters(), utilsFormatters(), markdownFormatters())
+    const utils = Object.assign({}, utilsFunctions())
+    const routes = []
 
-    window.ai = app.config.globalProperties.$ai = ai
-
-    // Load Extensions
-    const exts = await (await fetch("/ext")).json()
+    const ctx = new AppContext({ app, routes, ai, fmt, utils })
+    app.provide('ctx', ctx)
+    await ctx.init()
 
     // Load modules in parallel
-    const validExtensions = exts.filter(x => x.path);
-    const modules = await Promise.all(validExtensions.map(async extension => {
+    const validExtensions = ctx.state.extensions.filter(x => x.path);
+    ctx.modules = await Promise.all(validExtensions.map(async extension => {
         try {
             const module = await import(extension.path)
             return { extension, module }
@@ -180,25 +53,18 @@ export async function createContext() {
         }
     }))
 
-    const threadStore = useThreadStore()
-
-    const ctx = new AppContext({
-        app,
-        config,
-        models,
-        routes,
-        ai,
-        router,
-        threadStore,
-        exts,
-        modules,
+    // Install built-in modules sequentially
+    Object.entries(BuiltInModules).forEach(([name, module]) => {
+        try {
+            module.install(ctx)
+            console.log(`Installed built-in: ${name}`)
+        } catch (e) {
+            console.error(`Failed to install built-in ${name}:`, e)
+        }
     })
-    app.provide('ctx', ctx)
 
-    BuiltInModules.forEach(ext => ext.install(ctx))
-
-    // Install sequentially
-    for (const result of modules) {
+    // Install extensions sequentially
+    for (const result of ctx.modules) {
         if (result && result.module.default && result.module.default.install) {
             try {
                 result.module.default.install(ctx)
@@ -208,6 +74,44 @@ export async function createContext() {
             }
         }
     }
+
+    // Register all components with Vue
+    Object.entries(ctx._components).forEach(([name, component]) => {
+        app.component(name, component)
+    })
+
+    // Add fallback route and create router
+    routes.push({ path: '/:fallback(.*)*', component: ctx.component('Home') })
+    routes.forEach(r => r.path = ai.base + r.path)
+    ctx.router = createRouter({
+        history: createWebHistory(),
+        routes,
+    })
+    app.use(ctx.router)
+
+    ctx.router.beforeEach((to, from) => {
+        const title = to.meta.title || 'Chat'
+        console.log('beforeEach', to.path, title)
+        ctx.setLayout({ path: to.path })
+        ctx.setState({ title })
+        document.title = title
+        return true
+    })
+
+    if (ctx.layout.path && location.pathname === '/' && !location.search) {
+        console.log('redirecting to saved path: ', ctx.layout.path)
+        ctx.router.push({ path: ctx.layout.path })
+    }
+
+    // Load all extensions in parallel
+    await Promise.all(ctx.modules.filter(x => x.module.default && x.module.default.load).map(async result => {
+        try {
+            await result.module.default.load(ctx)
+            console.log(`Loaded extension: ${result.extension.id}`)
+        } catch (e) {
+            console.error(`Failed to load extension ${result.extension.id}:`, e)
+        }
+    }))
 
     return ctx
 }

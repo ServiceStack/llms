@@ -1,0 +1,356 @@
+{
+    "openrouter": {
+        "models": {
+            "google/gemini-2.5-flash-image": {
+                "name": "Gemini 2.5 Flash Image (Nano Banana)",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0.30,
+                    "output": 2.50
+                }
+            },
+            "google/gemini-2.5-flash-image-preview": {
+                "name": "Gemini 2.5 Flash Image Preview (Nano Banana)",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0.30,
+                    "output": 2.50
+                }
+            },
+            "google/gemini-3-pro-image-preview": {
+                "name": "Google: Nano Banana Pro Preview (Gemini 3 Pro)",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 2.0,
+                    "output": 12.0
+                }
+            },
+            "sourceful/riverflow-v2-fast-preview": {
+                "name": "Sourceful: Riverflow V2 Fast Preview",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 7.19
+                }
+            },
+            "sourceful/riverflow-v2-standard-preview": {
+                "name": "Sourceful: Riverflow V2 Standard Preview",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 8.38
+                }
+            },
+            "sourceful/riverflow-v2-max-preview": {
+                "name": "Sourceful: Riverflow V2 Max Preview",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 17.96
+                }
+            },
+            "openai/gpt-5-image-mini": {
+                "name": "OpenAI: GPT-5 Image Mini",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 2.50,
+                    "output": 2
+                }
+            },
+            "openai/gpt-5-image": {
+                "name": "OpenAI: GPT-5 Image",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 10.0,
+                    "output": 10.0
+                }
+            },
+            "black-forest-labs/flux.2-pro": {
+                "name": "Black Forest Labs: FLUX.2 Pro",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 3.66,
+                    "output": 3.66
+                }
+            },
+            "black-forest-labs/flux.2-max": {
+                "name": "Black Forest Labs: FLUX.2 Max",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 7.32,
+                    "output": 7.32
+                }
+            },
+            "black-forest-labs/flux.2-flex": {
+                "name": "Black Forest Labs: FLUX.2 Flex",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 14.64,
+                    "output": 14.64
+                }
+            }
+        }
+    },
+    "openai": {
+        "models": {
+            "chatgpt-image-latest": {
+                "name": "ChatGPT Image Latest",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 5.0,
+                    "output": 32.0
+                }
+            },
+            "gpt-image-1.5": {
+                "name": "GPT Image 1.5",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 5.0,
+                    "output": 32.0
+                }
+            },
+            "gpt-image-1": {
+                "name": "GPT Image 1",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 5.0,
+                    "output": 40.0
+                }
+            },
+            "gpt-image-1-mini": {
+                "name": "GPT Image 1 Mini",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 5.0,
+                    "output": 8.0
+                }
+            }
+        }
+    },
+    "chutes": {
+        "models": {
+            "chutes-z-image-turbo": {
+                "name": "Z Image Turbo",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "qwen-image": {
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "chutes-qwen-image-edit-2509": {
+                "name": "Qwen Image Edit 2509",
+                "modalities": {
+                    "input": [
+                        "text",
+                        "image"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "chutes-hidream": {
+                "name": "Hidream",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "chutes-hunyuan-image-3": {
+                "name": "Hunyuan Image 3",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "FLUX.1-schnell": {
+                "name": "FLUX.1 Schnell",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "chroma": {
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "JuggernautXL-Ragnarok": {
+                "name": "JuggernautXL Ragnarok",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "Animij": {
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "Illustrij": {
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            },
+            "iLustMix": {
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                }
+            }
+        }
+    }
+}

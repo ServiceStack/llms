@@ -1,0 +1,267 @@
+import { computed, inject, ref, onMounted, onUnmounted } from "vue"
+import { toJsonObject } from "../utils.mjs"
+
+const ToggleSidebarButton = {
+    template: `
+    <button type="button"
+        @click="$emit('toggle-sidebar')"
+        class="group relative text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
+        title="Collapse sidebar"
+    >
+        <div class="relative size-5">
+            <!-- Default sidebar icon -->
+            <svg class="absolute inset-0 group-hover:hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="9" y1="3" x2="9" y2="21"></line>
+            </svg>
+            <!-- Hover state: |← icon -->
+            <svg class="absolute inset-0 hidden group-hover:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m10.071 4.929l1.414 1.414L6.828 11H16v2H6.828l4.657 4.657l-1.414 1.414L3 12zM18.001 19V5h2v14z"/></svg>
+        </div>
+    </button>
+    `,
+    emits: ['toggle-sidebar'],
+}
+
+const Brand = {
+    template: `
+    <div class="flex-shrink-0 p-2 border-b border-gray-200 dark:border-gray-700 select-none">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <button type="button"
+                    @click="$router.push('/')"
+                    class="text-lg font-semibold text-gray-900 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
+                    title="Go back home"
+                >
+                    {{ $state.title }}
+                </button>
+            </div>
+        </div>
+    </div>
+    `,
+    emits: ['home', 'toggle-sidebar'],
+}
+
+const Welcome = {
+    template: `
+        <div class="mb-2 flex justify-center">
+            <svg class="size-20 text-gray-700 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2.19c3.13 0 5.68 2.25 5.68 5s-2.55 5-5.68 5a5.7 5.7 0 0 1-1.89-.29l-.75-.26l-.56.56a14 14 0 0 1-2 1.55a.13.13 0 0 1-.07 0v-.06a6.58 6.58 0 0 0 .15-4.29a5.25 5.25 0 0 1-.55-2.16c0-2.77 2.55-5 5.68-5M8 .94c-3.83 0-6.93 2.81-6.93 6.27a6.4 6.4 0 0 0 .64 2.64a5.53 5.53 0 0 1-.18 3.48a1.32 1.32 0 0 0 2 1.5a15 15 0 0 0 2.16-1.71a6.8 6.8 0 0 0 2.31.36c3.83 0 6.93-2.81 6.93-6.27S11.83.94 8 .94"/><ellipse cx="5.2" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="10.8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/></svg>
+        </div>
+        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">{{ $ai.welcome }}</h2>
+    `
+}
+
+const Avatar = {
+    template: `
+        <div v-if="$ai.auth?.profileUrl" class="relative" ref="avatarContainer">
+            <img
+                @click.stop="toggleMenu"
+                :src="$ai.auth.profileUrl"
+                :title="authTitle"
+                class="size-8 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-300"
+            />
+            <div
+                v-if="showMenu"
+                @click.stop
+                class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
+            >
+                <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                    <div class="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{{ $ai.auth.displayName || $ai.auth.userName }}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{{ $ai.auth.email }}</div>
+                </div>
+                <button type="button"
+                    @click="handleLogout"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center whitespace-nowrap"
+                >
+                    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    Sign Out
+                </button>
+            </div>
+        </div>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const ai = ctx.ai
+        const showMenu = ref(false)
+        const avatarContainer = ref(null)
+
+        const authTitle = computed(() => {
+            if (!ai.auth) return ''
+            const { userId, userName, displayName, bearerToken, roles } = ai.auth
+            const name = userName || displayName
+            const prefix = roles && roles.includes('Admin') ? 'Admin' : 'Name'
+            const sb = [
+                name ? `${prefix}: ${name}` : '',
+                `API Key: ${bearerToken}`,
+                `${userId}`,
+            ]
+            return sb.filter(x => x).join('\n')
+        })
+
+        function toggleMenu() {
+            showMenu.value = !showMenu.value
+        }
+
+        async function handleLogout() {
+            showMenu.value = false
+            await ai.signOut()
+            // Reload the page to show sign-in screen
+            window.location.reload()
+        }
+
+        // Close menu when clicking outside
+        const handleClickOutside = (event) => {
+            if (showMenu.value && avatarContainer.value && !avatarContainer.value.contains(event.target)) {
+                showMenu.value = false
+            }
+        }
+
+        onMounted(() => {
+            document.addEventListener('click', handleClickOutside)
+        })
+
+        onUnmounted(() => {
+            document.removeEventListener('click', handleClickOutside)
+        })
+
+        return {
+            authTitle,
+            handleLogout,
+            showMenu,
+            toggleMenu,
+            avatarContainer,
+        }
+    }
+}
+
+const OAuthSignIn = {
+    template: `
+    <div class="min-h-full -mt-36 flex flex-col justify-center sm:px-6 lg:px-8">
+        <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
+            <Welcome />
+        </div>
+        <div class="sm:mx-auto sm:w-full sm:max-w-md">
+            <div v-if="errorMessage" class="mb-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg px-4 py-3">
+                <div class="flex items-start space-x-2">
+                    <div class="flex-1">
+                        <div class="text-base font-medium">{{ errorMessage }}</div>
+                    </div>
+                    <button type="button"
+                        @click="errorMessage = null"
+                        class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-red-100 flex-shrink-0"
+                    >
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="py-8 px-4 sm:px-10">
+                <div class="space-y-4">
+                    <button
+                        type="button"
+                        @click="signInWithGitHub"
+                        class="w-full inline-flex items-center justify-center px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-base font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                    >
+                        <svg class="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd" />
+                        </svg>
+                        Sign in with GitHub
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>     
+    `,
+    emits: ['done'],
+    setup(props, { emit }) {
+        const errorMessage = ref(null)
+
+        function signInWithGitHub() {
+            // Redirect to GitHub OAuth endpoint
+            window.location.href = '/auth/github'
+        }
+
+        return {
+            signInWithGitHub,
+            errorMessage,
+        }
+    }
+}
+
+const SignIn = {
+    template: `
+    <div class="min-h-full -mt-12 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div class="sm:mx-auto sm:w-full sm:max-w-md">
+            <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-50">
+                Sign In
+            </h2>
+        </div>
+        <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+            <ErrorSummary v-if="errorSummary" class="mb-3" :status="errorSummary" />
+            <div class="bg-white dark:bg-black py-8 px-4 shadow sm:rounded-lg sm:px-10">
+                <form @submit.prevent="submit">
+                    <div class="flex flex-1 flex-col justify-between">
+                        <div class="space-y-6">
+                            <fieldset class="grid grid-cols-12 gap-6">
+                                <div class="w-full col-span-12">
+                                    <TextInput id="apiKey" name="apiKey" label="API Key" v-model="apiKey" />
+                                </div>
+                            </fieldset>
+                        </div>
+                    </div>
+                    <div class="mt-8">
+                        <PrimaryButton class="w-full">Sign In</PrimaryButton>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>     
+    `,
+    emits: ['done'],
+    setup(props, { emit }) {
+        const ctx = inject('ctx')
+        const ai = ctx.ai
+        const apiKey = ref('')
+        const errorSummary = ref()
+        async function submit() {
+            const r = await ai.get('/auth', {
+                headers: {
+                    'Authorization': `Bearer ${apiKey.value}`
+                },
+            })
+            const txt = await r.text()
+            const json = toJsonObject(txt)
+            // console.log('json', json)
+            if (r.ok) {
+                json.apiKey = apiKey.value
+                emit('done', json)
+            } else {
+                errorSummary.value = json.responseStatus || {
+                    errorCode: "Unauthorized",
+                    message: 'Invalid API Key'
+                }
+            }
+        }
+
+        return {
+            apiKey,
+            submit,
+            errorSummary,
+        }
+    }
+}
+
+export default {
+    install(ctx) {
+        ctx.components({
+            ToggleSidebarButton,
+            Brand,
+            Welcome,
+            Avatar,
+            OAuthSignIn,
+            SignIn,
+        })
+    }
+}
