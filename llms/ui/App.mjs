@@ -49,7 +49,7 @@ const LeftPanel = {
 
 const TopBar = {
     template: `
-        <div class="flex space-x-2">
+        <div class="flex space-x-1">
             <div v-for="(icon, id) in $ctx.top" :key="id" class="relative flex items-center justify-center">
                 <component :is="icon.component" 
                     class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 block"
@@ -60,7 +60,7 @@ const TopBar = {
                 <div v-if="tooltip === icon.id && !icon.isActive({ ...$layout })" 
                     class="absolute top-full mt-2 px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-800 rounded shadow-md z-50 whitespace-nowrap pointer-events-none"
                     :class="last2.includes(id) ? 'right-0' : 'left-1/2 -translate-x-1/2'">
-                    {{icon.name}}
+                    {{icon.title ?? icon.name}}
                 </div>    
             </div>
         </div>
@@ -178,7 +178,7 @@ export default {
                         <TopBar />
                     </div>
                     <TopPanel class="shrink-0" />
-                    <div class="flex-1 overflow-hidden min-h-0 flex flex-col">
+                    <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
                         <RouterView class="h-full" />
                     </div>
                 </div>

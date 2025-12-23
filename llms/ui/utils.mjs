@@ -81,6 +81,10 @@ export function deepClone(o) {
     return serializedClone(o)
 }
 
+export function pluralize(word, count) {
+    return count === 1 ? word : word + 's'
+}
+
 const currFmt2 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 const currFmt6 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
 
@@ -156,6 +160,7 @@ export function utilsFormatters() {
         statsTitle,
         relativeTime,
         time,
+        pluralize,
     }
 }
 
@@ -183,6 +188,7 @@ export function utilsFunctions() {
         fileToDataUri,
         serializedClone,
         deepClone,
+        pluralize,
     }
 }
 

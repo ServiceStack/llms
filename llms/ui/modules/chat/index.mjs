@@ -666,6 +666,16 @@ const ChatPrompt = {
                 }
 
                 if (!errorStatus.value) {
+                    // Add tool history messages if any
+                    if (response.tool_history && Array.isArray(response.tool_history)) {
+                        for (const msg of response.tool_history) {
+                            if (msg.role === 'assistant') {
+                                msg.model = props.model.name // tag with model
+                            }
+                            await threads.addMessageToThread(threadId, msg)
+                        }
+                    }
+
                     // Add assistant response (save entire message including reasoning)
                     const assistantMessage = response.choices?.[0]?.message
 

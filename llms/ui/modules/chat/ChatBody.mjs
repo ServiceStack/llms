@@ -80,6 +80,7 @@ export default {
                         <div
                             v-for="message in currentThread.messages"
                             :key="message.id"
+                            v-show="!(message.role === 'tool' && isToolLinked(message))"
                             class="flex items-start space-x-3 group"
                             :class="message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''"
                         >
@@ -88,9 +89,15 @@ export default {
                                 <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
                                      :class="message.role === 'user'
                                         ? 'bg-blue-100 dark:bg-blue-900 text-gray-900 dark:text-gray-100 border border-blue-200 dark:border-blue-700'
-                                        : 'bg-gray-600 dark:bg-gray-500 text-white'"
+                                        : message.role === 'tool'
+                                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                                            : 'bg-gray-600 dark:bg-gray-500 text-white'"
                                 >
-                                    {{ message.role === 'user' ? 'U' : 'AI' }}
+                                    <span v-if="message.role === 'user'">U</span>
+                                    <svg v-else-if="message.role === 'tool'" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                                    </svg>
+                                    <span v-else>AI</span>
                                 </div>
 
                                 <!-- Delete button (shown on hover) -->
@@ -132,14 +139,83 @@ export default {
                                 ></div>
 
                                 <!-- Collapsible reasoning section -->
-                                <div v-if="message.role === 'assistant' && message.reasoning" class="mt-2">
+                                <div v-if="message.role === 'assistant' && message.reasoning" class="mt-2 mb-2">
                                     <button type="button" @click="toggleReasoning(message.id)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
                                         <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.id) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
                                         <span>{{ isReasoningExpanded(message.id) ? 'Hide reasoning' : 'Show reasoning' }}</span>
                                     </button>
-                                    <div v-if="isReasoningExpanded(message.id)" class="mt-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
+                                    <div v-if="isReasoningExpanded(message.id)" class="reasoning mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
                                         <div v-if="typeof message.reasoning === 'string'" v-html="$fmt.markdown(message.reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
-                                        <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto text-gray-900 dark:text-gray-100">{{ formatReasoning(message.reasoning) }}</pre>
+                                        <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto">{{ formatReasoning(message.reasoning) }}</pre>
+                                    </div>
+                                </div>
+
+                                <!-- Tool Calls & Outputs -->
+                                <div v-if="message.tool_calls && message.tool_calls.length > 0" class="mb-3 space-y-4">
+                                    <div v-for="(tool, i) in message.tool_calls" :key="i" class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+                                        <!-- Tool Call Header -->
+                                        <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800 space-x-4">
+                                            <div class="flex items-center gap-2">
+                                                <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                                                <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{{ tool.function.name }}</span>
+                                            </div>
+                                            <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Tool Call</span>
+                                        </div>
+                                        
+                                        <!-- Arguments -->
+                                        <div v-if="tool.function.arguments && tool.function.arguments != '{}'" class="not-prose px-3 py-2">
+                                            <HtmlFormat v-if="hasJsonStructure(tool.function.arguments)" :value="tryParseJson(tool.function.arguments)" :classes="customHtmlClasses" />
+                                            <pre v-else class="tool-arguments">{{ tool.function.arguments }}</pre>
+                                        </div>
+
+                                        <!-- Tool Output (Nested) -->
+                                        <div v-if="getToolOutput(tool.id)" class="border-t border-gray-200 dark:border-gray-700">
+                                            <div class="px-3 py-1.5 flex justify-between items-center border-b border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800">
+                                                <div class="flex items-center gap-2 ">
+                                                    <svg class="size-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                                    <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Output</span>
+                                                </div>    
+                                                <div v-if="hasJsonStructure(getToolOutput(tool.id).content)" class="flex items-center gap-2 text-[10px] uppercase tracking-wider font-medium select-none">
+                                                    <span @click="setPrefs({ toolFormat: 'text' })" 
+                                                          class="cursor-pointer transition-colors"
+                                                          :class="prefs.toolFormat !== 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
+                                                        text
+                                                    </span>
+                                                    <span class="text-gray-300 dark:text-gray-700">|</span>
+                                                    <span @click="setPrefs({ toolFormat: 'preview' })" 
+                                                          class="cursor-pointer transition-colors"
+                                                          :class="prefs.toolFormat == 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
+                                                        preview
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="not-prose px-3 py-2">
+                                                <pre v-if="prefs.toolFormat !== 'preview' || !hasJsonStructure(getToolOutput(tool.id).content)" class="tool-output">{{ getToolOutput(tool.id).content }}</pre>
+                                                <div v-else class="text-xs">
+                                                    <HtmlFormat v-if="tryParseJson(getToolOutput(tool.id).content)" :value="tryParseJson(getToolOutput(tool.id).content)" :classes="customHtmlClasses" />
+                                                    <div v-else class="text-gray-500 italic p-2">Invalid JSON content</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tool Output (Orphaned) -->
+                                <div v-if="message.role === 'tool' && !isToolLinked(message)" class="text-sm">
+                                    <div class="flex items-center gap-2 mb-1 opacity-70">
+                                        <div class="flex items-center text-xs font-mono font-medium text-gray-500 uppercase tracking-wider">
+                                            <svg class="size-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                            Tool Output
+                                        </div>
+                                        <div v-if="message.name" class="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-1.5 rounded text-gray-700 dark:text-gray-300">
+                                            {{ message.name }}
+                                        </div>
+                                        <div v-if="message.tool_call_id" class="text-[10px] font-mono text-gray-400">
+                                            {{ message.tool_call_id.slice(0,8) }}
+                                        </div>
+                                    </div>
+                                    <div class="not-prose bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-800 p-2 overflow-x-auto">
+                                        <pre class="tool-output">{{ message.content }}</pre>
                                     </div>
                                 </div>
 
@@ -153,7 +229,7 @@ export default {
                                 </div>
 
                                 <!-- User Message with separate attachments -->
-                                <div v-if="message.role !== 'assistant'">
+                                <div v-else-if="message.role !== 'assistant' && message.role !== 'tool'">
                                     <div v-html="$fmt.markdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
                                     
                                     <!-- Attachments Grid -->
@@ -311,9 +387,9 @@ export default {
         const router = useRouter()
         const route = useRoute()
 
-        const prefs = ctx.getPrefs()
+        const prefs = ref(ctx.getPrefs())
 
-        const selectedModel = ref(prefs.model || config.defaults.text.model || '')
+        const selectedModel = ref(prefs.value.model || config.defaults.text.model || '')
         const selectedModelObj = computed(() => {
             if (!selectedModel.value || !models) return null
             return models.find(m => m.name === selectedModel.value) || models.find(m => m.id === selectedModel.value)
@@ -748,7 +824,48 @@ export default {
         })
         onUnmounted(() => sub?.unsubscribe())
 
+        const getToolOutput = (toolCallId) => {
+            return currentThread.value?.messages?.find(m => m.role === 'tool' && m.tool_call_id === toolCallId)
+        }
+
+        const isToolLinked = (message) => {
+            if (message.role !== 'tool') return false
+            return currentThread.value?.messages?.some(m => m.role === 'assistant' && m.tool_calls?.some(tc => tc.id === message.tool_call_id))
+        }
+
+        const tryParseJson = (str) => {
+            try {
+                return JSON.parse(str)
+            } catch (e) {
+                return null
+            }
+        }
+        const hasJsonStructure = (str) => {
+            return tryParseJson(str) != null
+        }
+        /**
+         * @param {object|array} type 
+         * @param {'div'|'table'|'thead'|'th'|'tr'|'td'} tag 
+         * @param {number} depth 
+         * @param {string} cls 
+         * @param {number} index 
+        */
+        const customHtmlClasses = (type, tag, depth, cls, index) => {
+            cls = cls.replace('shadow ring-1 ring-black/5 md:rounded-lg', '')
+            if (tag == 'th') {
+                cls += ' lowercase'
+            }
+            return cls
+        }
+
+        function setPrefs(o) {
+            Object.assign(prefs.value, o)
+            ctx.setPrefs(prefs.value)
+        }
+
         return {
+            prefs,
+            setPrefs,
             config,
             models,
             threads,
@@ -781,6 +898,11 @@ export default {
             openLightbox,
             closeLightbox,
             resolveUrl,
+            getToolOutput,
+            isToolLinked,
+            tryParseJson,
+            hasJsonStructure,
+            customHtmlClasses,
         }
     }
 }

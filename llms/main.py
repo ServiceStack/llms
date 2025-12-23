@@ -11,6 +11,7 @@ import asyncio
 import base64
 import hashlib
 import importlib.util
+import inspect
 import json
 import mimetypes
 import os
@@ -26,6 +27,7 @@ from datetime import datetime
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
+from typing import get_type_hints
 from urllib.parse import parse_qs, urlencode
 
 import aiohttp
@@ -320,6 +322,35 @@ def convert_image_if_needed(image_bytes, mimetype="image/png"):
         _log(f"Error converting image: {e}")
         # Return original if conversion fails
         return image_bytes, mimetype
+
+
+def function_to_tool_definition(func):
+    type_hints = get_type_hints(func)
+    signature = inspect.signature(func)
+    parameters = {"type": "object", "properties": {}, "required": []}
+
+    for name, param in signature.parameters.items():
+        param_type = type_hints.get(name, str)
+        param_type_name = "string"
+        if param_type == int:
+            param_type_name = "integer"
+        elif param_type == float:
+            param_type_name = "number"
+        elif param_type == bool:
+            param_type_name = "boolean"
+
+        parameters["properties"][name] = {"type": param_type_name}
+        if param.default == inspect.Parameter.empty:
+            parameters["required"].append(name)
+
+    return {
+        "type": "function",
+        "function": {
+            "name": func.__name__,
+            "description": func.__doc__ or "",
+            "parameters": parameters,
+        },
+    }
 
 
 async def process_chat(chat, provider_id=None):
@@ -1034,8 +1065,73 @@ async def chat_completion(chat):
         provider = g_handlers[name]
         _log(f"provider: {name} {type(provider).__name__}")
         try:
-            response = await provider.chat(chat.copy())
-            return response
+            # Inject global tools if present
+            current_chat = chat.copy()
+            # Inject global tools if present
+            current_chat = chat.copy()
+            if g_app.tool_definitions:
+                include_all_tools = False
+                only_tools = []
+                if "metadata" in chat:
+                    only_tools = chat["metadata"].get("only_tools", "").split(",")
+                    include_all_tools = only_tools == "all"
+
+                if include_all_tools or len(only_tools) > 0:
+                    if "tools" not in current_chat:
+                        current_chat["tools"] = []
+
+                    existing_tools = {t["function"]["name"] for t in current_chat["tools"]}
+                    for tool_def in g_app.tool_definitions:
+                        name = tool_def["function"]["name"]
+                        if name not in existing_tools and (include_all_tools or name in only_tools):
+                            current_chat["tools"].append(tool_def)
+
+            # Tool execution loop
+            max_iterations = 5
+            tool_history = []
+            for _ in range(max_iterations):
+                response = await provider.chat(current_chat)
+
+                # Check for tool_calls in the response
+                choice = response.get("choices", [])[0] if response.get("choices") else {}
+                message = choice.get("message", {})
+                tool_calls = message.get("tool_calls")
+
+                if tool_calls:
+                    # Append the assistant's message with tool calls to history
+                    if "messages" not in current_chat:
+                        current_chat["messages"] = []
+                    current_chat["messages"].append(message)
+                    tool_history.append(message)
+
+                    for tool_call in tool_calls:
+                        function_name = tool_call["function"]["name"]
+                        function_args = json.loads(tool_call["function"]["arguments"])
+
+                        tool_result = f"Error: Tool {function_name} not found"
+                        if function_name in g_app.tools:
+                            try:
+                                func = g_app.tools[function_name]
+                                if inspect.iscoroutinefunction(func):
+                                    tool_result = await func(**function_args)
+                                else:
+                                    tool_result = func(**function_args)
+                            except Exception as e:
+                                tool_result = f"Error executing tool {function_name}: {e}"
+
+                        # Append tool result to history
+                        tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": str(tool_result)}
+                        current_chat["messages"].append(tool_msg)
+                        tool_history.append(tool_msg)
+
+                    # Continue loop to send tool results back to LLM
+                    continue
+
+                # If no tool calls, return the response
+                if tool_history:
+                    response["tool_history"] = tool_history
+                return response
+
         except Exception as e:
             if first_exception is None:
                 first_exception = e
@@ -1121,15 +1217,23 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
         printdump(chat)
 
     try:
+        # Apply pre-chat filters
+        context = {"chat": chat}
+        for filter_func in g_app.chat_request_filters:
+            chat = await filter_func(chat, context)
+
         response = await chat_completion(chat)
+
+        # Apply post-chat filters
+        for filter_func in g_app.chat_response_filters:
+            response = await filter_func(response, context)
         if raw:
             print(json.dumps(response, indent=2))
             exit(0)
         else:
             msg = response["choices"][0]["message"]
-            if "answer" in msg:
-                answer = msg["content"]
-                print(answer)
+            if "content" in msg or "answer" in msg:
+                print(msg["content"])
 
             generated_files = []
             for choice in response["choices"]:
@@ -1851,6 +1955,9 @@ class AppExtensions:
         self.chat_response_filters = []
         self.server_add_get = []
         self.server_add_post = []
+        self.server_add_post = []
+        self.tools = {}
+        self.tool_definitions = []
         self.all_providers = [
             OpenAiCompatible,
             MistralProvider,
@@ -1982,6 +2089,15 @@ class ExtensionContext:
             return session.get("userName")
         return None
 
+    def register_tool(self, func, tool_def=None):
+        if tool_def is None:
+            tool_def = function_to_tool_definition(func)
+
+        name = tool_def["function"]["name"]
+        self.log(f"Registered tool: {name}")
+        self.app.tools[name] = func
+        self.app.tool_definitions.append(tool_def)
+
 
 def load_builtin_extensions():
     providers_path = _ROOT / "providers"
@@ -2011,7 +2127,7 @@ def load_builtin_extensions():
 
 
 def get_extensions_path():
-    return os.path.join(Path.home(), ".llms", "extensions")
+    return os.environ.get("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
 
 
 def init_extensions(parser):
@@ -2569,9 +2685,7 @@ def main():
                 chat = await request.json()
 
                 # Apply pre-chat filters
-                context = {"request": request}
-                # Apply pre-chat filters
-                context = {"request": request}
+                context = {"request": request, "chat": chat}
                 for filter_func in g_app.chat_request_filters:
                     chat = await filter_func(chat, context)
 
@@ -2587,16 +2701,6 @@ def main():
                 return web.json_response({"error": str(e)}, status=500)
 
         app.router.add_post("/v1/chat/completions", chat_handler)
-
-        async def extensions_handler(request):
-            return web.json_response(g_app.ui_extensions)
-
-        app.router.add_get("/ext", extensions_handler)
-
-        async def models_handler(request):
-            return web.json_response(get_models())
-
-        app.router.add_get("/models/list", models_handler)
 
         async def active_models_handler(request):
             return web.json_response(get_active_models())
@@ -2730,6 +2834,16 @@ def main():
             return web.json_response(response_data)
 
         app.router.add_post("/upload", upload_handler)
+
+        async def extensions_handler(request):
+            return web.json_response(g_app.ui_extensions)
+
+        app.router.add_get("/ext", extensions_handler)
+
+        async def tools_handler(request):
+            return web.json_response(g_app.tool_definitions)
+
+        app.router.add_get("/ext/tools", tools_handler)
 
         async def cache_handler(request):
             path = request.match_info["tail"]

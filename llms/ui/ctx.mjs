@@ -11,12 +11,13 @@ export class ExtensionScope {
         this.baseUrl = `${ctx.ai.base}/ext/${this.id}`
         this.storageKey = `llms.${this.id}`
         this.state = reactive({})
+        this.prefs = reactive(storageObject(this.storageKey))
     }
     getPrefs() {
-        return storageObject(this.storageKey)
+        return this.prefs
     }
     setPrefs(o) {
-        storageObject(this.storageKey, Object.assign(this.getPrefs(), o))
+        storageObject(this.storageKey, Object.assign(this.prefs, o))
     }
     get(url, options) {
         return this.ctx.ai.get(combinePaths(this.baseUrl, url), options)
@@ -45,7 +46,6 @@ export class AppContext {
         this.events = new EventBus()
         this.modalComponents = {}
         this.extensions = []
-        this.layout = reactive(storageObject(`llms.layout`))
         this.chatRequestFilters = []
         this.chatResponseFilters = []
         this.chatErrorFilters = []
@@ -53,12 +53,15 @@ export class AppContext {
         this.updateThreadFilters = []
         this.top = {}
         this.left = {}
+        this.layout = reactive(storageObject(`llms.layout`))
+        this.prefs = reactive(storageObject(ai.prefsKey))
 
         if (!Array.isArray(this.layout.hide)) {
             this.layout.hide = []
         }
         Object.assign(app.config.globalProperties, {
             $ctx: this,
+            $prefs: this.prefs,
             $state: this.state,
             $layout: this.layout,
             $ai: ai,
@@ -79,6 +82,12 @@ export class AppContext {
             globalThis[globalName] = this.app.config.globalProperties[globalName] = global
             this[name] = global
         })
+    }
+    getPrefs() {
+        return this.prefs
+    }
+    setPrefs(o) {
+        storageObject(this.ai.prefsKey, Object.assign(this.prefs, o))
     }
     _validateIcons(icons) {
         Object.entries(icons).forEach(([id, icon]) => {
@@ -173,12 +182,6 @@ export class AppContext {
     layoutVisible(key) {
         return !this.layout.hide.includes(key)
     }
-    getPrefs() {
-        return storageObject(this.ai.prefsKey)
-    }
-    setPrefs(o) {
-        storageObject(this.ai.prefsKey, Object.assign(this.getPrefs(), o))
-    }
     toggleTop(name) {
         console.log('toggleTop', name)
         this.layout.top = this.layout.top == name ? undefined : name
@@ -192,5 +195,11 @@ export class AppContext {
         } else {
             this.router.push({ path })
         }
+    }
+    getJson(url, options) {
+        return this.ai.getJson(url, options)
+    }
+    postJson(url, options) {
+        return this.ai.postJson(url, options)
     }
 }

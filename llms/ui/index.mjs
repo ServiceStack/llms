@@ -9,6 +9,7 @@ import ChatModule from './modules/chat/index.mjs'
 import ThreadsModule from './modules/threads/index.mjs'
 import ModelSelectorModule from './modules/model-selector.mjs'
 import AnalyticsModule from './modules/analytics.mjs'
+import ToolsModule from './modules/tools.mjs'
 import { utilsFunctions, utilsFormatters } from './utils.mjs'
 import { markdownFormatters } from './markdown.mjs'
 import { AppContext } from './ctx.mjs'
@@ -22,6 +23,7 @@ const BuiltInModules = {
     ThreadsModule,
     ModelSelectorModule,
     AnalyticsModule,
+    ToolsModule,
 }
 
 
@@ -53,10 +55,13 @@ export async function createContext() {
         }
     }))
 
+    const installedModules = []
+
     // Install built-in modules sequentially
     Object.entries(BuiltInModules).forEach(([name, module]) => {
         try {
             module.install(ctx)
+            installedModules.push({ extension: { id: name }, module: { default: module } })
             console.log(`Installed built-in: ${name}`)
         } catch (e) {
             console.error(`Failed to install built-in ${name}:`, e)
@@ -68,6 +73,7 @@ export async function createContext() {
         if (result && result.module.default && result.module.default.install) {
             try {
                 result.module.default.install(ctx)
+                installedModules.push(result)
                 console.log(`Installed extension: ${result.extension.id}`)
             } catch (e) {
                 console.error(`Failed to install extension ${result.extension.id}:`, e)
@@ -103,8 +109,11 @@ export async function createContext() {
         ctx.router.push({ path: ctx.layout.path })
     }
 
+    const loadModules = installedModules.filter(x => x.module.default && x.module.default.load)
+    console.log('Loading modules: ', loadModules.map(x => x.extension.id))
+
     // Load all extensions in parallel
-    await Promise.all(ctx.modules.filter(x => x.module.default && x.module.default.load).map(async result => {
+    await Promise.all(loadModules.map(async result => {
         try {
             await result.module.default.load(ctx)
             console.log(`Loaded extension: ${result.extension.id}`)

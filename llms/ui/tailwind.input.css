@@ -30,6 +30,11 @@
     ::file-selector-button {
         border-color: hsl(var(--border));
     }
+
+    .reasoning .prose-xs p,
+    .reasoning .prose-xs li {
+        font-size: 13px;
+    }
 }
 
 @theme {
@@ -142,6 +147,21 @@
     .prose th {
         background-color: #f9fafb;
         font-weight: 600;
+    }
+
+    /* Tool specific styles to override global prose */
+    .tool-arguments,
+    .tool-output {
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: transparent !important;
+        color: inherit !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-size: 0.75rem !important;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+        border: none !important;
+        border-radius: 0 !important;
     }
 
     /* highlight.js - vs.css */
