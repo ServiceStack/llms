@@ -1,4 +1,4 @@
-import { ref, onMounted, watch, nextTick, computed, inject } from 'vue'
+import { ref, watch, nextTick, computed, inject, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { leftPart } from '@servicestack/client'
 import { Chart, registerables } from "chart.js"
@@ -106,7 +106,7 @@ const MonthSelector = {
 
 export const Analytics = {
     template: `
-        <div class="flex flex-col h-full w-full">
+        <div class="flex flex-col w-full">
             <!-- Header -->
             <div class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 sm:px-4 py-3">
                 <div
@@ -150,9 +150,9 @@ export const Analytics = {
             </div>
 
             <!-- Content -->
-            <div class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900" :class="activeTab === 'activity' ? 'p-0' : 'p-4'">
+            <div class="flex-1 bg-gray-50 dark:bg-gray-900" :class="activeTab === 'activity' ? 'p-0' : 'p-4'">
 
-                <div :class="activeTab === 'activity' ? 'h-full' : 'max-w-6xl mx-auto'">
+                <div :class="activeTab === 'activity' ? '' : 'max-w-6xl mx-auto'">
                     <!-- Stats Summary (hidden for Activity tab) -->
                     <div v-if="activeTab !== 'activity'" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
@@ -283,7 +283,7 @@ export const Analytics = {
                     </div>
 
                     <!-- Activity Tab - Full Page Layout -->
-                    <div v-if="activeTab === 'activity'" class="h-full flex flex-col bg-white dark:bg-gray-800">
+                    <div v-if="activeTab === 'activity'" class="flex flex-col bg-white dark:bg-gray-800">
                         <!-- Filters Bar -->
                         <div class="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 sm:px-6 py-4">
                             <div class="flex flex-wrap gap-2 sm:gap-4 items-end">
@@ -321,7 +321,7 @@ export const Analytics = {
                         </div>
 
                         <!-- Requests List with Infinite Scroll -->
-                        <div class="flex-1 overflow-y-auto" @scroll="onActivityScroll" ref="activityScrollContainer">
+                        <div class="flex-1">
                             <div v-if="isActivityLoading && activityRequests.length === 0" class="flex items-center justify-center h-full">
                                 <div class="text-center">
                                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -393,6 +393,7 @@ export const Analytics = {
                                     No more requests to load
                                 </div>
                             </div>
+                            <div ref="scrollSentinel" class="h-4 w-full"></div>
                         </div>
                     </div>
                 </div>
@@ -527,7 +528,8 @@ export const Analytics = {
         const selectedProvider = ref('')
         const sortBy = ref('created')
         const filterOptions = ref({ models: [], providers: [] })
-        const activityScrollContainer = ref(null)
+        const scrollSentinel = ref(null)
+        let observer = null
 
         const hasActiveFilters = computed(() => selectedModel.value || selectedProvider.value)
 
@@ -1312,14 +1314,17 @@ export const Analytics = {
             }
         }
 
-        const onActivityScroll = async () => {
-            if (!activityScrollContainer.value) return
+        const setupObserver = () => {
+            if (observer) observer.disconnect()
 
-            const { scrollTop, scrollHeight, clientHeight } = activityScrollContainer.value
-            const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+            observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting && activityHasMore.value && !isActivityLoadingMore.value && !isActivityLoading.value) {
+                    loadActivityRequests(false)
+                }
+            }, { rootMargin: '200px' })
 
-            if (isNearBottom && activityHasMore.value && !isActivityLoadingMore.value && !isActivityLoading.value) {
-                await loadActivityRequests(false)
+            if (scrollSentinel.value) {
+                observer.observe(scrollSentinel.value)
             }
         }
 
@@ -1435,6 +1440,8 @@ export const Analytics = {
             } else if (newTab === 'activity') {
                 await loadActivityFilterOptions()
                 await loadActivityRequests(true)
+                await nextTick()
+                setupObserver()
             }
         })
 
@@ -1467,7 +1474,13 @@ export const Analytics = {
             if (activeTab.value === 'activity') {
                 await loadActivityFilterOptions()
                 await loadActivityRequests(true)
+                await nextTick()
+                setupObserver()
             }
+        })
+
+        onUnmounted(() => {
+            if (observer) observer.disconnect()
         })
 
         return {
@@ -1504,8 +1517,8 @@ export const Analytics = {
             sortBy,
             filterOptions,
             hasActiveFilters,
-            activityScrollContainer,
-            onActivityScroll,
+            hasActiveFilters,
+            scrollSentinel,
             clearActivityFilters,
             formatActivityDate,
             threadExists,
