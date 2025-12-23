@@ -1,4 +1,36 @@
 {
+    "minimax": {
+        "models": {
+            "MiniMax-M2.1": {
+                "id": "MiniMax-M2.1",
+                "name": "MiniMax M2.1",
+                "family": "minimax",
+                "attachment": false,
+                "reasoning": true,
+                "tool_call": true,
+                "temperature": true,
+                "release_date": "2025-12-23",
+                "last_updated": "2025-12-23",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "text"
+                    ]
+                },
+                "open_weights": true,
+                "cost": {
+                    "input": 0.3,
+                    "output": 1.2
+                },
+                "limit": {
+                    "context": 204800,
+                    "output": 128000
+                }
+            }
+        }
+    },
     "openrouter": {
         "models": {
             "google/gemini-2.5-flash-image": {
