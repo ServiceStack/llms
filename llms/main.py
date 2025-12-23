@@ -40,7 +40,7 @@ try:
 except ImportError:
     HAS_PIL = False
 
-VERSION = "3.0.0b5"
+VERSION = "3.0.0b6"
 _ROOT = None
 DEBUG = True  # os.getenv("PYPI_SERVICESTACK") is not None
 MOCK = False
