@@ -2453,9 +2453,29 @@ def main():
                 requirements_path = os.path.join(target_path, "requirements.txt")
                 if os.path.exists(requirements_path):
                     print(f"Installing dependencies from {requirements_path}...")
-                    subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], cwd=target_path, check=True
-                    )
+
+                    # Check if uv is installed
+                    has_uv = False
+                    try:
+                        subprocess.run(
+                            ["uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+                        )
+                        has_uv = True
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        pass
+
+                    if has_uv:
+                        subprocess.run(
+                            ["uv", "pip", "install", "-p", sys.executable, "-r", "requirements.txt"],
+                            cwd=target_path,
+                            check=True,
+                        )
+                    else:
+                        subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+                            cwd=target_path,
+                            check=True,
+                        )
                     print("Dependencies installed successfully.")
 
                 print(f"Extension {target_name} installed successfully.")
