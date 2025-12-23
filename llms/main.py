@@ -1073,8 +1073,9 @@ async def chat_completion(chat):
                 include_all_tools = False
                 only_tools = []
                 if "metadata" in chat:
-                    only_tools = chat["metadata"].get("only_tools", "").split(",")
-                    include_all_tools = only_tools == "all"
+                    only_tools_str = chat["metadata"].get("only_tools", "")
+                    include_all_tools = only_tools_str == "all"
+                    only_tools = only_tools_str.split(",")
 
                 if include_all_tools or len(only_tools) > 0:
                     if "tools" not in current_chat:
