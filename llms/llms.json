@@ -107,6 +107,14 @@
             },
             "stream": false
         },
+        "out:audio": {
+            "model": "gemini-2.5-flash-preview-tts",
+            "messages": [],
+            "modalities": [
+                "audio"
+            ],
+            "stream": false
+        },
         "check": {
             "messages": [
                 {
@@ -240,6 +248,13 @@
             "thinking_config": {
                 "thinkingBudget": 1024,
                 "includeThoughts": true
+            },
+            "speech_config": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": "Kore"
+                    }
+                }
             },
             "check": {
                 "messages": [

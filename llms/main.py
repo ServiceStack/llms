@@ -492,6 +492,33 @@ class HTTPError(Exception):
         self.headers = headers
         super().__init__(f"HTTP {status} {reason}")
 
+def save_bytes_to_cache(base64_data, filename, file_info):
+    ext = filename.split(".")[-1]
+    mimetype = get_file_mime_type(filename)
+    content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
+    save_filename = f"{sha256_hash}.{ext}" if ext else sha256_hash
+
+    # Use first 2 chars for subdir to avoid too many files in one dir
+    subdir = sha256_hash[:2]
+    relative_path = f"{subdir}/{save_filename}"
+    full_path = get_cache_path(relative_path)
+    url = f"~cache/{relative_path}"
+
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+    with open(full_path, "wb") as f:
+        f.write(content)
+    info = {
+        "date": int(time.time()),
+        "url": url,
+        "size": len(content),
+        "type": mimetype,
+        "name": filename,
+    }
+    info.update(file_info)
+    return url, info
 
 def save_image_to_cache(base64_data, filename, image_info):
     ext = filename.split(".")[-1]
@@ -505,7 +532,6 @@ def save_image_to_cache(base64_data, filename, image_info):
     subdir = sha256_hash[:2]
     relative_path = f"{subdir}/{save_filename}"
     full_path = get_cache_path(relative_path)
-
     url = f"~cache/{relative_path}"
 
     # if file and its .info.json already exists, return it
@@ -1244,6 +1270,10 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
                         for image in msg["images"]:
                             image_url = image["image_url"]["url"]
                             generated_files.append(image_url)
+                    if "audios" in msg:
+                        for audio in msg["audios"]:
+                            audio_url = audio["audio_url"]["url"]
+                            generated_files.append(audio_url)
 
             if len(generated_files) > 0:
                 print("\nSaved files:")
@@ -2003,6 +2033,9 @@ class ExtensionContext:
 
     def save_image_to_cache(self, base64_data, filename, image_info):
         return save_image_to_cache(base64_data, filename, image_info)
+
+    def save_bytes_to_cache(self, bytes_data, filename, file_info):
+        return save_bytes_to_cache(bytes_data, filename, file_info)
 
     def text_from_file(self, path):
         return text_from_file(path)
@@ -3324,6 +3357,17 @@ def main():
 
             if len(extra_args) > 0:
                 prompt = " ".join(extra_args)
+                if not chat["messages"] or len(chat["messages"]) == 0:
+                    chat["messages"] = [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": ""
+                            }
+                        ]
+                    }]
+
                 # replace content of last message if exists, else add
                 last_msg = chat["messages"][-1] if "messages" in chat else None
                 if last_msg and last_msg["role"] == "user":

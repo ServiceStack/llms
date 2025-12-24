@@ -2,6 +2,9 @@ import json
 import time
 
 import aiohttp
+import base64
+import io
+import wave
 
 # class GoogleOpenAiProvider(OpenAiCompatible):
 #     sdk = "google-openai-compatible"
@@ -68,6 +71,7 @@ def install(ctx):
             super().__init__(**new_kwargs)
             self.safety_settings = kwargs.get("safety_settings")
             self.thinking_config = kwargs.get("thinking_config")
+            self.speech_config = kwargs.get("speech_config")
             self.tools = kwargs.get("tools")
             self.curl = kwargs.get("curl")
             self.headers = kwargs.get("headers", {"Content-Type": "application/json"})
@@ -195,7 +199,7 @@ def install(ctx):
 
                 if "modalities" in chat:
                     generation_config["responseModalities"] = [modality.upper() for modality in chat["modalities"]]
-                    if "image_config" in chat:
+                    if "image" in chat["modalities"] and "image_config" in chat:
                         # delete thinkingConfig
                         del generation_config["thinkingConfig"]
                         config_map = {
@@ -205,6 +209,11 @@ def install(ctx):
                         generation_config["imageConfig"] = {
                             config_map[k]: v for k, v in chat["image_config"].items() if k in config_map
                         }
+                    if "audio" in chat["modalities"] and self.speech_config:
+                        del generation_config["thinkingConfig"]
+                        generation_config["speechConfig"] = self.speech_config.copy()
+                        # Currently Google Audio Models only accept AUDIO
+                        generation_config["responseModalities"] = ["AUDIO"]
 
                 started_at = int(time.time() * 1000)
                 gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
@@ -218,13 +227,22 @@ def install(ctx):
                     with open(f"{ctx.MOCK_DIR}/gemini-image.json") as f:
                         obj = json.load(f)
                 else:
-                    async with session.post(
-                        gemini_chat_url,
-                        headers=self.headers,
-                        data=json.dumps(gemini_chat),
-                        timeout=aiohttp.ClientTimeout(total=120),
-                    ) as res:
-                        obj = await self.response_json(res)
+                    try:
+                        async with session.post(
+                            gemini_chat_url,
+                            headers=self.headers,
+                            data=json.dumps(gemini_chat),
+                            timeout=aiohttp.ClientTimeout(total=120),
+                        ) as res:
+                            obj = await self.response_json(res)
+                    except Exception as e:
+                        ctx.log(f"Error: {res.status} {res.reason}: {e}")
+                        text = await res.text()
+                        try:
+                            obj = json.loads(text)
+                        except:
+                            ctx.log(text)
+                            raise e
 
                 if "error" in obj:
                     ctx.log(f"Error: {obj['error']}")
@@ -248,6 +266,7 @@ def install(ctx):
                     content = ""
                     reasoning = ""
                     images = []
+                    audios = []
                     if "content" in candidate and "parts" in candidate["content"]:
                         text_parts = []
                         reasoning_parts = []
@@ -260,19 +279,51 @@ def install(ctx):
                             if "inlineData" in part:
                                 inline_data = part["inlineData"]
                                 mime_type = inline_data.get("mimeType", "image/png")
-                                ext = mime_type.split("/")[1]
-                                base64_data = inline_data["data"]
-                                filename = f"{chat['model'].split('/')[-1]}-{len(images)}.{ext}"
-                                relative_url, info = ctx.save_image_to_cache(base64_data, filename, {})
-                                images.append(
-                                    {
-                                        "type": "image_url",
-                                        "index": len(images),
-                                        "image_url": {
-                                            "url": relative_url,
-                                        },
-                                    }
-                                )
+                                if mime_type.startswith("image"):
+                                    ext = mime_type.split("/")[1]
+                                    base64_data = inline_data["data"]
+                                    filename = f"{chat['model'].split('/')[-1]}-{len(images)}.{ext}"
+                                    ctx.log(f"inlineData {len(base64_data)} {mime_type} {filename}")
+                                    relative_url, info = ctx.save_image_to_cache(base64_data, filename, {})
+                                    images.append(
+                                        {
+                                            "type": "image_url",
+                                            "index": len(images),
+                                            "image_url": {
+                                                "url": relative_url,
+                                            },
+                                        }
+                                    )
+                                elif mime_type.startswith("audio"):
+                                    # mime_type audio/L16;codec=pcm;rate=24000
+                                    base64_data = inline_data["data"]
+
+                                    pcm = base64.b64decode(base64_data)
+                                    # Convert PCM to WAV
+                                    wav_io = io.BytesIO()
+                                    with wave.open(wav_io, "wb") as wf:
+                                        wf.setnchannels(1)
+                                        wf.setsampwidth(2)
+                                        wf.setframerate(24000)
+                                        wf.writeframes(pcm)
+                                    wav_data = wav_io.getvalue()
+                                    
+                                    ext = mime_type.split("/")[1].split(";")[0]
+                                    pcm_filename = f"{chat['model'].split('/')[-1]}-{len(audios)}.{ext}"
+                                    filename = pcm_filename.replace(f".{ext}", ".wav")
+                                    ctx.log(f"inlineData {len(base64_data)} {mime_type} {filename}")
+
+                                    relative_url, info = ctx.save_bytes_to_cache(wav_data, filename, {})
+
+                                    audios.append(
+                                        {
+                                            "type": "audio_url",
+                                            "index": len(audios),
+                                            "audio_url": {
+                                                "url": relative_url,
+                                            },
+                                        }
+                                    )
                         content = " ".join(text_parts)
                         reasoning = " ".join(reasoning_parts)
 
@@ -288,6 +339,8 @@ def install(ctx):
                         choice["message"]["reasoning"] = reasoning
                     if len(images) > 0:
                         choice["message"]["images"] = images
+                    if len(audios) > 0:
+                        choice["message"]["audios"] = audios
                     choices.append(choice)
                 response["choices"] = choices
                 if "usageMetadata" in obj:

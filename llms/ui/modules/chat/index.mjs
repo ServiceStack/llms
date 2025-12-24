@@ -320,6 +320,9 @@ const ChatPrompt = {
         const canGenerateImages = computed(() => {
             return props.model?.modalities?.output?.includes('image')
         })
+        const canGenerateAudio = computed(() => {
+            return props.model?.modalities?.output?.includes('audio')
+        })
 
         // File attachments (+) handlers
         const triggerFilePicker = () => {
@@ -593,6 +596,9 @@ const ChatPrompt = {
                         aspect_ratio: imageAspectRatios[ctx.state.selectedAspectRatio] || '1:1'
                     }
                     request.modalities = ["image", "text"]
+                }
+                else if (canGenerateAudio.value) {
+                    request.modalities = ["audio", "text"]
                 }
 
                 request.metadata.threadId = threadId

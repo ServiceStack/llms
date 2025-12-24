@@ -228,6 +228,15 @@ export default {
                                     </template>
                                 </div>
 
+                                <!-- Assistant Audios -->
+                                <div v-if="message.audios && message.audios.length > 0" class="mt-2 flex flex-wrap gap-2">
+                                    <template v-for="(audio, i) in message.audios" :key="i">
+                                        <div v-if="audio.type === 'audio_url'" class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                                            <audio controls :src="resolveUrl(audio.audio_url.url)" class="h-8 w-64"></audio>
+                                        </div>
+                                    </template>
+                                </div>
+
                                 <!-- User Message with separate attachments -->
                                 <div v-else-if="message.role !== 'assistant' && message.role !== 'tool'">
                                     <div v-html="$fmt.markdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
