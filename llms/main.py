@@ -1250,7 +1250,7 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
                 for file in generated_files:
                     if file.startswith("~cache"):
                         print(get_cache_path(file[7:]))
-                        _log(f"http://localhost:8000/{file}")
+                        print(f"http://localhost:8000/{file}")
                     else:
                         print(file)
 
