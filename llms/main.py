@@ -42,10 +42,9 @@ except ImportError:
 
 VERSION = "3.0.0b6"
 _ROOT = None
-DEBUG = True  # os.getenv("PYPI_SERVICESTACK") is not None
-MOCK = False
-MOCK_DIR = os.getenv("MOCK_DIR")
+DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
+MOCK_DIR = os.getenv("MOCK_DIR")
 g_config_path = None
 g_config = None
 g_providers = None
@@ -1280,7 +1279,7 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
                 for file in generated_files:
                     if file.startswith("~cache"):
                         print(get_cache_path(file[7:]))
-                        _log(f"http://localhost:8000/{file}")
+                        print(f"http://localhost:8000/{file}")
                     else:
                         print(file)
 
@@ -2316,7 +2315,6 @@ def main():
 
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
     parser.add_argument("--update-providers", action="store_true", help="Update local models.dev providers.json")
-    parser.add_argument("--update-extensions", action="store_true", help="Update installed extensions")
 
     parser.add_argument("--root", default=None, help="Change root directory for UI files", metavar="PATH")
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
