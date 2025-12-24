@@ -2,7 +2,7 @@
 
 ## Rewritten for extensibility
 
-A major rewrite of llms has been completed to make it extensible and allow for easy addition of new features and providers. Including built-in UI components which have been [refactored into modules](https://github.com/ServiceStack/llms/tree/main/llms/ui/modules) utilizing the same extensibility APIs any extension will be able to use. In addition to adding new features, extensions are also to replace existing components by registering new components with the same name.
+A major rewrite of llms has been completed to make it extensible and allow for easy addition of new features and providers. Including built-in UI components which have been [refactored into modules](https://github.com/ServiceStack/llms/tree/main/llms/ui/modules) utilizing the same extensibility APIs any extension will be able to use where in addition to adding new pages and features, they're also able to replace existing components by registering new components with the same name.
 
 Likewise, the server has adopted a server extension model, where major provider implementations can now be dropped into the [llms/providers](https://github.com/ServiceStack/llms/tree/main/llms/providers) folder where it will be automatically loaded and registered at runtime.
 
@@ -42,7 +42,7 @@ This optimization keeps your local configuration file lightweight by only contai
 
 ## New Model Selector UI
 
-With over 530 models from 23 providers now available, discovering and selecting the right model required a complete overhaul from a simple Autocomplete. The Model Selector has been completely redesigned as a full-featured dialog offering:
+With over 530 models from 23 providers now available, discovering and selecting the right model required a complete overhaul from the previous simple Autocomplete selector. The Model Selector has been completely redesigned as a full-featured dialog offering:
 
 ### 🔍 **Smart Search & Discovery**
 - **Full-text Search**: Instantly search across model names, IDs, and providers
@@ -307,7 +307,7 @@ v3 includes built-in support for image generation models on:
 - **Chutes**
 - **Nvidia**
 
-As there is no standard way to generate images, this requires a custom implementation for each provider.
+As there is no standard way to generate images, this required a custom implementation for each provider.
 
 It can be generated from the command-line using the `--out image` modifier, e.g:
 
@@ -315,9 +315,9 @@ It can be generated from the command-line using the `--out image` modifier, e.g:
 llms --out image "cat in a hat"
 ```
 
-Which uses the `out:image` chat template by default.
+Which uses the `out:image` chat template in `llms.json` by default.
 
-It can be used with any model that supports image generation, e.g You can generate an image using Nano Banana by using its id or name:
+It can be used with any model that supports image generation, e.g You can generate an image using Nano Banana by using its **id** or **name**:
 
 ```bash
 llms -m "gemini-2.5-flash-image" --out image "cat in a hat"
@@ -348,14 +348,13 @@ Saved files:
 http://localhost:8000/~cache/c2/c27b5fd43ebbdbca39459b510001eb8aaef622e5b947866ef78f36def9acf118.wav
 ```
 
-Which you can either play from the command line:
+Which you can either play from the command line, e,g:
 
 ```bash
 play /Users/llmspy/.llms/cache/c2/c27b5fd43ebbdbca39459b510001eb8aaef622e5b947866ef78f36def9acf118.wav
 ```
 
 Or run the Server using `llms --serve 8000` to play it in the browser.
-
 
 ## Image Cache & Optimization
 A new caching system has been implemented for uploaded images and files. Uploads are now persisted in `~/.llms/cache`, preserving them across messages and sessions.
