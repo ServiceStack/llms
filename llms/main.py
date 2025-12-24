@@ -42,10 +42,9 @@ except ImportError:
 
 VERSION = "3.0.0b6"
 _ROOT = None
-DEBUG = True  # os.getenv("PYPI_SERVICESTACK") is not None
-MOCK = False
-MOCK_DIR = os.getenv("MOCK_DIR")
+DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
+MOCK_DIR = os.getenv("MOCK_DIR")
 g_config_path = None
 g_config = None
 g_providers = None
