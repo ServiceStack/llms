@@ -2283,7 +2283,6 @@ def main():
 
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
     parser.add_argument("--update-providers", action="store_true", help="Update local models.dev providers.json")
-    parser.add_argument("--update-extensions", action="store_true", help="Update installed extensions")
 
     parser.add_argument("--root", default=None, help="Change root directory for UI files", metavar="PATH")
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
