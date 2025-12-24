@@ -279,8 +279,34 @@ git clone https://github.com/<user>/<repo> ~/.llms/extensions/<repo>
 
 Feel free to submit pull requests to add new extensions to the [llmspy/repositories](https://github.com/orgs/llmspy/repositories) organization to make your extension easily discoverable to everyone.
 
-## Optimized `--update`
-The `--update` command provides an optimal way to fetch the latest provider list from `models.dev` but saves only a subset to your local `providers.json`. It filters and saves only the providers that are referenced in your `llms.json`. This optimization keeps your local configuration file lightweight and focused on the providers you actually use.
+## Image Generation Support
+
+v3 includes built-in support for image generation models on:
+
+- **Google**
+- **OpenAI**
+- **OpenRouter**
+- **Chutes**
+- **Nvidia**
+
+As there is no standard way to generate images, this requires a custom implementation for each provider.
+
+It can be generated from the command-line using the `--out image` modifier, e.g:
+
+```bash
+llms --out image "cat in a hat"
+```
+
+Which uses the `out:image` chat template by default.
+
+It can be used with any model that supports image generation, e.g You can generate an image using Nano Banana by using its id or name:
+
+```bash
+llms -m "gemini-2.5-flash-image" --out image "cat in a hat"
+llms -m "Gemini 2.5 Flash Image" --out image "cat in a hat"
+```
+
+All generated images are saved to the `~/.llms/cache` folder using their SHA-256 hash as the filename.
 
 ## Image Cache & Optimization
 A new caching system has been implemented for uploaded images and files. Uploads are now persisted in `~/.llms/cache`, preserving them across messages and sessions.
