@@ -29,7 +29,7 @@
             ]
         },
         "image": {
-            "model": "qwen2.5vl",
+            "model": "gemma-3-27b-it",
             "messages": [
                 {
                     "role": "user",
