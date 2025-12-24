@@ -308,6 +308,37 @@ llms -m "Gemini 2.5 Flash Image" --out image "cat in a hat"
 
 All generated images are saved to the `~/.llms/cache` folder using their SHA-256 hash as the filename.
 
+## Audio Generation Support
+
+v3 includes built-in support for audio generation on Google's new TTS models:
+
+- **Gemini 2.5 Flash Preview TTS**
+- **Gemini 2.5 Pro Preview TTS**
+
+This is available both in the UI and on the command-line using `--out audio`, e.g:
+
+```bash
+llms --out audio "Merry Christmas"
+llms -m gemini-2.5-pro-preview-tts --out audio "Merry Christmas"  
+```
+
+Where it will save and generate both local file and HTTP URL links, e.g:
+
+```
+Saved files:
+/Users/llmspy/.llms/cache/c2/c27b5fd43ebbdbca39459b510001eb8aaef622e5b947866ef78f36def9acf118.wav
+http://localhost:8000/~cache/c2/c27b5fd43ebbdbca39459b510001eb8aaef622e5b947866ef78f36def9acf118.wav
+```
+
+Which you can either play from the command line:
+
+```bash
+play /Users/llmspy/.llms/cache/c2/c27b5fd43ebbdbca39459b510001eb8aaef622e5b947866ef78f36def9acf118.wav
+```
+
+Or run the Server using `llms --serve 8000` to play it in the browser.
+
+
 ## Image Cache & Optimization
 A new caching system has been implemented for uploaded images and files. Uploads are now persisted in `~/.llms/cache`, preserving them across messages and sessions.
 - **Efficient Storage**: Only cache references are stored in the browser history and sent with chat messages, significantly reducing local storage usage and payload size.
