@@ -22,6 +22,14 @@ The switch to models.dev greatly expands our model selection to not more than 53
 
 Please raise an issue to add support for any missing providers from [models.dev](https://models.dev) you would like to use.
 
+### Up to Date Providers
+
+If your providers.json is older than 1 day, it will be automatically updated when you run `llms`. You can also use the `--update-providers` command at anytime to update your local `providers.json` with the latest provider list from `models.dev`. 
+
+It filters and saves only the providers that are referenced in your `llms.json`. Any additional providers you want to use that are not included in `models.dev` can be added to your `~/.llms/providers-extra.json` which will be merged into your `providers.json` when updated.
+
+This optimization keeps your local configuration file lightweight by only containing the providers you actually use.
+
 ## New Model Selector UI
 
 With over 530 models from 23 providers now available, discovering and selecting the right model required a complete overhaul from a simple Autocomplete. The Model Selector has been completely redesigned as a full-featured dialog offering:
@@ -146,7 +154,7 @@ The provider configuration is now closely aligned with the `models.dev` npm conf
 By standardizing on `models.dev` definitions, the project now shares a compatible configuration model with other AI tools like **OpenCode**. This includes the standardization of environment variables using the `"env"` property, ensuring simpler and more portable configuration across different tools.
 
 ## Extensions
-To keep the core lightweight while enabling limitless enhancements, we've introduced a flexible Extensions system. This allows you to add features, integrate with new services, and customize the UI without bloating the base application.
+To keep the core lightweight while enabling limitless enhancements, we've introduced a flexible Extensions system. This allows you to add features, register new provider implementations, extend, replace and customize the UI with your own custom features.
 
 ### Installation
 Extensions can be installed from GitHub or by creating a local folder:
@@ -157,7 +165,7 @@ Extensions can be installed from GitHub or by creating a local folder:
 Extensions are Python modules that plug into the server lifecycle using special hooks defined in their `__init__.py`:
 
 - **`__parser__(parser)`**: Add custom CLI arguments.
-- **`__install__(ctx)`**: Enhance the server instance (e.g., add routes, register filters). `ctx` gives you access to the `ExtensionContext`.
+- **`__install__(ctx)`**: Enhance the server instance (e.g., add routes, register providers, filters, etc). `ctx` gives you access to the `ExtensionContext`.
 - **`__run__(ctx)`**: Execute custom logic when running in CLI mode.
 
 ### How it Works (UI)
@@ -170,7 +178,7 @@ Extensions can also include a frontend component.
 // ui/index.mjs
 export default {
     install(ctx) {
-        // Register components, add routes, etc.
+        // Register or replace components, add routes, etc.
         ctx.components({ MyComponent })
     }
 }
@@ -215,6 +223,61 @@ Remove extension:
 llms --remove system_prompts
 ```
 
+## Tool Support
+
+New in v3 is first-class support for Python function calling (Tools), allowing LLMs to interact with your local environment and custom logic.
+
+### 1. Python Function Tools
+
+Define tools using standard Python functions. The system automatically generates tool definitions from your function's signature, type hints, and docstrings.
+
+```python
+def get_current_time(timezone: str = "UTC") -> str:
+    """Get current time in the specified timezone"""
+    return f"The time is {datetime.now().strftime('%I:%M %p')} {timezone}"
+```
+
+### 2. Registration
+Register your tools within an extension's `install` method. You can register simple functions or provide manual definitions for complex cases.
+
+```python
+def install(ctx):
+    # Automatic definition from function signature
+    ctx.register_tool(get_current_time)
+```
+
+### 3. UI Management
+- **One-Click Enable/Disable**: Use the new Tool Selector in the chat interface (top-right) to control which tools are available to the model.
+- **Dedicated Tools Page**: View all registered tools and their definitions at `/tools` or via the sidebar link.
+- **Granular Control**: Select "All", "None", or specific tools for each chat session.
+
+## Available Tools
+
+All available tools are maintained in GitHub [llmspy/repositories](https://github.com/orgs/llmspy/repositories), currently:
+
+- `core_tools` - Core System Tools providing essential file operations, memory persistence, math expression evaluation, and code execution
+- `duckduckgo` - Add web search tool capabilities using Duck Duck Go
+- `system_prompts` - Enables and includes collection of awesome system prompts
+
+```bash
+llms --add core_tools
+```
+
+Installing an extension simply clones it into your `~/.llms/extensions` folder and installs any Python `requirements.txt` dependencies (if any). Inversely, you can remove an extension by deleting the folder from `~/.llms/extensions`.
+
+You can also install 3rd Party extensions from GitHub using:
+
+```bash
+llms --add <user>/<repo>
+```
+
+Or by manually cloning it in your `~/.llms/extensions` folder:
+
+```bash
+git clone https://github.com/<user>/<repo> ~/.llms/extensions/<repo>
+```
+
+Feel free to submit pull requests to add new extensions to the [llmspy/repositories](https://github.com/orgs/llmspy/repositories) organization to make your extension easily discoverable to everyone.
 
 ## Optimized `--update`
 The `--update` command provides an optimal way to fetch the latest provider list from `models.dev` but saves only a subset to your local `providers.json`. It filters and saves only the providers that are referenced in your `llms.json`. This optimization keeps your local configuration file lightweight and focused on the providers you actually use.
