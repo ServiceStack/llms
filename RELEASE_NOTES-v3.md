@@ -1,10 +1,20 @@
 # v3 Release Notes
 
+## Rewritten for extensibility
+
+A major rewrite of llms has been completed to make it extensible and allow for easy addition of new features and providers. Including built-in UI components which have been [refactored into modules](https://github.com/ServiceStack/llms/tree/main/llms/ui/modules) utilizing the same extensibility APIs any extension will be able to use. In addition to adding new features, extensions are also to replace existing components by registering new components with the same name.
+
+Likewise, the server has adopted a server extension model, where major provider implementations can now be dropped into the [llms/providers](https://github.com/ServiceStack/llms/tree/main/llms/providers) folder where it will be automatically loaded and registered at runtime.
+
+This allows [main.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) to continue to retain a lean functional core in a single file whislt still being extensible.
+
 ## New Provider Configuration Model
 
-The internal provider configuration is now a **superset** of `models.dev/api.json`. Definitions are merged, allowing you to simply enable providers using `"enabled": true` while inheriting all standard provider configurations from `models.dev`.
+The most disruptive change is the migration to utilize the same [models.dev](https://models.dev) open provider and model catalogue as used and maintained by [OpenCode](https://opencode.ai).
 
-The switch to models.dev greatly expands our model selection to not more than 530 providers from 23 different providers. Including new support for:
+llms provider configuration is now a **superset** of `models.dev/api.json` where its definitions are merged, allowing you to enable providers using just `"enabled": true` where it inherits all standard provider configurations from `models.dev`.
+
+The switch to models.dev greatly expands our model selection to more than 530 models from 23 different providers. Including new support for:
 
 - Alibaba (39 models)
 - Chutes (56 models)
@@ -24,11 +34,11 @@ Please raise an issue to add support for any missing providers from [models.dev]
 
 ### Up to Date Providers
 
-If your providers.json is older than 1 day, it will be automatically updated when you run `llms`. You can also use the `--update-providers` command at anytime to update your local `providers.json` with the latest provider list from `models.dev`. 
+This also allows `llms` to automatically update your `providers.json` with the latest provider list from `models.dev` daily. You can also use the `--update-providers` command at anytime to update your local `providers.json` with the latest provider list from `models.dev`. 
 
-It filters and saves only the providers that are referenced in your `llms.json`. Any additional providers you want to use that are not included in `models.dev` can be added to your `~/.llms/providers-extra.json` which will be merged into your `providers.json` when updated.
+`llms` filters and saves only the providers that are referenced in your `llms.json`. Any additional providers you want to use that are not included in `models.dev` can be added to your `~/.llms/providers-extra.json` which will be merged into your `providers.json` when updated.
 
-This optimization keeps your local configuration file lightweight by only containing the providers you actually use.
+This optimization keeps your local configuration file lightweight by only containing the providers that are available for use.
 
 ## New Model Selector UI
 
@@ -128,7 +138,9 @@ Use `map_models` to explicitly whitelist and map specific models. Only the model
 ```
 
 ### 4. Custom Provider & Model Definitions
-You can still fully define custom providers and models that aren't in `models.dev`. For example, adding Mistral's free `codestral` endpoint:
+
+You can still fully define custom OpenAI compatible providers and models that aren't in `models.dev`. For example, adding Mistral's free `codestral` endpoint:
+
 ```json
 "codestral": {
     "enabled": true,
@@ -146,6 +158,8 @@ You can still fully define custom providers and models that aren't in `models.de
     }
 }
 ```
+
+If you just want to enable access to new models for existing providers whilst you're waiting for them to be added to models.dev, you can add them to your ``~/.llms/providers-extra.json` where they'll be merged into your `providers.json` when updated.
 
 ### 5. NPM SDK Alignment
 The provider configuration is now closely aligned with the `models.dev` npm configuration. The `"npm"` field is used to map the provider configuration to the correct Python provider implementation. This generic mapping allows for flexible provider support, including **Anthropic Chat Completion** requests, which are correctly handled for both **Anthropic** and **MiniMax** providers.
@@ -165,16 +179,20 @@ Extensions can be installed from GitHub or by creating a local folder:
 Extensions are Python modules that plug into the server lifecycle using special hooks defined in their `__init__.py`:
 
 - **`__parser__(parser)`**: Add custom CLI arguments.
-- **`__install__(ctx)`**: Enhance the server instance (e.g., add routes, register providers, filters, etc). `ctx` gives you access to the `ExtensionContext`.
+- **`__install__(ctx)`**: Enhance the server instance (e.g., add routes, register providers, request/response filters, etc). `ctx` gives you access to the `ExtensionContext`.
 - **`__run__(ctx)`**: Execute custom logic when running in CLI mode.
 
 ### How it Works (UI)
-Extensions can also include a frontend component.
+Extensions can also just include a frontend component.
 1.  **Placement**: Add a `ui` folder within your extension directory.
 2.  **Access**: Files in this folder are automatically served at `/ext/<extension_name>/*`.
 3.  **Integration**: Create a `ui/index.mjs` file. This is the entry point and must export an `install` function:
 
 ```javascript
+const MyComponent = {
+    template: `...`
+}
+
 // ui/index.mjs
 export default {
     install(ctx) {
@@ -315,7 +333,7 @@ v3 includes built-in support for audio generation on Google's new TTS models:
 - **Gemini 2.5 Flash Preview TTS**
 - **Gemini 2.5 Pro Preview TTS**
 
-This is available both in the UI and on the command-line using `--out audio`, e.g:
+This is available in both the UI and on the command-line using `--out audio`, e.g:
 
 ```bash
 llms --out audio "Merry Christmas"
