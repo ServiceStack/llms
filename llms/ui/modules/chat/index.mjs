@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { $$, createElement, lastRightPart } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
 import ChatBody from './ChatBody.mjs'
+import HomeTools from './HomeTools.mjs'
 import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
@@ -459,12 +460,6 @@ const ChatPrompt = {
             return textMessage?.content.find(c => c.type === 'text')?.text || ''
         }
 
-        function toModelInfo(model) {
-            if (!model) return undefined
-            const { id, name, provider, cost, modalities } = model
-            return ctx.utils.deepClone({ id, name, provider, cost, modalities })
-        }
-
         // Send message
         const sendMessage = async () => {
             if (!messageText.value.trim() && !hasImage() && !hasAudio() && !hasFile()) return
@@ -508,7 +503,7 @@ const ChatPrompt = {
                     const newThread = await threads.createThread({
                         title: 'New Chat',
                         model,
-                        info: toModelInfo(props.model),
+                        info: ctx.utils.toModelInfo(props.model),
                     })
                     threadId = newThread.id
                     // Navigate to the new thread URL
@@ -518,7 +513,7 @@ const ChatPrompt = {
                     // Update the existing thread's model to match current selection
                     await threads.updateThread(threadId, {
                         model,
-                        info: toModelInfo(props.model),
+                        info: ctx.utils.toModelInfo(props.model),
                     })
                 }
 
@@ -613,7 +608,7 @@ const ChatPrompt = {
 
                 // Send to API
                 const startTime = Date.now()
-                const res = await ai.post('/v1/chat/completions', {
+                const res = await ctx.post('/v1/chat/completions', {
                     body: JSON.stringify(request),
                     signal: controller.signal
                 })
@@ -772,6 +767,7 @@ export default {
             SettingsDialog,
             ChatPrompt,
             ChatBody,
+            HomeTools,
             Home,
         })
         ctx.setGlobals({

@@ -59,7 +59,6 @@ export function serializedClone(obj) {
     }
 }
 
-
 export function deepClone(o) {
     if (o === null || typeof o !== 'object') return o
 
@@ -80,6 +79,14 @@ export function deepClone(o) {
     // Fallback to JSON stringify/parse for older environments
     return serializedClone(o)
 }
+
+export function toModelInfo(model) {
+    if (!model) return undefined
+    const { id, name, provider, cost, modalities } = model
+    return deepClone({ id, name, provider, cost, modalities })
+}
+
+
 
 export function pluralize(word, count) {
     return count === 1 ? word : word + 's'
@@ -179,7 +186,6 @@ export const nextId = (() => {
 export function utilsFunctions() {
     return {
         nextId,
-        deepClone,
         toJsonArray,
         toJsonObject,
         storageArray,
@@ -188,6 +194,7 @@ export function utilsFunctions() {
         fileToDataUri,
         serializedClone,
         deepClone,
+        toModelInfo,
         pluralize,
     }
 }
