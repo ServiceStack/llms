@@ -193,9 +193,11 @@ def install(ctx):
                     gemini_chat["generationConfig"] = generation_config
 
                 if "tools" in chat:
-                    gemini_chat["tools"] = chat["tools"]
+                    # gemini_chat["tools"] = chat["tools"]
+                    ctx.log("Error: tools not supported in Gemini")
                 elif self.tools:
-                    gemini_chat["tools"] = self.tools.copy()
+                    # gemini_chat["tools"] = self.tools.copy()
+                    ctx.log("Error: tools not supported in Gemini")
 
                 if "modalities" in chat:
                     generation_config["responseModalities"] = [modality.upper() for modality in chat["modalities"]]
