@@ -40,11 +40,18 @@ export const o = {
             return { responseStatus: { errorCode: 'Error', message: `GET failed: ${e.message ?? e}` } }
         }
     },
-    post(url, options) {
-        return fetch(this.resolveUrl(url), {
+    async post(url, options) {
+        return await fetch(this.resolveUrl(url), {
             method: 'POST',
             ...options,
             headers: Object.assign({ 'Content-Type': 'application/json' }, this.headers, options?.headers),
+        })
+    },
+    async postForm(url, options) {
+        return await fetch(this.resolveUrl(url), {
+            method: 'POST',
+            ...options,
+            headers: Object.assign({}, options?.headers),
         })
     },
     async postJson(url, options) {
