@@ -185,19 +185,29 @@ export class AppContext {
     layoutVisible(key) {
         return !this.layout.hide.includes(key)
     }
-    toggleTop(name) {
-        console.log('toggleTop', name)
-        this.layout.top = this.layout.top == name ? undefined : name
-        storageObject(`llms.layout`, this.layout)
-    }
-    togglePath(path) {
-        const currentPath = this.router.currentRoute.value?.path
-        console.log('togglePath', path, currentPath)
-        if (currentPath == path) {
-            this.toggleLayout('left')
+    toggleTop(name, toggle) {
+        if (toggle === false) {
+            this.layout.top = undefined
+        } else if (toggle === true) {
+            this.layout.top = name
         } else {
+            this.layout.top = this.layout.top == name ? undefined : name
+        }
+        storageObject(`llms.layout`, this.layout)
+        console.log('toggleTop', name, toggle, this.layout.top, this.layout.top === name)
+        return this.layout.top === name
+    }
+    togglePath(path, toggle) {
+        const currentPath = this.router.currentRoute.value?.path
+        console.log('togglePath', path, currentPath, toggle)
+        if (currentPath != path) {
+            if (toggle === undefined) {
+                toggle = true
+            }
             this.router.push({ path })
         }
+        this.toggleLayout('left', toggle)
+        return toggle
     }
     async getJson(url, options) {
         return await this.ai.getJson(url, options)
