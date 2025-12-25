@@ -2208,10 +2208,10 @@ def install_extensions():
     for item in os.listdir(extensions_path):
         item_path = os.path.join(extensions_path, item)
         if os.path.isdir(item_path):
-            init_file = os.path.join(item_path, "__init__.py")
-            if os.path.exists(init_file):
+            try:
                 ctx = ExtensionContext(g_app, item_path)
-                try:
+                init_file = os.path.join(item_path, "__init__.py")
+                if os.path.exists(init_file):
                     spec = importlib.util.spec_from_file_location(item, init_file)
                     if spec and spec.loader:
                         module = importlib.util.module_from_spec(spec)
@@ -2226,20 +2226,20 @@ def install_extensions():
                             _dbg(f"Extension {item} has no __install__ function")
                     else:
                         _dbg(f"Extension {item} has no __init__.py")
+                else:
+                    _dbg(f"Extension {init_file} not found")
 
-                    # if ui folder exists, serve as static files at /ext/{item}/
-                    ui_path = os.path.join(item_path, "ui")
-                    if os.path.exists(ui_path):
-                        ctx.add_static_files(ui_path)
+                # if ui folder exists, serve as static files at /ext/{item}/
+                ui_path = os.path.join(item_path, "ui")
+                if os.path.exists(ui_path):
+                    ctx.add_static_files(ui_path)
 
-                        # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
-                        if os.path.exists(os.path.join(ui_path, "index.mjs")):
-                            ctx.register_ui_extension("index.mjs")
+                # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
+                if os.path.exists(os.path.join(ui_path, "index.mjs")):
+                    ctx.register_ui_extension("index.mjs")
 
-                except Exception as e:
-                    _err(f"Failed to install extension {item}", e)
-            else:
-                _dbg(f"Extension {init_file} not found")
+            except Exception as e:
+                _err(f"Failed to install extension {item}", e)
         else:
             _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
 
