@@ -148,7 +148,7 @@ const ProviderStatus = {
         const onToggle = async (provider, enable) => {
             pending.value = { ...pending.value, [provider]: true }
             try {
-                const res = await ai.post(`/providers/${encodeURIComponent(provider)}`, {
+                const res = await ctx.post(`/providers/${encodeURIComponent(provider)}`, {
                     body: JSON.stringify(enable ? { enable: true } : { disable: true })
                 })
                 if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
