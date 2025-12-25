@@ -7,17 +7,15 @@ const Brand = {
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <button type="button"
-                    @click="$router.push('/')"
+                    @click="$ctx.to('/')"
                     class="text-lg font-semibold text-gray-900 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
-                    title="Go back home"
-                >
+                    title="Go back home">
                     {{ $state.title }}
                 </button>
             </div>
         </div>
     </div>
     `,
-    emits: ['home', 'toggle-sidebar'],
 }
 
 const Welcome = {

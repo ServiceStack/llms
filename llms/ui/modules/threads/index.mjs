@@ -135,7 +135,7 @@ const GroupedThreads = {
 const ThreadsSidebar = {
     template: `
         <div class="flex flex-col h-full">
-            <Brand @home="goToInitialState" @toggle-sidebar="$emit('toggle-sidebar')" />
+            <Brand />
             <!-- Thread List -->
             <div class="flex-1 overflow-y-auto">
                 <div v-if="isLoading" class="p-4 text-center text-gray-500 dark:text-gray-400">
@@ -169,8 +169,7 @@ const ThreadsSidebar = {
             </div>
         </div>
     `,
-    emits: ['thread-selected', 'toggle-sidebar'],
-    setup(props, { emit }) {
+    setup(props) {
         const ctx = inject('ctx')
         const ai = ctx.ai
         const router = useRouter()
@@ -191,7 +190,6 @@ const ThreadsSidebar = {
 
         const selectThread = async (threadId) => {
             router.push(`${ai.base}/c/${threadId}`)
-            emit('thread-selected')
         }
 
         const deleteThread = async (threadId) => {
@@ -205,20 +203,16 @@ const ThreadsSidebar = {
         }
 
         const createNewThread = async () => {
-            const newThread = await createThread()
-            router.push(`${ai.base}/c/${newThread.id}`)
-            emit('thread-selected')
+            ctx.threads.startNewThread({ title: 'New Chat' })
         }
 
         const goToInitialState = () => {
             clearCurrentThread()
-            router.push(`${ai.base}/`)
-            emit('thread-selected')
+            ctx.to(`/`)
         }
 
         const goToAnalytics = () => {
-            router.push(`${ai.base}/analytics`)
-            emit('thread-selected')
+            ctx.to(`/analytics`)
         }
 
         return {

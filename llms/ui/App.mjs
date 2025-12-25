@@ -5,7 +5,7 @@ import { AppContext } from "./ctx.mjs"
 // Vertical Sidebar Icons
 const LeftBar = {
     template: `
-        <div class="flex flex-col space-y-2 pt-2.5 px-1">
+        <div class="select-none flex flex-col space-y-2 pt-2.5 px-1">
             <div v-for="(icon, id) in $ctx.left" :key="id" class="relative flex items-center justify-center">
                 <component :is="icon.component" 
                     class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded block"
@@ -31,7 +31,7 @@ const LeftBar = {
 const LeftPanel = {
     template: `
         <div v-if="component" class="flex flex-col h-full border-r border-gray-200 dark:border-gray-700">
-            <button type="button" @click="$emit('toggle-sidebar')" class="absolute top-2 right-2 p-1 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden z-20">
+            <button type="button" class="absolute top-2 right-2 p-1 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden z-20">
                 <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </button>
             <component :is="component" />
@@ -49,11 +49,11 @@ const LeftPanel = {
 
 const TopBar = {
     template: `
-        <div class="flex space-x-1">
+        <div class="select-none flex space-x-1">
             <div v-for="(icon, id) in $ctx.top" :key="id" class="relative flex items-center justify-center">
                 <component :is="icon.component" 
-                    class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 block"
-                    :class="{ 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded' : icon.isActive({ ...$layout }) }" 
+                    class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 block border border-transparent"
+                    :class="{ 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 rounded' : icon.isActive({ ...$layout }) }" 
                     @mouseenter="tooltip = icon.id"
                     @mouseleave="tooltip = ''"
                     />
@@ -164,7 +164,6 @@ export default {
                         'fixed inset-y-0 left-[2.25rem] lg:left-0',
                         'bg-gray-50 dark:bg-gray-800'
                     ]"
-                    @thread-selected="$ctx.toggleLayout('left',false)" @toggle-sidebar="$ctx.toggleLayout('left')"
                 />
             </div>
 
