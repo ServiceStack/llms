@@ -28,6 +28,9 @@ export class ExtensionScope {
     post(url, options) {
         return this.ctx.ai.post(combinePaths(this.baseUrl, url), options)
     }
+    async postForm(url, options) {
+        return await this.ctx.ai.postForm(combinePaths(this.baseUrl, url), options)
+    }
     async postJson(url, options) {
         return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), options)
     }
@@ -196,10 +199,16 @@ export class AppContext {
             this.router.push({ path })
         }
     }
-    getJson(url, options) {
-        return this.ai.getJson(url, options)
+    async getJson(url, options) {
+        return await this.ai.getJson(url, options)
     }
-    postJson(url, options) {
-        return this.ai.postJson(url, options)
+    async post(url, options) {
+        return await this.ai.post(url, options)
+    }
+    async postForm(url, options) {
+        return await this.ai.postForm(url, options)
+    }
+    async postJson(url, options) {
+        return await this.ai.postJson(url, options)
     }
 }
