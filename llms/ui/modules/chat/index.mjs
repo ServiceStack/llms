@@ -150,7 +150,15 @@ export function useChatPrompt(ctx) {
 
     function getSelectedModel() {
         const candidates = [ctx.state.selectedModel, ctx.state.config.defaults.text.model]
-        return candidates.map(name => name && getModel(name)).find(x => !!x)
+        const ret = candidates.map(name => name && getModel(name)).find(x => !!x)
+        if (!ret) {
+            // Try to find a model in the latest threads
+            for (const thread in ctx.threads.threads) {
+                const model = thread.model && getModel(thread.model)
+                if (model) return model
+            }
+        }
+        return ret
     }
 
     function setSelectedModel(model) {
@@ -295,7 +303,6 @@ const ChatPrompt = {
     setup(props) {
         const ctx = inject('ctx')
         const config = ctx.state.config
-        const ai = ctx.ai
         const router = useRouter()
         const chatPrompt = ctx.chat
         const {
@@ -495,30 +502,25 @@ const ChatPrompt = {
             chatPrompt.abortController.value = controller
             const model = props.model.name
 
-            try {
-                let threadId
+            let thread
 
+            try {
                 // Create thread if none exists
                 if (!currentThread.value) {
-                    const newThread = await threads.createThread({
-                        title: 'New Chat',
-                        model,
-                        info: ctx.utils.toModelInfo(props.model),
-                    })
-                    threadId = newThread.id
-                    // Navigate to the new thread URL
-                    router.push(`${ai.base}/c/${newThread.id}`)
+                    thread = await ctx.threads.startNewThread()
                 } else {
-                    threadId = currentThread.value.id
+                    let threadId = currentThread.value.id
                     // Update the existing thread's model to match current selection
                     await threads.updateThread(threadId, {
                         model,
                         info: ctx.utils.toModelInfo(props.model),
                     })
+
+                    // Get the thread to check for duplicates
+                    thread = await threads.getThread(threadId)
                 }
 
-                // Get the thread to check for duplicates
-                let thread = await threads.getThread(threadId)
+                let threadId = thread.id
 
                 // Handle Editing / Redo Logic
                 if (editingMessageId.value) {
@@ -733,6 +735,14 @@ const ChatPrompt = {
 
         watch(() => ctx.state.selectedAspectRatio, newValue => {
             ctx.setPrefs({ aspectRatio: newValue })
+        })
+
+        watch(() => ctx.layout.path, newValue => {
+            if (newValue === '/' || newValue.startsWith('/c/')) {
+                nextTick(() => {
+                    refMessage.value?.focus()
+                })
+            }
         })
 
         return {

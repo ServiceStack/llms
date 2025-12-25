@@ -541,6 +541,55 @@ async function deleteRequest(requestId) {
     await tx.complete
 }
 
+function getLatestCachedThread() {
+    return threads.value[0]
+}
+async function getLatestThread() {
+    await initDB()
+    const tx = db.transaction(['threads'], 'readonly')
+    const store = tx.objectStore('threads')
+    // Open cursor in reverse order (prev = previous/descending)
+    const cursor = await store.openCursor(null, 'prev');
+    return cursor ? cursor.value : null;
+}
+
+async function startNewThread(opt = null, model = null) {
+    if (!opt) opt = {}
+    if (!model) {
+        model = ctx.chat.getSelectedModel()
+    }
+    if (!model) {
+        console.error('No model selected')
+        return
+    }
+    const title = opt.title || 'New Chat'
+    const latestThread = getLatestCachedThread()
+
+    console.log('startNewThread', title, model.name, ctx.router.currentRoute.value?.path, latestThread?.messages?.length)
+    ctx.setLayout({ left: 'ThreadsSidebar' })
+
+    if (latestThread && latestThread.title == title && !latestThread.messages?.length) {
+        if (ctx.router.currentRoute.value?.path != `/c/${latestThread.id}`) {
+            ctx.to(`/c/${latestThread.id}`)
+        }
+        return latestThread
+    }
+    const newThread = await createThread({
+        title,
+        model: model.name,
+        info: ctx.utils.toModelInfo(model),
+    })
+
+    console.log('newThread', newThread, model, opt)
+    // Navigate to the new thread URL
+    ctx.to(`/c/${newThread.id}`)
+
+    // Get the thread to check for duplicates
+    let thread = await getThread(newThread.id)
+    return thread
+}
+
+
 // Export the store
 export function useThreadStore() {
     return {
@@ -573,6 +622,9 @@ export function useThreadStore() {
         deleteRequest,
         getAllRequestIds,
         getAllThreadIds,
+        getLatestThread,
+        getLatestCachedThread,
+        startNewThread,
     }
 }
 
