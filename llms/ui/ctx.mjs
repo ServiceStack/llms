@@ -58,6 +58,7 @@ export class AppContext {
         this.left = {}
         this.layout = reactive(storageObject(`llms.layout`))
         this.prefs = reactive(storageObject(ai.prefsKey))
+        this._onRouterBeforeEach = []
 
         if (!Array.isArray(this.layout.hide)) {
             this.layout.hide = []
@@ -220,5 +221,26 @@ export class AppContext {
     }
     async postJson(url, options) {
         return await this.ai.postJson(url, options)
+    }
+    to(route) {
+        if (typeof route == 'string') {
+            route = route.startsWith(this.ai.base)
+                ? route
+                : combinePaths(this.ai.base, route)
+            const path = { path: route }
+            console.log('to', path)
+            this.router.push(path)
+        } else {
+            route.path = route.path.startsWith(this.ai.base)
+                ? route.path
+                : combinePaths(this.ai.base, route.path)
+            console.log('to', route)
+            this.router.push(route)
+        }
+    }
+
+    // Events
+    onRouterBeforeEach(callback) {
+        this._onRouterBeforeEach.push(callback)
     }
 }

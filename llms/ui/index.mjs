@@ -103,6 +103,7 @@ export async function createContext() {
         document.title = title
         return true
     })
+    ctx._onRouterBeforeEach.forEach(ctx.router.beforeEach)
 
     if (ctx.layout.path && location.pathname === '/' && !location.search) {
         console.log('redirecting to saved path: ', ctx.layout.path)
