@@ -1,3 +1,4 @@
+import { toRaw } from "vue"
 import { rightPart } from "@servicestack/client"
 
 export function toJsonArray(json) {
@@ -72,7 +73,8 @@ export function deepClone(o) {
             return structuredClone(o)
         } catch (e) {
             console.warn('structuredClone failed, falling back to JSON:', e)
-            console.log(JSON.stringify(o, undefined, 2))
+            console.log(o)
+            // console.log(JSON.stringify(o, undefined, 2))
         }
     }
 
@@ -82,11 +84,11 @@ export function deepClone(o) {
 
 export function toModelInfo(model) {
     if (!model) return undefined
-    const { id, name, provider, cost, modalities } = model
-    return deepClone({ id, name, provider, cost, modalities })
+    const props = ['id', 'name', 'provider', 'cost', 'modalities']
+    const to = {}
+    props.forEach(k => to[k] = toRaw(model[k]))
+    return deepClone(to)
 }
-
-
 
 export function pluralize(word, count) {
     return count === 1 ? word : word + 's'
