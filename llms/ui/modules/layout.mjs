@@ -1,27 +1,6 @@
 import { computed, inject, ref, onMounted, onUnmounted } from "vue"
 import { toJsonObject } from "../utils.mjs"
 
-const ToggleSidebarButton = {
-    template: `
-    <button type="button"
-        @click="$emit('toggle-sidebar')"
-        class="group relative text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
-        title="Collapse sidebar"
-    >
-        <div class="relative size-5">
-            <!-- Default sidebar icon -->
-            <svg class="absolute inset-0 group-hover:hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="9" y1="3" x2="9" y2="21"></line>
-            </svg>
-            <!-- Hover state: |← icon -->
-            <svg class="absolute inset-0 hidden group-hover:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m10.071 4.929l1.414 1.414L6.828 11H16v2H6.828l4.657 4.657l-1.414 1.414L3 12zM18.001 19V5h2v14z"/></svg>
-        </div>
-    </button>
-    `,
-    emits: ['toggle-sidebar'],
-}
-
 const Brand = {
     template: `
     <div class="flex-shrink-0 p-2 border-b border-gray-200 dark:border-gray-700 select-none">
@@ -256,7 +235,6 @@ const SignIn = {
 export default {
     install(ctx) {
         ctx.components({
-            ToggleSidebarButton,
             Brand,
             Welcome,
             Avatar,
