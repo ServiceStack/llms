@@ -59,6 +59,7 @@ export class AppContext {
         this.layout = reactive(storageObject(`llms.layout`))
         this.prefs = reactive(storageObject(ai.prefsKey))
         this._onRouterBeforeEach = []
+        this._onClass = []
 
         if (!Array.isArray(this.layout.hide)) {
             this.layout.hide = []
@@ -242,5 +243,18 @@ export class AppContext {
     // Events
     onRouterBeforeEach(callback) {
         this._onRouterBeforeEach.push(callback)
+    }
+
+    onClass(callback) {
+        this._onClass.push(callback)
+    }
+
+    cls(id, cls) {
+        if (this._onClass.length) {
+            this._onClass.forEach(callback => {
+                cls = callback(id, cls) ?? cls
+            })
+        }
+        return cls
     }
 }

@@ -150,12 +150,12 @@ export default {
             <div
                 v-if="isMobile && $ctx.layoutVisible('left') && $ai.hasAccess"
                 @click="$ctx.toggleLayout('left')"
-                class="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                :class="$ctx.cls('mobile-overlay', 'fixed inset-0 bg-black/50 z-40 lg:hidden')"
             ></div>
 
-            <div id="sidebar" class="z-100 relative flex bg-gray-50 dark:bg-gray-800">
-                <LeftBar />
-                <LeftPanel
+            <div id="sidebar" :class="$ctx.cls('sidebar', 'z-100 relative flex bg-gray-50 dark:bg-gray-800')">
+                <LeftBar id="left-bar" />
+                <LeftPanel id="left-panel"
                     v-if="$ai.hasAccess && $ctx.layoutVisible('left')"
                     :class="[
                         'transition-transform duration-300 ease-in-out z-50',
@@ -168,22 +168,22 @@ export default {
             </div>
 
             <!-- Main Area -->
-            <div class="flex-1 flex flex-col">
-                <div class="flex flex-col h-full w-full overflow-hidden">
-                    <div class="py-1 pr-1 flex items-center justify-between shrink-0">
+            <div id="main" :class="$ctx.cls('main', 'flex-1 flex flex-col')">
+                <div id="main-inner" :class="$ctx.cls('main-inner', 'flex flex-col h-full w-full overflow-hidden')">
+                    <div id="header" :class="$ctx.cls('header', 'py-1 pr-1 flex items-center justify-between shrink-0')">
                         <div>
                             <ModelSelector :models="$state.models" v-model="$state.selectedModel" />
                         </div>
-                        <TopBar />
+                        <TopBar id="top-bar" />
                     </div>
-                    <TopPanel class="shrink-0" />
-                    <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                    <TopPanel id="top-panel" :class="$ctx.cls('top-panel', 'shrink-0')" />
+                    <div id="page" :class="$ctx.cls('page', 'flex-1 overflow-y-auto min-h-0 flex flex-col')">
                         <RouterView class="h-full" />
                     </div>
                 </div>
             </div>
 
-            <component v-if="modal" :is="modal" class="!z-[200]" @done="closeModal" />
+            <component v-if="modal" :is="modal" :class="$ctx.cls('modal', '!z-[200]')" @done="closeModal" />
         </div>
     `,
 }
