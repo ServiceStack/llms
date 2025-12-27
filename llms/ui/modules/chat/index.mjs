@@ -1,7 +1,7 @@
 
 import { ref, computed, watch, nextTick, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { $$, createElement, lastRightPart } from "@servicestack/client"
+import { $$, createElement, lastRightPart, ApiResult, createErrorStatus } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
 import ChatBody from './ChatBody.mjs'
 import HomeTools from './HomeTools.mjs'
@@ -174,7 +174,205 @@ export function useChatPrompt(ctx) {
         return getModel(model)?.provider
     }
 
+    const canGenerateImage = model => {
+        return model?.modalities?.output?.includes('image')
+    }
+    const canGenerateAudio = model => {
+        return model?.modalities?.output?.includes('audio')
+    }
+
+    function applySettings(request) {
+        settings.applySettings(request)
+    }
+
+    function createContent({ text, files }) {
+        let content = []
+
+        // Add Text Block
+        content.push({ type: 'text', text })
+
+        // Add Attachment Blocks
+        for (const f of files) {
+            const ext = lastRightPart(f.name, '.')
+            if (imageExts.includes(ext)) {
+                content.push({ type: 'image_url', image_url: { url: f.url } })
+            } else if (audioExts.includes(ext)) {
+                content.push({ type: 'input_audio', input_audio: { data: f.url, format: ext } })
+            } else {
+                content.push({ type: 'file', file: { file_data: f.url, filename: f.name } })
+            }
+        }
+        return content
+    }
+
+    function createRequest({ model, aspect_ratio }) {
+        // Construct API Request from History
+        const request = {
+            model: model.name,
+            messages: [],
+            metadata: {}
+        }
+
+        // Apply user settings
+        applySettings(request)
+
+        if (canGenerateImage(model)) {
+            request.image_config = {
+                aspect_ratio: aspect_ratio || imageAspectRatios[ctx.state.selectedAspectRatio] || '1:1'
+            }
+            request.modalities = ["image", "text"]
+        }
+        else if (canGenerateAudio(model)) {
+            request.modalities = ["audio", "text"]
+        }
+
+        return request
+    }
+
+    async function completion({ request, model, thread, controller, store }) {
+        try {
+            let error
+            if (!model) {
+                if (request.model) {
+                    model = getModel(request.model)
+                } else {
+                    model = getModel(request.model) ?? getSelectedModel()
+                }
+            }
+
+            if (!model) {
+                return new ApiResult({
+                    error: createErrorStatus(`Model ${request.model || ''} not found`, 'NotFound')
+                })
+            }
+
+            if (!request.messages) request.messages = []
+            if (!request.metadata) request.metadata = {}
+
+            if (store && !thread) {
+                const title = getTextContent(request) || 'New Chat'
+                thread = await ctx.threads.startNewThread({ title, model })
+            }
+
+            const threadId = thread?.id || ctx.threads.generateThreadId()
+
+            const ctxRequest = {
+                request,
+                thread,
+            }
+            ctx.chatRequestFilters.forEach(f => f(ctxRequest))
+
+            console.debug('completion.request', request)
+
+            // Send to API
+            const startTime = Date.now()
+            const res = await ctx.post('/v1/chat/completions', {
+                body: JSON.stringify(request),
+                signal: controller?.signal
+            })
+
+            let response = null
+            if (!res.ok) {
+                error = createErrorStatus('', `HTTP ${res.status} ${res.statusText}`)
+                let errorBody = null
+                try {
+                    errorBody = await res.text()
+                    if (errorBody) {
+                        // Try to parse as JSON for better formatting
+                        try {
+                            const errorJson = JSON.parse(errorBody)
+                            const status = errorJson?.responseStatus
+                            if (status) {
+                                error.errorCode += ` ${status.errorCode}`
+                                error.message = status.message
+                                error.stackTrace = status.stackTrace
+                            } else {
+                                error.stackTrace = JSON.stringify(errorJson, null, 2)
+                            }
+                        } catch (e) {
+                        }
+                    }
+                } catch (e) {
+                    // If we can't read the response body, just use the status
+                }
+            } else {
+                try {
+                    response = await res.json()
+                    const ctxResponse = {
+                        response,
+                        thread,
+                    }
+                    ctx.chatResponseFilters.forEach(f => f(ctxResponse))
+                    console.debug('completion.response', JSON.stringify(response, null, 2))
+                } catch (e) {
+                    error = createErrorStatus(e.message)
+                }
+            }
+
+            if (response?.error) {
+                error ??= createErrorStatus()
+                error.message = response.error
+            }
+
+            if (error) {
+                ctx.chatErrorFilters.forEach(f => f(error))
+                return new ApiResult({ error })
+            }
+
+            if (!error) {
+                // Add tool history messages if any
+                if (response.tool_history && Array.isArray(response.tool_history)) {
+                    for (const msg of response.tool_history) {
+                        if (msg.role === 'assistant') {
+                            msg.model = model.name // tag with model
+                        }
+                        if (store) {
+                            await ctx.threads.addMessageToThread(threadId, msg)
+                        }
+                    }
+                }
+
+                // Add assistant response (save entire message including reasoning)
+                const assistantMessage = response.choices?.[0]?.message
+
+                const usage = response.usage
+                if (usage) {
+                    if (response.metadata?.pricing) {
+                        const [input, output] = response.metadata.pricing.split('/')
+                        usage.duration = response.metadata.duration ?? (Date.now() - startTime)
+                        usage.input = input
+                        usage.output = output
+                        usage.tokens = usage.completion_tokens
+                        usage.price = usage.output
+                        usage.cost = ctx.fmt.tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
+                    }
+                    await ctx.threads.logRequest(threadId, model.name, request, response)
+                }
+                if (store) {
+                    assistantMessage.model = model.name
+                    await ctx.threads.addMessageToThread(threadId, assistantMessage, usage)
+                }
+
+                nextTick(addCopyButtons)
+
+                return new ApiResult({ response })
+            }
+        } catch (e) {
+            return createErrorStatus(e.message, 'ChatFailed')
+
+        }
+    }
+    function getTextContent(chat) {
+        const textMessage = chat.messages.find(m =>
+            m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'text'))
+        return textMessage?.content.find(c => c.type === 'text')?.text || ''
+    }
+
     return {
+        completion,
+        createContent,
+        createRequest,
+        applySettings,
         messageText,
         attachedFiles,
         errorStatus,
@@ -196,6 +394,9 @@ export function useChatPrompt(ctx) {
         getSelectedModel,
         setSelectedModel,
         getProviderForModel,
+        canGenerateImage,
+        canGenerateAudio,
+        getTextContent,
     }
 }
 
@@ -278,7 +479,7 @@ const ChatPrompt = {
                     </div>
 
                     <!-- Image Aspect Ratio Selector -->
-                    <div v-if="canGenerateImages" class="min-w-[120px]">
+                    <div v-if="$chat.canGenerateImage(model)" class="min-w-[120px]">
                         <select name="aspect_ratio" v-model="$state.selectedAspectRatio" 
                                 class="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300 pl-2 pr-6 py-1 focus:ring-blue-500 focus:border-blue-500">
                             <option v-for="(ratio, size) in imageAspectRatios" :key="size" :value="size">
@@ -314,6 +515,7 @@ const ChatPrompt = {
             hasAudio,
             hasFile,
             editingMessageId,
+            getTextContent,
         } = chatPrompt
         const threads = ctx.threads
         const {
@@ -323,14 +525,6 @@ const ChatPrompt = {
         const fileInput = ref(null)
         const refMessage = ref(null)
         const showSettings = ref(false)
-        const { applySettings } = ctx.chat.settings
-
-        const canGenerateImages = computed(() => {
-            return props.model?.modalities?.output?.includes('image')
-        })
-        const canGenerateAudio = computed(() => {
-            return props.model?.modalities?.output?.includes('audio')
-        })
 
         // File attachments (+) handlers
         const triggerFilePicker = () => {
@@ -461,12 +655,6 @@ const ChatPrompt = {
             }
         }
 
-        function getTextContent(chat) {
-            const textMessage = chat.messages.find(m =>
-                m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'text'))
-            return textMessage?.content.find(c => c.type === 'text')?.text || ''
-        }
-
         // Send message
         const sendMessage = async () => {
             if (!messageText.value.trim() && !hasImage() && !hasAudio() && !hasFile()) return
@@ -477,25 +665,10 @@ const ChatPrompt = {
 
             // 1. Construct Structured Content (Text + Attachments)
             let text = messageText.value.trim()
-            let content = []
 
 
             messageText.value = ''
-
-            // Add Text Block
-            content.push({ type: 'text', text: text })
-
-            // Add Attachment Blocks
-            for (const f of attachedFiles.value) {
-                const ext = lastRightPart(f.name, '.')
-                if (imageExts.includes(ext)) {
-                    content.push({ type: 'image_url', image_url: { url: f.url } })
-                } else if (audioExts.includes(ext)) {
-                    content.push({ type: 'input_audio', input_audio: { data: f.url, format: ext } })
-                } else {
-                    content.push({ type: 'file', file: { file_data: f.url, filename: f.name } })
-                }
-            }
+            let content = ctx.chat.createContent({ text, files: attachedFiles.value })
 
             // Create AbortController for this request
             const controller = new AbortController()
@@ -507,7 +680,7 @@ const ChatPrompt = {
             try {
                 // Create thread if none exists
                 if (!currentThread.value) {
-                    thread = await ctx.threads.startNewThread()
+                    thread = await ctx.threads.startNewThread({ model: props.model })
                 } else {
                     let threadId = currentThread.value.id
                     // Update the existing thread's model to match current selection
@@ -528,7 +701,7 @@ const ChatPrompt = {
                     const messageExists = thread.messages.find(m => m.id === editingMessageId.value)
                     if (messageExists) {
                         // Update the message content
-                        await threads.updateMessageInThread(threadId, editingMessageId.value, { content: content })
+                        await threads.updateMessageInThread(threadId, editingMessageId.value, { content })
                         // Redo from this message (clears subsequent)
                         await threads.redoMessageFromThread(threadId, editingMessageId.value)
 
@@ -570,141 +743,25 @@ const ChatPrompt = {
 
                 isGenerating.value = true
 
-                // Construct API Request from History
-                const request = {
-                    model,
-                    messages: [],
-                    metadata: {}
-                }
+                const request = ctx.chat.createRequest({ model: props.model })
 
                 // Add History
-                thread.messages.forEach(m => {
+                thread?.messages.forEach(m => {
                     request.messages.push({
                         role: m.role,
                         content: m.content
                     })
                 })
+                request.metadata.threadId = thread.id
 
-                // Apply user settings
-                applySettings(request)
-
-                if (canGenerateImages.value) {
-                    request.image_config = {
-                        aspect_ratio: imageAspectRatios[ctx.state.selectedAspectRatio] || '1:1'
-                    }
-                    request.modalities = ["image", "text"]
-                }
-                else if (canGenerateAudio.value) {
-                    request.modalities = ["audio", "text"]
-                }
-
-                request.metadata.threadId = threadId
-
-                const ctxRequest = {
-                    request,
-                    thread,
-                }
-                ctx.chatRequestFilters.forEach(f => f(ctxRequest))
-
-                console.debug('chatRequest', request)
-
-                // Send to API
-                const startTime = Date.now()
-                const res = await ctx.post('/v1/chat/completions', {
-                    body: JSON.stringify(request),
-                    signal: controller.signal
-                })
-
-                let response = null
-                if (!res.ok) {
-                    errorStatus.value = {
-                        errorCode: `HTTP ${res.status} ${res.statusText}`,
-                        message: null,
-                        stackTrace: null
-                    }
-                    let errorBody = null
-                    try {
-                        errorBody = await res.text()
-                        if (errorBody) {
-                            // Try to parse as JSON for better formatting
-                            try {
-                                const errorJson = JSON.parse(errorBody)
-                                const status = errorJson?.responseStatus
-                                if (status) {
-                                    errorStatus.value.errorCode += ` ${status.errorCode}`
-                                    errorStatus.value.message = status.message
-                                    errorStatus.value.stackTrace = status.stackTrace
-                                } else {
-                                    errorStatus.value.stackTrace = JSON.stringify(errorJson, null, 2)
-                                }
-                            } catch (e) {
-                            }
-                        }
-                    } catch (e) {
-                        // If we can't read the response body, just use the status
-                    }
-                } else {
-                    try {
-                        response = await res.json()
-                        const ctxResponse = {
-                            response,
-                            thread,
-                        }
-                        ctx.chatResponseFilters.forEach(f => f(ctxResponse))
-                        console.debug('chatResponse', JSON.stringify(response, null, 2))
-                    } catch (e) {
-                        errorStatus.value = {
-                            errorCode: 'Error',
-                            message: e.message,
-                            stackTrace: null
-                        }
-                    }
-                }
-
-                if (response?.error) {
-                    errorStatus.value ??= {
-                        errorCode: 'Error',
-                    }
-                    errorStatus.value.message = response.error
-                }
-
-                if (!errorStatus.value) {
-                    // Add tool history messages if any
-                    if (response.tool_history && Array.isArray(response.tool_history)) {
-                        for (const msg of response.tool_history) {
-                            if (msg.role === 'assistant') {
-                                msg.model = props.model.name // tag with model
-                            }
-                            await threads.addMessageToThread(threadId, msg)
-                        }
-                    }
-
-                    // Add assistant response (save entire message including reasoning)
-                    const assistantMessage = response.choices?.[0]?.message
-
-                    const usage = response.usage
-                    if (usage) {
-                        if (response.metadata?.pricing) {
-                            const [input, output] = response.metadata.pricing.split('/')
-                            usage.duration = response.metadata.duration ?? (Date.now() - startTime)
-                            usage.input = input
-                            usage.output = output
-                            usage.tokens = usage.completion_tokens
-                            usage.price = usage.output
-                            usage.cost = ctx.fmt.tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
-                        }
-                        await threads.logRequest(threadId, props.model, request, response)
-                    }
-                    assistantMessage.model = props.model.name
-                    await threads.addMessageToThread(threadId, assistantMessage, usage)
-
-                    nextTick(addCopyButtons)
-
+                const api = await ctx.chat.completion({ request, thread, controller, store: true })
+                if (api.response) {
+                    // success
                     attachedFiles.value = []
-                    // Error will be cleared when user sends next message (no auto-timeout)
                 } else {
-                    ctx.chatErrorFilters.forEach(f => f(errorStatus.value))
+                    errorStatus.value = api.error
                 }
+
             } catch (error) {
                 // Check if the error is due to abort
                 if (error.name === 'AbortError') {
@@ -764,7 +821,6 @@ const ChatPrompt = {
             cancelRequest,
             addNewLine,
             imageAspectRatios,
-            canGenerateImages,
         }
     }
 }

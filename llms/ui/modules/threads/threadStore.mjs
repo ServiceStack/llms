@@ -117,6 +117,9 @@ async function createThread(args = {}) {
     if (!thread.title) {
         thread.title = 'New Chat'
     }
+    if (thread.title.length > 200) {
+        thread.title = thread.title.slice(0, 200) + '...'
+    }
 
     ctx.createThreadFilters.forEach(f => f(thread))
 
@@ -553,16 +556,14 @@ async function getLatestThread() {
     return cursor ? cursor.value : null;
 }
 
-async function startNewThread(opt = null, model = null) {
-    if (!opt) opt = {}
-    if (!model) {
-        model = ctx.chat.getSelectedModel()
-    }
+async function startNewThread({ title, model }) {
     if (!model) {
         console.error('No model selected')
         return
     }
-    const title = opt.title || 'New Chat'
+    if (!title) {
+        title = 'New Chat'
+    }
     const latestThread = getLatestCachedThread()
 
     console.log('startNewThread', title, model.name, ctx.router.currentRoute.value?.path, latestThread?.messages?.length)
@@ -580,7 +581,7 @@ async function startNewThread(opt = null, model = null) {
         info: ctx.utils.toModelInfo(model),
     })
 
-    console.log('newThread', newThread, model, opt)
+    console.log('newThread', newThread, model)
     // Navigate to the new thread URL
     ctx.to(`/c/${newThread.id}`)
 
@@ -624,6 +625,7 @@ export function useThreadStore() {
         getAllThreadIds,
         getLatestThread,
         getLatestCachedThread,
+        generateThreadId,
         startNewThread,
     }
 }

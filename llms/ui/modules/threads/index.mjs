@@ -203,7 +203,7 @@ const ThreadsSidebar = {
         }
 
         const createNewThread = async () => {
-            ctx.threads.startNewThread({ title: 'New Chat' })
+            ctx.threads.startNewThread({ title: 'New Chat', model: ctx.chat.getSelectedModel() })
         }
 
         const goToInitialState = () => {
