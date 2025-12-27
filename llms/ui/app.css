@@ -1688,6 +1688,9 @@
   .bg-red-600\! {
     background-color: var(--color-red-600) !important;
   }
+  .bg-red-800 {
+    background-color: var(--color-red-800);
+  }
   .bg-red-800\! {
     background-color: var(--color-red-800) !important;
   }
