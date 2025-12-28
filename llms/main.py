@@ -491,6 +491,7 @@ class HTTPError(Exception):
         self.headers = headers
         super().__init__(f"HTTP {status} {reason}")
 
+
 def save_bytes_to_cache(base64_data, filename, file_info):
     ext = filename.split(".")[-1]
     mimetype = get_file_mime_type(filename)
@@ -518,6 +519,7 @@ def save_bytes_to_cache(base64_data, filename, file_info):
     }
     info.update(file_info)
     return url, info
+
 
 def save_image_to_cache(base64_data, filename, image_info):
     ext = filename.split(".")[-1]
@@ -1078,7 +1080,41 @@ def api_providers():
     return ret
 
 
-async def chat_completion(chat):
+def to_error_response(e, stacktrace=False):
+    status = {"errorCode": "Exception", "message": str(e)}
+    if stacktrace:
+        status["stackTrace"] = traceback.format_exc()
+    return {"responseStatus": status}
+
+
+def g_chat_request(template=None, text=None, model=None, system_prompt=None):
+    chat_template = g_config["defaults"].get(template or "text")
+    if not chat_template:
+        raise Exception(f"Chat template '{template}' not found")
+
+    chat = chat_template.copy()
+    if model:
+        chat["model"] = model
+    if system_prompt is not None:
+        chat["messages"].insert(0, {"role": "system", "content": system_prompt})
+    if text is not None:
+        if not chat["messages"] or len(chat["messages"]) == 0:
+            chat["messages"] = [{"role": "user", "content": [{"type": "text", "text": ""}]}]
+
+        # replace content of last message if exists, else add
+        last_msg = chat["messages"][-1] if "messages" in chat else None
+        if last_msg and last_msg["role"] == "user":
+            if isinstance(last_msg["content"], list):
+                last_msg["content"][-1]["text"] = text
+            else:
+                last_msg["content"] = text
+        else:
+            chat["messages"].append({"role": "user", "content": text})
+
+    return chat
+
+
+async def g_chat_completion(chat):
     model = chat["model"]
     # get first provider that has the model
     candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
@@ -1243,16 +1279,8 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
         printdump(chat)
 
     try:
-        # Apply pre-chat filters
-        context = {"chat": chat}
-        for filter_func in g_app.chat_request_filters:
-            chat = await filter_func(chat, context)
+        response = await g_app.chat_completion(chat)
 
-        response = await chat_completion(chat)
-
-        # Apply post-chat filters
-        for filter_func in g_app.chat_response_filters:
-            response = await filter_func(response, context)
         if raw:
             print(json.dumps(response, indent=2))
             exit(0)
@@ -2010,6 +2038,24 @@ class AppExtensions:
             "21:9": "1536×672",
         }
 
+    def chat_request(self, template=None, text=None, model=None, system_prompt=None):
+        return g_chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
+
+    async def chat_completion(self, chat, context=None):
+        # Apply pre-chat filters
+        if context is None:
+            context = {"chat": chat}
+        for filter_func in self.chat_request_filters:
+            chat = await filter_func(chat, context)
+
+        response = await g_chat_completion(chat)
+
+        # Apply post-chat filters
+        for filter_func in self.chat_response_filters:
+            response = await filter_func(response, context)
+
+        return response
+
 
 class ExtensionContext:
     def __init__(self, app, path):
@@ -2098,8 +2144,11 @@ class ExtensionContext:
     def get_config(self):
         return g_config
 
-    def chat_completion(self, chat):
-        return chat_completion(chat)
+    def chat_request(self, template=None, text=None, model=None, system_prompt=None):
+        return self.app.chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
+
+    def chat_completion(self, chat, context=None):
+        return self.app.chat_completion(chat, context=context)
 
     def get_providers(self):
         return g_handlers
@@ -2735,19 +2784,8 @@ def main():
 
             try:
                 chat = await request.json()
-
-                # Apply pre-chat filters
                 context = {"request": request, "chat": chat}
-                for filter_func in g_app.chat_request_filters:
-                    chat = await filter_func(chat, context)
-
-                response = await chat_completion(chat)
-
-                # Apply post-chat filters
-                # Apply post-chat filters
-                for filter_func in g_app.chat_response_filters:
-                    response = await filter_func(response, context)
-
+                response = await g_app.chat_completion(chat, context)
                 return web.json_response(response)
             except Exception as e:
                 return web.json_response({"error": str(e)}, status=500)
@@ -3222,9 +3260,25 @@ def main():
 
         # go through and register all g_app extensions
         for handler in g_app.server_add_get:
-            app.router.add_get(handler[0], handler[1], **handler[2])
+            handler_fn = handler[1]
+
+            async def managed_handler(request, handler_fn=handler_fn):
+                try:
+                    return await handler_fn(request)
+                except Exception as e:
+                    return web.json_response(to_error_response(e, stacktrace=True), status=500)
+
+            app.router.add_get(handler[0], managed_handler, **handler[2])
         for handler in g_app.server_add_post:
-            app.router.add_post(handler[0], handler[1], **handler[2])
+            handler_fn = handler[1]
+
+            async def managed_handler(request, handler_fn=handler_fn):
+                try:
+                    return await handler_fn(request)
+                except Exception as e:
+                    return web.json_response(to_error_response(e, stacktrace=True), status=500)
+
+            app.router.add_post(handler[0], managed_handler, **handler[2])
 
         # Serve index.html from root
         async def index_handler(request):
@@ -3356,15 +3410,7 @@ def main():
             if len(extra_args) > 0:
                 prompt = " ".join(extra_args)
                 if not chat["messages"] or len(chat["messages"]) == 0:
-                    chat["messages"] = [{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": ""
-                            }
-                        ]
-                    }]
+                    chat["messages"] = [{"role": "user", "content": [{"type": "text", "text": ""}]}]
 
                 # replace content of last message if exists, else add
                 last_msg = chat["messages"][-1] if "messages" in chat else None
