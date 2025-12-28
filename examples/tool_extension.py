@@ -8,12 +8,12 @@ import json
 import math
 import operator
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 
-def get_current_time(timezone: str = "UTC") -> str:
-    """Get current time in the specified timezone"""
-    return f"The time is {datetime.now().strftime('%I:%M %p')} {timezone}"
+def get_current_time() -> str:
+    """Get current UTC time in ISO-8601 format."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def read_file(file_path: str) -> str:
