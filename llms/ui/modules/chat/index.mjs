@@ -189,23 +189,27 @@ export function useChatPrompt(ctx) {
         let content = []
 
         // Add Text Block
-        content.push({ type: 'text', text })
+        if (text) {
+            content.push({ type: 'text', text })
+        }
 
         // Add Attachment Blocks
-        for (const f of files) {
-            const ext = lastRightPart(f.name, '.')
-            if (imageExts.includes(ext)) {
-                content.push({ type: 'image_url', image_url: { url: f.url } })
-            } else if (audioExts.includes(ext)) {
-                content.push({ type: 'input_audio', input_audio: { data: f.url, format: ext } })
-            } else {
-                content.push({ type: 'file', file: { file_data: f.url, filename: f.name } })
+        if (Array.isArray(files)) {
+            for (const f of files) {
+                const ext = lastRightPart(f.name, '.')
+                if (imageExts.includes(ext)) {
+                    content.push({ type: 'image_url', image_url: { url: f.url } })
+                } else if (audioExts.includes(ext)) {
+                    content.push({ type: 'input_audio', input_audio: { data: f.url, format: ext } })
+                } else {
+                    content.push({ type: 'file', file: { file_data: f.url, filename: f.name } })
+                }
             }
         }
         return content
     }
 
-    function createRequest({ model, aspect_ratio }) {
+    function createRequest({ model, text, files, systemPrompt, aspectRatio }) {
         // Construct API Request from History
         const request = {
             model: model.name,
@@ -216,14 +220,30 @@ export function useChatPrompt(ctx) {
         // Apply user settings
         applySettings(request)
 
+        if (systemPrompt) {
+            request.messages = request.messages.filter(m => m.role !== 'system')
+            request.messages.unshift({
+                role: 'system',
+                content: systemPrompt
+            })
+        }
+
         if (canGenerateImage(model)) {
             request.image_config = {
-                aspect_ratio: aspect_ratio || imageAspectRatios[ctx.state.selectedAspectRatio] || '1:1'
+                aspect_ratio: aspectRatio || imageAspectRatios[ctx.state.selectedAspectRatio] || '1:1'
             }
             request.modalities = ["image", "text"]
         }
         else if (canGenerateAudio(model)) {
             request.modalities = ["audio", "text"]
+        }
+
+        if (text) {
+            const content = createContent({ text, files })
+            request.messages.push({
+                role: 'user',
+                content
+            })
         }
 
         return request
@@ -358,14 +378,18 @@ export function useChatPrompt(ctx) {
                 return new ApiResult({ response })
             }
         } catch (e) {
-            return createErrorStatus(e.message, 'ChatFailed')
-
+            console.log('completion.error', e)
+            return new ApiResult({ error: createErrorStatus(e.message, 'ChatFailed') })
         }
     }
     function getTextContent(chat) {
         const textMessage = chat.messages.find(m =>
             m.role === 'user' && Array.isArray(m.content) && m.content.some(c => c.type === 'text'))
         return textMessage?.content.find(c => c.type === 'text')?.text || ''
+    }
+    function getAnswer(response) {
+        const textMessage = response.choices?.[0]?.message
+        return textMessage?.content || ''
     }
 
     return {
@@ -397,6 +421,7 @@ export function useChatPrompt(ctx) {
         canGenerateImage,
         canGenerateAudio,
         getTextContent,
+        getAnswer,
     }
 }
 

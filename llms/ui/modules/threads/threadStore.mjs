@@ -62,7 +62,7 @@ async function logRequest(threadId, model, request, response) {
     const lastUserContent = request.messages?.slice().reverse().find(m => m.role === 'user')?.content
     const content = Array.isArray(lastUserContent)
         ? lastUserContent.filter(c => c?.text).map(c => c.text).join(' ')
-        : lastUserContent
+        : lastUserContent || ''
     const title = content.slice(0, 100) + (content.length > 100 ? '...' : '')
     const inputTokens = usage?.prompt_tokens ?? 0
     const outputTokens = usage?.completion_tokens ?? 0
