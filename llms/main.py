@@ -518,6 +518,11 @@ def save_bytes_to_cache(base64_data, filename, file_info):
         "name": filename,
     }
     info.update(file_info)
+
+    context = {"url": url, "info": info}
+    for filter in g_app.cache_saved_filters:
+        filter(context)
+
     return url, info
 
 
@@ -571,6 +576,10 @@ def save_image_to_cache(base64_data, filename, image_info):
     info_path = os.path.splitext(full_path)[0] + ".info.json"
     with open(info_path, "w") as f:
         json.dump(info, f)
+
+    context = {"url": url, "info": info}
+    for filter in g_app.cache_saved_filters:
+        filter(context)
 
     return url, info
 
@@ -2014,6 +2023,7 @@ class AppExtensions:
         self.server_add_get = []
         self.server_add_post = []
         self.server_add_post = []
+        self.cache_saved_filters = []
         self.tools = {}
         self.tool_definitions = []
         self.all_providers = [
@@ -2120,6 +2130,10 @@ class ExtensionContext:
     def register_chat_response_filter(self, handler):
         self.log(f"Registered chat response filter: {handler}")
         self.app.chat_response_filters.append(handler)
+
+    def register_cache_saved_filter(self, handler):
+        self.log(f"Registered cache saved filter: {handler}")
+        self.app.cache_saved_filters.append(handler)
 
     def add_static_files(self, ext_dir):
         self.log(f"Registered static files: {ext_dir}")
