@@ -19,6 +19,9 @@ export class ExtensionScope {
     setPrefs(o) {
         storageObject(this.storageKey, Object.assign(this.prefs, o))
     }
+    savePrefs() {
+        storageObject(this.storageKey, this.prefs)
+    }
     get(url, options) {
         return this.ctx.ai.get(combinePaths(this.baseUrl, url), options)
     }
