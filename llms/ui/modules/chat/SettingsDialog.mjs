@@ -107,7 +107,7 @@ export function useSettings() {
 
 export default {
     template: `
-    <div v-if="isOpen" class="fixed inset-0 z-50 overflow-y-auto" @click.self="close">
+    <div v-if="isOpen" class="fixed inset-0 z-100 overflow-y-auto" @click.self="close">
         <div class="flex min-h-screen items-center justify-center p-4">
             <!-- Backdrop -->
             <div class="fixed inset-0 bg-black/40 transition-opacity" @click="close"></div>

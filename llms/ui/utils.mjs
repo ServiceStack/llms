@@ -159,6 +159,14 @@ export function utilsFormatters() {
         })
     }
 
+    function shortDate(ts) {
+        if (!ts) return ''
+        const date = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts)
+        return date.toLocaleDateString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        })
+    }
+
 
     return {
         currFmt: currFmt2,
@@ -170,6 +178,7 @@ export function utilsFormatters() {
         relativeTime,
         time,
         pluralize,
+        shortDate,
     }
 }
 

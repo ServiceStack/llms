@@ -8,8 +8,6 @@ import LayoutModule from './modules/layout.mjs'
 import ChatModule from './modules/chat/index.mjs'
 import ThreadsModule from './modules/threads/index.mjs'
 import ModelSelectorModule from './modules/model-selector.mjs'
-import AnalyticsModule from './modules/analytics.mjs'
-import ToolsModule from './modules/tools.mjs'
 import { utilsFunctions, utilsFormatters } from './utils.mjs'
 import { markdownFormatters } from './markdown.mjs'
 import { AppContext } from './ctx.mjs'
@@ -22,8 +20,6 @@ const BuiltInModules = {
     ChatModule,
     ThreadsModule,
     ModelSelectorModule,
-    AnalyticsModule,
-    ToolsModule,
 }
 
 
