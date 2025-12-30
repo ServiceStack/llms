@@ -1100,10 +1100,17 @@ def api_providers():
 
 
 def to_error_response(e, stacktrace=False):
-    status = {"errorCode": "Exception", "message": str(e)}
+    status = {"errorCode": "Error", "message": str(e)}
     if stacktrace:
         status["stackTrace"] = traceback.format_exc()
     return {"responseStatus": status}
+
+
+def create_error_response(message, error_code="Error", stack_trace=None):
+    ret = {"responseStatus": {"errorCode": error_code, "message": message}}
+    if stack_trace:
+        ret["responseStatus"]["stackTrace"] = stack_trace
+    return ret
 
 
 def g_chat_request(template=None, text=None, model=None, system_prompt=None):
@@ -1546,8 +1553,8 @@ def home_llms_path(filename):
     return f"{os.getenv('HOME')}/.llms/{filename}"
 
 
-def get_cache_path(filename):
-    return home_llms_path(f"cache/{filename}")
+def get_cache_path(path=""):
+    return home_llms_path(f"cache/{path}") if path else home_llms_path("cache")
 
 
 def get_config_path():
@@ -2176,6 +2183,9 @@ class ExtensionContext:
     def get_config(self):
         return g_config
 
+    def get_cache_path(self, path=""):
+        return get_cache_path(path)
+
     def chat_request(self, template=None, text=None, model=None, system_prompt=None):
         return self.app.chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
 
@@ -2241,7 +2251,7 @@ def load_builtin_extensions():
 
 
 def get_extensions_path():
-    return os.environ.get("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
+    return os.getenv("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
 
 
 def init_extensions(parser):
@@ -2722,6 +2732,7 @@ def main():
         exit(0)
 
     if cli_args.serve is not None:
+        error_auth_required = create_error_response("Authentication required", "Unauthorized")
         # Disable inactive providers and save to config before starting server
         all_providers = g_config["providers"].keys()
         enabled_providers = list(g_handlers.keys())
@@ -2798,16 +2809,7 @@ def main():
             # Check authentication if enabled
             is_authenticated, user_data = check_auth(request)
             if not is_authenticated:
-                return web.json_response(
-                    {
-                        "error": {
-                            "message": "Authentication required",
-                            "type": "authentication_error",
-                            "code": "unauthorized",
-                        }
-                    },
-                    status=401,
-                )
+                return web.json_response(error_auth_required, status=401)
 
             try:
                 chat = await request.json()
@@ -2815,7 +2817,7 @@ def main():
                 response = await g_app.chat_completion(chat, context)
                 return web.json_response(response)
             except Exception as e:
-                return web.json_response({"error": str(e)}, status=500)
+                return web.json_response(to_error_response(e), status=500)
 
         app.router.add_post("/v1/chat/completions", chat_handler)
 
@@ -2869,16 +2871,7 @@ def main():
             # Check authentication if enabled
             is_authenticated, user_data = check_auth(request)
             if not is_authenticated:
-                return web.json_response(
-                    {
-                        "error": {
-                            "message": "Authentication required",
-                            "type": "authentication_error",
-                            "code": "unauthorized",
-                        }
-                    },
-                    status=401,
-                )
+                return web.json_response(error_auth_required, status=401)
 
             reader = await request.multipart()
 
@@ -2888,7 +2881,7 @@ def main():
                 field = await reader.next()
 
             if not field:
-                return web.json_response({"error": "No file provided"}, status=400)
+                return web.json_response(create_error_response("No file provided"), status=400)
 
             filename = field.filename or "file"
             content = await field.read()
@@ -2948,6 +2941,8 @@ def main():
             with open(info_path, "w") as f:
                 json.dump(response_data, f)
 
+            g_app.on_cache_saved_filters({"url": url, "info": response_data})
+
             return web.json_response(response_data)
 
         app.router.add_post("/upload", upload_handler)
@@ -2973,7 +2968,7 @@ def main():
 
                 # Check for directory traversal for info path
                 try:
-                    cache_root = Path(get_cache_path(""))
+                    cache_root = Path(get_cache_path())
                     requested_path = Path(info_path).resolve()
                     if not str(requested_path).startswith(str(cache_root)):
                         return web.Response(text="403: Forbidden", status=403)
@@ -2989,7 +2984,7 @@ def main():
 
             # Check for directory traversal
             try:
-                cache_root = Path(get_cache_path(""))
+                cache_root = Path(get_cache_path())
                 requested_path = Path(full_path).resolve()
                 if not str(requested_path).startswith(str(cache_root)):
                     return web.Response(text="403: Forbidden", status=403)
@@ -3008,7 +3003,7 @@ def main():
         async def github_auth_handler(request):
             """Initiate GitHub OAuth flow"""
             if "auth" not in g_config or "github" not in g_config["auth"]:
-                return web.json_response({"error": "GitHub OAuth not configured"}, status=500)
+                return web.json_response(create_error_response("GitHub OAuth not configured"), status=500)
 
             auth_config = g_config["auth"]["github"]
             client_id = auth_config.get("client_id", "")
@@ -3024,7 +3019,7 @@ def main():
             redirect_uri = os.getenv(redirect_uri, redirect_uri)
 
             if not client_id:
-                return web.json_response({"error": "GitHub client_id not configured"}, status=500)
+                return web.json_response(create_error_response("GitHub client_id not configured"), status=500)
 
             # Generate CSRF state token
             state = secrets.token_urlsafe(32)
@@ -3095,7 +3090,7 @@ def main():
             g_oauth_states.pop(state)
 
             if "auth" not in g_config or "github" not in g_config["auth"]:
-                return web.json_response({"error": "GitHub OAuth not configured"}, status=500)
+                return web.json_response(create_error_response("GitHub OAuth not configured"), status=500)
 
             auth_config = g_config["auth"]["github"]
             client_id = auth_config.get("client_id", "")
@@ -3115,7 +3110,7 @@ def main():
             redirect_uri = os.getenv(redirect_uri, redirect_uri)
 
             if not client_id or not client_secret:
-                return web.json_response({"error": "GitHub OAuth credentials not configured"}, status=500)
+                return web.json_response(create_error_response("GitHub OAuth credentials not configured"), status=500)
 
             # Exchange code for access token
             async with aiohttp.ClientSession() as session:
@@ -3134,7 +3129,7 @@ def main():
 
                     if not access_token:
                         error = token_response.get("error_description", "Failed to get access token")
-                        return web.Response(text=f"OAuth error: {error}", status=400)
+                        return web.json_response(create_error_response(f"OAuth error: {error}"), status=400)
 
                 # Fetch user info
                 user_url = "https://api.github.com/user"
@@ -3169,7 +3164,7 @@ def main():
             session_token = get_session_token(request)
 
             if not session_token or session_token not in g_sessions:
-                return web.json_response({"error": "Invalid or expired session"}, status=401)
+                return web.json_response(create_error_response("Invalid or expired session"), status=401)
 
             session_data = g_sessions[session_token]
 
@@ -3225,9 +3220,7 @@ def main():
             #         })
 
             # Not authenticated - return error in expected format
-            return web.json_response(
-                {"responseStatus": {"errorCode": "Unauthorized", "message": "Not authenticated"}}, status=401
-            )
+            return web.json_response(error_auth_required, status=401)
 
         app.router.add_get("/auth", auth_handler)
         app.router.add_get("/auth/github", github_auth_handler)
@@ -3293,7 +3286,7 @@ def main():
                 try:
                     return await handler_fn(request)
                 except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=True), status=500)
+                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
 
             app.router.add_get(handler[0], managed_handler, **handler[2])
         for handler in g_app.server_add_post:
@@ -3303,7 +3296,7 @@ def main():
                 try:
                     return await handler_fn(request)
                 except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=True), status=500)
+                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
 
             app.router.add_post(handler[0], managed_handler, **handler[2])
 
@@ -3348,7 +3341,7 @@ def main():
 
         for provider in enable_providers:
             if provider not in g_config["providers"]:
-                print(f"Provider {provider} not found")
+                print(f"Provider '{provider}' not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
                 exit(1)
             if provider in g_config["providers"]:
