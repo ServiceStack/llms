@@ -50,15 +50,18 @@ def install(ctx):
             if "messages" in chat and len(chat["messages"]) > 0:
                 aspect_ratio = chat["messages"][0].get("aspect_ratio", "1:1")
             cfg_scale = self.cfg_scale
+            steps = self.steps
+            width = self.width
+            height = self.height
             if chat["model"] == "chutes-z-image-turbo":
                 cfg_scale = min(self.cfg_scale, 5)
             payload = {
                 "model": chat["model"],
                 "prompt": ctx.last_user_prompt(chat),
                 "guidance_scale": cfg_scale,
-                "width": self.width,
-                "height": self.height,
-                "num_inference_steps": self.steps,
+                "width": width,
+                "height": height,
+                "num_inference_steps": steps,
             }
             if chat["model"] in self.model_negative_prompt:
                 payload["negative_prompt"] = self.negative_prompt
@@ -68,9 +71,10 @@ def install(ctx):
             if aspect_ratio:
                 dimension = ctx.app.aspect_ratios.get(aspect_ratio)
                 if dimension:
-                    width, height = dimension.split("×")
-                    payload["width"] = int(width)
-                    payload["height"] = int(height)
+                    w, h = dimension.split("×")
+                    width, height = int(w), int(h)
+                    payload["width"] = width
+                    payload["height"] = height
 
             if chat["model"] in self.model_resolutions:
                 # if models use resolution, remove width and height
@@ -107,14 +111,16 @@ def install(ctx):
                     relative_url, info = ctx.save_image_to_cache(
                         image_data,
                         f"{chat['model']}.{ext}",
-                        {
-                            "model": chat["model"],
-                            "prompt": ctx.last_user_prompt(chat),
-                            "width": self.width,
-                            "height": self.height,
-                            "cfg_scale": self.cfg_scale,
-                            "steps": self.steps,
-                        },
+                        ctx.to_file_info(
+                            chat,
+                            {
+                                "aspect_ratio": aspect_ratio,
+                                "width": width,
+                                "height": height,
+                                "cfg_scale": cfg_scale,
+                                "steps": steps,
+                            },
+                        ),
                     )
                     return {
                         "choices": [

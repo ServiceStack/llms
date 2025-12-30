@@ -29,10 +29,11 @@ def install(ctx):
                         last_model = "/" in chat["model"] and chat["model"].split("/")[-1] or chat["model"]
                         filename = f"{last_model}_{seed}.png"
 
-                    image_info = {
-                        "seed": seed,
-                    }
-                    relative_url, info = ctx.save_image_to_cache(base64, filename, image_info)
+                    relative_url, info = ctx.save_image_to_cache(
+                        base64,
+                        filename,
+                        ctx.to_file_info(chat, {"seed": seed}),
+                    )
                     return {
                         "choices": [
                             {

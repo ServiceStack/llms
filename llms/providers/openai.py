@@ -83,10 +83,7 @@ def install(ctx):
                         relative_url, info = ctx.save_image_to_cache(
                             image_data,
                             f"{chat['model']}-{i}.{ext}",
-                            {
-                                "model": chat["model"],
-                                "prompt": ctx.last_user_prompt(chat),
-                            },
+                            ctx.to_file_info(chat),
                         )
                         images.append(
                             {

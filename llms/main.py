@@ -629,6 +629,20 @@ def last_user_prompt(chat):
     return prompt
 
 
+def to_file_info(chat, info=None, response=None):
+    prompt = last_user_prompt(chat)
+    ret = info or {}
+    if chat["model"] and "model" not in ret:
+        ret["model"] = chat["model"]
+    if prompt and "prompt" not in ret:
+        ret["prompt"] = prompt
+    if "image_config" in chat:
+        ret.update(chat["image_config"])
+    if "metadata" in chat and "user" in chat["metadata"]:
+        ret["user"] = chat["metadata"]["user"]
+    return ret
+
+
 # Image Generator Providers
 class GeneratorBase:
     def __init__(self, **kwargs):
