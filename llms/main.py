@@ -1324,8 +1324,8 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
             if len(generated_files) > 0:
                 print("\nSaved files:")
                 for file in generated_files:
-                    if file.startswith("~cache"):
-                        print(get_cache_path(file[7:]))
+                    if file.startswith("/~cache"):
+                        print(get_cache_path(file[8:]))
                         print(f"http://localhost:8000/{file}")
                     else:
                         print(file)
@@ -1364,7 +1364,7 @@ def init_llms(config, providers):
     # iterate over config and replace $ENV with env value
     for key, value in g_config.items():
         if isinstance(value, str) and value.startswith("$"):
-            g_config[key] = os.environ.get(value[1:], "")
+            g_config[key] = os.getenv(value[1:], "")
 
     # if g_verbose:
     #     printdump(g_config)
@@ -1402,11 +1402,11 @@ def create_provider_kwargs(definition, provider=None):
     if "api_key" in provider:
         value = provider["api_key"]
         if isinstance(value, str) and value.startswith("$"):
-            provider["api_key"] = os.environ.get(value[1:], "")
+            provider["api_key"] = os.getenv(value[1:], "")
 
     if "api_key" not in provider and "env" in provider:
         for env_var in provider["env"]:
-            val = os.environ.get(env_var)
+            val = os.getenv(env_var)
             if val:
                 provider["api_key"] = val
                 break
@@ -1543,7 +1543,7 @@ def print_status():
 
 
 def home_llms_path(filename):
-    return f"{os.environ.get('HOME')}/.llms/{filename}"
+    return f"{os.getenv('HOME')}/.llms/{filename}"
 
 
 def get_cache_path(filename):
@@ -1556,8 +1556,8 @@ def get_config_path():
         "./llms.json",
         home_config_path,
     ]
-    if os.environ.get("LLMS_CONFIG_PATH"):
-        check_paths.insert(0, os.environ.get("LLMS_CONFIG_PATH"))
+    if os.getenv("LLMS_CONFIG_PATH"):
+        check_paths.insert(0, os.getenv("LLMS_CONFIG_PATH"))
 
     for check_path in check_paths:
         g_config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), check_path))
@@ -2435,7 +2435,7 @@ def main():
     g_app = AppExtensions(cli_args, extra_args)
 
     # Check for verbose mode from CLI argument or environment variables
-    verbose_env = os.environ.get("VERBOSE", "").lower()
+    verbose_env = os.getenv("VERBOSE", "").lower()
     if cli_args.verbose or verbose_env in ("1", "true"):
         g_verbose = True
         # printdump(cli_args)
@@ -2443,11 +2443,6 @@ def main():
         g_default_model = cli_args.model
     if cli_args.logprefix:
         g_logprefix = cli_args.logprefix
-
-    _ROOT = Path(cli_args.root) if cli_args.root else resolve_root()
-    if not _ROOT:
-        print("Resource root not found")
-        exit(1)
 
     home_config_path = home_llms_path("llms.json")
     home_providers_path = home_llms_path("providers.json")
@@ -2509,7 +2504,7 @@ def main():
     if (
         os.path.exists(home_providers_path)
         and (time.time() - os.path.getmtime(home_providers_path)) > 86400
-        and os.environ.get("LLMS_DISABLE_UPDATE", "") != "1"
+        and os.getenv("LLMS_DISABLE_UPDATE", "") != "1"
     ):
         try:
             asyncio.run(update_providers(home_providers_path))
@@ -2757,8 +2752,8 @@ def main():
             if client_secret.startswith("$"):
                 client_secret = client_secret[1:]
 
-            client_id = os.environ.get(client_id, client_id)
-            client_secret = os.environ.get(client_secret, client_secret)
+            client_id = os.getenv(client_id, client_id)
+            client_secret = os.getenv(client_secret, client_secret)
 
             if (
                 not client_id
@@ -3025,8 +3020,8 @@ def main():
             if redirect_uri.startswith("$"):
                 redirect_uri = redirect_uri[1:]
 
-            client_id = os.environ.get(client_id, client_id)
-            redirect_uri = os.environ.get(redirect_uri, redirect_uri)
+            client_id = os.getenv(client_id, client_id)
+            redirect_uri = os.getenv(redirect_uri, redirect_uri)
 
             if not client_id:
                 return web.json_response({"error": "GitHub client_id not configured"}, status=500)
@@ -3061,7 +3056,7 @@ def main():
             if restrict_to.startswith("$"):
                 restrict_to = restrict_to[1:]
 
-            restrict_to = os.environ.get(restrict_to, None if restrict_to == "GITHUB_USERS" else restrict_to)
+            restrict_to = os.getenv(restrict_to, None if restrict_to == "GITHUB_USERS" else restrict_to)
 
             # If restrict_to is configured, validate the user
             if restrict_to:
@@ -3115,9 +3110,9 @@ def main():
             if redirect_uri.startswith("$"):
                 redirect_uri = redirect_uri[1:]
 
-            client_id = os.environ.get(client_id, client_id)
-            client_secret = os.environ.get(client_secret, client_secret)
-            redirect_uri = os.environ.get(redirect_uri, redirect_uri)
+            client_id = os.getenv(client_id, client_id)
+            client_secret = os.getenv(client_secret, client_secret)
+            redirect_uri = os.getenv(redirect_uri, redirect_uri)
 
             if not client_id or not client_secret:
                 return web.json_response({"error": "GitHub OAuth credentials not configured"}, status=500)
