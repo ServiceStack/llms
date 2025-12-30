@@ -519,9 +519,7 @@ def save_bytes_to_cache(base64_data, filename, file_info):
     }
     info.update(file_info)
 
-    context = {"url": url, "info": info}
-    for filter in g_app.cache_saved_filters:
-        filter(context)
+    g_app.on_cache_saved_filters({"url": url, "info": info})
 
     return url, info
 
@@ -577,9 +575,7 @@ def save_image_to_cache(base64_data, filename, image_info):
     with open(info_path, "w") as f:
         json.dump(info, f)
 
-    context = {"url": url, "info": info}
-    for filter in g_app.cache_saved_filters:
-        filter(context)
+    g_app.on_cache_saved_filters({"url": url, "info": info})
 
     return url, info
 
@@ -2080,6 +2076,11 @@ class AppExtensions:
 
         return response
 
+    def on_cache_saved_filters(self, context):
+        _log(f"on_cache_saved_filters {len(self.cache_saved_filters)}: {context['url']}")
+        for filter_func in self.cache_saved_filters:
+            filter_func(context)
+
 
 class ExtensionContext:
     def __init__(self, app, path):
@@ -2099,6 +2100,9 @@ class ExtensionContext:
 
     def last_user_prompt(self, chat):
         return last_user_prompt(chat)
+
+    def to_file_info(self, chat, info=None):
+        return to_file_info(chat, info=None)
 
     def save_image_to_cache(self, base64_data, filename, image_info):
         return save_image_to_cache(base64_data, filename, image_info)
