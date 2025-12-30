@@ -16,6 +16,9 @@ def install(ctx):
 
         def to_response(self, response, chat, started_at):
             # go through all image responses and save them to cache
+            cost = None
+            if "usage" in response and "cost" in response["usage"]:
+                cost = response["usage"]["cost"]
             for choice in response["choices"]:
                 if "message" in choice and "images" in choice["message"]:
                     for image in choice["message"]["images"]:
@@ -29,11 +32,9 @@ def install(ctx):
                                 base64_data = parts[1]
                                 model = chat["model"].split("/")[-1]
                                 filename = f"{model}-{choice['index']}.{ext}"
-                                info = {
-                                    "model": model,
-                                    "prompt": ctx.last_user_prompt(chat),
-                                }
-                                relative_url, info = ctx.save_image_to_cache(base64_data, filename, info)
+                                relative_url, info = ctx.save_image_to_cache(
+                                    base64_data, filename, ctx.to_file_info(chat, {"cost": cost})
+                                )
                                 image["image_url"]["url"] = relative_url
 
             return response

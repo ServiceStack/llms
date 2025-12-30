@@ -253,6 +253,18 @@ def install(ctx):
                 if ctx.debug:
                     ctx.dbg(json.dumps(gemini_response_summary(obj), indent=2))
 
+                # calculate cost per generation
+                cost = None
+                token_costs = obj.get("metadata", {}).get("pricing", "")
+                if token_costs:
+                    input_price, output_price = token_costs.split("/")
+                    input_per_token = float(input_price) / 1000000
+                    output_per_token = float(output_price) / 1000000
+                    if "usageMetadata" in obj:
+                        input_tokens = obj["usageMetadata"]["promptTokenCount"]
+                        output_tokens = obj["usageMetadata"]["candidatesTokenCount"]
+                        cost = (input_per_token * input_tokens) + (output_per_token * output_tokens)
+
                 response = {
                     "id": f"chatcmpl-{started_at}",
                     "created": started_at,
@@ -286,7 +298,11 @@ def install(ctx):
                                     base64_data = inline_data["data"]
                                     filename = f"{chat['model'].split('/')[-1]}-{len(images)}.{ext}"
                                     ctx.log(f"inlineData {len(base64_data)} {mime_type} {filename}")
-                                    relative_url, info = ctx.save_image_to_cache(base64_data, filename, {})
+                                    relative_url, info = ctx.save_image_to_cache(
+                                        base64_data,
+                                        filename,
+                                        ctx.to_file_info(chat, {"cost": cost}),
+                                    )
                                     images.append(
                                         {
                                             "type": "image_url",
@@ -309,13 +325,17 @@ def install(ctx):
                                         wf.setframerate(24000)
                                         wf.writeframes(pcm)
                                     wav_data = wav_io.getvalue()
-                                    
+
                                     ext = mime_type.split("/")[1].split(";")[0]
                                     pcm_filename = f"{chat['model'].split('/')[-1]}-{len(audios)}.{ext}"
                                     filename = pcm_filename.replace(f".{ext}", ".wav")
                                     ctx.log(f"inlineData {len(base64_data)} {mime_type} {filename}")
 
-                                    relative_url, info = ctx.save_bytes_to_cache(wav_data, filename, {})
+                                    relative_url, info = ctx.save_bytes_to_cache(
+                                        wav_data,
+                                        filename,
+                                        ctx.to_file_info(chat, {"cost": cost}),
+                                    )
 
                                     audios.append(
                                         {
