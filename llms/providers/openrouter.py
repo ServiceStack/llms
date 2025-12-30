@@ -50,6 +50,8 @@ def install(ctx):
                 return ctx.log_json(self.to_response(json.loads(text), chat, started_at))
             else:
                 chat_url = provider.chat_url
+                # remove tools
+                chat.pop("tools", None)
                 chat = await self.process_chat(chat, provider_id=self.id)
                 ctx.log(f"POST {chat_url}")
                 ctx.log(provider.chat_summary(chat))
