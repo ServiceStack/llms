@@ -45,6 +45,7 @@ _ROOT = None
 DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
 MOCK_DIR = os.getenv("MOCK_DIR")
+DISABLE_EXTENSIONS = (os.getenv("LLMS_DISABLE") or "").split(",")
 g_config_path = None
 g_config = None
 g_providers = None
@@ -1140,7 +1141,7 @@ def g_chat_request(template=None, text=None, model=None, system_prompt=None):
     return chat
 
 
-async def g_chat_completion(chat):
+async def g_chat_completion(chat, context=None):
     model = chat["model"]
     # get first provider that has the model
     candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
@@ -2065,6 +2066,26 @@ class AppExtensions:
             "21:9": "1536×672",
         }
 
+    def get_session(self, request):
+        session_token = get_session_token(request)
+
+        if not session_token or session_token not in g_sessions:
+            return None
+
+        session_data = g_sessions[session_token]
+        return session_data
+
+    def get_username(self, request):
+        session = self.get_session(request)
+        if session:
+            return session.get("userName")
+        return None
+
+    def get_user_path(self, username=None):
+        if username:
+            return home_llms_path(os.path.join("user", username))
+        return home_llms_path(os.path.join("user", "default"))
+
     def chat_request(self, template=None, text=None, model=None, system_prompt=None):
         return g_chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
 
@@ -2072,10 +2093,17 @@ class AppExtensions:
         # Apply pre-chat filters
         if context is None:
             context = {"chat": chat}
+        elif "request" in context:
+            username = self.get_username(context["request"])
+            if username:
+                if "metadata" not in chat:
+                    chat["metadata"] = {}
+                chat["metadata"]["user"] = username
+
         for filter_func in self.chat_request_filters:
             chat = await filter_func(chat, context)
 
-        response = await g_chat_completion(chat)
+        response = await g_chat_completion(chat, context)
 
         # Apply post-chat filters
         for filter_func in self.chat_response_filters:
@@ -2087,6 +2115,12 @@ class AppExtensions:
         _log(f"on_cache_saved_filters {len(self.cache_saved_filters)}: {context['url']}")
         for filter_func in self.cache_saved_filters:
             filter_func(context)
+
+
+def handler_name(handler):
+    if hasattr(handler, "__name__"):
+        return handler.__name__
+    return "unknown"
 
 
 class ExtensionContext:
@@ -2140,7 +2174,7 @@ class ExtensionContext:
             print(traceback.format_exc(), flush=True)
 
     def add_provider(self, provider):
-        self.log(f"Registered provider: {provider}")
+        self.log(f"Registered provider: {provider.__name__}")
         self.app.all_providers.append(provider)
 
     def register_ui_extension(self, index):
@@ -2149,15 +2183,15 @@ class ExtensionContext:
         self.app.ui_extensions.append({"id": self.name, "path": path})
 
     def register_chat_request_filter(self, handler):
-        self.log(f"Registered chat request filter: {handler}")
+        self.log(f"Registered chat request filter: {handler_name(handler)}")
         self.app.chat_request_filters.append(handler)
 
     def register_chat_response_filter(self, handler):
-        self.log(f"Registered chat response filter: {handler}")
+        self.log(f"Registered chat response filter: {handler_name(handler)}")
         self.app.chat_response_filters.append(handler)
 
     def register_cache_saved_filter(self, handler):
-        self.log(f"Registered cache saved filter: {handler}")
+        self.log(f"Registered cache saved filter: {handler_name(handler)}")
         self.app.cache_saved_filters.append(handler)
 
     def add_static_files(self, ext_dir):
@@ -2198,21 +2232,6 @@ class ExtensionContext:
     def get_provider(self, name):
         return g_handlers.get(name)
 
-    def get_session(self, request):
-        session_token = get_session_token(request)
-
-        if not session_token or session_token not in g_sessions:
-            return None
-
-        session_data = g_sessions[session_token]
-        return session_data
-
-    def get_username(self, request):
-        session = self.get_session(request)
-        if session:
-            return session.get("userName")
-        return None
-
     def register_tool(self, func, tool_def=None):
         if tool_def is None:
             tool_def = function_to_tool_definition(func)
@@ -2222,61 +2241,78 @@ class ExtensionContext:
         self.app.tools[name] = func
         self.app.tool_definitions.append(tool_def)
 
+    def get_session(self, request):
+        return self.app.get_session(request)
+
+    def get_username(self, request):
+        return self.app.get_username(request)
+
+    def get_user_path(self, username=None):
+        return self.app.get_user_path(username)
+
 
 def load_builtin_extensions():
     providers_path = _ROOT / "providers"
-    if not providers_path.exists():
-        return
+    if providers_path.exists():
+        for item in os.listdir(providers_path):
+            if not item.endswith(".py") or item == "__init__.py":
+                continue
 
-    for item in os.listdir(providers_path):
-        if not item.endswith(".py") or item == "__init__.py":
-            continue
+            item_path = providers_path / item
+            module_name = item[:-3]
 
-        item_path = providers_path / item
-        module_name = item[:-3]
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, item_path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[f"llms.providers.{module_name}"] = module
+                    spec.loader.exec_module(module)
 
-        try:
-            spec = importlib.util.spec_from_file_location(module_name, item_path)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[f"llms.providers.{module_name}"] = module
-                spec.loader.exec_module(module)
-
-                install_func = getattr(module, "__install__", None)
-                if callable(install_func):
-                    install_func(ExtensionContext(g_app, item_path))
-                    _log(f"Loaded builtin extension: {module_name}")
-        except Exception as e:
-            _err(f"Failed to load builtin extension {module_name}", e)
+                    install_func = getattr(module, "__install__", None)
+                    if callable(install_func):
+                        install_func(ExtensionContext(g_app, item_path))
+                        _log(f"Loaded builtin provider: {module_name}")
+            except Exception as e:
+                _err(f"Failed to load builtin provider {module_name}", e)
 
 
 def get_extensions_path():
     return os.getenv("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
 
 
-def init_extensions(parser):
+def get_extensions_dirs():
     extensions_path = get_extensions_path()
     os.makedirs(extensions_path, exist_ok=True)
 
-    for item in os.listdir(extensions_path):
-        item_path = os.path.join(extensions_path, item)
-        if os.path.isdir(item_path):
-            try:
-                # check for __parser__ function if exists in __init.__.py and call it with parser
-                init_file = os.path.join(item_path, "__init__.py")
-                if os.path.exists(init_file):
-                    spec = importlib.util.spec_from_file_location(item, init_file)
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        sys.modules[item] = module
-                        spec.loader.exec_module(module)
+    all_dirs = [extensions_path, _ROOT / "extensions"]
+    return [d for d in all_dirs if os.path.exists(d)]
 
-                        parser_func = getattr(module, "__parser__", None)
-                        if callable(parser_func):
-                            parser_func(parser)
-                            _log(f"Extension {item} parser loaded")
-            except Exception as e:
-                _err(f"Failed to load extension {item} parser", e)
+
+def init_extensions(parser):
+    for extensions_dir in get_extensions_dirs():
+        for item in os.listdir(extensions_dir):
+            item_path = os.path.join(extensions_dir, item)
+
+            if item in DISABLE_EXTENSIONS:
+                continue
+
+            if os.path.isdir(item_path):
+                try:
+                    # check for __parser__ function if exists in __init.__.py and call it with parser
+                    init_file = os.path.join(item_path, "__init__.py")
+                    if os.path.exists(init_file):
+                        spec = importlib.util.spec_from_file_location(item, init_file)
+                        if spec and spec.loader:
+                            module = importlib.util.module_from_spec(spec)
+                            sys.modules[item] = module
+                            spec.loader.exec_module(module)
+
+                            parser_func = getattr(module, "__parser__", None)
+                            if callable(parser_func):
+                                parser_func(parser)
+                                _log(f"Extension {item} parser loaded")
+                except Exception as e:
+                    _err(f"Failed to load extension {item} parser", e)
 
 
 def install_extensions():
@@ -2284,55 +2320,59 @@ def install_extensions():
     Scans ensure ~/.llms/extensions/ for directories with __init__.py and loads them as extensions.
     Calls the `__install__(ctx)` function in the extension module.
     """
-    extensions_path = get_extensions_path()
-    os.makedirs(extensions_path, exist_ok=True)
 
-    ext_count = len(os.listdir(extensions_path))
+    extension_dirs = get_extensions_dirs()
+    ext_count = len(list(extension_dirs))
     if ext_count == 0:
         _log("No extensions found")
         return
 
     _log(f"Installing {ext_count} extension{'' if ext_count == 1 else 's'}...")
 
-    sys.path.append(extensions_path)
+    for extensions_dir in extension_dirs:
+        for item in os.listdir(extensions_dir):
+            item_path = os.path.join(extensions_dir, item)
 
-    for item in os.listdir(extensions_path):
-        item_path = os.path.join(extensions_path, item)
-        if os.path.isdir(item_path):
-            try:
-                ctx = ExtensionContext(g_app, item_path)
-                init_file = os.path.join(item_path, "__init__.py")
-                if os.path.exists(init_file):
-                    spec = importlib.util.spec_from_file_location(item, init_file)
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        sys.modules[item] = module
-                        spec.loader.exec_module(module)
+            if item in DISABLE_EXTENSIONS:
+                _log(f"Extension disabled: {item}")
+                continue
 
-                        install_func = getattr(module, "__install__", None)
-                        if callable(install_func):
-                            install_func(ctx)
-                            _log(f"Extension {item} installed")
+            if os.path.isdir(item_path):
+                sys.path.append(item_path)
+                try:
+                    ctx = ExtensionContext(g_app, item_path)
+                    init_file = os.path.join(item_path, "__init__.py")
+                    if os.path.exists(init_file):
+                        spec = importlib.util.spec_from_file_location(item, init_file)
+                        if spec and spec.loader:
+                            module = importlib.util.module_from_spec(spec)
+                            sys.modules[item] = module
+                            spec.loader.exec_module(module)
+
+                            install_func = getattr(module, "__install__", None)
+                            if callable(install_func):
+                                install_func(ctx)
+                                _log(f"Extension {item} installed")
+                            else:
+                                _dbg(f"Extension {item} has no __install__ function")
                         else:
-                            _dbg(f"Extension {item} has no __install__ function")
+                            _dbg(f"Extension {item} has no __init__.py")
                     else:
-                        _dbg(f"Extension {item} has no __init__.py")
-                else:
-                    _dbg(f"Extension {init_file} not found")
+                        _dbg(f"Extension {init_file} not found")
 
-                # if ui folder exists, serve as static files at /ext/{item}/
-                ui_path = os.path.join(item_path, "ui")
-                if os.path.exists(ui_path):
-                    ctx.add_static_files(ui_path)
+                    # if ui folder exists, serve as static files at /ext/{item}/
+                    ui_path = os.path.join(item_path, "ui")
+                    if os.path.exists(ui_path):
+                        ctx.add_static_files(ui_path)
 
-                # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
-                if os.path.exists(os.path.join(ui_path, "index.mjs")):
-                    ctx.register_ui_extension("index.mjs")
+                    # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
+                    if os.path.exists(os.path.join(ui_path, "index.mjs")):
+                        ctx.register_ui_extension("index.mjs")
 
-            except Exception as e:
-                _err(f"Failed to install extension {item}", e)
-        else:
-            _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
+                except Exception as e:
+                    _err(f"Failed to install extension {item}", e)
+            else:
+                _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
 
 
 def run_extension_cli():
@@ -2344,6 +2384,10 @@ def run_extension_cli():
 
     for item in os.listdir(extensions_path):
         item_path = os.path.join(extensions_path, item)
+
+        if item in DISABLE_EXTENSIONS:
+            continue
+
         if os.path.isdir(item_path):
             init_file = os.path.join(item_path, "__init__.py")
             if os.path.exists(init_file):
@@ -2369,6 +2413,11 @@ def run_extension_cli():
 
 def main():
     global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_app
+
+    _ROOT = os.getenv("LLMS_ROOT", resolve_root())
+    if not _ROOT:
+        print("Resource root not found")
+        exit(1)
 
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument("--config", default=None, help="Path to config file", metavar="FILE")
@@ -2407,7 +2456,6 @@ def main():
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
     parser.add_argument("--update-providers", action="store_true", help="Update local models.dev providers.json")
 
-    parser.add_argument("--root", default=None, help="Change root directory for UI files", metavar="PATH")
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
 
@@ -2919,9 +2967,10 @@ def main():
             with open(full_path, "wb") as f:
                 f.write(content)
 
+            url = f"/~cache/{relative_path}"
             response_data = {
                 "date": int(time.time()),
-                "url": f"/~cache/{relative_path}",
+                "url": url,
                 "size": len(content),
                 "type": mimetype,
                 "name": filename,
