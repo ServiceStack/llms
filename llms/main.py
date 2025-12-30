@@ -610,6 +610,12 @@ def chat_to_prompt(chat):
     return prompt
 
 
+def chat_to_username(chat):
+    if "metadata" in chat and "user" in chat["metadata"]:
+        return chat["metadata"]["user"]
+    return None
+
+
 def last_user_prompt(chat):
     prompt = ""
     if "messages" in chat:
@@ -635,8 +641,9 @@ def to_file_info(chat, info=None, response=None):
         ret["prompt"] = prompt
     if "image_config" in chat:
         ret.update(chat["image_config"])
-    if "metadata" in chat and "user" in chat["metadata"]:
-        ret["user"] = chat["metadata"]["user"]
+    user = chat_to_username(chat)
+    if user:
+        ret["user"] = user
     return ret
 
 
@@ -922,13 +929,14 @@ class OpenAiCompatible:
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
         # remove metadata if any (conflicts with some providers, e.g. Z.ai)
-        chat.pop("metadata", None)
+        metadata = chat.pop("metadata", None)
 
         async with aiohttp.ClientSession() as session:
             started_at = time.time()
             async with session.post(
                 self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)
             ) as response:
+                chat["metadata"] = metadata
                 return self.to_response(await response_json(response), chat, started_at)
 
 
@@ -2112,7 +2120,7 @@ class AppExtensions:
         return response
 
     def on_cache_saved_filters(self, context):
-        _log(f"on_cache_saved_filters {len(self.cache_saved_filters)}: {context['url']}")
+        # _log(f"on_cache_saved_filters {len(self.cache_saved_filters)}: {context['url']}")
         for filter_func in self.cache_saved_filters:
             filter_func(context)
 
@@ -2135,6 +2143,7 @@ class ExtensionContext:
         self.MOCK_DIR = MOCK_DIR
         self.debug = DEBUG
         self.verbose = g_verbose
+        self.aspect_ratios = app.aspect_ratios
 
     def chat_to_prompt(self, chat):
         return chat_to_prompt(chat)

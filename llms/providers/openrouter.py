@@ -57,7 +57,7 @@ def install(ctx):
                 ctx.log(f"POST {chat_url}")
                 ctx.log(provider.chat_summary(chat))
                 # remove metadata if any (conflicts with some providers, e.g. Z.ai)
-                chat.pop("metadata", None)
+                metadata = chat.pop("metadata", None)
 
                 async with aiohttp.ClientSession() as session, session.post(
                     chat_url,
@@ -65,6 +65,8 @@ def install(ctx):
                     data=json.dumps(chat),
                     timeout=aiohttp.ClientTimeout(total=300),
                 ) as response:
+                    if metadata:
+                        chat["metadata"] = metadata
                     return ctx.log_json(self.to_response(await self.response_json(response), chat, started_at))
 
     ctx.add_provider(OpenRouterGenerator)
