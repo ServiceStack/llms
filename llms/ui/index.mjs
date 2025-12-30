@@ -48,12 +48,16 @@ export async function createContext() {
     ctx.modules = await Promise.all(validExtensions.map(async extension => {
         try {
             const module = await import(extension.path)
-            return { extension, module }
+            const order = module.default.order || 0
+            return { extension, module, order }
         } catch (e) {
             console.error(`Failed to load extension module ${extension.name}:`, e)
             return null
         }
     }))
+
+    // sort modules by order
+    ctx.modules.sort((a, b) => a.order - b.order)
 
     const installedModules = []
 
@@ -105,9 +109,13 @@ export async function createContext() {
     })
     ctx._onRouterBeforeEach.forEach(ctx.router.beforeEach)
 
-    if (ctx.layout.path && location.pathname === '/' && !location.search) {
-        console.log('redirecting to saved path: ', ctx.layout.path)
-        ctx.router.push({ path: ctx.layout.path })
+    if (ai.hasAccess) {
+        if (ctx.layout.path && location.pathname === '/' && !location.search) {
+            console.log('redirecting to saved path: ', ctx.layout.path)
+            ctx.router.push({ path: ctx.layout.path })
+        }
+    } else {
+        ctx.router.push({ path: '/' })
     }
 
     const loadModules = installedModules.filter(x => x.module.default && x.module.default.load)

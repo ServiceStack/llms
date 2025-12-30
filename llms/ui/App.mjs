@@ -147,13 +147,13 @@ export default {
     template: `
         <div class="flex h-screen">
             <!-- Mobile Overlay -->
-            <div
+            <div v-if="$ai.hasAccess"
                 v-if="isMobile && $ctx.layoutVisible('left') && $ai.hasAccess"
                 @click="$ctx.toggleLayout('left')"
                 :class="$ctx.cls('mobile-overlay', 'fixed inset-0 bg-black/50 z-40 lg:hidden')"
             ></div>
 
-            <div id="sidebar" :class="$ctx.cls('sidebar', 'z-100 relative flex bg-gray-50 dark:bg-gray-800')">
+            <div v-if="$ai.hasAccess" id="sidebar" :class="$ctx.cls('sidebar', 'z-100 relative flex bg-gray-50 dark:bg-gray-800')">
                 <LeftBar id="left-bar" />
                 <LeftPanel id="left-panel"
                     v-if="$ai.hasAccess && $ctx.layoutVisible('left')"
@@ -170,13 +170,13 @@ export default {
             <!-- Main Area -->
             <div id="main" :class="$ctx.cls('main', 'flex-1 flex flex-col')">
                 <div id="main-inner" :class="$ctx.cls('main-inner', 'flex flex-col h-full w-full overflow-hidden')">
-                    <div id="header" :class="$ctx.cls('header', 'py-1 pr-1 flex items-center justify-between shrink-0')">
+                    <div v-if="$ai.hasAccess" id="header" :class="$ctx.cls('header', 'py-1 pr-1 flex items-center justify-between shrink-0')">
                         <div>
                             <ModelSelector :models="$state.models" v-model="$state.selectedModel" />
                         </div>
                         <TopBar id="top-bar" />
                     </div>
-                    <TopPanel id="top-panel" :class="$ctx.cls('top-panel', 'shrink-0')" />
+                    <TopPanel v-if="$ai.hasAccess" id="top-panel" :class="$ctx.cls('top-panel', 'shrink-0')" />
                     <div id="page" :class="$ctx.cls('page', 'flex-1 overflow-y-auto min-h-0 flex flex-col')">
                         <RouterView class="h-full" />
                     </div>
