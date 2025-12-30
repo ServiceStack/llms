@@ -2142,8 +2142,8 @@ class ExtensionContext:
     def last_user_prompt(self, chat):
         return last_user_prompt(chat)
 
-    def to_file_info(self, chat, info=None):
-        return to_file_info(chat, info=None)
+    def to_file_info(self, chat, info=None, response=None):
+        return to_file_info(chat, info=info, response=response)
 
     def save_image_to_cache(self, base64_data, filename, image_info):
         return save_image_to_cache(base64_data, filename, image_info)
@@ -2251,7 +2251,7 @@ class ExtensionContext:
         return self.app.get_user_path(username)
 
 
-def load_builtin_extensions():
+def load_builtin_providers():
     providers_path = _ROOT / "providers"
     if providers_path.exists():
         for item in os.listdir(providers_path):
@@ -2280,39 +2280,74 @@ def get_extensions_path():
     return os.getenv("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
 
 
+def get_disabled_extensions():
+    ret = DISABLE_EXTENSIONS.copy()
+    if g_config:
+        for ext in g_config.get("disable_extensions", []):
+            if ext not in ret:
+                ret.append(ext)
+    return ret
+
+
 def get_extensions_dirs():
+    """
+    Returns a list of extension directories.
+    """
     extensions_path = get_extensions_path()
     os.makedirs(extensions_path, exist_ok=True)
 
-    all_dirs = [extensions_path, _ROOT / "extensions"]
-    return [d for d in all_dirs if os.path.exists(d)]
+    # allow overriding builtin extensions
+    override_extensions = []
+    if os.path.exists(extensions_path):
+        override_extensions = os.listdir(extensions_path)
+
+    ret = []
+    disabled_extensions = get_disabled_extensions()
+
+    builtin_extensions_dir = _ROOT / "extensions"
+    if os.path.exists(builtin_extensions_dir):
+        for item in os.listdir(builtin_extensions_dir):
+            if os.path.isdir(os.path.join(builtin_extensions_dir, item)):
+                if item in override_extensions:
+                    continue
+                if item in disabled_extensions:
+                    continue
+                ret.append(os.path.join(builtin_extensions_dir, item))
+
+    if os.path.exists(extensions_path):
+        for item in os.listdir(extensions_path):
+            if os.path.isdir(os.path.join(extensions_path, item)):
+                if item in disabled_extensions:
+                    continue
+                ret.append(os.path.join(extensions_path, item))
+
+    return ret
 
 
 def init_extensions(parser):
-    for extensions_dir in get_extensions_dirs():
-        for item in os.listdir(extensions_dir):
-            item_path = os.path.join(extensions_dir, item)
+    """
+    Initializes extensions by loading their __init__.py files and calling the __parser__ function if it exists.
+    """
+    for item_path in get_extensions_dirs():
+        item = os.path.basename(item_path)
 
-            if item in DISABLE_EXTENSIONS:
-                continue
+        if os.path.isdir(item_path):
+            try:
+                # check for __parser__ function if exists in __init.__.py and call it with parser
+                init_file = os.path.join(item_path, "__init__.py")
+                if os.path.exists(init_file):
+                    spec = importlib.util.spec_from_file_location(item, init_file)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        sys.modules[item] = module
+                        spec.loader.exec_module(module)
 
-            if os.path.isdir(item_path):
-                try:
-                    # check for __parser__ function if exists in __init.__.py and call it with parser
-                    init_file = os.path.join(item_path, "__init__.py")
-                    if os.path.exists(init_file):
-                        spec = importlib.util.spec_from_file_location(item, init_file)
-                        if spec and spec.loader:
-                            module = importlib.util.module_from_spec(spec)
-                            sys.modules[item] = module
-                            spec.loader.exec_module(module)
-
-                            parser_func = getattr(module, "__parser__", None)
-                            if callable(parser_func):
-                                parser_func(parser)
-                                _log(f"Extension {item} parser loaded")
-                except Exception as e:
-                    _err(f"Failed to load extension {item} parser", e)
+                        parser_func = getattr(module, "__parser__", None)
+                        if callable(parser_func):
+                            parser_func(parser)
+                            _log(f"Extension {item} parser loaded")
+            except Exception as e:
+                _err(f"Failed to load extension {item} parser", e)
 
 
 def install_extensions():
@@ -2327,66 +2362,59 @@ def install_extensions():
         _log("No extensions found")
         return
 
+    disabled_extensions = get_disabled_extensions()
+    if len(disabled_extensions) > 0:
+        _log(f"Disabled extensions: {', '.join(disabled_extensions)}")
+
     _log(f"Installing {ext_count} extension{'' if ext_count == 1 else 's'}...")
 
-    for extensions_dir in extension_dirs:
-        for item in os.listdir(extensions_dir):
-            item_path = os.path.join(extensions_dir, item)
+    for item_path in extension_dirs:
+        item = os.path.basename(item_path)
 
-            if item in DISABLE_EXTENSIONS:
-                _log(f"Extension disabled: {item}")
-                continue
+        if os.path.isdir(item_path):
+            sys.path.append(item_path)
+            try:
+                ctx = ExtensionContext(g_app, item_path)
+                init_file = os.path.join(item_path, "__init__.py")
+                if os.path.exists(init_file):
+                    spec = importlib.util.spec_from_file_location(item, init_file)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        sys.modules[item] = module
+                        spec.loader.exec_module(module)
 
-            if os.path.isdir(item_path):
-                sys.path.append(item_path)
-                try:
-                    ctx = ExtensionContext(g_app, item_path)
-                    init_file = os.path.join(item_path, "__init__.py")
-                    if os.path.exists(init_file):
-                        spec = importlib.util.spec_from_file_location(item, init_file)
-                        if spec and spec.loader:
-                            module = importlib.util.module_from_spec(spec)
-                            sys.modules[item] = module
-                            spec.loader.exec_module(module)
-
-                            install_func = getattr(module, "__install__", None)
-                            if callable(install_func):
-                                install_func(ctx)
-                                _log(f"Extension {item} installed")
-                            else:
-                                _dbg(f"Extension {item} has no __install__ function")
+                        install_func = getattr(module, "__install__", None)
+                        if callable(install_func):
+                            install_func(ctx)
+                            _log(f"Extension {item} installed")
                         else:
-                            _dbg(f"Extension {item} has no __init__.py")
+                            _dbg(f"Extension {item} has no __install__ function")
                     else:
-                        _dbg(f"Extension {init_file} not found")
+                        _dbg(f"Extension {item} has no __init__.py")
+                else:
+                    _dbg(f"Extension {init_file} not found")
 
-                    # if ui folder exists, serve as static files at /ext/{item}/
-                    ui_path = os.path.join(item_path, "ui")
-                    if os.path.exists(ui_path):
-                        ctx.add_static_files(ui_path)
+                # if ui folder exists, serve as static files at /ext/{item}/
+                ui_path = os.path.join(item_path, "ui")
+                if os.path.exists(ui_path):
+                    ctx.add_static_files(ui_path)
 
-                    # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
-                    if os.path.exists(os.path.join(ui_path, "index.mjs")):
-                        ctx.register_ui_extension("index.mjs")
+                # Register UI extension if index.mjs exists (/ext/{item}/index.mjs)
+                if os.path.exists(os.path.join(ui_path, "index.mjs")):
+                    ctx.register_ui_extension("index.mjs")
 
-                except Exception as e:
-                    _err(f"Failed to install extension {item}", e)
-            else:
-                _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
+            except Exception as e:
+                _err(f"Failed to install extension {item}", e)
+        else:
+            _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
 
 
 def run_extension_cli():
     """
     Run the CLI for an extension.
     """
-    extensions_path = get_extensions_path()
-    os.makedirs(extensions_path, exist_ok=True)
-
-    for item in os.listdir(extensions_path):
-        item_path = os.path.join(extensions_path, item)
-
-        if item in DISABLE_EXTENSIONS:
-            continue
+    for item_path in get_extensions_dirs():
+        item = os.path.basename(item_path)
 
         if os.path.isdir(item_path):
             init_file = os.path.join(item_path, "__init__.py")
@@ -2719,7 +2747,7 @@ def main():
         asyncio.run(update_extensions(cli_args.update))
         exit(0)
 
-    load_builtin_extensions()
+    load_builtin_providers()
 
     asyncio.run(reload_providers())
 
