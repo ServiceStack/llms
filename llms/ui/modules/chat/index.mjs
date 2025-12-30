@@ -366,7 +366,7 @@ export function useChatPrompt(ctx) {
                         usage.price = usage.output
                         usage.cost = ctx.fmt.tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
                     }
-                    await ctx.threads.logRequest(threadId, model.name, request, response)
+                    await ctx.threads.logRequest(threadId, model, request, response)
                 }
                 if (store) {
                     assistantMessage.model = model.name
