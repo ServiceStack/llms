@@ -504,7 +504,7 @@ def save_bytes_to_cache(base64_data, filename, file_info):
     subdir = sha256_hash[:2]
     relative_path = f"{subdir}/{save_filename}"
     full_path = get_cache_path(relative_path)
-    url = f"~cache/{relative_path}"
+    url = f"/~cache/{relative_path}"
 
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
@@ -536,7 +536,7 @@ def save_image_to_cache(base64_data, filename, image_info):
     subdir = sha256_hash[:2]
     relative_path = f"{subdir}/{save_filename}"
     full_path = get_cache_path(relative_path)
-    url = f"~cache/{relative_path}"
+    url = f"/~cache/{relative_path}"
 
     # if file and its .info.json already exists, return it
     info_path = os.path.splitext(full_path)[0] + ".info.json"
