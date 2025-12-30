@@ -339,8 +339,8 @@ export const Analytics = {
                                         <div class="flex-1 min-w-0 w-full">
                                             <div class="flex flex-col sm:flex-row justify-between gap-2 mb-2">
                                                 <div class="flex items-center gap-2 flex-wrap">
-                                                    <span class="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded font-medium">{{ request.model }}</span>
-                                                    <span class="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded font-medium">{{ request.provider }}</span>
+                                                    <span v-if="request.model" class="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded font-medium">{{ request.model }}</span>
+                                                    <span v-if="request.provider" class="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded font-medium">{{ request.provider }}</span>
                                                     <span v-if="request.providerRef" class="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded font-medium">{{ request.providerRef }}</span>
                                                     <span v-if="request.finishReason" class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded font-medium">{{ request.finishReason }}</span>
                                                 </div>
@@ -1531,6 +1531,8 @@ export const Analytics = {
 }
 
 export default {
+    order: 20 - 100,
+
     install(ctx) {
         ctx.components({
             MonthSelector,

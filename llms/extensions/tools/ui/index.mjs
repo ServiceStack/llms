@@ -136,6 +136,8 @@ const ToolSelector = {
 }
 
 export default {
+    order: 10 - 100,
+
     install(ctx) {
 
         ctx.components({
