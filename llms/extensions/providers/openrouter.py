@@ -4,7 +4,7 @@ import time
 import aiohttp
 
 
-def install(ctx):
+def install_openrouter(ctx):
     from llms.main import GeneratorBase
 
     # https://openrouter.ai/docs/guides/overview/multimodal/image-generation
@@ -70,6 +70,3 @@ def install(ctx):
                     return ctx.log_json(self.to_response(await self.response_json(response), chat, started_at))
 
     ctx.add_provider(OpenRouterGenerator)
-
-
-__install__ = install

@@ -4,7 +4,7 @@ import time
 import aiohttp
 
 
-def install(ctx):
+def install_nvidia(ctx):
     from llms.main import GeneratorBase
 
     class NvidiaGenAi(GeneratorBase):
@@ -103,6 +103,3 @@ def install(ctx):
                     return self.to_response(await self.response_json(response), chat, started_at)
 
     ctx.add_provider(NvidiaGenAi)
-
-
-__install__ = install

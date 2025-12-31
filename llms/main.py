@@ -2260,31 +2260,6 @@ class ExtensionContext:
         return self.app.get_user_path(username)
 
 
-def load_builtin_providers():
-    providers_path = _ROOT / "providers"
-    if providers_path.exists():
-        for item in os.listdir(providers_path):
-            if not item.endswith(".py") or item == "__init__.py":
-                continue
-
-            item_path = providers_path / item
-            module_name = item[:-3]
-
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, item_path)
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[f"llms.providers.{module_name}"] = module
-                    spec.loader.exec_module(module)
-
-                    install_func = getattr(module, "__install__", None)
-                    if callable(install_func):
-                        install_func(ExtensionContext(g_app, item_path))
-                        _log(f"Loaded builtin provider: {module_name}")
-            except Exception as e:
-                _err(f"Failed to load builtin provider {module_name}", e)
-
-
 def get_extensions_path():
     return os.getenv("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
 
@@ -2756,11 +2731,9 @@ def main():
         asyncio.run(update_extensions(cli_args.update))
         exit(0)
 
-    load_builtin_providers()
+    install_extensions()
 
     asyncio.run(reload_providers())
-
-    install_extensions()
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")

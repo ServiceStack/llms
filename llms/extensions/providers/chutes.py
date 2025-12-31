@@ -5,7 +5,7 @@ import time
 import aiohttp
 
 
-def install(ctx):
+def install_chutes(ctx):
     from llms.main import GeneratorBase
 
     class ChutesImage(GeneratorBase):
@@ -153,6 +153,3 @@ def install(ctx):
                     raise Exception(f"Failed to generate image {response.status}")
 
     ctx.add_provider(ChutesImage)
-
-
-__install__ = install

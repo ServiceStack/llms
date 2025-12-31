@@ -1,10 +1,10 @@
-import json
-import time
-
-import aiohttp
 import base64
 import io
+import json
+import time
 import wave
+
+import aiohttp
 
 # class GoogleOpenAiProvider(OpenAiCompatible):
 #     sdk = "google-openai-compatible"
@@ -14,7 +14,7 @@ import wave
 #         self.chat_url = "https://generativelanguage.googleapis.com/v1beta/chat/completions"
 
 
-def install(ctx):
+def install_google(ctx):
     from llms.main import OpenAiCompatible
 
     def gemini_chat_summary(gemini_chat):
@@ -376,6 +376,3 @@ def install(ctx):
                 return ctx.log_json(self.to_response(response, chat, started_at))
 
     ctx.add_provider(GoogleProvider)
-
-
-__install__ = install

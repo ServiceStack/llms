@@ -6,7 +6,7 @@ import time
 import aiohttp
 
 
-def install(ctx):
+def install_openai(ctx):
     from llms.main import GeneratorBase, OpenAiCompatible
 
     class OpenAiProvider(OpenAiCompatible):
@@ -153,4 +153,4 @@ def install(ctx):
     ctx.add_provider(OpenAiGenerator)
 
 
-__install__ = install
+__install__ = install_openai

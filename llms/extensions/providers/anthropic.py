@@ -4,7 +4,7 @@ import time
 import aiohttp
 
 
-def install(ctx):
+def install_anthropic(ctx):
     from llms.main import OpenAiCompatible
 
     class AnthropicProvider(OpenAiCompatible):
@@ -184,6 +184,3 @@ def install(ctx):
             return ret
 
     ctx.add_provider(AnthropicProvider)
-
-
-__install__ = install
