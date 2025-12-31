@@ -9,6 +9,7 @@
             "restrict_to": "GITHUB_USERS"
         }
     },
+    "disable_extensions": [],
     "defaults": {
         "headers": {
             "Content-Type": "application/json",
