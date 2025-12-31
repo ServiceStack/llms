@@ -287,3 +287,12 @@ class GalleryDB:
         except Exception as e:
             self.ctx.err(f"query_media ({take}, {skip})", e)
             return []
+
+    def delete_media(self, hash, user=None):
+        try:
+            with self.get_connection() as conn:
+                sql_where, params = self.get_user_filter(user)
+                params.update({"hash": hash})
+                self.exec(conn, f"DELETE FROM media {sql_where} AND hash = :hash", params)
+        except Exception as e:
+            self.ctx.err(f"delete_media ({hash})", e)

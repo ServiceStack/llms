@@ -50,5 +50,12 @@ def install(ctx):
 
     ctx.add_get("media/totals", media_totals)
 
+    async def delete_media(request):
+        hash = request.match_info["hash"]
+        g_db.delete_media(hash, user=ctx.get_username(request))
+        return web.json_response({})
+
+    ctx.add_delete("media/{hash}", delete_media)
+
 
 __install__ = install

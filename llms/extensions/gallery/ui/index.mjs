@@ -60,10 +60,11 @@ const GalleryPage = {
 
             <!-- Image Grid -->
             <div v-if="ext.prefs.type === 'image'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
-                <div 
+                <div
                     v-for="(item, index) in items" 
                     :key="item.id" 
-                    class="group relative aspect-[3/4] rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800/30 cursor-pointer border border-gray-200 dark:border-white/5 transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl hover:shadow-blue-500/10 hover:border-blue-400/50 dark:hover:border-blue-500/30"
+                    class="group relative rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800/30 cursor-pointer border border-gray-200 dark:border-white/5 transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl hover:shadow-blue-500/10 hover:border-blue-400/50 dark:hover:border-blue-500/30"
+                    :class="ext.prefs.format === 'landscape' ? 'aspect-video' : ext.prefs.format === 'square' ? 'aspect-square' : 'aspect-[3/4]'"
                     @click="openLightbox(index)"
                 >
                     <img 
@@ -136,6 +137,7 @@ const GalleryPage = {
                     
                     <!-- Main Content -->
                     <div class="flex-1 relative flex items-center justify-center p-4">
+
                         <button type="button" class="absolute top-4 right-4 z-50 p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-black/50 dark:hover:bg-white/10 rounded-full transition-all" @click="closeLightbox">
                             <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
@@ -212,11 +214,15 @@ const GalleryPage = {
                         </div>
 
                         <!-- Footer Actions -->
-                        <div class="p-6 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#161616]">
-                            <a :href="lightboxItem.url" download class="flex w-full items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 px-6 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-lg shadow-black/5 dark:shadow-white/5">
+                        <!-- Footer Actions -->
+                        <div class="p-6 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#161616] flex gap-2">
+                             <a :href="lightboxItem.url" download class="flex-1 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 px-6 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-lg shadow-black/5 dark:shadow-white/5">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Download Original
+                                Download
                             </a>
+                            <button type="button" @click="deleteMedia" class="flex items-center justify-center p-3 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors" title="Delete">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -392,6 +398,28 @@ const GalleryPage = {
             })
         }
 
+        async function deleteMedia() {
+            if (!lightboxItem.value) return
+            if (!confirm('Are you sure you want to delete this media?')) return
+
+            const hash = lightboxItem.value.hash
+            try {
+                const response = await fetch(`${ext.baseUrl}/media/${hash}`, {
+                    method: 'DELETE'
+                })
+                if (response.ok) {
+                    items.value = items.value.filter(item => item.hash !== hash)
+                    closeLightbox()
+                } else {
+                    console.error("Failed to delete media", response)
+                    alert("Failed to delete media")
+                }
+            } catch (e) {
+                console.error("Error deleting media", e)
+                alert("Error deleting media")
+            }
+        }
+
         return {
             ext,
             items,
@@ -413,6 +441,7 @@ const GalleryPage = {
             hasPrev,
             remixImage,
             remixAudio,
+            deleteMedia,
         }
     }
 }
