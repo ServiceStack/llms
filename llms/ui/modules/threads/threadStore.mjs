@@ -1,4 +1,4 @@
-import { ref, computed, unref } from 'vue'
+import { ref, computed } from 'vue'
 import { openDB } from 'idb'
 import { nextId } from '../../utils.mjs'
 
