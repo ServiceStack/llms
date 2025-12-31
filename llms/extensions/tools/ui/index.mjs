@@ -12,7 +12,7 @@ const Tools = {
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <div v-for="tool in ($state.tools || [])" :key="tool.function.name"
-                class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
+                class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
                 
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                     <div class="font-bold text-lg text-gray-900 dark:text-gray-100 font-mono break-all">
