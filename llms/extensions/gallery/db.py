@@ -131,6 +131,9 @@ class GalleryDB:
                 """,
             )
 
+            self.exec(conn, "CREATE INDEX IF NOT EXISTS idx_media_user ON media(user)")
+            self.exec(conn, "CREATE INDEX IF NOT EXISTS idx_media_type ON media(type)")
+
             # Check for missing columns and migrate if necessary
             cur = self.exec(conn, "PRAGMA table_info(media)")
             columns = {row[1] for row in cur.fetchall()}
