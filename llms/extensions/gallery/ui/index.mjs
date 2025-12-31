@@ -90,12 +90,19 @@ const GalleryPage = {
                         </svg>
                     </div>
                     <div class="flex-1 min-w-0">
-                        <div class="flex justify-between items-baseline mb-1">
-                            <h3 class="text-gray-900 dark:text-white font-medium truncate pr-4">{{ item.name || 'Untitled' }}</h3>
+                        <div class="flex justify-between items-center mb-1">
+                            <h3 class="text-gray-900 dark:text-white font-medium truncate pr-4">{{ item.caption || item.prompt || 'Untitled' }}</h3>
                             <span class="text-xs text-gray-500 shrink-0">{{ $fmt.formatDate(item.created) }}</span>
                         </div>
-                        <div class="text-xs text-blue-600 dark:text-blue-300/80 mb-2">{{ item.model }}</div>
-                        <audio controls class="w-full h-8 opacity-90" :src="item.url"></audio>
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="text-xs text-blue-600 dark:text-blue-300/80">{{ item.model }}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <audio controls class="w-full h-8 opacity-90" :src="item.url"></audio>
+                            <button type="button" @click="remixAudio(item)" class="px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200 shrink-0">
+                                Remix
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -161,7 +168,7 @@ const GalleryPage = {
                             <div>
                                 <div class="flex justify-between">
                                     <h3 class="text-xs uppercase tracking-widest text-gray-500 font-semibold mb-3">Prompt</h3>
-                                    <button type="button" @click="remixPrompt" class="mb-2 px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200">
+                                    <button type="button" @click="remixImage" class="mb-2 px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200">
                                         Remix
                                     </button>
                                 </div>                            
@@ -361,14 +368,24 @@ const GalleryPage = {
             if (e.key === 'Escape') closeLightbox()
         }
 
-        function remixPrompt() {
+        function remixImage() {
             const selected = lightboxItem.value
-            console.log(ctx.state.selectedAspectRatio)
-            console.log(JSON.stringify(selected, null, 2))
             closeLightbox()
             ctx.chat.setSelectedModel(ctx.chat.getModel(selected.model))
             ctx.chat.messageText.value = selected.prompt
             ctx.chat.selectAspectRatio(selected.aspect_ratio)
+            ctx.threads.startNewThread({
+                title: selected.prompt,
+                model: ctx.chat.getSelectedModel(),
+            })
+        }
+
+        function remixAudio(item) {
+            const selected = item || lightboxItem.value
+            if (lightboxItem.value) closeLightbox()
+
+            ctx.chat.setSelectedModel(ctx.chat.getModel(selected.model))
+            ctx.chat.messageText.value = selected.prompt
             ctx.threads.startNewThread({
                 title: selected.prompt,
                 model: ctx.chat.getSelectedModel(),
@@ -394,7 +411,8 @@ const GalleryPage = {
             prevItem,
             hasNext,
             hasPrev,
-            remixPrompt,
+            remixImage,
+            remixAudio,
         }
     }
 }
