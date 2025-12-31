@@ -261,8 +261,8 @@ def install_google(ctx):
                     input_per_token = float(input_price) / 1000000
                     output_per_token = float(output_price) / 1000000
                     if "usageMetadata" in obj:
-                        input_tokens = obj["usageMetadata"]["promptTokenCount"]
-                        output_tokens = obj["usageMetadata"]["candidatesTokenCount"]
+                        input_tokens = obj["usageMetadata"].get("promptTokenCount", 0)
+                        output_tokens = obj["usageMetadata"].get("candidatesTokenCount", 0)
                         cost = (input_per_token * input_tokens) + (output_per_token * output_tokens)
 
                 response = {
