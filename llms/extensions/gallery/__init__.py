@@ -13,8 +13,6 @@ except ImportError as e:
 
 
 def install(ctx):
-    ctx.log("!!! gallery.install !!!")
-
     def get_gallery_db():
         global g_db
         if g_db is None and GalleryDB:

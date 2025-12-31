@@ -2414,8 +2414,8 @@ def run_extension_cli():
                     # Check for __run__ function if exists in __init__.py and call it with ctx
                     run_func = getattr(module, "__run__", None)
                     if callable(run_func):
+                        _log(f"Running extension {item}...")
                         handled = run_func(ctx)
-                        _log(f"Extension {item} was run")
                         return handled
 
                 except Exception as e:
