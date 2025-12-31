@@ -83,16 +83,23 @@ const GalleryPage = {
             </div>
 
             <!-- Audio List -->
-            <div v-if="ext.prefs.type === 'audio'" class="flex flex-col gap-4 max-w-4xl mx-auto">
+            <div v-if="ext.prefs.type === 'audio'" class="flex flex-col gap-4 max-w-3xl mx-auto">
                 <div v-for="(item, index) in items" :key="item.id" class="bg-white dark:bg-gray-800/40 p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex items-center gap-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm">
-                    <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-2v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-2" />
-                        </svg>
+                    <div class="flex flex-col items-center gap-2 shrink-0">
+                        <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-2v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-2" />
+                            </svg>
+                        </div>
+                        <button type="button" @click="remixAudio(item)" class="mb-1 px-2 py-0.5 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200 shrink-0">
+                            Remix
+                        </button>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex justify-between items-center mb-1">
-                            <h3 class="text-gray-900 dark:text-white font-medium truncate pr-4">{{ item.caption || item.prompt || 'Untitled' }}</h3>
+                            <h3 class="text-gray-900 dark:text-white font-medium truncate pr-4" :title="item.caption || item.prompt || ''">
+                                {{ item.caption || item.prompt || 'Untitled' }}
+                            </h3>
                             <span class="text-xs text-gray-500 shrink-0">{{ $fmt.formatDate(item.created) }}</span>
                         </div>
                         <div class="flex justify-between items-center mb-2">
@@ -100,8 +107,8 @@ const GalleryPage = {
                         </div>
                         <div class="flex items-center gap-2">
                             <audio controls class="w-full h-8 opacity-90" :src="item.url"></audio>
-                            <button type="button" @click="remixAudio(item)" class="px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200 shrink-0">
-                                Remix
+                            <button type="button" @click="deleteMedia(item)" class="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors" title="Delete">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </button>
                         </div>
                     </div>
@@ -213,7 +220,6 @@ const GalleryPage = {
                             </div>
                         </div>
 
-                        <!-- Footer Actions -->
                         <!-- Footer Actions -->
                         <div class="p-6 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#161616] flex gap-2">
                              <a :href="lightboxItem.url" download class="flex-1 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 px-6 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-lg shadow-black/5 dark:shadow-white/5">
@@ -398,18 +404,22 @@ const GalleryPage = {
             })
         }
 
-        async function deleteMedia() {
-            if (!lightboxItem.value) return
+        async function deleteMedia(item) {
+            const target = item && item.hash ? item : lightboxItem.value
+            if (!target) return
+
             if (!confirm('Are you sure you want to delete this media?')) return
 
-            const hash = lightboxItem.value.hash
+            const hash = target.hash
             try {
                 const response = await fetch(`${ext.baseUrl}/media/${hash}`, {
                     method: 'DELETE'
                 })
                 if (response.ok) {
                     items.value = items.value.filter(item => item.hash !== hash)
-                    closeLightbox()
+                    if (lightboxItem.value && lightboxItem.value.hash === hash) {
+                        closeLightbox()
+                    }
                 } else {
                     console.error("Failed to delete media", response)
                     alert("Failed to delete media")
