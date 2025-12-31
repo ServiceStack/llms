@@ -181,7 +181,7 @@ class GalleryDB:
             if not meta.get("hash"):
                 meta["hash"] = meta["url"].split("/")[-1].split(".")[0]
 
-            if "width" in meta and "height" in meta:
+            if "width" in meta and "height" in meta and meta["width"] and meta["height"]:
                 meta["aspect_ratio"] = self.closest_aspect_ratio(int(meta["width"]), int(meta["height"]))
 
             meta["metadata"] = db_value(metadata)
