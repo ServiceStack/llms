@@ -2048,7 +2048,9 @@ class AppExtensions:
         self.chat_response_filters = []
         self.server_add_get = []
         self.server_add_post = []
-        self.server_add_post = []
+        self.server_add_put = []
+        self.server_add_delete = []
+        self.server_add_patch = []
         self.cache_saved_filters = []
         self.tools = {}
         self.tool_definitions = []
@@ -2222,6 +2224,18 @@ class ExtensionContext:
     def add_post(self, path, handler, **kwargs):
         self.dbg(f"Registered POST: {os.path.join(self.ext_prefix, path)}")
         self.app.server_add_post.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def add_put(self, path, handler, **kwargs):
+        self.dbg(f"Registered PUT: {os.path.join(self.ext_prefix, path)}")
+        self.app.server_add_put.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def add_delete(self, path, handler, **kwargs):
+        self.dbg(f"Registered DELETE: {os.path.join(self.ext_prefix, path)}")
+        self.app.server_add_delete.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def add_patch(self, path, handler, **kwargs):
+        self.dbg(f"Registered PATCH: {os.path.join(self.ext_prefix, path)}")
+        self.app.server_add_patch.append((os.path.join(self.ext_prefix, path), handler, kwargs))
 
     def get_config(self):
         return g_config
@@ -3358,6 +3372,36 @@ def main():
                     return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
 
             app.router.add_post(handler[0], managed_handler, **handler[2])
+        for handler in g_app.server_add_put:
+            handler_fn = handler[1]
+
+            async def managed_handler(request, handler_fn=handler_fn):
+                try:
+                    return await handler_fn(request)
+                except Exception as e:
+                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+
+            app.router.add_put(handler[0], managed_handler, **handler[2])
+        for handler in g_app.server_add_delete:
+            handler_fn = handler[1]
+
+            async def managed_handler(request, handler_fn=handler_fn):
+                try:
+                    return await handler_fn(request)
+                except Exception as e:
+                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+
+            app.router.add_delete(handler[0], managed_handler, **handler[2])
+        for handler in g_app.server_add_patch:
+            handler_fn = handler[1]
+
+            async def managed_handler(request, handler_fn=handler_fn):
+                try:
+                    return await handler_fn(request)
+                except Exception as e:
+                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+
+            app.router.add_patch(handler[0], managed_handler, **handler[2])
 
         # Serve index.html from root
         async def index_handler(request):
