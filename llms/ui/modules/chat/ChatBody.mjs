@@ -18,7 +18,7 @@ export default {
                     </div>
 
                     <!-- Messages -->
-                    <div v-else class="space-y-2">
+                    <div v-else-if="currentThread?.messages?.length" class="space-y-2">
                         <div v-if="currentThread?.messages.length && currentThread?.model" class="flex items-center justify-center select-none">
                             <span @click="$chat.setSelectedModel({ name: currentThread.model})" 
                                 class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors border hover:border-gray-300 dark:hover:border-gray-700">
@@ -27,7 +27,7 @@ export default {
                             </span>
                         </div>
                         <div
-                            v-for="message in currentThread.messages"
+                            v-for="message in currentThread.messages.filter(x => x.role !== 'system')"
                             :key="message.id"
                             v-show="!(message.role === 'tool' && isToolLinked(message))"
                             class="flex items-start space-x-3 group"
@@ -50,7 +50,7 @@ export default {
                                 </div>
 
                                 <!-- Delete button (shown on hover) -->
-                                <button type="button" @click.stop="threads.deleteMessageFromThread(currentThread.id, message.id)"
+                                <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.id)"
                                     class="mx-auto opacity-0 group-hover:opacity-100 mt-2 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
                                     title="Delete message">
                                     <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,7 +252,7 @@ export default {
                         </div>
 
                         <!-- Loading indicator -->
-                        <div v-if="isGenerating" class="flex items-start space-x-3 group">
+                        <div v-if="$threads.watchingThread" class="flex items-start space-x-3 group">
                             <!-- Avatar outside the bubble -->
                             <div class="flex-shrink-0">
                                 <div class="w-8 h-8 rounded-full bg-gray-600 dark:bg-gray-500 text-white flex items-center justify-center text-sm font-medium">
@@ -270,18 +270,36 @@ export default {
                             </div>
 
                             <!-- Cancel button -->
-                            <button type="button" @click="cancelRequest"
+                            <button type="button" @click="$threads.cancelThread()"
                                 class="px-3 py-1 rounded text-sm text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 border border-transparent hover:border-red-300 dark:hover:border-red-600 transition-all"
                                 title="Cancel request">
                                 cancel
                             </button>
                         </div>
 
-                        <!-- Error message bubble -->
-                        <div v-if="errorStatus" class="flex items-start space-x-3">
+                        <!-- Thread error message bubble -->
+                        <div v-if="currentThread?.error" class="mt-8 flex items-center space-x-3">
                             <!-- Avatar outside the bubble -->
                             <div class="flex-shrink-0">
-                                <div class="w-8 h-8 rounded-full bg-red-600 dark:bg-red-500 text-white flex items-center justify-center text-sm font-medium">
+                                <div class="size-8 rounded-full bg-red-600 dark:bg-red-500 text-white flex items-center justify-center text-lg font-bold">
+                                    !
+                                </div>
+                            </div>
+                            <!-- Error bubble -->
+                            <div class="max-w-[85%] rounded-lg px-3 py-1 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 shadow-sm">
+                                <div class="flex items-start space-x-2">
+                                    <div class="flex-1 min-w-0">
+                                        <div v-if="currentThread.error" class="text-base mb-1">{{ currentThread.error }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Error message bubble -->
+                        <div v-if="$state.error" class="mt-8 flex items-start space-x-3">
+                            <!-- Avatar outside the bubble -->
+                            <div class="flex-shrink-0">
+                                <div class="size-8 rounded-full bg-red-600 dark:bg-red-500 text-white flex items-center justify-center text-lg font-bold">
                                     !
                                 </div>
                             </div>
@@ -290,20 +308,20 @@ export default {
                             <div class="max-w-[85%] rounded-lg px-4 py-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 shadow-sm">
                                 <div class="flex items-start space-x-2">
                                     <div class="flex-1 min-w-0">
-                                        <div class="text-base font-medium mb-1">{{ errorStatus?.errorCode || 'Error' }}</div>
-                                        <div v-if="errorStatus?.message" class="text-base mb-1">{{ errorStatus.message }}</div>
-                                        <div v-if="errorStatus?.stackTrace" class="text-sm whitespace-pre-wrap break-words max-h-80 overflow-y-auto font-mono p-2 rounded bg-red-100 dark:bg-red-950/50">
-                                            {{ errorStatus.stackTrace }}
+                                        <div class="flex justify-between items-start">
+                                            <div class="text-base font-medium mb-1">{{ $state.error?.errorCode || 'Error' }}</div>
+                                            <button type="button" @click="$ctx.clearError()" title="Clear Error"
+                                                class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-red-100 flex-shrink-0">
+                                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div v-if="$state.error?.message" class="text-base mb-1">{{ $state.error.message }}</div>
+                                        <div v-if="$state.error?.stackTrace" class="mt-2 text-sm whitespace-pre-wrap break-words max-h-80 overflow-y-auto font-mono p-2 border border-red-200/70 dark:border-red-800/70">
+                                            {{ $state.error.stackTrace }}
                                         </div>
                                     </div>
-                                    <button type="button"
-                                        @click="errorStatus = null"
-                                        class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-red-100 flex-shrink-0"
-                                    >
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                        </svg>
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -340,7 +358,6 @@ export default {
         const threads = ctx.threads
         const chatPrompt = ctx.chat
         const { currentThread } = threads
-        const { errorStatus, isGenerating } = ctx.chat
 
         const router = useRouter()
         const route = useRoute()
@@ -383,12 +400,9 @@ export default {
 
         // Watch for route changes and load the appropriate thread
         watch(() => route.params.id, async (newId) => {
-            const thread = await threads.setCurrentThreadFromRoute(newId, router)
-
-            // If the selected thread specifies a model and it's available, switch to it
-            if (thread?.model && Array.isArray(models) && models.includes(thread.model)) {
-                selectedModel.value = thread.model
-            }
+            // console.debug('watch route.params.id', newId)
+            ctx.clearError()
+            threads.setCurrentThreadFromRoute(newId, router)
 
             if (!newId) {
                 chatPrompt.reset()
@@ -516,37 +530,18 @@ export default {
         const redoMessage = async (message) => {
             if (!currentThread.value || message.role !== 'user') return
 
-            try {
-                const threadId = currentThread.value.id
+            const threadId = currentThread.value.id
 
-                // Clear all messages after this one
-                await threads.redoMessageFromThread(threadId, message.id)
+            // Clear all messages after this one
+            await threads.redoMessageFromThread(threadId, message.timestamp)
 
-                const state = await extractMessageState(message)
+            const state = await extractMessageState(message)
 
-                // Set the message text in the chat prompt
-                chatPrompt.messageText.value = state.text
+            // Set the message text in the chat prompt
+            chatPrompt.messageText.value = state.text
 
-                // Restore attached files
-                chatPrompt.attachedFiles.value = state.files
-
-                // Trigger send by simulating the send action
-                // We'll use a small delay to ensure the UI updates
-                await nextTick()
-
-                // Find the send button and click it
-                const sendButton = document.querySelector('button[title*="Send"]')
-                if (sendButton && !sendButton.disabled) {
-                    sendButton.click()
-                }
-            } catch (error) {
-                console.error('Failed to redo message:', error)
-                errorStatus.value = {
-                    errorCode: 'Error',
-                    message: 'Failed to redo message: ' + error.message,
-                    stackTrace: null
-                }
-            }
+            // Restore attached files
+            chatPrompt.attachedFiles.value = state.files
         }
 
         // Edit a user message
@@ -557,7 +552,7 @@ export default {
             const state = await extractMessageState(message)
             chatPrompt.messageText.value = state.text
             chatPrompt.attachedFiles.value = state.files
-            chatPrompt.editingMessageId.value = message.id
+            chatPrompt.editingMessage.value = message.timestamp
 
             // Focus the textarea
             nextTick(() => {
@@ -568,11 +563,6 @@ export default {
                     textarea.selectionStart = textarea.selectionEnd = textarea.value.length
                 }
             })
-        }
-
-        // Cancel pending request
-        const cancelRequest = () => {
-            chatPrompt.cancel()
         }
 
         function tokensTitle(usage) {
@@ -638,13 +628,10 @@ export default {
             setPrefs,
             config,
             models,
-            threads,
-            isGenerating,
             currentThread,
             selectedModel,
             selectedModelObj,
             messagesContainer,
-            errorStatus,
             copying,
             isReasoningExpanded,
             toggleReasoning,
@@ -652,7 +639,6 @@ export default {
             copyMessageContent,
             redoMessage,
             editMessage,
-            cancelRequest,
             configUpdated,
             tokensTitle,
             getAttachments,

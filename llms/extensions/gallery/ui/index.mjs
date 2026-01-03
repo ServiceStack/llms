@@ -272,7 +272,8 @@ const GalleryPage = {
                 }
 
                 // USE ext.getJson AS REQUESTED
-                const data = await ext.getJson(`/media?${params}`)
+                const api = await ext.getJson(`/media?${params}`)
+                const data = api.response || []
 
                 if (data.length < PAGE_SIZE) {
                     allLoaded.value = true

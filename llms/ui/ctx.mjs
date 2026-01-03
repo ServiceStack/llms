@@ -1,5 +1,5 @@
 
-import { reactive } from 'vue'
+import { reactive, markRaw } from 'vue'
 import { EventBus, humanize, combinePaths } from "@servicestack/client"
 import { storageObject } from './utils.mjs'
 
@@ -25,8 +25,20 @@ export class ExtensionScope {
     get(url, options) {
         return this.ctx.ai.get(combinePaths(this.baseUrl, url), options)
     }
+    delete(url, options) {
+        return this.ctx.ai.get(combinePaths(this.baseUrl, url), {
+            ...options,
+            method: 'DELETE'
+        })
+    }
     async getJson(url, options) {
         return this.ctx.ai.getJson(combinePaths(this.baseUrl, url), options)
+    }
+    async deleteJson(url, options) {
+        return this.ctx.ai.getJson(combinePaths(this.baseUrl, url), {
+            ...options,
+            method: 'DELETE'
+        })
     }
     post(url, options) {
         return this.ctx.ai.post(combinePaths(this.baseUrl, url), options)
@@ -34,8 +46,35 @@ export class ExtensionScope {
     async postForm(url, options) {
         return await this.ctx.ai.postForm(combinePaths(this.baseUrl, url), options)
     }
-    async postJson(url, options) {
-        return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), options)
+    async postJson(url, body) {
+        return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), {
+            body: body instanceof FormData ? body : JSON.stringify(body)
+        })
+    }
+    async putJson(url, body) {
+        return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), {
+            method: 'PUT',
+            body: body instanceof FormData ? body : JSON.stringify(body)
+        })
+    }
+    async patchJson(url, body) {
+        return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), {
+            method: 'PATCH',
+            body: body instanceof FormData ? body : JSON.stringify(body)
+        })
+    }
+    async createJsonResult(res) {
+        return this.ctx.ai.createJsonResult(res)
+    }
+    createErrorResult(e) {
+        return this.ctx.ai.createErrorResult(e)
+    }
+    setError(e, msg = null) {
+        const prefix = this.id ? `[${this.id}] ` : ''
+        this.ctx.setError(e, msg ? `${prefix} ${msg}` : prefix)
+    }
+    clearError() {
+        this.ctx.clearError()
     }
 }
 
@@ -138,8 +177,9 @@ export class AppContext {
     }
     modals(modals) {
         Object.keys(modals).forEach(name => {
-            this.modalComponents[name] = modals[name]
-            this.component(name, modals[name])
+            const modal = markRaw(modals[name])
+            this.modalComponents[name] = modal
+            this.component(name, modal)
         })
     }
     openModal(name) {
@@ -214,6 +254,21 @@ export class AppContext {
         this.toggleLayout('left', toggle)
         return toggle
     }
+
+    setError(error, msg = null) {
+        this.state.error = error
+        if (error) {
+            if (msg) {
+                console.error(error.message, msg, error)
+            } else {
+                console.error(error.message, error)
+            }
+        }
+    }
+    clearError() {
+        this.state.error = null
+    }
+
     async getJson(url, options) {
         return await this.ai.getJson(url, options)
     }

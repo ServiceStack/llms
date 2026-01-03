@@ -6,7 +6,6 @@ import App from './App.mjs'
 import ai from './ai.mjs'
 import LayoutModule from './modules/layout.mjs'
 import ChatModule from './modules/chat/index.mjs'
-import ThreadsModule from './modules/threads/index.mjs'
 import ModelSelectorModule from './modules/model-selector.mjs'
 import { utilsFunctions, utilsFormatters } from './utils.mjs'
 import { markdownFormatters } from './markdown.mjs'
@@ -18,7 +17,6 @@ const Components = {
 const BuiltInModules = {
     LayoutModule,
     ChatModule,
-    ThreadsModule,
     ModelSelectorModule,
 }
 
@@ -97,7 +95,7 @@ export async function createContext() {
 
     ctx.router.beforeEach((to, from) => {
         const title = to.meta.title || 'Chat'
-        console.log('beforeEach', to.path, title)
+        console.debug('router:change', to.path, title)
         ctx.setLayout({ path: to.path })
         ctx.setState({ title })
         document.title = title

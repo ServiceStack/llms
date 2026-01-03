@@ -1,7 +1,10 @@
 import { onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
+import { appendQueryString } from '@servicestack/client'
 import ThreadStore from './threadStore.mjs'
 import Recents from './Recents.mjs'
+
+let ext
 
 // Thread Item Component
 const ThreadItem = {
@@ -70,7 +73,20 @@ const GroupedThreads = {
             v-for="thread in groupedThreads.today"
             :key="thread.id"
             :thread="thread"
-            :is-active="currentThread?.id === thread.id"
+            :is-active="currentThread?.id == thread.id"
+            @select="$emit('select', $event)"
+            @delete="$emit('delete', $event)"
+        />
+    </div>
+
+    <!-- Yesterday -->
+    <div v-if="groupedThreads.yesterday.length > 0" class="mb-4">
+        <h3 class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none">Yesterday</h3>
+        <ThreadItem
+            v-for="thread in groupedThreads.yesterday"
+            :key="thread.id"
+            :thread="thread"
+            :is-active="currentThread?.id == thread.id"
             @select="$emit('select', $event)"
             @delete="$emit('delete', $event)"
         />
@@ -83,7 +99,7 @@ const GroupedThreads = {
             v-for="thread in groupedThreads.lastWeek"
             :key="thread.id"
             :thread="thread"
-            :is-active="currentThread?.id === thread.id"
+            :is-active="currentThread?.id == thread.id"
             @select="$emit('select', $event)"
             @delete="$emit('delete', $event)"
         />
@@ -96,7 +112,7 @@ const GroupedThreads = {
             v-for="thread in groupedThreads.lastMonth"
             :key="thread.id"
             :thread="thread"
-            :is-active="currentThread?.id === thread.id"
+            :is-active="currentThread?.id == thread.id"
             @select="$emit('select', $event)"
             @delete="$emit('delete', $event)"
         />
@@ -109,7 +125,7 @@ const GroupedThreads = {
             v-for="thread in monthThreads"
             :key="thread.id"
             :thread="thread"
-            :is-active="currentThread?.id === thread.id"
+            :is-active="currentThread?.id == thread.id"
             @select="$emit('select', $event)"
             @delete="$emit('delete', $event)"
         />
@@ -229,8 +245,62 @@ const ThreadsSidebar = {
     }
 }
 
+function useRequests(ext) {
+    async function query(query) {
+        return (await ext.getJson(appendQueryString(`/requests`, query))).response || []
+    }
+    async function deleteById(requestId) {
+        if (!requestId) {
+            throw new Error('Request ID is required')
+        }
+        return await ext.deleteJson(`/requests/${requestId}`)
+    }
+
+    async function getThreadIds(query) {
+        return (await ext.getJson(appendQueryString(`/requests?fields=threadId&not_null=threadId&as=column&take=10000`, query))).response || []
+    }
+
+    async function getSummary() {
+        return (await ext.getJson(`/requests/summary`)).response
+    }
+    async function getDailySummary(day) {
+        return (await ext.getJson(`/requests/summary/${day}`)).response
+    }
+
+    // Get unique values for filter options
+    async function getFilterOptions() {
+        const results = await query({
+            select: 'distinct',
+            fields: 'model,provider',
+            not_null: 'model,provider',
+        })
+
+        if (results) {
+            const models = [...new Set(results.map(r => r.model).filter(m => m))].sort()
+            const providers = [...new Set(results.map(r => r.provider).filter(p => p))].sort()
+            console.log('getFilterOptions', models, providers)
+            return {
+                models,
+                providers
+            }
+        }
+    }
+
+    return {
+        query,
+        deleteById,
+        getThreadIds,
+        getSummary,
+        getDailySummary,
+        getFilterOptions,
+    }
+}
+
 export default {
+    order: -100,
+
     install(ctx) {
+        ext = ctx.scope('app')
         ctx.components({
             ThreadsSidebar,
             ThreadItem,
@@ -242,13 +312,12 @@ export default {
         ])
         ThreadStore.install(ctx)
 
+        ctx.setGlobals({
+            requests: useRequests(ext)
+        })
+
         ctx.setLayout({
             left: 'ThreadsSidebar',
         })
-    },
-
-    async load(ctx) {
-        const { initDB } = ctx.threads
-        await initDB()
     }
 }

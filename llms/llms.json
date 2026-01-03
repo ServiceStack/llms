@@ -9,7 +9,10 @@
             "restrict_to": "GITHUB_USERS"
         }
     },
-    "disable_extensions": [],
+    "disable_extensions": [
+        "xmas",
+        "duckduckgo"
+    ],
     "defaults": {
         "headers": {
             "Content-Type": "application/json",

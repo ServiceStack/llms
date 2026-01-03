@@ -46,8 +46,8 @@ class GalleryDB:
             "rating": "TEXT",  # "M"
             "ratings": "JSON",  # {"predicted_rating":"G","confidence":0.2164306640625,"all_scores":{"G":0.2164306640625,"PG":0.21240234375,"PG-13":0.1915283203125,"M":0.2069091796875,"R":0.2064208984375}}
             "objects": "JSON",  # [{"model":"640m","class":"FACE_FEMALE","score":0.5220243334770203,"box":[361,346,367,451]},{"model":"640m","class":"FEMALE_BREAST_EXPOSED","score":0.31755316257476807,"box":[672,1068,212,272]}]
-            "variant_id": "TEXT",  # 1
-            "variant_name": "TEXT",  # 4x Upscaled
+            "variantId": "TEXT",  # 1
+            "variantName": "TEXT",  # 4x Upscaled
             "published": "TIMESTAMP",
             "metadata": "JSON",  # {"date":1767111852}
         }
@@ -123,8 +123,8 @@ class GalleryDB:
                     rating TEXT,
                     ratings JSON,
                     objects JSON,
-                    variant_id TEXT,
-                    variant_name TEXT,
+                    variantId TEXT,
+                    variantName TEXT,
                     published TIMESTAMP,
                     metadata JSON
                 )

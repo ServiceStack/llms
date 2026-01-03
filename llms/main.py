@@ -9,6 +9,7 @@
 import argparse
 import asyncio
 import base64
+import contextlib
 import hashlib
 import importlib.util
 import inspect
@@ -332,11 +333,11 @@ def function_to_tool_definition(func):
     for name, param in signature.parameters.items():
         param_type = type_hints.get(name, str)
         param_type_name = "string"
-        if param_type == int:
+        if param_type is int:
             param_type_name = "integer"
-        elif param_type == float:
+        elif param_type is float:
             param_type_name = "number"
-        elif param_type == bool:
+        elif param_type is bool:
             param_type_name = "boolean"
 
         parameters["properties"][name] = {"type": param_type_name}
@@ -484,6 +485,92 @@ async def process_chat(chat, provider_id=None):
     return chat
 
 
+def image_ext_from_mimetype(mimetype, default="png"):
+    if "/" in mimetype:
+        _ext = mimetypes.guess_extension(mimetype)
+        if _ext:
+            return _ext.lstrip(".")
+    return default
+
+
+def audio_ext_from_format(format, default="mp3"):
+    if format == "mpeg":
+        return "mp3"
+    return format or default
+
+
+def file_ext_from_mimetype(mimetype, default="pdf"):
+    if "/" in mimetype:
+        _ext = mimetypes.guess_extension(mimetype)
+        if _ext:
+            return _ext.lstrip(".")
+    return default
+
+
+def cache_message_inline_data(m):
+    """
+    Replaces and caches any inline data URIs in the message content.
+    """
+    if "content" not in m:
+        return
+
+    content = m["content"]
+    if isinstance(content, list):
+        for item in content:
+            if item.get("type") == "image_url":
+                image_url = item.get("image_url", {})
+                url = image_url.get("url")
+                if url and url.startswith("data:"):
+                    # Extract base64 and mimetype
+                    try:
+                        header, base64_data = url.split(";base64,")
+                        # header is like "data:image/png"
+                        ext = image_ext_from_mimetype(header.split(":")[1])
+                        filename = f"image.{ext}"  # Hash will handle uniqueness
+
+                        cache_url, _ = save_image_to_cache(base64_data, filename, {}, ignore_info=True)
+                        image_url["url"] = cache_url
+                    except Exception as e:
+                        _log(f"Error caching inline image: {e}")
+
+            elif item.get("type") == "input_audio":
+                input_audio = item.get("input_audio", {})
+                data = input_audio.get("data")
+                if data:
+                    # Handle data URI or raw base64
+                    base64_data = data
+                    if data.startswith("data:"):
+                        with contextlib.suppress(ValueError):
+                            header, base64_data = data.split(";base64,")
+
+                    fmt = audio_ext_from_format(input_audio.get("format"))
+                    filename = f"audio.{fmt}"
+
+                    try:
+                        cache_url, _ = save_bytes_to_cache(base64_data, filename, {}, ignore_info=True)
+                        input_audio["data"] = cache_url
+                    except Exception as e:
+                        _log(f"Error caching inline audio: {e}")
+
+            elif item.get("type") == "file":
+                file_info = item.get("file", {})
+                file_data = file_info.get("file_data")
+                if file_data and file_data.startswith("data:"):
+                    try:
+                        header, base64_data = file_data.split(";base64,")
+                        mimetype = header.split(":")[1]
+                        # Try to get extension from filename if available, else mimetype
+                        filename = file_info.get("filename", "file")
+                        if "." not in filename:
+                            ext = file_ext_from_mimetype(mimetype)
+                            filename = f"{filename}.{ext}"
+
+                        cache_url, _ = save_bytes_to_cache(base64_data, filename, {}, ignore_info=True)
+                        file_info["file_data"] = cache_url
+                    except Exception as e:
+                        _log(f"Error caching inline file: {e}")
+
+
 class HTTPError(Exception):
     def __init__(self, status, reason, body, headers=None):
         self.status = status
@@ -493,39 +580,7 @@ class HTTPError(Exception):
         super().__init__(f"HTTP {status} {reason}")
 
 
-def save_bytes_to_cache(base64_data, filename, file_info):
-    ext = filename.split(".")[-1]
-    mimetype = get_file_mime_type(filename)
-    content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
-    sha256_hash = hashlib.sha256(content).hexdigest()
-
-    save_filename = f"{sha256_hash}.{ext}" if ext else sha256_hash
-
-    # Use first 2 chars for subdir to avoid too many files in one dir
-    subdir = sha256_hash[:2]
-    relative_path = f"{subdir}/{save_filename}"
-    full_path = get_cache_path(relative_path)
-    url = f"/~cache/{relative_path}"
-
-    os.makedirs(os.path.dirname(full_path), exist_ok=True)
-
-    with open(full_path, "wb") as f:
-        f.write(content)
-    info = {
-        "date": int(time.time()),
-        "url": url,
-        "size": len(content),
-        "type": mimetype,
-        "name": filename,
-    }
-    info.update(file_info)
-
-    g_app.on_cache_saved_filters({"url": url, "info": info})
-
-    return url, info
-
-
-def save_image_to_cache(base64_data, filename, image_info):
+def save_bytes_to_cache(base64_data, filename, file_info, ignore_info=False):
     ext = filename.split(".")[-1]
     mimetype = get_file_mime_type(filename)
     content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
@@ -542,6 +597,56 @@ def save_image_to_cache(base64_data, filename, image_info):
     # if file and its .info.json already exists, return it
     info_path = os.path.splitext(full_path)[0] + ".info.json"
     if os.path.exists(full_path) and os.path.exists(info_path):
+        _dbg(f"Cached bytes exists: {relative_path}")
+        if ignore_info:
+            return url, None
+        return url, json.load(open(info_path))
+
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+    with open(full_path, "wb") as f:
+        f.write(content)
+    info = {
+        "date": int(time.time()),
+        "url": url,
+        "size": len(content),
+        "type": mimetype,
+        "name": filename,
+    }
+    info.update(file_info)
+
+    # Save metadata
+    info_path = os.path.splitext(full_path)[0] + ".info.json"
+    with open(info_path, "w") as f:
+        json.dump(info, f)
+
+    _dbg(f"Saved cached bytes and info: {relative_path}")
+
+    g_app.on_cache_saved_filters({"url": url, "info": info})
+
+    return url, info
+
+
+def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
+    ext = filename.split(".")[-1]
+    mimetype = get_file_mime_type(filename)
+    content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
+    sha256_hash = hashlib.sha256(content).hexdigest()
+
+    save_filename = f"{sha256_hash}.{ext}" if ext else sha256_hash
+
+    # Use first 2 chars for subdir to avoid too many files in one dir
+    subdir = sha256_hash[:2]
+    relative_path = f"{subdir}/{save_filename}"
+    full_path = get_cache_path(relative_path)
+    url = f"/~cache/{relative_path}"
+
+    # if file and its .info.json already exists, return it
+    info_path = os.path.splitext(full_path)[0] + ".info.json"
+    if os.path.exists(full_path) and os.path.exists(info_path):
+        _dbg(f"Saved image exists: {relative_path}")
+        if ignore_info:
+            return url, None
         return url, json.load(open(info_path))
 
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
@@ -575,6 +680,8 @@ def save_image_to_cache(base64_data, filename, image_info):
     info_path = os.path.splitext(full_path)[0] + ".info.json"
     with open(info_path, "w") as f:
         json.dump(info, f)
+
+    _dbg(f"Saved image and info: {relative_path}")
 
     g_app.on_cache_saved_filters({"url": url, "info": info})
 
@@ -610,6 +717,21 @@ def chat_to_prompt(chat):
     return prompt
 
 
+def chat_to_system_prompt(chat):
+    if "messages" in chat:
+        for message in chat["messages"]:
+            if message["role"] == "system":
+                # if content is string
+                if isinstance(message["content"], str):
+                    return message["content"]
+                elif isinstance(message["content"], list):
+                    # if content is array of objects
+                    for part in message["content"]:
+                        if part["type"] == "text":
+                            return part["text"]
+    return None
+
+
 def chat_to_username(chat):
     if "metadata" in chat and "user" in chat["metadata"]:
         return chat["metadata"]["user"]
@@ -630,6 +752,34 @@ def last_user_prompt(chat):
                         if part["type"] == "text":
                             prompt = part["text"]
     return prompt
+
+
+def chat_response_to_message(openai_response):
+    """
+    Returns an assistant message from the OpenAI Response.
+    Handles normalizing text, image, and audio responses into the message content.
+    """
+    timestamp = int(time.time() * 1000)  # openai_response.get("created")
+    choices = openai_response
+    if isinstance(openai_response, dict) and "choices" in openai_response:
+        choices = openai_response["choices"]
+
+    choice = choices[0] if isinstance(choices, list) and choices else choices
+
+    if isinstance(choice, str):
+        return {"role": "assistant", "content": choice, "timestamp": timestamp}
+
+    if isinstance(choice, dict):
+        message = choice.get("message", choice)
+    else:
+        return {"role": "assistant", "content": str(choice), "timestamp": timestamp}
+
+    # Ensure message is a dict
+    if not isinstance(message, dict):
+        return {"role": "assistant", "content": message, "timestamp": timestamp}
+
+    message.update({"timestamp": timestamp})
+    return message
 
 
 def to_file_info(chat, info=None, response=None):
@@ -809,12 +959,16 @@ class OpenAiCompatible:
         if not self.models:
             await self.load_models()
 
-    def model_cost(self, model):
+    def model_info(self, model):
         provider_model = self.provider_model(model) or model
         for model_id, model_info in self.models.items():
             if model_id.lower() == provider_model.lower():
-                return model_info.get("cost")
+                return model_info
         return None
+
+    def model_cost(self, model):
+        model_info = self.model_info(model)
+        return model_info.get("cost") if model_info else None
 
     def provider_model(self, model):
         # convert model to lowercase for case-insensitive comparison
@@ -877,7 +1031,7 @@ class OpenAiCompatible:
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
 
         if "modalities" in chat:
-            for modality in chat["modalities"]:
+            for modality in chat.get("modalities", []):
                 # use default implementation for text modalities
                 if modality == "text":
                     continue
@@ -1108,8 +1262,12 @@ def api_providers():
     return ret
 
 
+def to_error_message(e):
+    return str(e)
+
+
 def to_error_response(e, stacktrace=False):
-    status = {"errorCode": "Error", "message": str(e)}
+    status = {"errorCode": "Error", "message": to_error_message(e)}
     if stacktrace:
         status["stackTrace"] = traceback.format_exc()
     return {"responseStatus": status}
@@ -1119,6 +1277,14 @@ def create_error_response(message, error_code="Error", stack_trace=None):
     ret = {"responseStatus": {"errorCode": error_code, "message": message}}
     if stack_trace:
         ret["responseStatus"]["stackTrace"] = stack_trace
+    return ret
+
+
+def should_cancel_thread(context):
+    ret = context.get("cancelled", False)
+    if ret:
+        thread_id = context.get("threadId")
+        _dbg(f"Thread cancelled {thread_id}")
     return ret
 
 
@@ -1150,28 +1316,51 @@ def g_chat_request(template=None, text=None, model=None, system_prompt=None):
 
 
 async def g_chat_completion(chat, context=None):
-    model = chat["model"]
-    # get first provider that has the model
-    candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
-    if len(candidate_providers) == 0:
-        raise (Exception(f"Model {model} not found"))
+    try:
+        model = chat.get("model")
+        if not model:
+            raise Exception("Model not specified")
 
+        if context is None:
+            context = {"chat": chat, "tools": "all"}
+
+        # get first provider that has the model
+        candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
+        if len(candidate_providers) == 0:
+            raise (Exception(f"Model {model} not found"))
+    except Exception as e:
+        await g_app.on_chat_error(e, context or {"chat": chat})
+        raise e
+
+    started_at = time.time()
     first_exception = None
+    provider_name = "Unknown"
     for name in candidate_providers:
-        provider = g_handlers[name]
-        _log(f"provider: {name} {type(provider).__name__}")
         try:
-            # Inject global tools if present
-            current_chat = chat.copy()
+            provider_name = name
+            provider = g_handlers[name]
+            _log(f"provider: {name} {type(provider).__name__}")
+            started_at = time.time()
+            context["startedAt"] = datetime.now()
+            context["provider"] = name
+            model_info = provider.model_info(model)
+            context["modelCost"] = model_info.get("cost", provider.model_cost(model)) or {"input": 0, "output": 0}
+            context["modelInfo"] = model_info
+
+            # Accumulate usage across tool calls
+            total_usage = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+            accumulated_cost = 0.0
+
             # Inject global tools if present
             current_chat = chat.copy()
             if g_app.tool_definitions:
-                include_all_tools = False
-                only_tools = []
-                if "metadata" in chat:
-                    only_tools_str = chat["metadata"].get("only_tools", "")
-                    include_all_tools = only_tools_str == "all"
-                    only_tools = only_tools_str.split(",")
+                only_tools_str = context.get("tools", "all")
+                include_all_tools = only_tools_str == "all"
+                only_tools = only_tools_str.split(",")
 
                 if include_all_tools or len(only_tools) > 0:
                     if "tools" not in current_chat:
@@ -1183,11 +1372,37 @@ async def g_chat_completion(chat, context=None):
                         if name not in existing_tools and (include_all_tools or name in only_tools):
                             current_chat["tools"].append(tool_def)
 
+            # Apply pre-chat filters ONCE
+            context["chat"] = current_chat
+            for filter_func in g_app.chat_request_filters:
+                await filter_func(current_chat, context)
+
             # Tool execution loop
-            max_iterations = 5
+            max_iterations = 10
             tool_history = []
+            final_response = None
+
             for _ in range(max_iterations):
+                if should_cancel_thread(context):
+                    return
+
                 response = await provider.chat(current_chat)
+
+                if should_cancel_thread(context):
+                    return
+
+                # Aggregate usage
+                if "usage" in response:
+                    usage = response["usage"]
+                    total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+                    total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+                    total_usage["total_tokens"] += usage.get("total_tokens", 0)
+
+                    # Calculate cost for this step if available
+                    if "cost" in response and isinstance(response["cost"], (int, float)):
+                        accumulated_cost += response["cost"]
+                    elif "cost" in usage and isinstance(usage["cost"], (int, float)):
+                        accumulated_cost += usage["cost"]
 
                 # Check for tool_calls in the response
                 choice = response.get("choices", [])[0] if response.get("choices") else {}
@@ -1198,48 +1413,85 @@ async def g_chat_completion(chat, context=None):
                     # Append the assistant's message with tool calls to history
                     if "messages" not in current_chat:
                         current_chat["messages"] = []
+                    if "timestamp" not in message:
+                        message["timestamp"] = int(time.time() * 1000)
                     current_chat["messages"].append(message)
                     tool_history.append(message)
 
                     for tool_call in tool_calls:
                         function_name = tool_call["function"]["name"]
-                        function_args = json.loads(tool_call["function"]["arguments"])
-
-                        tool_result = f"Error: Tool {function_name} not found"
-                        if function_name in g_app.tools:
-                            try:
-                                func = g_app.tools[function_name]
-                                if inspect.iscoroutinefunction(func):
-                                    tool_result = await func(**function_args)
-                                else:
-                                    tool_result = func(**function_args)
-                            except Exception as e:
-                                tool_result = f"Error executing tool {function_name}: {e}"
+                        try:
+                            function_args = json.loads(tool_call["function"]["arguments"])
+                        except Exception as e:
+                            tool_result = f"Error parsing JSON arguments for tool {function_name}: {e}"
+                        else:
+                            tool_result = f"Error: Tool {function_name} not found"
+                            if function_name in g_app.tools:
+                                try:
+                                    func = g_app.tools[function_name]
+                                    if inspect.iscoroutinefunction(func):
+                                        tool_result = await func(**function_args)
+                                    else:
+                                        tool_result = func(**function_args)
+                                except Exception as e:
+                                    tool_result = f"Error executing tool {function_name}: {e}"
 
                         # Append tool result to history
                         tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": str(tool_result)}
                         current_chat["messages"].append(tool_msg)
                         tool_history.append(tool_msg)
 
+                    for filter_func in g_app.chat_tool_filters:
+                        await filter_func(current_chat, context)
+
+                    if should_cancel_thread(context):
+                        return
+
                     # Continue loop to send tool results back to LLM
                     continue
 
-                # If no tool calls, return the response
+                # If no tool calls, this is the final response
                 if tool_history:
                     response["tool_history"] = tool_history
-                return response
+
+                # Update final response with aggregated usage
+                if "usage" not in response:
+                    response["usage"] = {}
+                # convert to int seconds
+                context["duration"] = duration = int(time.time() - started_at)
+                total_usage.update({"duration": duration})
+                response["usage"].update(total_usage)
+                # If we accumulated cost, set it on the response
+                if accumulated_cost > 0:
+                    response["cost"] = accumulated_cost
+
+                final_response = response
+                break  # Exit tool loop
+
+            if final_response:
+                # Apply post-chat filters ONCE on final response
+                for filter_func in g_app.chat_response_filters:
+                    await filter_func(final_response, context)
+
+                if DEBUG:
+                    _dbg(json.dumps(final_response, indent=2))
+
+                return final_response
 
         except Exception as e:
             if first_exception is None:
                 first_exception = e
-            _log(f"Provider {name} failed: {e}")
+                context["stackTrace"] = traceback.format_exc()
+            _err(f"Provider {provider_name} failed", first_exception)
+            await g_app.on_chat_error(e, context)
+
             continue
 
     # If we get here, all providers failed
     raise first_exception
 
 
-async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False):
+async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=None, raw=False):
     if g_default_model:
         chat["model"] = g_default_model
 
@@ -1314,7 +1566,10 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
         printdump(chat)
 
     try:
-        response = await g_app.chat_completion(chat)
+        context = {
+            "tools": tools or "all",
+        }
+        response = await g_app.chat_completion(chat, context=context)
 
         if raw:
             print(json.dumps(response, indent=2))
@@ -1349,15 +1604,15 @@ async def cli_chat(chat, image=None, audio=None, file=None, args=None, raw=False
     except HTTPError as e:
         # HTTP error (4xx, 5xx)
         print(f"{e}:\n{e.body}")
-        exit(1)
+        g_app.exit(1)
     except aiohttp.ClientConnectionError as e:
         # Connection issues
         print(f"Connection error: {e}")
-        exit(1)
+        g_app.exit(1)
     except asyncio.TimeoutError as e:
         # Timeout
         print(f"Timeout error: {e}")
-        exit(1)
+        g_app.exit(1)
 
 
 def config_str(key):
@@ -2043,15 +2298,20 @@ class AppExtensions:
     def __init__(self, cli_args, extra_args):
         self.cli_args = cli_args
         self.extra_args = extra_args
+        self.config = None
+        self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
         self.chat_request_filters = []
+        self.chat_tool_filters = []
         self.chat_response_filters = []
+        self.chat_error_filters = []
         self.server_add_get = []
         self.server_add_post = []
         self.server_add_put = []
         self.server_add_delete = []
         self.server_add_patch = []
         self.cache_saved_filters = []
+        self.shutdown_handlers = []
         self.tools = {}
         self.tool_definitions = []
         self.all_providers = [
@@ -2075,6 +2335,30 @@ class AppExtensions:
             "16:9": "1344×768",
             "21:9": "1536×672",
         }
+
+    def set_config(self, config):
+        self.config = config
+        self.auth_enabled = self.config.get("auth", {}).get("enabled", False)
+
+    # Authentication middleware helper
+    def check_auth(self, request):
+        """Check if request is authenticated. Returns (is_authenticated, user_data)"""
+        if not self.auth_enabled:
+            return True, None
+
+        # Check for OAuth session token
+        session_token = get_session_token(request)
+        if session_token and session_token in g_sessions:
+            return True, g_sessions[session_token]
+
+        # Check for API key
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            api_key = auth_header[7:]
+            if api_key:
+                return True, {"authProvider": "apikey"}
+
+        return False, None
 
     def get_session(self, request):
         session_token = get_session_token(request)
@@ -2100,31 +2384,32 @@ class AppExtensions:
         return g_chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
 
     async def chat_completion(self, chat, context=None):
-        # Apply pre-chat filters
-        if context is None:
-            context = {"chat": chat}
-        elif "request" in context:
-            username = self.get_username(context["request"])
-            if username:
-                if "metadata" not in chat:
-                    chat["metadata"] = {}
-                chat["metadata"]["user"] = username
-
-        for filter_func in self.chat_request_filters:
-            chat = await filter_func(chat, context)
-
         response = await g_chat_completion(chat, context)
-
-        # Apply post-chat filters
-        for filter_func in self.chat_response_filters:
-            response = await filter_func(response, context)
-
         return response
 
     def on_cache_saved_filters(self, context):
         # _log(f"on_cache_saved_filters {len(self.cache_saved_filters)}: {context['url']}")
         for filter_func in self.cache_saved_filters:
             filter_func(context)
+
+    async def on_chat_error(self, e, context):
+        # Apply chat error filters
+        if "stackTrace" not in context:
+            context["stackTrace"] = traceback.format_exc()
+        for filter_func in self.chat_error_filters:
+            try:
+                await filter_func(e, context)
+            except Exception as e:
+                _err("chat error filter failed", e)
+
+    def exit(self, exit_code=0):
+        if len(self.shutdown_handlers) > 0:
+            _dbg(f"running {len(self.shutdown_handlers)} shutdown handlers...")
+            for handler in self.shutdown_handlers:
+                handler()
+
+        _dbg(f"exit({exit_code})")
+        sys.exit(exit_code)
 
 
 def handler_name(handler):
@@ -2136,6 +2421,9 @@ def handler_name(handler):
 class ExtensionContext:
     def __init__(self, app, path):
         self.app = app
+        self.cli_args = app.cli_args
+        self.extra_args = app.extra_args
+        self.error_auth_required = app.error_auth_required
         self.path = path
         self.name = os.path.basename(path)
         if self.name.endswith(".py"):
@@ -2149,6 +2437,12 @@ class ExtensionContext:
 
     def chat_to_prompt(self, chat):
         return chat_to_prompt(chat)
+
+    def chat_to_system_prompt(self, chat):
+        return chat_to_system_prompt(chat)
+
+    def chat_response_to_message(self, response):
+        return chat_response_to_message(response)
 
     def last_user_prompt(self, chat):
         return last_user_prompt(chat)
@@ -2184,6 +2478,12 @@ class ExtensionContext:
         if self.verbose:
             print(traceback.format_exc(), flush=True)
 
+    def error_message(self, e):
+        return to_error_message(e)
+
+    def error_response(self, e, stacktrace=False):
+        return to_error_response(e, stacktrace=stacktrace)
+
     def add_provider(self, provider):
         self.log(f"Registered provider: {provider.__name__}")
         self.app.all_providers.append(provider)
@@ -2197,13 +2497,25 @@ class ExtensionContext:
         self.log(f"Registered chat request filter: {handler_name(handler)}")
         self.app.chat_request_filters.append(handler)
 
+    def register_chat_tool_filter(self, handler):
+        self.log(f"Registered chat tool filter: {handler_name(handler)}")
+        self.app.chat_tool_filters.append(handler)
+
     def register_chat_response_filter(self, handler):
         self.log(f"Registered chat response filter: {handler_name(handler)}")
         self.app.chat_response_filters.append(handler)
 
+    def register_chat_error_filter(self, handler):
+        self.log(f"Registered chat error filter: {handler_name(handler)}")
+        self.app.chat_error_filters.append(handler)
+
     def register_cache_saved_filter(self, handler):
         self.log(f"Registered cache saved filter: {handler_name(handler)}")
         self.app.cache_saved_filters.append(handler)
+
+    def register_shutdown_handler(self, handler):
+        self.log(f"Registered shutdown handler: {handler_name(handler)}")
+        self.app.shutdown_handlers.append(handler)
 
     def add_static_files(self, ext_dir):
         self.log(f"Registered static files: {ext_dir}")
@@ -2264,6 +2576,9 @@ class ExtensionContext:
         self.app.tools[name] = func
         self.app.tool_definitions.append(tool_def)
 
+    def check_auth(self, request):
+        return self.app.check_auth(request)
+
     def get_session(self, request):
         return self.app.get_session(request)
 
@@ -2272,6 +2587,12 @@ class ExtensionContext:
 
     def get_user_path(self, username=None):
         return self.app.get_user_path(username)
+
+    def should_cancel_thread(self, context):
+        return should_cancel_thread(context)
+
+    def cache_message_inline_data(self, message):
+        return cache_message_inline_data(message)
 
 
 def get_extensions_path():
@@ -2454,6 +2775,9 @@ def main():
     parser.add_argument(
         "-s", "--system", default=None, help="System prompt to use for chat completion", metavar="PROMPT"
     )
+    parser.add_argument(
+        "--tools", default=None, help="Tools to use for chat completion (all|none|<tool>,<tool>...)", metavar="TOOLS"
+    )
     parser.add_argument("--image", default=None, help="Image input to use in chat completion")
     parser.add_argument("--audio", default=None, help="Audio input to use in chat completion")
     parser.add_argument("--file", default=None, help="File input to use in chat completion")
@@ -2575,6 +2899,8 @@ def main():
         asyncio.run(save_home_configs())
         g_config_path = home_config_path
         g_config = load_config_json(text_from_file(g_config_path))
+
+    g_app.set_config(g_config)
 
     if not g_providers:
         g_providers = json.loads(text_from_file(home_providers_path))
@@ -2794,17 +3120,16 @@ def main():
         print(f"\n{model_count} models available from {provider_count} providers")
 
         print_status()
-        exit(0)
+        g_app.exit(0)
 
     if cli_args.check is not None:
         # Check validity of models for a provider
         provider_name = cli_args.check
         model_names = extra_args if len(extra_args) > 0 else None
         asyncio.run(check_models(provider_name, model_names))
-        exit(0)
+        g_app.exit(0)
 
     if cli_args.serve is not None:
-        error_auth_required = create_error_response("Authentication required", "Unauthorized")
         # Disable inactive providers and save to config before starting server
         all_providers = g_config["providers"].keys()
         enabled_providers = list(g_handlers.keys())
@@ -2857,35 +3182,18 @@ def main():
         _log(f"client_max_size set to {client_max_size} bytes ({client_max_size / 1024 / 1024:.1f}MB)")
         app = web.Application(client_max_size=client_max_size)
 
-        # Authentication middleware helper
-        def check_auth(request):
-            """Check if request is authenticated. Returns (is_authenticated, user_data)"""
-            if not auth_enabled:
-                return True, None
-
-            # Check for OAuth session token
-            session_token = get_session_token(request)
-            if session_token and session_token in g_sessions:
-                return True, g_sessions[session_token]
-
-            # Check for API key
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                api_key = auth_header[7:]
-                if api_key:
-                    return True, {"authProvider": "apikey"}
-
-            return False, None
-
         async def chat_handler(request):
             # Check authentication if enabled
-            is_authenticated, user_data = check_auth(request)
+            is_authenticated, user_data = g_app.check_auth(request)
             if not is_authenticated:
-                return web.json_response(error_auth_required, status=401)
+                return web.json_response(g_app.error_auth_required, status=401)
 
             try:
                 chat = await request.json()
-                context = {"request": request, "chat": chat}
+                context = {"chat": chat, "request": request, "user": g_app.get_username(request)}
+                metadata = chat.get("metadata", {})
+                context["threadId"] = metadata.get("threadId", None)
+                context["tools"] = metadata.get("tools", "all")
                 response = await g_app.chat_completion(chat, context)
                 return web.json_response(response)
             except Exception as e:
@@ -2941,9 +3249,9 @@ def main():
 
         async def upload_handler(request):
             # Check authentication if enabled
-            is_authenticated, user_data = check_auth(request)
+            is_authenticated, user_data = g_app.check_auth(request)
             if not is_authenticated:
-                return web.json_response(error_auth_required, status=401)
+                return web.json_response(g_app.error_auth_required, status=401)
 
             reader = await request.multipart()
 
@@ -3293,7 +3601,7 @@ def main():
             #         })
 
             # Not authenticated - return error in expected format
-            return web.json_response(error_auth_required, status=401)
+            return web.json_response(g_app.error_auth_required, status=401)
 
         app.router.add_get("/auth", auth_handler)
         app.router.add_get("/auth/github", github_auth_handler)
@@ -3427,7 +3735,7 @@ def main():
 
         print(f"Starting server on port {port}...")
         web.run_app(app, host="0.0.0.0", port=port, print=_log)
-        exit(0)
+        g_app.exit(0)
 
     if cli_args.enable is not None:
         if cli_args.enable.endswith(","):
@@ -3457,7 +3765,7 @@ def main():
         print_status()
         if len(msgs) > 0:
             print("\n" + "\n".join(msgs))
-        exit(0)
+        g_app.exit(0)
 
     if cli_args.disable is not None:
         if cli_args.disable.endswith(","):
@@ -3480,7 +3788,7 @@ def main():
             print(f"\nDisabled provider {provider}")
 
         print_status()
-        exit(0)
+        g_app.exit(0)
 
     if cli_args.default is not None:
         default_model = cli_args.default
@@ -3492,7 +3800,7 @@ def main():
         default_text["model"] = default_model
         save_config(g_config)
         print(f"\nDefault model set to: {default_model}")
-        exit(0)
+        g_app.exit(0)
 
     if (
         cli_args.chat is not None
@@ -3552,21 +3860,28 @@ def main():
 
             asyncio.run(
                 cli_chat(
-                    chat, image=cli_args.image, audio=cli_args.audio, file=cli_args.file, args=args, raw=cli_args.raw
+                    chat,
+                    tools=cli_args.tools,
+                    image=cli_args.image,
+                    audio=cli_args.audio,
+                    file=cli_args.file,
+                    args=args,
+                    raw=cli_args.raw,
                 )
             )
-            exit(0)
+            g_app.exit(0)
         except Exception as e:
             print(f"{cli_args.logprefix}Error: {e}")
             if cli_args.verbose:
                 traceback.print_exc()
-            exit(1)
+            g_app.exit(1)
 
     handled = run_extension_cli()
 
     if not handled:
         # show usage from ArgumentParser
         parser.print_help()
+        g_app.exit(0)
 
 
 if __name__ == "__main__":

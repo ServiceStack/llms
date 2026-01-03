@@ -58,6 +58,21 @@ def install_anthropic(ctx):
                 if message.get("role") == "system":
                     continue
 
+                if message.get("role") == "tool":
+                    # Convert OpenAI tool response to Anthropic tool_result
+                    tool_call_id = message.get("tool_call_id")
+                    content = message.get("content", "")
+
+                    tool_result = {"type": "tool_result", "tool_use_id": tool_call_id, "content": content}
+
+                    # Anthropic requires tool results to be in a user message
+                    # Check if the last message was a user message, if so append to it
+                    if anthropic_request["messages"] and anthropic_request["messages"][-1]["role"] == "user":
+                        anthropic_request["messages"][-1]["content"].append(tool_result)
+                    else:
+                        anthropic_request["messages"].append({"role": "user", "content": [tool_result]})
+                    continue
+
                 anthropic_message = {"role": message.get("role"), "content": []}
 
                 content = message.get("content", "")
@@ -106,7 +121,18 @@ def install_anthropic(ctx):
             if "stream" in chat:
                 anthropic_request["stream"] = chat["stream"]
             if "tools" in chat:
-                anthropic_request["tools"] = chat["tools"]
+                anthropic_tools = []
+                for tool in chat["tools"]:
+                    if tool.get("type") == "function":
+                        function = tool.get("function", {})
+                        anthropic_tool = {
+                            "name": function.get("name"),
+                            "description": function.get("description"),
+                            "input_schema": function.get("parameters"),
+                        }
+                        anthropic_tools.append(anthropic_tool)
+                if anthropic_tools:
+                    anthropic_request["tools"] = anthropic_tools
             if "tool_choice" in chat:
                 anthropic_request["tool_choice"] = chat["tool_choice"]
 
@@ -138,6 +164,7 @@ def install_anthropic(ctx):
             # Transform content blocks to message content
             content_parts = []
             thinking_parts = []
+            tool_calls = []
 
             for block in response.get("content", []):
                 if block.get("type") == "text":
@@ -145,6 +172,16 @@ def install_anthropic(ctx):
                 elif block.get("type") == "thinking":
                     # Store thinking blocks separately (some models include reasoning)
                     thinking_parts.append(block.get("thinking", ""))
+                elif block.get("type") == "tool_use":
+                    tool_call = {
+                        "id": block.get("id"),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name"),
+                            "arguments": json.dumps(block.get("input", {})),
+                        },
+                    }
+                    tool_calls.append(tool_call)
 
             # Combine all text content
             message_content = "\n".join(content_parts) if content_parts else ""
@@ -159,6 +196,10 @@ def install_anthropic(ctx):
             # Add thinking as metadata if present
             if thinking_parts:
                 choice["message"]["thinking"] = "\n".join(thinking_parts)
+
+            # Add tool_calls if present
+            if tool_calls:
+                choice["message"]["tool_calls"] = tool_calls
 
             ret["choices"].append(choice)
 

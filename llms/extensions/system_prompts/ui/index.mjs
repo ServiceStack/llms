@@ -278,7 +278,8 @@ export default {
     },
 
     async load(ctx) {
-        const prompts = await ext.getJson(`/prompts.json`)
+        const api = await ext.getJson(`/prompts.json`)
+        const prompts = api.response || []
         ctx.setState({ prompts })
     }
 }

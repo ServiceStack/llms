@@ -11,7 +11,7 @@ const Tools = {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            <div v-for="tool in ($state.tools || [])" :key="tool.function.name"
+            <div v-for="tool in (Array.isArray($state.tools) ? $state.tools : []).filter(x => x.function)" :key="tool.function.name"
                 class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
                 
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
@@ -100,7 +100,7 @@ const ToolSelector = {
     setup() {
         const ctx = inject('ctx')
 
-        const availableTools = computed(() => ctx.state.tools || [])
+        const availableTools = computed(() => (Array.isArray(ctx.state.tools) ? ctx.state.tools : []).filter(x => x.function))
 
         function isToolActive(name) {
             const only = ctx.prefs.onlyTools
@@ -145,12 +145,12 @@ export default {
             ToolSelector,
         })
 
-        const svg = (attrs, title) => `<svg ${attrs} xmlns="http://www.w4.org/2000/svg" viewBox="0 0 24 24">${title ? "<title>" + title + "</title>" : ''}<path fill="currentColor" d="M5.33 3.272a3.5 3.5 0 0 1 4.472 4.473L20.647 18.59l-2.122 2.122L7.68 9.867a3.5 3.5 0 0 1-4.472-4.474L5.444 7.63a1.5 1.5 0 0 0 2.121-2.121zm10.367 1.883l3.182-1.768l1.414 1.415l-1.768 3.182l-1.768.353l-2.12 2.121l-1.415-1.414l2.121-2.121zm-7.071 7.778l2.121 2.122l-4.95 4.95A1.5 1.5 0 0 1 3.58 17.99l.097-.107z"/></svg>`
+        const svg = (attrs, title) => `<svg ${attrs} xmlns="http://www.w4.org/2000/svg" viewBox="0 0 24 24">${title ? "<title>" + title + "</title>" : ''}<path fill="currentColor" d="M5.33 3.272a3.5 3.5 0 0 1 4.472 4.473L20.647 18.59l-2.122 2.122L7.68 9.867a3.5 3.5 0 0 1-4.472-4.474L5.444 7.63a1.5 1.5 0 0 0 2.121-2.121zm10.367 1.883l3.182-1.768l1.414 1.415l-1.768 3.182l-1.768.353l-2.12 2.121l-1.415-1.414l2.121-2.121zm-7.071 7.778l2.121 2.122l-4.95 4.95A1.5 1.5 0 0 1 3.58 17.99l.097-.107z" /></svg>`
 
         ctx.setLeftIcons({
             tools: {
                 component: {
-                    template: svg('@click=$ctx.togglePath("/tools")'),
+                    template: svg(`@click="$ctx.togglePath('/tools')"`),
                 },
                 isActive({ path }) {
                     return path === '/tools'
@@ -162,7 +162,7 @@ export default {
             tools: {
                 component: {
                     template: svg([
-                        `@click=$ctx.toggleTop("ToolSelector")`,
+                        `@click="$ctx.toggleTop('ToolSelector')"`,
                         `:class="$prefs.onlyTools == null ? 'text-green-600 dark:text-green-300' : $prefs.onlyTools.length ? 'text-blue-600! dark:text-blue-300!' : ''"`
                     ].join(' ')),
                     // , "{{$prefs.onlyTools == null ? 'Include All Tools' : $prefs.onlyTools.length ? 'Include Selected Tools' : 'All Tools Excluded'}}"
@@ -185,12 +185,12 @@ export default {
             const prefs = ctx.prefs
             if (prefs.onlyTools != null) {
                 if (Array.isArray(prefs.onlyTools)) {
-                    request.metadata.only_tools = prefs.onlyTools.length > 0
+                    request.metadata.tools = prefs.onlyTools.length > 0
                         ? prefs.onlyTools.join(',')
                         : 'none'
                 }
             } else {
-                request.metadata.only_tools = 'all'
+                request.metadata.tools = 'all'
             }
         })
 
@@ -199,6 +199,6 @@ export default {
 
     async load(ctx) {
         const ext = ctx.scope('tools')
-        ctx.state.tools = await ext.getJson('/')
+        ctx.state.tools = (await ext.getJson('/')).response || []
     }
 }

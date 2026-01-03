@@ -1,7 +1,7 @@
 
 import { ref, computed, watch, nextTick, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { $$, createElement, lastRightPart, ApiResult, createErrorStatus } from "@servicestack/client"
+import { $$, createElement, lastRightPart, ApiResult, createErrorStatus, pick } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
 import ChatBody from './ChatBody.mjs'
 import HomeTools from './HomeTools.mjs'
@@ -118,33 +118,17 @@ export function addCopyButtons() {
 export function useChatPrompt(ctx) {
     const messageText = ref('')
     const attachedFiles = ref([])
-    const isGenerating = ref(false)
-    const errorStatus = ref(null)
-    const abortController = ref(null)
     const hasImage = () => attachedFiles.value.some(f => imageExts.includes(lastRightPart(f.name, '.')))
     const hasAudio = () => attachedFiles.value.some(f => audioExts.includes(lastRightPart(f.name, '.')))
     const hasFile = () => attachedFiles.value.length > 0
-    // const hasText = () => !hasImage() && !hasAudio() && !hasFile()
 
-    const editingMessageId = ref(null)
+    const editingMessage = ref(null)
 
     function reset() {
         // Ensure initial state is ready to accept input
-        isGenerating.value = false
         attachedFiles.value = []
         messageText.value = ''
-        abortController.value = null
-        editingMessageId.value = null
-    }
-
-    function cancel() {
-        // Cancel the pending request
-        if (abortController.value) {
-            abortController.value.abort()
-        }
-        // Reset UI state
-        isGenerating.value = false
-        abortController.value = null
+        editingMessage.value = null
     }
 
     const settings = useSettings()
@@ -351,9 +335,6 @@ export function useChatPrompt(ctx) {
                         if (msg.role === 'assistant') {
                             msg.model = model.name // tag with model
                         }
-                        if (store) {
-                            await ctx.threads.addMessageToThread(threadId, msg)
-                        }
                     }
                 }
 
@@ -371,11 +352,6 @@ export function useChatPrompt(ctx) {
                         usage.price = usage.output
                         usage.cost = ctx.fmt.tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
                     }
-                    await ctx.threads.logRequest(threadId, model, request, response)
-                }
-                if (store) {
-                    assistantMessage.model = model.name
-                    await ctx.threads.addMessageToThread(threadId, assistantMessage, usage)
                 }
 
                 nextTick(addCopyButtons)
@@ -409,19 +385,11 @@ export function useChatPrompt(ctx) {
         applySettings,
         messageText,
         attachedFiles,
-        errorStatus,
-        isGenerating,
-        abortController,
-        editingMessageId,
-        get generating() {
-            return isGenerating.value
-        },
+        editingMessage,
         hasImage,
         hasAudio,
         hasFile,
-        // hasText,
         reset,
-        cancel,
         settings,
         addCopyButtons,
         getModel,
@@ -446,7 +414,7 @@ const ChatPrompt = {
                 <div>
                     <button type="button"
                             @click="triggerFilePicker"
-                            :disabled="isGenerating || !model"
+                            :disabled="$threads.isWatchingThread.value || !model"
                             class="size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
                             title="Attach image or audio">
                         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256">
@@ -460,7 +428,7 @@ const ChatPrompt = {
                 </div>
                 <div>
                     <button type="button" title="Settings" @click="showSettings = true"
-                        :disabled="isGenerating || !model"
+                        :disabled="$threads.watchingThread || !model"
                         class="size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed">
                         <svg class="size-4 text-gray-600 dark:text-gray-400 disabled:text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"></path></svg>
                     </button>
@@ -486,16 +454,16 @@ const ChatPrompt = {
                                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-500'
                                 : 'border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500'
                         ]"
-                        :disabled="isGenerating || !model"
+                        :disabled="$threads.watchingThread || !model"
                     ></textarea>
-                    <button v-if="!isGenerating" title="Send (Enter)" type="button"
+                    <button v-if="!$threads.watchingThread" title="Send (Enter)" type="button"
                         @click="sendMessage"
-                        :disabled="!messageText.trim() || isGenerating || !model"
+                        :disabled="!messageText.trim() || $threads.watchingThread || !model"
                         class="absolute bottom-2 right-2 size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:border-gray-200 dark:disabled:border-gray-700 transition-colors">
                         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="20" stroke-dashoffset="20" d="M12 21l0 -17.5"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.2s" values="20;0"/></path><path stroke-dasharray="12" stroke-dashoffset="12" d="M12 3l7 7M12 3l-7 7"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.2s" dur="0.2s" values="12;0"/></path></g></svg>
                     </button>
                     <button v-else title="Cancel request" type="button"
-                        @click="cancelRequest"
+                        @click="$threads.cancelThread()"
                         class="absolute bottom-2 right-2 size-8 flex items-center justify-center rounded-md border border-red-300 dark:border-red-600 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
                         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -506,7 +474,7 @@ const ChatPrompt = {
                 <!-- Attachments & Image Options -->
                 <div class="mt-2 flex justify-between items-start gap-2">
                     <div class="flex flex-wrap gap-2">
-                        <div v-for="(f,i) in attachedFiles" :key="i" class="flex items-center gap-2 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800">
+                        <div v-for="(f,i) in $chat.attachedFiles.value" :key="i" class="flex items-center gap-2 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800">
                             <span class="truncate max-w-48" :title="f.name">{{ f.name }}</span>
                             <button type="button" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="removeAttachment(i)" title="Remove Attachment">
                                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -528,6 +496,7 @@ const ChatPrompt = {
                 <div v-if="!model" class="mt-2 text-sm text-red-600 dark:text-red-400">
                     Please select a model
                 </div>
+            </div>
         </div>
     </div>    
     `,
@@ -540,23 +509,13 @@ const ChatPrompt = {
     setup(props) {
         const ctx = inject('ctx')
         const config = ctx.state.config
-        const router = useRouter()
-        const chatPrompt = ctx.chat
         const {
             messageText,
-            attachedFiles,
-            isGenerating,
-            errorStatus,
             hasImage,
             hasAudio,
             hasFile,
-            editingMessageId,
             getTextContent,
-        } = chatPrompt
-        const threads = ctx.threads
-        const {
-            currentThread,
-        } = ctx.threads
+        } = ctx.chat
 
         const fileInput = ref(null)
         const refMessage = ref(null)
@@ -580,7 +539,7 @@ const ChatPrompt = {
                             type: f.type,
                             width: response.width,
                             height: response.height,
-                            threadId: currentThread.value?.id,
+                            threadId: ctx.threads.currentThread.value?.id,
                             created: Date.now()
                         }
 
@@ -589,22 +548,21 @@ const ChatPrompt = {
                             file: f // Keep original file for preview/fallback if needed
                         }
                     } catch (error) {
-                        console.error('File upload failed:', error)
-                        errorStatus.value = {
+                        ctx.setError({
                             errorCode: 'Upload Failed',
                             message: `Failed to upload ${f.name}: ${error.message}`
-                        }
+                        })
                         return null
                     }
                 }))
 
-                attachedFiles.value.push(...uploadedFiles.filter(f => f))
+                ctx.chat.attachedFiles.value.push(...uploadedFiles.filter(f => f))
             }
 
             // allow re-selecting the same file
             if (fileInput.value) fileInput.value.value = ''
 
-            if (!messageText.value.trim()) {
+            if (!messageText.value?.trim()) {
                 if (hasImage()) {
                     messageText.value = getTextContent(config.defaults.image)
                 } else if (hasAudio()) {
@@ -615,7 +573,7 @@ const ChatPrompt = {
             }
         }
         const removeAttachment = (i) => {
-            attachedFiles.value.splice(i, 1)
+            ctx.chat.attachedFiles.value.splice(i, 1)
         }
 
         // Handle paste events for clipboard images, audio, and files
@@ -693,132 +651,110 @@ const ChatPrompt = {
 
         // Send message
         const sendMessage = async () => {
-            if (!messageText.value.trim() && !hasImage() && !hasAudio() && !hasFile()) return
-            if (isGenerating.value || !props.model) return
+            if (!messageText.value?.trim() && !hasImage() && !hasAudio() && !hasFile()) return
+            if (ctx.threads.isWatchingThread.value || !props.model) return
 
-            // Clear any existing error message
-            errorStatus.value = null
+            ctx.clearError()
 
             // 1. Construct Structured Content (Text + Attachments)
             let text = messageText.value.trim()
 
-
             messageText.value = ''
-            let content = ctx.chat.createContent({ text, files: attachedFiles.value })
-
-            // Create AbortController for this request
-            const controller = new AbortController()
-            chatPrompt.abortController.value = controller
-            const model = props.model.name
+            let content = ctx.chat.createContent({ text, files: ctx.chat.attachedFiles.value })
 
             let thread
 
-            try {
-                // Create thread if none exists
-                if (!currentThread.value) {
-                    thread = await ctx.threads.startNewThread({ model: props.model })
-                } else {
-                    let threadId = currentThread.value.id
-                    // Update the existing thread's model to match current selection
-                    await threads.updateThread(threadId, {
-                        model,
-                        info: ctx.utils.toModelInfo(props.model),
-                    })
-
-                    // Get the thread to check for duplicates
-                    thread = await threads.getThread(threadId)
-                }
-
-                let threadId = thread.id
-
-                // Handle Editing / Redo Logic
-                if (editingMessageId.value) {
-                    // Check if message still exists
-                    const messageExists = thread.messages.find(m => m.id === editingMessageId.value)
-                    if (messageExists) {
-                        // Update the message content
-                        await threads.updateMessageInThread(threadId, editingMessageId.value, { content })
-                        // Redo from this message (clears subsequent)
-                        await threads.redoMessageFromThread(threadId, editingMessageId.value)
-
-                        // Clear editing state
-                        editingMessageId.value = null
-                    } else {
-                        // Fallback if message was deleted
-                        editingMessageId.value = null
-                    }
-                    // Refresh thread state
-                    thread = await threads.getThread(threadId)
-                } else {
-                    // Regular Send Logic
-                    const lastMessage = thread.messages[thread.messages.length - 1]
-
-                    // Check duplicate based on text content extracted from potential array
-                    const getLastText = (msgContent) => {
-                        if (typeof msgContent === 'string') return msgContent
-                        if (Array.isArray(msgContent)) return msgContent.find(c => c.type === 'text')?.text || ''
-                        return ''
-                    }
-                    const newText = text // content[0].text
-                    const lastText = lastMessage && lastMessage.role === 'user' ? getLastText(lastMessage.content) : null
-
-                    const isDuplicate = lastText === newText
-
-                    // Add user message only if it's not a duplicate
-                    // Note: We are saving the FULL STRUCTURED CONTENT array here
-                    if (!isDuplicate) {
-                        await threads.addMessageToThread(threadId, {
-                            role: 'user',
-                            content: content,
-                            model: props.model.name,
-                        })
-                        // Reload thread after adding message
-                        thread = await threads.getThread(threadId)
-                    }
-                }
-
-                isGenerating.value = true
-
-                const request = ctx.chat.createRequest({ model: props.model })
-
-                // Add History
-                thread?.messages.forEach(m => {
-                    request.messages.push({
-                        role: m.role,
-                        content: m.content
-                    })
-                })
-                request.metadata.threadId = thread.id
-
-                const api = await ctx.chat.completion({ request, thread, controller, store: true })
-                if (api.response) {
-                    // success
-                    attachedFiles.value = []
-                } else {
-                    errorStatus.value = api.error
-                }
-
-            } catch (error) {
-                // Check if the error is due to abort
-                if (error.name === 'AbortError') {
-                    console.log('Request was cancelled by user')
-                    // Don't show error for cancelled requests
-                } else {
-                    // Re-throw other errors to be handled by outer catch
-                    throw error
-                }
-            } finally {
-                isGenerating.value = false
-                chatPrompt.abortController.value = null
-                // Restore focus to the textarea
-                nextTick(() => {
-                    refMessage.value?.focus()
-                })
+            // Create thread if none exists
+            if (!ctx.threads.currentThread.value) {
+                thread = await ctx.threads.startNewThread({ model: props.model })
+            } else {
+                thread = ctx.threads.currentThread.value
             }
-        }
 
-        const cancelRequest = () => {
-            chatPrompt.cancel()
+            let threadId = thread.id
+            let messages = thread.messages || []
+            if (!threadId) {
+                console.error('No thread ID found', thread, ctx.threads.currentThread.value)
+                return
+            }
+
+            // Handle Editing / Redo Logic
+            const editingMessage = ctx.chat.editingMessage.value
+            if (editingMessage) {
+                let messageIndex = messages.findIndex(m => m.timestamp === editingMessage)
+                if (messageIndex == -1) {
+                    messageIndex = messages.findLastIndex(m => m.role === 'user')
+                }
+                console.log('Editing message', editingMessage, messageIndex, messages)
+
+                if (messageIndex >= 0) {
+                    messages[messageIndex].content = content
+                    // Truncate messages to only include up to the edited message
+                    messages.length = messageIndex + 1
+                } else {
+                    messages.push({
+                        timestamp: new Date().valueOf(),
+                        role: 'user',
+                        content,
+                    })
+                }
+            } else {
+                // Regular Send Logic
+                const lastMessage = messages[messages.length - 1]
+
+                // Check duplicate based on text content extracted from potential array
+                const getLastText = (msgContent) => {
+                    if (typeof msgContent === 'string') return msgContent
+                    if (Array.isArray(msgContent)) return msgContent.find(c => c.type === 'text')?.text || ''
+                    return ''
+                }
+                const newText = text // content[0].text
+                const lastText = lastMessage && lastMessage.role === 'user' ? getLastText(lastMessage.content) : null
+                const isDuplicate = lastText === newText
+
+                // Add user message only if it's not a duplicate
+                // Note: We are saving the FULL STRUCTURED CONTENT array here
+                if (!isDuplicate) {
+                    messages.push({
+                        timestamp: new Date().valueOf(),
+                        role: 'user',
+                        content,
+                    })
+                }
+            }
+
+            const request = ctx.chat.createRequest({ model: props.model })
+
+            // Add Thread History
+            messages.forEach(m => {
+                request.messages.push(m)
+            })
+
+            // Update Thread Title if not set or is default
+            if (!thread.title || thread.title === 'New Chat' || request.title === 'New Chat') {
+                request.title = text.length > 100
+                    ? text.slice(0, 100) + '...'
+                    : text
+                console.debug(`changing thread title from '${thread.title}' to '${request.title}'`)
+            } else {
+                console.debug(`thread title is '${thread.title}'`, request.title)
+            }
+
+            const api = await ctx.threads.queueChat(threadId, request)
+            if (api.response) {
+                // success
+                ctx.chat.editingMessage.value = null
+                ctx.chat.attachedFiles.value = []
+                thread = api.response
+                ctx.threads.replaceThread(thread)
+            } else {
+                ctx.setError(api.error)
+            }
+
+            // Restore focus to the textarea
+            nextTick(() => {
+                refMessage.value?.focus()
+            })
         }
 
         const addNewLine = () => {
@@ -839,8 +775,6 @@ const ChatPrompt = {
         })
 
         return {
-            isGenerating,
-            attachedFiles,
             messageText,
             fileInput,
             refMessage,
@@ -854,7 +788,6 @@ const ChatPrompt = {
             onDrop,
             removeAttachment,
             sendMessage,
-            cancelRequest,
             addNewLine,
             imageAspectRatios,
         }

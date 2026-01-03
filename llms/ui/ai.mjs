@@ -1,4 +1,5 @@
 import { reactive } from "vue"
+import { ApiResult } from "@servicestack/client"
 
 const base = ''
 const headers = { 'Accept': 'application/json' }
@@ -31,14 +32,7 @@ export const o = {
     },
     async getJson(url, options) {
         const res = await this.get(url, options)
-        let txt = ''
-        try {
-            txt = await res.text()
-            return JSON.parse(txt)
-        } catch (e) {
-            console.error('Failed to parse JSON from GET', url, e, txt)
-            return { responseStatus: { errorCode: 'Error', message: `GET failed: ${e.message ?? e}` } }
-        }
+        return await this.createJsonResult(res, url)
     },
     async post(url, options) {
         return await fetch(this.resolveUrl(url), {
@@ -56,16 +50,38 @@ export const o = {
     },
     async postJson(url, options) {
         const res = await this.post(url, options)
+        return await this.createJsonResult(res, url)
+    },
+    async createJsonResult(res, msg = null) {
         let txt = ''
         try {
             txt = await res.text()
-            return JSON.parse(txt)
+            const response = JSON.parse(txt)
+            if (response?.responseStatus?.errorCode) {
+                return new ApiResult({ error: response.responseStatus })
+            }
+            if (!res.ok) {
+                return new ApiResult({ error: { errorCode: 'Error', message: res.statusText } })
+            }
+            return new ApiResult({ response })
         } catch (e) {
-            console.error('Failed to parse JSON from POST', url, e, txt)
-            return { responseStatus: { errorCode: 'Error', message: `POST failed: ${e.message ?? e}` } }
+            console.error('Failed to parse JSON', e, msg, txt)
+            const responseStatus = {
+                errorCode: 'Error',
+                message: `${e.message ?? e}`,
+                stackTrace: msg ? `${msg}\n${txt}` : txt,
+            }
+            return { responseStatus }
         }
     },
-
+    createErrorResult(e) {
+        return new ApiResult({
+            responseStatus: {
+                errorCode: 'Error',
+                message: `${e.message ?? e}`
+            }
+        })
+    },
     async getConfig() {
         return this.get('/config')
     },

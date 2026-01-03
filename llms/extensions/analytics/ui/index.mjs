@@ -46,7 +46,7 @@ const MonthSelector = {
     </div>
     `,
     props: {
-        dailyData: Array,
+        dailyData: Object,
     },
     setup(props) {
         const router = useRouter()
@@ -307,7 +307,7 @@ export const Analytics = {
 
                                 <div class="flex flex-col flex-1 min-w-[140px] sm:flex-initial">
                                     <select v-model="sortBy" class="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full">
-                                        <option value="created">Date (Newest)</option>
+                                        <option value="createdAt">Date (Newest)</option>
                                         <option value="cost">Cost (Highest)</option>
                                         <option value="duration">Duration (Longest)</option>
                                         <option value="totalTokens">Tokens (Most)</option>
@@ -322,14 +322,14 @@ export const Analytics = {
 
                         <!-- Requests List with Infinite Scroll -->
                         <div class="flex-1">
-                            <div v-if="isActivityLoading && activityRequests.length === 0" class="flex items-center justify-center h-full">
+                            <div v-if="isActivityLoading && activityRequests.length === 0" class="mt-8 flex items-center justify-center h-full">
                                 <div class="text-center">
                                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                                     <p class="mt-4 text-gray-600 dark:text-gray-400">Loading requests...</p>
                                 </div>
                             </div>
 
-                            <div v-else-if="activityRequests.length === 0" class="flex items-center justify-center h-full">
+                            <div v-else-if="activityRequests.length === 0" class="mt-4 flex items-center justify-center h-full">
                                 <p class="text-gray-500 dark:text-gray-400">No requests found</p>
                             </div>
 
@@ -345,32 +345,36 @@ export const Analytics = {
                                                     <span v-if="request.finishReason" class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded font-medium">{{ request.finishReason }}</span>
                                                 </div>
                                                 <div class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                                    {{ formatActivityDate(request.created) }}
+                                                    {{ formatActivityDate(request.createdAt) }}
                                                 </div>
                                             </div>
                                             <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate mb-3">
                                                 {{ request.title }}
                                             </div>
 
-                                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                                            <div v-if="request.error" class="rounded-lg px-2 py-1 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 text-sm"
+                                                :title="request.error + '\\n' + (request.stacktrace || '')">
+                                                {{ request.error }}
+                                            </div>
+                                            <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                                                 <div :title="request.cost">
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Cost</div>
                                                     <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $fmt.costLong(request.cost) }}</div>
                                                 </div>
                                                 <div class="col-span-2 sm:col-span-1">
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Tokens</div>
-                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                                        {{ $fmt.humanifyNumber(request.inputTokens) }} -> {{ $fmt.humanifyNumber(request.outputTokens) }}
-                                                        <span v-if="request.inputCachedTokens" class="ml-1 text-xs text-gray-500 dark:text-gray-400">({{ $fmt.humanifyNumber(request.inputCachedTokens) }} cached)</span>
+                                                    <div v-if="request.inputTokens || request.outputTokens" class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                                        {{ $fmt.humanifyNumber(request.inputTokens || 0) }} -> {{ $fmt.humanifyNumber(request.outputTokens || 0) }}
+                                                        <span v-if="request.inputCachedTokens" class="ml-1 text-xs text-gray-500 dark:text-gray-400">({{ $fmt.humanifyNumber(request.inputCachedTokens || 0) }} cached)</span>
                                                     </div>
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Duration</div>
-                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.duration ? $fmt.humanifyMs(request.duration) : '—' }}</div>
+                                                    <div v-if="request.duration" class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $fmt.humanifyMs(request.duration) }}</div>
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Speed</div>
-                                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.duration && request.outputTokens ? (request.outputTokens / (request.duration / 1000)).toFixed(1) + ' tok/s' : '—' }}</div>
+                                                    <div v-if="request.duration && request.outputTokens" class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ (request.outputTokens / (request.duration / 1000)).toFixed(1) + ' tok/s' }}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -402,10 +406,9 @@ export const Analytics = {
     `,
     setup() {
         const ctx = inject('ctx')
-        const threads = ctx.threads
         const router = useRouter()
         const route = useRoute()
-        const { initDB } = threads
+        const analyticsData = ref()
 
         // Initialize activeTab from URL query parameter, default to 'cost'
         const activeTab = ref(route.query.tab || 'cost')
@@ -430,6 +433,9 @@ export const Analytics = {
         })
         const selectedYear = computed(() => {
             return route.query.year !== undefined ? parseInt(route.query.year) : currentDate.getFullYear()
+        })
+        const selectedYearMonth = computed(() => {
+            return `${selectedYear.value}-${selectedMonth.value < 10 ? '0' + selectedMonth.value : selectedMonth.value}`
         })
         const allDailyData = ref({}) // Store all data for filtering
 
@@ -526,7 +532,7 @@ export const Analytics = {
 
         const selectedModel = ref('')
         const selectedProvider = ref('')
-        const sortBy = ref('created')
+        const sortBy = ref('createdAt')
         const filterOptions = ref({ models: [], providers: [] })
         const scrollSentinel = ref(null)
         let observer = null
@@ -535,44 +541,9 @@ export const Analytics = {
 
         async function loadAnalyticsData() {
             try {
-                const db = await initDB()
-                const tx = db.transaction(['requests'], 'readonly')
-                const store = tx.objectStore('requests')
-                const allRequests = await store.getAll()
-
                 // Group requests by date
-                const dailyData = {}
-                let totalCostSum = 0
-                let totalInputSum = 0
-                let totalOutputSum = 0
-                const yearsSet = new Set()
-
-                allRequests.forEach(req => {
-                    const date = new Date(req.created * 1000)
-                    const dateKey = date.toISOString().split('T')[0] // YYYY-MM-DD
-                    yearsSet.add(date.getFullYear())
-
-                    if (!dailyData[dateKey]) {
-                        dailyData[dateKey] = {
-                            cost: 0,
-                            requests: 0,
-                            inputTokens: 0,
-                            outputTokens: 0
-                        }
-                    }
-
-                    dailyData[dateKey].cost += req.cost || 0
-                    dailyData[dateKey].requests += 1
-                    dailyData[dateKey].inputTokens += req.inputTokens || 0
-                    dailyData[dateKey].outputTokens += req.outputTokens || 0
-
-                    totalCostSum += req.cost || 0
-                    totalInputSum += req.inputTokens || 0
-                    totalOutputSum += req.outputTokens || 0
-                })
-
-                // Store all daily data for filtering
-                allDailyData.value = dailyData
+                analyticsData.value = await ctx.requests.getSummary()
+                allDailyData.value = analyticsData.value.dailyData
 
                 // Update chart data based on selected month/year
                 updateChartData()
@@ -649,36 +620,8 @@ export const Analytics = {
             }
 
             try {
-                const db = await initDB()
-                const tx = db.transaction(['requests'], 'readonly')
-                const store = tx.objectStore('requests')
-                const allRequests = await store.getAll()
-
-                // Filter requests for the selected day
-                const dayStart = Math.floor(new Date(dateKey + 'T00:00:00Z').getTime() / 1000)
-                const dayEnd = Math.floor(new Date(dateKey + 'T23:59:59Z').getTime() / 1000)
-
-                const dayRequests = allRequests.filter(req => req.created >= dayStart && req.created <= dayEnd)
-
-                // Aggregate by model
-                const modelData = {}
-                const providerData = {}
-
-                dayRequests.forEach(req => {
-                    // Model aggregation
-                    if (!modelData[req.model]) {
-                        modelData[req.model] = { cost: 0, count: 0 }
-                    }
-                    modelData[req.model].cost += req.cost || 0
-                    modelData[req.model].count += 1
-
-                    // Provider aggregation
-                    if (!providerData[req.provider]) {
-                        providerData[req.provider] = { cost: 0, count: 0 }
-                    }
-                    providerData[req.provider].cost += req.cost || 0
-                    providerData[req.provider].count += 1
-                })
+                const dailySummary = await ctx.requests.getDailySummary(dateKey)
+                const { modelData, providerData } = dailySummary
 
                 // Prepare model pie chart data
                 const modelLabels = Object.keys(modelData).sort()
@@ -722,38 +665,8 @@ export const Analytics = {
             }
 
             try {
-                const db = await initDB()
-                const tx = db.transaction(['requests'], 'readonly')
-                const store = tx.objectStore('requests')
-                const allRequests = await store.getAll()
-
-                // Filter requests for the selected day
-                const dayStart = Math.floor(new Date(dateKey + 'T00:00:00Z').getTime() / 1000)
-                const dayEnd = Math.floor(new Date(dateKey + 'T23:59:59Z').getTime() / 1000)
-
-                const dayRequests = allRequests.filter(req => req.created >= dayStart && req.created <= dayEnd)
-
-                // Aggregate by model and provider (using tokens)
-                const modelData = {}
-                const providerData = {}
-
-                dayRequests.forEach(req => {
-                    const totalTokens = (req.inputTokens || 0) + (req.outputTokens || 0)
-
-                    // Model aggregation
-                    if (!modelData[req.model]) {
-                        modelData[req.model] = { tokens: 0, count: 0 }
-                    }
-                    modelData[req.model].tokens += totalTokens
-                    modelData[req.model].count += 1
-
-                    // Provider aggregation
-                    if (!providerData[req.provider]) {
-                        providerData[req.provider] = { tokens: 0, count: 0 }
-                    }
-                    providerData[req.provider].tokens += totalTokens
-                    providerData[req.provider].count += 1
-                })
+                const dailySummary = await ctx.requests.getDailySummary(dateKey)
+                const { modelData, providerData } = dailySummary
 
                 // Prepare model pie chart data
                 const modelLabels = Object.keys(modelData).sort()
@@ -1235,7 +1148,7 @@ export const Analytics = {
         // Activity tab functions
         const loadActivityFilterOptions = async () => {
             try {
-                filterOptions.value = await threads.getFilterOptions()
+                filterOptions.value = await ctx.requests.getFilterOptions()
             } catch (error) {
                 console.error('Failed to load filter options:', error)
             }
@@ -1243,24 +1156,9 @@ export const Analytics = {
 
         const loadExistingThreadIds = async () => {
             try {
-                // Calculate date range for selected month/year
-                const startDate = new Date(selectedYear.value, selectedMonth.value - 1, 1)
-                const endDate = new Date(selectedYear.value, selectedMonth.value, 0, 23, 59, 59)
-
-                // Convert to timestamp strings (threadId format)
-                const startThreadId = startDate.getTime().toString()
-                const endThreadId = endDate.getTime().toString()
-
-                const db = await initDB()
-                const tx = db.transaction(['threads'], 'readonly')
-                const store = tx.objectStore('threads')
-
-                // Use IDBKeyRange to only load threads within the month's timestamp range
-                const range = IDBKeyRange.bound(startThreadId, endThreadId)
-                const monthThreads = await store.getAll(range)
-
-                // Create a Set of existing thread IDs for the month
-                existingThreadIds.value = new Set(monthThreads.map(thread => thread.id))
+                existingThreadIds.value = new Set(await ctx.requests.getThreadIds({
+                    month: selectedYearMonth.value,
+                }))
             } catch (error) {
                 console.error('Failed to load existing thread IDs:', error)
                 existingThreadIds.value = new Set()
@@ -1283,28 +1181,24 @@ export const Analytics = {
             }
 
             try {
-                // Calculate date range for selected month/year
-                const startDate = new Date(selectedYear.value, selectedMonth.value - 1, 1)
-                const endDate = new Date(selectedYear.value, selectedMonth.value, 0, 23, 59, 59)
+                const requests = await ctx.requests.query({
+                    model: selectedModel.value || undefined,
+                    provider: selectedProvider.value || undefined,
+                    sort: `-${sortBy.value}`,
+                    take: activityPageSize,
+                    skip: activityOffset.value,
+                    month: selectedYearMonth.value,
+                })
 
-                const filters = {
-                    model: selectedModel.value || null,
-                    provider: selectedProvider.value || null,
-                    sortBy: sortBy.value,
-                    sortOrder: 'desc',
-                    startDate: Math.floor(startDate.getTime() / 1000),
-                    endDate: Math.floor(endDate.getTime() / 1000)
-                }
-
-                const result = await threads.getRequests(filters, activityPageSize, activityOffset.value)
+                const hasMore = requests.length >= activityPageSize
 
                 if (reset) {
-                    activityRequests.value = result.requests
+                    activityRequests.value = requests
                 } else {
-                    activityRequests.value.push(...result.requests)
+                    activityRequests.value.push(...requests)
                 }
 
-                activityHasMore.value = result.hasMore
+                activityHasMore.value = hasMore
                 activityOffset.value += activityPageSize
             } catch (error) {
                 console.error('Failed to load requests:', error)
@@ -1331,12 +1225,12 @@ export const Analytics = {
         const clearActivityFilters = async () => {
             selectedModel.value = ''
             selectedProvider.value = ''
-            sortBy.value = 'created'
+            sortBy.value = 'createdAt'
             await loadActivityRequests(true)
         }
 
-        const formatActivityDate = (timestamp) => {
-            const date = new Date(timestamp * 1000)
+        const formatActivityDate = (d) => {
+            const date = new Date(d)
             return date.toLocaleTimeString(undefined, { hour12: false }) + ' '
                 + date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 
@@ -1347,17 +1241,12 @@ export const Analytics = {
         }
 
         const deleteRequestLog = async (requestId) => {
-            if (confirm('Are you sure you want to delete this request log?')) {
-                try {
-                    await threads.deleteRequest(requestId)
-                    // Remove from the list
-                    activityRequests.value = activityRequests.value.filter(r => r.id !== requestId)
-                    // Reload analytics data
-                    await loadAnalyticsData()
-                } catch (error) {
-                    console.error('Failed to delete request:', error)
-                    alert('Failed to delete request')
-                }
+            if (confirm(`Are you sure you want to delete this request log ${requestId}?`)) {
+                await ctx.requests.deleteById(requestId)
+                // Remove from the list
+                activityRequests.value = activityRequests.value.filter(r => r.id !== requestId)
+                // Reload analytics data
+                await loadAnalyticsData()
             }
         }
 

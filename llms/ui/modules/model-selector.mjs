@@ -350,7 +350,7 @@ const ModelSelectorModal = {
                                 @click="selectModel(model)"
                                 :class="[
                                     'relative text-left p-4 rounded-lg border transition-all group',
-                                    modelValue === model.name
+                                    $state.selectedModel === model.name
                                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500/50'
                                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                                 ]">
@@ -560,7 +560,7 @@ const ModelSelectorModal = {
             }
 
             // Filter by search query
-            if (prefs.value.query.trim()) {
+            if (prefs.value.query?.trim()) {
                 const query = prefs.value.query.toLowerCase()
                 result = result.filter(m =>
                     m.name?.toLowerCase().includes(query) ||

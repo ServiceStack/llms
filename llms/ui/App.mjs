@@ -147,8 +147,7 @@ export default {
     template: `
         <div class="flex h-screen">
             <!-- Mobile Overlay -->
-            <div v-if="$ai.hasAccess"
-                v-if="isMobile && $ctx.layoutVisible('left') && $ai.hasAccess"
+            <div v-if="isMobile && $ctx.layoutVisible('left') && $ai.hasAccess"
                 @click="$ctx.toggleLayout('left')"
                 :class="$ctx.cls('mobile-overlay', 'fixed inset-0 bg-black/50 z-40 lg:hidden')"
             ></div>
