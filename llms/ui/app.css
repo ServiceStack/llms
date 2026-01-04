@@ -17,7 +17,6 @@
     --color-red-700: oklch(50.5% 0.213 27.518);
     --color-red-800: oklch(44.4% 0.177 26.899);
     --color-red-900: oklch(39.6% 0.141 25.723);
-    --color-red-950: oklch(25.8% 0.092 26.042);
     --color-yellow-50: oklch(98.7% 0.026 102.212);
     --color-yellow-200: oklch(94.5% 0.129 101.54);
     --color-yellow-400: oklch(85.2% 0.199 91.936);
@@ -5042,6 +5041,7 @@
     word-break: break-all !important;
     border: none !important;
     border-radius: 0 !important;
+    overflow: auto !important;
   }
   .hljs {
     background: white;
@@ -5338,6 +5338,26 @@
     right: 0;
     bottom: 0;
     left: 0;
+  }
+  @media (min-width: 640px) {
+    .message pre {
+      max-width: 500px !important;
+    }
+  }
+  @media (min-width: 768px) {
+    .message pre {
+      max-width: 600px !important;
+    }
+  }
+  @media (min-width: 1024px) {
+    .message pre, .message .prose pre {
+      max-width: 700px !important;
+    }
+  }
+  @media (min-width: 1280px) {
+    .message pre, .message .prose pre {
+      max-width: 800px !important;
+    }
   }
 }
 @property --tw-border-spacing-x {

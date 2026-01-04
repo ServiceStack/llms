@@ -162,6 +162,7 @@
         word-break: break-all !important;
         border: none !important;
         border-radius: 0 !important;
+        overflow: auto !important;
     }
 
     /* highlight.js - vs.css */
@@ -651,4 +652,32 @@
         left: 0;
     }
 
+
+    @media (min-width: 640px) {
+        .message pre {
+            max-width: 500px !important;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .message pre {
+            max-width: 600px !important;
+        }
+    }
+
+    @media (min-width: 1024px) {
+
+        .message pre,
+        .message .prose pre {
+            max-width: 700px !important;
+        }
+    }
+
+    @media (min-width: 1280px) {
+
+        .message pre,
+        .message .prose pre {
+            max-width: 800px !important;
+        }
+    }
 }

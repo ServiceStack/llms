@@ -615,6 +615,9 @@ export default {
             if (tag == 'th') {
                 cls += ' lowercase'
             }
+            if (tag == 'td') {
+                cls += ' whitespace-pre-wrap'
+            }
             return cls
         }
 

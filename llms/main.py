@@ -325,6 +325,15 @@ def convert_image_if_needed(image_bytes, mimetype="image/png"):
         return image_bytes, mimetype
 
 
+def to_content(result):
+    if isinstance(result, (str, int, float, bool)):
+        return str(result)
+    elif isinstance(result, (list, set, tuple, dict)):
+        return json.dumps(result)
+    else:
+        return str(result)
+
+
 def function_to_tool_definition(func):
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
@@ -1437,7 +1446,7 @@ async def g_chat_completion(chat, context=None):
                                     tool_result = f"Error executing tool {function_name}: {e}"
 
                         # Append tool result to history
-                        tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": str(tool_result)}
+                        tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": to_content(tool_result)}
                         current_chat["messages"].append(tool_msg)
                         tool_history.append(tool_msg)
 
@@ -2611,6 +2620,9 @@ class ExtensionContext:
 
     def cache_message_inline_data(self, message):
         return cache_message_inline_data(message)
+
+    def to_content(self, result):
+        return to_content(result)
 
 
 def get_extensions_path():

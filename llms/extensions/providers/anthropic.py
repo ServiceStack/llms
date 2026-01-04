@@ -61,7 +61,9 @@ def install_anthropic(ctx):
                 if message.get("role") == "tool":
                     # Convert OpenAI tool response to Anthropic tool_result
                     tool_call_id = message.get("tool_call_id")
-                    content = message.get("content", "")
+                    content = ctx.to_content(message.get("content", ""))
+                    if not isinstance(content, (str, list)):
+                        content = str(content)
 
                     tool_result = {"type": "tool_result", "tool_use_id": tool_call_id, "content": content}
 
