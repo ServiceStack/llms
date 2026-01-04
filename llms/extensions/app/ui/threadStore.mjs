@@ -30,6 +30,10 @@ function setError(error, msg = null) {
     ctx?.setError(error, msg)
 }
 
+async function query(query) {
+    return (await ext.getJson(appendQueryString(`/threads`, query))).response || []
+}
+
 let watchThreadTimeout = ref(null)
 async function watchThreadUpdates() {
     const thread = currentThread.value
@@ -362,6 +366,7 @@ export function useThreadStore() {
         groupedThreads,
 
         // Actions
+        query,
         createThread,
         updateThread,
         deleteMessageFromThread,

@@ -358,7 +358,7 @@ class AppDB:
 
             if "q" in query:
                 sql_where += " AND " if sql_where else "WHERE "
-                sql_where += "(title LIKE :q)"
+                sql_where += "(title LIKE :q OR messages LIKE :q)"
                 params["q"] = f"%{query['q']}%"
 
             sql = f"{select_columns(all_columns, query.get('fields'), select=query.get('select'))} FROM thread {sql_where} {order_by(all_columns, sort)} LIMIT :take OFFSET :skip"
