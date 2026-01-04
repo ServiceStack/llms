@@ -75,7 +75,7 @@ class AppDB:
                 "modelInfo": "JSON",
                 "modalities": "JSON",
                 "messages": "JSON",
-                "imageConfig": "JSON",
+                "args": "JSON",
                 "toolHistory": "JSON",
                 "cost": "REAL",
                 "inputTokens": "INTEGER",

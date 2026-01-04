@@ -60,7 +60,7 @@ def install(ctx):
         return to
 
     def thread_dto(row):
-        return row and to_dto(row, ["messages", "modalities", "imageConfig", "modelInfo", "stats"])
+        return row and to_dto(row, ["messages", "modalities", "args", "modelInfo", "stats"])
 
     def request_dto(row):
         return row and to_dto(row, ["usage"])
@@ -125,7 +125,7 @@ def install(ctx):
             raise Exception("messages required")
 
         id = request.match_info["id"]
-        thread = g_db.get_thread(id, user=ctx.get_username(request))
+        thread = thread_dto(g_db.get_thread(id, user=ctx.get_username(request)))
         if not thread:
             raise Exception("Thread not found")
 
@@ -147,9 +147,12 @@ def install(ctx):
         system_prompt = ctx.chat_to_system_prompt(chat)
         if system_prompt:
             update_thread["systemPrompt"] = system_prompt
-        image_config = chat.get("image_config")
-        if image_config:
-            update_thread["imageConfig"] = image_config
+
+        args = thread.get("args") or {}
+        for k, v in chat.items():
+            if k in ctx.request_args:
+                args[k] = v
+        update_thread["args"] = args
 
         # allow chat to override thread title
         title = chat.get("title")
@@ -175,10 +178,12 @@ def install(ctx):
             "model": thread.get("model"),
             "messages": thread.get("messages"),
             "modalities": thread.get("modalities"),
-            "image_config": thread.get("imageConfig"),
             "systemPrompt": thread.get("systemPrompt"),
             "metadata": thread.get("metadata", {}),
         }
+        for k, v in thread.get("args", {}).items():
+            if k in ctx.request_args:
+                chat[k] = v
 
         context = {
             "chat": chat,

@@ -2314,6 +2314,23 @@ class AppExtensions:
         self.shutdown_handlers = []
         self.tools = {}
         self.tool_definitions = []
+        self.request_args = {
+            "image_config": dict,  # e.g. { "aspect_ratio": "1:1" }
+            "temperature": float,  # e.g: 0.7
+            "max_completion_tokens": int,  # e.g: 2048
+            "seed": int,  # e.g: 42
+            "top_p": float,  # e.g: 0.9
+            "frequency_penalty": float,  # e.g: 0.5
+            "presence_penalty": float,  # e.g: 0.5
+            "stop": list,  # e.g: ["Stop"]
+            "reasoning_effort": str,  # e.g: minimal, low, medium, high
+            "verbosity": str,  # e.g: low, medium, high
+            "service_tier": str,  # e.g: auto, default
+            "top_logprobs": int,
+            "safety_identifier": str,
+            "store": bool,
+            "enable_thinking": bool,
+        }
         self.all_providers = [
             OpenAiCompatible,
             MistralProvider,
@@ -2434,6 +2451,7 @@ class ExtensionContext:
         self.debug = DEBUG
         self.verbose = g_verbose
         self.aspect_ratios = app.aspect_ratios
+        self.request_args = app.request_args
 
     def chat_to_prompt(self, chat):
         return chat_to_prompt(chat)
