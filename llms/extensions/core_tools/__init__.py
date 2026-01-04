@@ -3,17 +3,21 @@ Core System Tools providing essential file operations, memory persistence, math 
 """
 
 import ast
+import contextlib
 import glob
 import json
 import math
 import operator
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
 from statistics import mean, median, stdev, variance
 from typing import Any, Dict, List, Optional
+
+g_ctx = None
 
 # -----------------------------
 # In-memory storage (replace later)
@@ -278,7 +282,7 @@ def calc(expression: str) -> str:
 
 
 # -----------------------------
-# Python execution tool
+# code execution tools
 # -----------------------------
 
 
@@ -298,11 +302,148 @@ def run_python(code: str) -> Dict[str, Any]:
         # ulimit -v 1048576: Max virtual memory 1GB
         cmd = f"ulimit -t 5; ulimit -v 1048576; {sys.executable} script.py"
 
+        run_as = os.environ.get("LLMS_RUN_AS")
+        if run_as:
+            # Grant access to temp_dir
+            with contextlib.suppress(Exception):
+                os.chmod(temp_dir, 0o777)
+            cmd = f"sudo -u {run_as} bash -c '{cmd}'"
+
         try:
             # Run with restricted environment
             # We keep PATH to find basic tools if needed, but remove sensitive vars
             clean_env = {"PATH": os.environ.get("PATH", "")}
 
+            g_ctx.dbg(f"run_python ({temp_dir}): {cmd}")
+            result = subprocess.run(
+                ["bash", "-c", cmd], cwd=temp_dir, env=clean_env, capture_output=True, text=True, timeout=10
+            )
+            return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
+        except subprocess.TimeoutExpired:
+            return {"stdout": "", "stderr": "Execution timed out", "returncode": -1}
+        except Exception as e:
+            return {"stdout": "", "stderr": f"Error: {e}", "returncode": -1}
+
+
+def run_javascript(code: str) -> Dict[str, Any]:
+    """
+    Execute JavaScript code in a temporary sandboxed environment using bun or node.
+    """
+    # Check for available runtime
+    runtime = shutil.which("bun") or shutil.which("node")
+    if not runtime:
+        return {"stdout": "", "stderr": "Error: Neither 'bun' nor 'node' is available on the system.", "returncode": -1}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        script_path = os.path.join(temp_dir, "script.js")
+
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(code)
+
+        # Construct command with resource limits
+        # ulimit -t 5: Max CPU time 5 seconds
+        # ulimit -v 8589934592: Max virtual memory 8GB
+        cmd = f"ulimit -t 5; ulimit -v 8589934592; {runtime} script.js"
+
+        run_as = os.environ.get("LLMS_RUN_AS")
+        if run_as:
+            with contextlib.suppress(Exception):
+                os.chmod(temp_dir, 0o777)
+            cmd = f"sudo -u {run_as} bash -c '{cmd}'"
+
+        try:
+            # Run with restricted environment
+            clean_env = {"PATH": os.environ.get("PATH", "")}
+
+            g_ctx.dbg(f"run_javascript ({temp_dir}): {cmd}")
+            result = subprocess.run(
+                ["bash", "-c", cmd], cwd=temp_dir, env=clean_env, capture_output=True, text=True, timeout=10
+            )
+            return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
+        except subprocess.TimeoutExpired:
+            return {"stdout": "", "stderr": "Execution timed out", "returncode": -1}
+        except Exception as e:
+            return {"stdout": "", "stderr": f"Error: {e}", "returncode": -1}
+
+
+def run_typescript(code: str) -> Dict[str, Any]:
+    """
+    Execute TypeScript code in a temporary sandboxed environment using bun or node.
+    """
+    # Check for available runtime
+    runtime = shutil.which("bun") or shutil.which("node")
+    if not runtime:
+        return {"stdout": "", "stderr": "Error: Neither 'bun' nor 'node' is available on the system.", "returncode": -1}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        script_path = os.path.join(temp_dir, "script.ts")
+
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(code)
+
+        # Construct command with resource limits
+        # ulimit -t 5: Max CPU time 5 seconds
+        # ulimit -v 8589934592: Max virtual memory 8GB
+        cmd = f"ulimit -t 5; ulimit -v 8589934592; {runtime} script.ts"
+
+        run_as = os.environ.get("LLMS_RUN_AS")
+        if run_as:
+            with contextlib.suppress(Exception):
+                os.chmod(temp_dir, 0o777)
+            cmd = f"sudo -u {run_as} bash -c '{cmd}'"
+
+        try:
+            # Run with restricted environment
+            clean_env = {"PATH": os.environ.get("PATH", "")}
+
+            g_ctx.dbg(f"run_typescript ({temp_dir}): {cmd}")
+            result = subprocess.run(
+                ["bash", "-c", cmd], cwd=temp_dir, env=clean_env, capture_output=True, text=True, timeout=10
+            )
+            return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
+        except subprocess.TimeoutExpired:
+            return {"stdout": "", "stderr": "Execution timed out", "returncode": -1}
+        except Exception as e:
+            return {"stdout": "", "stderr": f"Error: {e}", "returncode": -1}
+
+
+def run_csharp(code: str) -> Dict[str, Any]:
+    """
+    Execute C# code in a temporary sandboxed environment using dotnet.
+    """
+    # Check for available runtime
+    runtime = shutil.which("dotnet")
+    if not runtime:
+        return {"stdout": "", "stderr": "Error: 'dotnet' is not available on the system.", "returncode": -1}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        script_path = os.path.join(temp_dir, "script.cs")
+
+        # Ensure we just have the code, user might pass it without wrapping class if it's top-level statements
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(code)
+
+        # Construct command with resource limits
+        # ulimit -t 5: Max CPU time 5 seconds
+        # ulimit -v 8589934592: Max virtual memory 8GB
+        # Note: 'dotnet run script.cs' is the command as per user request for .NET 10
+        cmd = f"ulimit -t 5; ulimit -v 8589934592; {runtime} run script.cs"
+
+        run_as = os.environ.get("LLMS_RUN_AS")
+        if run_as:
+            with contextlib.suppress(Exception):
+                os.chmod(temp_dir, 0o777)
+            # For dotnet, we need to set HOME and DOTNET_CLI_HOME to temp_dir for write access
+            cmd = f"sudo -u {run_as} env HOME={temp_dir} DOTNET_CLI_HOME={temp_dir} bash -c '{cmd}'"
+
+        try:
+            # Run with restricted environment
+            clean_env = {"PATH": os.environ.get("PATH", "")}
+
+            # Dotnet might need some ENV vars to work correctly, usually DOTNET_CLI_HOME or similar if strictly sandboxed
+            # But we are keeping PATH, hopefully commonly needed vars are there or default works.
+            # We might want to pass more env vars if it fails.
+            g_ctx.dbg(f"run_csharp ({temp_dir}): {cmd}")
             result = subprocess.run(
                 ["bash", "-c", cmd], cwd=temp_dir, env=clean_env, capture_output=True, text=True, timeout=10
             )
@@ -342,6 +483,8 @@ def get_current_time(tz_name: Optional[str] = None) -> str:
 
 
 def install(ctx):
+    global g_ctx
+    g_ctx = ctx
     # Examples of registering tools using automatic definition generation
     ctx.register_tool(memory_read)
     ctx.register_tool(memory_write)
@@ -352,6 +495,9 @@ def install(ctx):
     ctx.register_tool(glob_paths)
     ctx.register_tool(calc)
     ctx.register_tool(run_python)
+    ctx.register_tool(run_typescript)
+    ctx.register_tool(run_javascript)
+    ctx.register_tool(run_csharp)
     ctx.register_tool(get_current_time)
 
 
