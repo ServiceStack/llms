@@ -62,6 +62,11 @@ class AppDB:
 
         self.ctx = ctx
         self.db_path = str(db_path)
+
+        dirname = os.path.dirname(self.db_path)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
+
         self.db = DbManager(ctx, self.db_path)
         self.columns = {
             "thread": {
@@ -142,9 +147,6 @@ class AppDB:
                     self.ctx.err(f"adding {table} column {col}", e)
 
     def init_db(self, conn):
-        dirname = os.path.dirname(self.db_path)
-        if dirname:
-            os.makedirs(dirname, exist_ok=True)
         # Create table with all columns
         # Note: default SQLite timestamp has different tz to datetime.now()
         overrides = {

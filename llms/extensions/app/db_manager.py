@@ -12,10 +12,10 @@ def create_reader_connection(db_path):
 
 def create_writer_connection(db_path):
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA busy_timeout=5000")  # Reasonable timeout for busy connections
     conn.execute("PRAGMA journal_mode=WAL")  # Enable WAL mode for better concurrency
     conn.execute("PRAGMA cache_size=-128000")  # Increase cache size for better performance
     conn.execute("PRAGMA synchronous=NORMAL")  # Reasonable durability/performance balance
-    conn.execute("PRAGMA busy_timeout=5000")  # Reasonable timeout for busy connections
     return conn
 
 
