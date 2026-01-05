@@ -2,6 +2,7 @@
 @import "tailwindcss";
 @source "./lib/servicestack-vue.mjs";
 @source "../../extensions";
+@source "../../llms-home/extensions";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

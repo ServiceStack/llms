@@ -8,7 +8,7 @@ import LayoutModule from './modules/layout.mjs'
 import ChatModule from './modules/chat/index.mjs'
 import ModelSelectorModule from './modules/model-selector.mjs'
 import { utilsFunctions, utilsFormatters } from './utils.mjs'
-import { markdownFormatters } from './markdown.mjs'
+import { marked, markdownFormatters } from './markdown.mjs'
 import { AppContext } from './ctx.mjs'
 
 const Components = {
@@ -29,11 +29,11 @@ export async function createContext() {
         app.component(name, Components[name])
     })
 
-    const fmt = Object.assign({}, useFormatters(), utilsFormatters(), markdownFormatters())
+    const fmt = Object.assign({}, useFormatters(), utilsFormatters())
     const utils = Object.assign({}, utilsFunctions())
     const routes = []
 
-    const ctx = new AppContext({ app, routes, ai, fmt, utils })
+    const ctx = new AppContext({ app, routes, ai, fmt, utils, marked })
     app.provide('ctx', ctx)
     await ctx.init()
 

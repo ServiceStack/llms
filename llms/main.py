@@ -2323,6 +2323,7 @@ class AppExtensions:
         self.shutdown_handlers = []
         self.tools = {}
         self.tool_definitions = []
+        self.index_headers = []
         self.index_footers = []
         self.request_args = {
             "image_config": dict,  # e.g. { "aspect_ratio": "1:1" }
@@ -2361,6 +2362,19 @@ class AppExtensions:
             "9:16": "768×1344",
             "16:9": "1344×768",
             "21:9": "1536×672",
+        }
+        self.import_maps = {
+            "vue-prod": "/ui/lib/vue.min.mjs",
+            "vue": "/ui/lib/vue.mjs",
+            "vue-router": "/ui/lib/vue-router.min.mjs",
+            "@servicestack/client": "/ui/lib/servicestack-client.mjs",
+            "@servicestack/vue": "/ui/lib/servicestack-vue.mjs",
+            "idb": "/ui/lib/idb.min.mjs",
+            "marked": "/ui/lib/marked.min.mjs",
+            "highlight.js": "/ui/lib/highlight.min.mjs",
+            "chart.js": "/ui/lib/chart.js",
+            "color.js": "/ui/lib/color.js",
+            "ctx.mjs": "/ui/ctx.mjs",
         }
 
     def set_config(self, config):
@@ -2576,6 +2590,12 @@ class ExtensionContext:
     def add_patch(self, path, handler, **kwargs):
         self.dbg(f"Registered PATCH: {os.path.join(self.ext_prefix, path)}")
         self.app.server_add_patch.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def add_importmaps(self, dict):
+        self.app.import_maps.update(dict)
+
+    def add_index_header(self, html):
+        self.app.index_headers.append(html)
 
     def add_index_footer(self, html):
         self.app.index_footers.append(html)
@@ -3748,11 +3768,28 @@ def main():
         # Serve index.html from root
         async def index_handler(request):
             index_content = read_resource_file_bytes("index.html")
-            html_footer = ""
-            for footer in g_app.index_footers:
-                html_footer += footer
-            # replace </html> with html_footer
-            index_content = index_content.replace(b"</html>", html_footer.encode("utf-8") + b"\n</html>")
+
+            importmaps = {"imports": g_app.import_maps}
+            importmaps_script = '<script type="importmap">\n' + json.dumps(importmaps, indent=4) + "\n</script>"
+            index_content = index_content.replace(
+                b'<script type="importmap"></script>',
+                importmaps_script.encode("utf-8"),
+            )
+
+            if len(g_app.index_headers) > 0:
+                html_header = ""
+                for header in g_app.index_headers:
+                    html_header += header
+                # replace </head> with html_header
+                index_content = index_content.replace(b"</head>", html_header.encode("utf-8") + b"\n</head>")
+
+            if len(g_app.index_footers) > 0:
+                html_footer = ""
+                for footer in g_app.index_footers:
+                    html_footer += footer
+                # replace </body> with html_footer
+                index_content = index_content.replace(b"</body>", html_footer.encode("utf-8") + b"\n</body>")
+
             return web.Response(body=index_content, content_type="text/html")
 
         app.router.add_get("/", index_handler)

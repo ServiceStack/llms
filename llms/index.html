@@ -23,51 +23,36 @@
             cursor: pointer;
         }
     </style>
+    <script type="importmap"></script>
+
 </head>
-<script type="importmap">
-    {
-        "imports": {
-            "vue-prod": "/ui/lib/vue.min.mjs",
-            "vue": "/ui/lib/vue.mjs",
-            "vue-router": "/ui/lib/vue-router.min.mjs",
-            "@servicestack/client": "/ui/lib/servicestack-client.mjs",
-            "@servicestack/vue": "/ui/lib/servicestack-vue.mjs",
-            "idb": "/ui/lib/idb.min.mjs",
-            "marked": "/ui/lib/marked.min.mjs",
-            "highlight.js": "/ui/lib/highlight.min.mjs",
-            "chart.js": "/ui/lib/chart.js",
-            "color.js": "/ui/lib/color.js",
-            "ctx.mjs": "/ui/ctx.mjs",
-            "katex.mjs": "/ui/lib/katex/katex.min.mjs"
-        }
-    }
-</script>
 
 <body>
     <div id="app"></div>
-</body>
-<script>
-    let colorScheme = location.search === "?dark"
-        ? "dark"
-        : location.search === "?light"
-            ? "light"
-            : localStorage.getItem('color-scheme')
-    let darkMode = colorScheme != null
-        ? colorScheme === 'dark'
-        : window.matchMedia('(prefers-color-scheme: dark)').matches
-    let html = document.documentElement
-    html.classList.toggle('dark', darkMode)
-    html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
-    if (localStorage.getItem('color-scheme') === null) {
-        localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
-    }    
-</script>
-<script type="module">
-    import { createContext } from '/ui/index.mjs'
 
-    const context = await createContext()
-    context.app.mount('#app')
-</script>
-<link rel="stylesheet" href="/ui/lib/katex/katex.min.css">
+    <script>
+        let colorScheme = location.search === "?dark"
+            ? "dark"
+            : location.search === "?light"
+                ? "light"
+                : localStorage.getItem('color-scheme')
+        let darkMode = colorScheme != null
+            ? colorScheme === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+        let html = document.documentElement
+        html.classList.toggle('dark', darkMode)
+        html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
+        if (localStorage.getItem('color-scheme') === null) {
+            localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
+        }    
+    </script>
+    <script type="module">
+        import { createContext } from '/ui/index.mjs'
+
+        const context = await createContext()
+        context.app.mount('#app')
+    </script>
+
+</body>
 
 </html>

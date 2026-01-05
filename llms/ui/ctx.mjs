@@ -82,18 +82,20 @@ export class ExtensionScope {
 }
 
 export class AppContext {
-    constructor({ app, routes, ai, fmt, utils }) {
+    constructor({ app, routes, ai, fmt, utils, marked }) {
         this.app = app
         this.routes = routes
         this.ai = ai
         this.fmt = fmt
         this.utils = utils
         this._components = {}
+        this.marked = marked
 
         this.state = reactive({})
         this.events = new EventBus()
         this.modalComponents = {}
         this.extensions = []
+        this.markedFilters = []
         this.chatRequestFilters = []
         this.chatResponseFilters = []
         this.chatErrorFilters = []
@@ -125,6 +127,9 @@ export class AppContext {
     }
     async init() {
         Object.assign(this.state, await this.ai.init(this))
+        Object.assign(this.fmt, {
+            markdown: this.renderMarkdown.bind(this)
+        })
     }
     setGlobals(globals) {
         Object.entries(globals).forEach(([name, global]) => {
@@ -320,5 +325,17 @@ export class AppContext {
     }
     toast(msg) {
         this.setState({ toast: msg })
+    }
+
+    renderMarkdown(content) {
+        if (Array.isArray(content)) {
+            content = content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+        }
+        // if (content) {
+        //     content = content
+        //         .replaceAll(`\\[ \\boxed{`, '\n<span class="inline-block text-xl text-blue-500 bg-blue-50 dark:text-blue-400 dark:bg-blue-950 px-3 py-1 rounded">')
+        //         .replaceAll('} \\]', '</span>\n')
+        // }
+        return this.marked.parse(content || '')
     }
 }
