@@ -111,6 +111,17 @@ export function formatCost(cost) {
     if (!cost) return ''
     return currFmt2.format(parseFloat(cost))
 }
+export function tokensTitle(usage) {
+    let title = []
+    if (usage.tokens && usage.price) {
+        const msg = parseFloat(usage.price) > 0
+            ? `${usage.tokens} tokens @ ${usage.price} = ${tokenCostLong(usage.price, usage.tokens)}`
+            : `${usage.tokens} tokens`
+        const duration = usage.duration ? ` in ${usage.duration}ms` : ''
+        title.push(msg + duration)
+    }
+    return title.join('\n')
+}
 
 // Accessible in views via $fmt
 export function utilsFormatters() {
@@ -172,6 +183,7 @@ export function utilsFormatters() {
         currFmt: currFmt2,
         tokenCost,
         tokenCostLong,
+        tokensTitle,
         cost: formatCost,
         costLong,
         statsTitle,

@@ -411,9 +411,29 @@ def install(ctx):
         tasks.append(g_db.create_request_async(request, user=user))
 
         if thread_id:
-            message = ctx.chat_response_to_message(o)
             messages = chat.get("messages", [])
-            messages.append(message)
+            last_role = messages[-1].get("role", None) if len(messages) > 0 else None
+            if last_role == "user" or last_role == "tool":
+                user_message = messages[-1]
+                user_message["model"] = model
+                user_message["usage"] = {
+                    "tokens": input_tokens,
+                    "price": input_price,
+                    "cost": (input_price * input_tokens) / 1000000,
+                }
+            else:
+                ctx.dbg(
+                    f"Missing user message for thread {thread_id}, {len(messages)} messages, last role: {last_role}"
+                )
+            assistant_message = ctx.chat_response_to_message(o)
+            assistant_message["model"] = model
+            assistant_message["usage"] = {
+                "tokens": output_tokens,
+                "price": output_price,
+                "cost": (output_price * output_tokens) / 1000000,
+                "duration": duration,
+            }
+            messages.append(assistant_message)
 
             update_thread = {
                 "model": model,

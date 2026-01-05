@@ -1,7 +1,29 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
+const MessageUsage = {
+    template: `
+    <div class="mt-2 text-xs opacity-70">                                        
+        <span v-if="message.model" @click="$chat.setSelectedModel({ name: message.model })" title="Select model"><span class="cursor-pointer hover:underline">{{ message.model }}</span> &#8226; </span>
+        <span>{{ $fmt.time(message.timestamp) }}</span>
+        <span v-if="usage" :title="$fmt.tokensTitle(usage)">
+            &#8226;
+            {{ $fmt.humanifyNumber(usage.tokens) }} tokens
+            <span v-if="usage.cost">&#183; {{ $fmt.tokenCostLong(usage.cost) }}</span>
+            <span v-if="usage.duration"> in {{ $fmt.humanifyMs(usage.duration) }}</span>
+        </span>
+    </div>    
+    `,
+    props: {
+        usage: Object,
+        message: Object,
+    }
+}
+
 export default {
+    components: {
+        MessageUsage,
+    },
     template: `
         <div class="flex flex-col h-full">
             <!-- Messages Area -->
@@ -212,16 +234,7 @@ export default {
                                     </div>
                                 </div>
 
-                                <div class="mt-2 text-xs opacity-70">                                        
-                                    <span v-if="message.model" @click="$chat.setSelectedModel({ name: message.model })" title="Select model"><span class="cursor-pointer hover:underline">{{ message.model }}</span> &#8226; </span>
-                                    <span>{{ $fmt.time(message.timestamp) }}</span>
-                                    <span v-if="message.usage" :title="tokensTitle(message.usage)">
-                                        &#8226;
-                                        {{ $fmt.humanifyNumber(message.usage.tokens) }} tokens
-                                        <span v-if="message.usage.cost">&#183; {{ message.usage.cost }}</span>
-                                        <span v-if="message.usage.duration"> in {{ $fmt.humanifyMs(message.usage.duration) }}</span>
-                                    </span>
-                                </div>
+                                <MessageUsage :message="message" :usage="getMessageUsage(message)" />
                             </div>
 
                             <!-- Edit and Redo buttons (shown on hover for user messages, outside bubble) -->
@@ -565,18 +578,6 @@ export default {
             })
         }
 
-        function tokensTitle(usage) {
-            let title = []
-            if (usage.tokens && usage.price) {
-                const msg = parseFloat(usage.price) > 0
-                    ? `${usage.tokens} tokens @ ${usage.price} = ${ctx.fmt.tokenCostLong(usage.price, usage.tokens)}`
-                    : `${usage.tokens} tokens`
-                const duration = usage.duration ? ` in ${usage.duration}ms` : ''
-                title.push(msg + duration)
-            }
-            return title.join('\n')
-        }
-
         let sub
         onMounted(() => {
             sub = ctx.events.subscribe(`keydown:Escape`, closeLightbox)
@@ -586,6 +587,20 @@ export default {
 
         const getToolOutput = (toolCallId) => {
             return currentThread.value?.messages?.find(m => m.role === 'tool' && m.tool_call_id === toolCallId)
+        }
+
+        const getMessageUsage = (message) => {
+            if (message.usage) return message.usage
+            if (message.tool_calls?.length) {
+                const toolUsages = message.tool_calls.map(tc => getToolOutput(tc.id)?.usage)
+                const agg = {
+                    tokens: toolUsages.reduce((a, b) => a + (b?.tokens || 0), 0),
+                    cost: toolUsages.reduce((a, b) => a + (b?.cost || 0), 0),
+                    duration: toolUsages.reduce((a, b) => a + (b?.duration || 0), 0)
+                }
+                return agg
+            }
+            return null
         }
 
         const isToolLinked = (message) => {
@@ -643,13 +658,13 @@ export default {
             redoMessage,
             editMessage,
             configUpdated,
-            tokensTitle,
             getAttachments,
             hasAttachments,
             lightboxUrl,
             openLightbox,
             closeLightbox,
             resolveUrl,
+            getMessageUsage,
             getToolOutput,
             isToolLinked,
             tryParseJson,
