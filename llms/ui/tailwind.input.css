@@ -320,6 +320,10 @@
         background-color: #282c34 !important;
     }
 
+    .prose :where(h1):not(:where([class~="not-prose"] *)) {
+        font-weight: 700 !important;
+    }
+
     .hljs-comment,
     .hljs-quote {
         color: rgb(148 163 184);

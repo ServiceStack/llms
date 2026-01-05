@@ -37,7 +37,8 @@
             "highlight.js": "/ui/lib/highlight.min.mjs",
             "chart.js": "/ui/lib/chart.js",
             "color.js": "/ui/lib/color.js",
-            "ctx.mjs": "/ui/ctx.mjs"
+            "ctx.mjs": "/ui/ctx.mjs",
+            "katex.mjs": "/ui/lib/katex/katex.min.mjs"
         }
     }
 </script>
@@ -67,5 +68,6 @@
     const context = await createContext()
     context.app.mount('#app')
 </script>
+<link rel="stylesheet" href="/ui/lib/katex/katex.min.css">
 
 </html>
