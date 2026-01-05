@@ -76,6 +76,9 @@ export class ExtensionScope {
     clearError() {
         this.ctx.clearError()
     }
+    toast(msg) {
+        this.ctx.toast(msg)
+    }
 }
 
 export class AppContext {
@@ -314,5 +317,8 @@ export class AppContext {
             })
         }
         return cls
+    }
+    toast(msg) {
+        this.setState({ toast: msg })
     }
 }

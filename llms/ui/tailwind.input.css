@@ -337,7 +337,7 @@
         padding: .8571429em 1.1428571em;
         max-width: calc(100vw - 1rem);
         min-width: fit-content;
-        background-color: #282c34 !important;
+        /* background-color: #282c34 !important; overrides CodeMirror */
     }
 
     pre code.hljs {

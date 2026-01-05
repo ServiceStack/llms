@@ -2323,6 +2323,7 @@ class AppExtensions:
         self.shutdown_handlers = []
         self.tools = {}
         self.tool_definitions = []
+        self.index_footers = []
         self.request_args = {
             "image_config": dict,  # e.g. { "aspect_ratio": "1:1" }
             "temperature": float,  # e.g: 0.7
@@ -2575,6 +2576,9 @@ class ExtensionContext:
     def add_patch(self, path, handler, **kwargs):
         self.dbg(f"Registered PATCH: {os.path.join(self.ext_prefix, path)}")
         self.app.server_add_patch.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+
+    def add_index_footer(self, html):
+        self.app.index_footers.append(html)
 
     def get_config(self):
         return g_config
@@ -3744,8 +3748,11 @@ def main():
         # Serve index.html from root
         async def index_handler(request):
             index_content = read_resource_file_bytes("index.html")
-            if index_content is None:
-                raise web.HTTPNotFound
+            html_footer = ""
+            for footer in g_app.index_footers:
+                html_footer += footer
+            # replace </html> with html_footer
+            index_content = index_content.replace(b"</html>", html_footer.encode("utf-8") + b"\n</html>")
             return web.Response(body=index_content, content_type="text/html")
 
         app.router.add_get("/", index_handler)

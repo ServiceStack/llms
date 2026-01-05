@@ -15,7 +15,7 @@ const LeftBar = {
                     />
                 <div v-if="tooltip === icon.id && !icon.isActive({ ...$layout })" 
                     class="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-800 rounded shadow-md z-50 whitespace-nowrap pointer-events-none" style="z-index: 60">
-                    {{icon.name}}
+                    {{icon.title ?? icon.name}}
                 </div>    
             </div>
         </div>
