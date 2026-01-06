@@ -1,10 +1,8 @@
 
-import { ref, computed, watch, nextTick, inject } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch, nextTick, inject } from 'vue'
 import { $$, createElement, lastRightPart, ApiResult, createErrorStatus, pick } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
 import ChatBody from './ChatBody.mjs'
-import HomeTools from './HomeTools.mjs'
 import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
@@ -792,6 +790,14 @@ const ChatPrompt = {
             imageAspectRatios,
         }
     }
+}
+
+const HomeTools = {
+    template: `
+        <div class="mt-4 flex space-x-3 justify-center items-center">
+            <DarkModeToggle />
+        </div>
+    `,
 }
 
 export default {
