@@ -236,7 +236,7 @@ export function useChatPrompt(ctx) {
         return request
     }
 
-    async function completion({ request, model, thread, controller, store }) {
+    async function completion({ request, model, thread, controller }) {
         try {
             let error
             if (!model) {
@@ -256,7 +256,7 @@ export function useChatPrompt(ctx) {
             if (!request.messages) request.messages = []
             if (!request.metadata) request.metadata = {}
 
-            if (store && !thread) {
+            if (!thread) {
                 const title = getTextContent(request) || 'New Chat'
                 thread = await ctx.threads.startNewThread({ title, model })
             }
