@@ -1,7 +1,6 @@
-# llms.py v3 Release Notes
-
-**A major release focused on extensibility, expanded provider support, and enhanced user experience.**
-
+---
+title: v3 Release Notes
+description: Major release focused on extensibility, expanded provider support, and enhanced user experience.
 ---
 
 ## 🚀 What's New at a Glance
@@ -14,7 +13,12 @@
 | **New Model Selector** | Redesigned full-featured dialog with search, filtering, sorting, and favorites |
 | **Image Generation** | Built-in support for Google, OpenAI, OpenRouter, Chutes, and Nvidia |
 | **Audio Generation** | TTS support for Gemini 2.5 Flash/Pro Preview models |
-| **Improved Caching** | Persistent image/file caching with optimized storage |
+| **Media Gallery** | Beautiful UI to browse generated portrait/landscape images and audio generations |
+| **Run Code UI** | Execute Python, JavaScript, TypeScript and C# code scripts in a CodeMirror editor |
+| **Calculator UI** | Beautiful UX Friendly UI to evaluate python math expressions |
+| **KaTeX Support** | Support for beautiful rendering of LaTeX math expressions |
+| **SQLite Storage** | Migrated from IndexedDB to server SQLite for robust persistence and concurrent usage |
+| **Asset Caching** | Persistent image/file file caching with metadata |
 
 ---
 
@@ -36,11 +40,15 @@
 
 ## Rewritten for Extensibility
 
-A major rewrite of llms has been completed to make it extensible and allow for easy addition of new features and providers. Most built-in UI components have been [refactored into modules](https://github.com/ServiceStack/llms/tree/main/llms/ui/modules) utilizing the same extensibility APIs that any extension can use. In addition to adding new pages and features, extensions can also **replace existing components** by registering new components with the same name.
+llms.py has been rewritten from the ground-up to make extensibility a **core concept** with all [major UI and Server features](https://github.com/ServiceStack/llms/tree/main/llms/extensions) now layering their encapsulated functionality using the public Extensibility APIs.
 
-Likewise, the server has adopted a **server extension model**, where major provider implementations can now be dropped into the [llms/providers](https://github.com/ServiceStack/llms/tree/main/llms/providers) folder, where they will be automatically loaded and registered at runtime.
+Extensions are just folders that can add both Server and UI features using the public client and server extensibility APIs. Built-in features are just extensions in the repo's [llms/extensions](https://github.com/ServiceStack/llms/tree/main/llms/extensions) folder which can be overridden by adding them to your local `~/.llms/extensions` folder.
 
-This approach allows [main.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) to retain a **lean functional core in a single file** whilst still being fully extensible.
+llms includes support for installing and uninstalling extensions from any GitHub repository. For better discoverability, non built-in extensions will be maintained in the [llmspy](https://github.com/orgs/llmspy/repositories) GitHub organization repositories which anyone else is welcome to contribute their repos to, to improve their discoverability.
+
+UI components are now registered and referenced as Global Vue components, which can be easily replaced by registering new Vue components with the same name as demonstrated in the [xmas](https://github.com/llmspy/xmas/blob/main/ui/index.mjs) extension demo.
+
+This approach allows [main.py](https://github.com/ServiceStack/llms/blob/main/llms/main.py) to retain a **lean functional core in a single file** whilst still being fully extensible and lays the foundation for **rapid development of new optional features** - both from the core team and external 3rd party extensions - enabling the community to extend llms.py in new unanticipated ways.
 
 ---
 
@@ -48,39 +56,40 @@ This approach allows [main.py](https://github.com/ServiceStack/llms/blob/main/ll
 
 The most significant change is the migration to utilize the same [models.dev](https://models.dev) open provider and model catalogue as used and maintained by [OpenCode](https://opencode.ai).
 
-llms provider configuration is now a **superset** of `models.dev/api.json` where its definitions are merged, allowing you to enable providers using just `"enabled": true` where it inherits all standard provider configurations from models.dev.
+**llms.json** provider configuration is now a **superset** of `models.dev/api.json` where its definitions are merged, allowing you to enable providers using just `"enabled": true` to inherit provider configurations from **models.dev**
 
 ### 🌐 Expanded Provider Support
 
-The switch to models.dev greatly expands the model selection to over **530 models** from **23 different providers**, including new support for:
+The switch to [models.dev](https://models.dev) greatly expands the model selection to over **530 models** from **23 different providers**, including new support for:
 
-| Provider | Models | Provider | Models |
-|----------|--------|----------|--------|
-| Alibaba | 39 | Hugging Face | 14 |
-| Chutes | 56 | LMStudio | local |
-| DeepSeek | 2 | MiniMax | 1 |
-| Fireworks AI | 12 | Moonshot AI | 5 |
-| GitHub Copilot | 27 | Nvidia | 24 |
-| GitHub Models | 55 | Zai | 6 |
-| | | Zai Coding Plan | 6 |
+| Provider       | Models   | Provider        | Models   |
+|----------------|----------|-----------------|----------|
+| Alibaba        | 39       | Hugging Face    | 14       |
+| Chutes         | 56       | Zai Coding Plan | 6        |
+| DeepSeek       | 2        | MiniMax         | 1        |
+| Fireworks AI   | 12       | Moonshot AI     | 5        |
+| GitHub Copilot | 27       | Nvidia          | 24       |
+| GitHub Models  | 55       | Zai             | 6        |
+| LMStudio       | local    | Ollama          | local    |
 
-> 💡 Please [raise an issue](https://github.com/ServiceStack/llms/issues) to add support for any missing providers from [models.dev](https://models.dev) you would like to use.
+Non OpenAI Compatible LLM and Image generation providers are maintained in the [providers](https://github.com/ServiceStack/llms/tree/main/llms/extensions/providers) extension, registered using the `ctx.add_provider()` API.
+
+<Tip>💡 [Raise an issue](https://github.com/ServiceStack/llms/issues) to add support for any missing providers from [models.dev](https://models.dev) you would like to use.</Tip>
 
 ### 🔄 Automatic Provider Updates
 
-llms automatically updates your `providers.json` with the latest provider list from models.dev **daily**. You can also trigger a manual update anytime:
+This actively maintained list of available providers and models are automatically updated into your `providers.json` daily that can also be manually updated with:
 
 ```bash
 llms --update-providers
 ```
 
-llms filters and saves only the providers that are referenced in your `llms.json`. Any additional providers you want to use that are not included in models.dev can be added to your `~/.llms/providers-extra.json`, which will be merged into your `providers.json` when updated.
+As an optimization only the providers that are referenced in your `llms.json` are saved. Any additional providers you want to use that are not included in models.dev can be added to your `~/.llms/providers-extra.json`, which get merged into your `providers.json` on every update.
 
-This optimization keeps your local configuration file lightweight by only containing the providers that are available for use.
+This keeps your local configuration file lightweight by only including the providers that are available for use.
 
 ### Configuration Examples
 
-#### 1. Simple Enable
 Enable providers by ID — all configuration is automatically inherited:
 
 ```json
@@ -90,143 +99,37 @@ Enable providers by ID — all configuration is automatically inherited:
 }
 ```
 
-#### 2. Custom Configuration
-Overlay custom settings like `temperature`, custom check requests, and provider-specific configuration:
-
-```json
-{
-  "github-models": {
-    "enabled": false,
-    "check": {
-      "messages": [{ "role": "user", "content": [{ "type": "text", "text": "1+1=" }] }],
-      "stream": false
-    }
-  },
-  "minimax": {
-    "enabled": true,
-    "temperature": 1.0
-  },
-  "google": {
-    "enabled": true,
-    "map_models": {
-      "gemini-flash-latest": "gemini-flash-latest",
-      "gemini-flash-lite-latest": "gemini-flash-lite-latest",
-      "gemini-2.5-pro": "gemini-2.5-pro",
-      "gemini-2.5-flash": "gemini-2.5-flash",
-      "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
-    },
-    "safety_settings": [
-      {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_ONLY_HIGH"
-      }
-    ],
-    "thinking_config": {
-      "thinkingBudget": 1024,
-      "includeThoughts": true
-    }
-  }
-}
-```
-
-#### 3. Model Mapping (`map_models`)
-Use `map_models` to explicitly whitelist and map specific models. Only the models listed here will be enabled for the provider, using definitions from models.dev:
-
-```json
-{
-  "alibaba": {
-    "enabled": true,
-    "map_models": {
-      "qwen3-max": "qwen3-max",
-      "qwen-max": "qwen-max",
-      "qwen-plus": "qwen-plus"
-    },
-    "enable_thinking": false
-  }
-}
-```
-
-#### 4. Custom Provider & Model Definitions
-Fully define custom OpenAI-compatible providers and models that aren't in models.dev. For example, adding Mistral's free `codestral` endpoint:
-
-```json
-{
-  "codestral": {
-    "enabled": true,
-    "id": "codestral",
-    "npm": "codestral",
-    "api": "https://codestral.mistral.ai/v1",
-    "env": ["CODESTRAL_API_KEY"],
-    "models": {
-      "codestral-latest": {
-        "id": "codestral-latest",
-        "name": "Codestral",
-        "cost": { "input": 0.0, "output": 0.0 }
-      }
-    }
-  }
-}
-```
-
-> 💡 **Tip:** To enable access to new models for existing providers while waiting for them to be added to models.dev, add them to your `~/.llms/providers-extra.json`, where they'll be merged into your `providers.json` when updated.
-
-#### 5. NPM SDK Alignment
-The provider configuration is closely aligned with the models.dev npm configuration. The `"npm"` field maps the provider configuration to the correct Python provider implementation. This generic mapping allows for flexible provider support, including **Anthropic Chat Completion** requests, which are correctly handled for both **Anthropic** and **MiniMax** providers.
-
-#### 6. Ecosystem Compatibility
-By standardizing on models.dev definitions, the project now shares a compatible configuration model with other AI tools like **OpenCode**. This includes the standardization of environment variables using the `"env"` property, ensuring simpler and more portable configuration across different tools.
+See [Configuration](/docs/configuration) docs for more info.
 
 ---
 
 ## New Model Selector UI
 
-With over 530 models from 23 providers now available, discovering and selecting the right model required a complete overhaul. The Model Selector has been completely redesigned as a full-featured dialog offering:
+With over 530 models from 23 providers now available, discovering and selecting the right model required a complete overhaul. 
+The Model Selector has been completely redesigned as a full-featured dialog offering:
 
-### 🔍 Smart Search & Discovery
-- **Full-text Search**: Instantly search across model names, IDs, and providers
-- **Real-time Filtering**: Results update as you type with no lag
-- **Model Count Display**: See how many models match your current filters
+- **🔍 Smart Search & Discovery** - Instantly search across model names, IDs, and providers
+- **🎯 Advanced Filtering** - Filter by name, providers & input and output modalities
+- **📊 Flexible Sorting** - Sort by Knowledge Cutoff, Release Date, Last Updated & Context
+- **⭐ Favorites System** - Star model card to add/remove to favorites quick list
+- **💎 Rich Model Cards** - In depth model overview at a glance
 
-### 🎯 Advanced Filtering
-- **Provider Filtering**: Click any provider to show only their models, with model counts displayed for each
-- **Modality Filtering**: Filter by input/output capabilities (text, image, audio, video, PDF)
-- **Favorites Tab**: Quick access to your most-used models with a dedicated favorites view
-- **Unavailable Favorites**: Gracefully handles favorited models whose providers are disabled
-
-### 📊 Flexible Sorting
-Sort models by multiple criteria with ascending/descending toggle:
-- **Knowledge Cutoff**: Find models with the most recent training data
-- **Release Date**: Discover the newest models
-- **Last Updated**: See which models are actively maintained
-- **Cost**: Sort by input or output token pricing
-- **Context Window**: Find models with the largest context limits
-- **Name**: Classic alphabetical sorting
-
-### ⭐ Favorites System
-- **One-Click Favoriting**: Star icon on each model card
-- **Persistent Storage**: Favorites saved to localStorage
-- **Smart Defaults**: Favorites tab shown by default when you have favorites
-- **Easy Management**: Remove favorites from any view
-
-### 💎 Rich Model Cards
-Each model displays comprehensive information at a glance:
-- **Provider Icon**: Visual identification of the model's provider
-- **Cost Information**: Input/output pricing per 1M tokens with "FREE" badge for free models
-- **Context Limits**: Maximum context window and output token limits
-- **Knowledge Cutoff**: Training data recency
-- **Capabilities**: Visual badges for reasoning and tool calling support
-- **Modality Icons**: Input/output support for image, audio, video, and PDF
+[![](/img/v3/model-selector.webp)](/docs/features/model-selector)
 
 ---
 
 ## Extensions System
 
-To keep the core lightweight while enabling limitless enhancements, we've introduced a flexible **Extensions system**. This allows you to add features, register new provider implementations, extend, replace, and customize the UI with your own custom features.
+To keep the core lightweight while enabling limitless enhancements, we've implemented a flexible **Extensions system** inspired by ComfyUI Custom Nodes. This allows adding new features, pages and toolbar icons, register new provider implementations, extend, replace, and customize the UI with your own custom features.
 
 ### Installation
 Extensions can be installed from GitHub or by creating a local folder:
-- **GitHub**: Clone extensions into `~/.llms/extensions` (e.g., `git clone https://github.com/user/repo ~/.llms/extensions/my_extension`)
 - **Local**: Simply create a folder in `~/.llms/extensions/my_extension`
+- **GitHub**: Clone extensions into `~/.llms/extensions`, e.g:
+
+```
+git clone https://github.com/user/repo ~/.llms/extensions/my_extension
+```
 
 ### How it Works (Server)
 Extensions are Python modules that plug into the server lifecycle using special hooks defined in their `__init__.py`:
@@ -240,6 +143,7 @@ Extensions are Python modules that plug into the server lifecycle using special 
 The `ctx` parameter provides access to the `ExtensionContext`.
 
 ### How it Works (UI)
+
 Extensions can also include frontend components:
 
 1. **Placement**: Add a `ui` folder within your extension directory
@@ -260,8 +164,46 @@ export default {
 }
 ```
 
-### Example: [`system_prompts`](https://github.com/llmspy/system_prompts)
-The `system_prompts` extension demonstrates these capabilities by allowing users to manage custom system prompts. It uses `__install__` to register an API endpoint and a UI extension to provide a management interface.
+### Example: [`xmas`](https://github.com/llmspy/xmas) extension
+The `xmas` extension demonstrates these capabilities where it utilizes the Extensions APIs to give llms.py a splash of Christmas spirit. It uses `__install__` to register an API endpoint and a UI extension for its UI features.
+
+### Server API
+
+**[__init__.py](https://github.com/llmspy/xmas/blob/main/__init__.py)**
+
+The xmas extension uses the `__install__` hook which runs after providers are configured to add new Server functionality by registering new aiohttp web application handlers.
+
+For example this registers both **GET** and **POST** handlers to a new `/ext/xmas/greet` endpoint to return new Xmas greeting:
+
+```python
+def install(ctx):
+    async def greet(request):
+        nonlocal count
+        name = request.query.get('name')
+        if not name:
+            data = await request.post()
+            name = data.get('name')
+
+        if not name:
+            name = 'Stranger'
+
+        greeting = greetings[count % len(greetings)]
+        count += 1
+        return web.json_response({"result":f"Hello {name}, {greeting}"})
+
+    ctx.add_get("greet", greet)
+    ctx.add_post("greet", greet)
+
+
+# register install extension handler
+__install__ = install
+```
+
+## UI Extensions
+
+[/ui/index.mjs](https://github.com/llmspy/xmas/blob/main/ui/index.mjs)
+
+
 
 ### Managing Extensions
 
@@ -270,9 +212,23 @@ The `system_prompts` extension demonstrates these capabilities by allowing users
 llms --add
 ```
 
+Output:
+
+```
+Available extensions:
+  core_tools       Essential tools for memory, file operations, math expressions and code execution
+  system_prompts   Enables and includes collection of awesome system prompts
+  duckduckgo       Add web search tool capabilities using Duck Duck Go
+  xmas             Example of utilizing the Extensions APIs to give llms.py some Christmas spirit
+
+Usage:
+  llms --add <extension>
+llms --add <github-user>/<repo>
+```
+
 **Install an extension:**
 ```bash
-llms --add system_prompts
+llms --add core_tools
 ```
 
 **Install a 3rd-party extension:**
@@ -331,6 +287,7 @@ All available tools are maintained in the GitHub [llmspy organization](https://g
 | `core_tools` | Core System Tools providing essential file operations, memory persistence, math expression evaluation, and code execution |
 | `duckduckgo` | Add web search capabilities using DuckDuckGo |
 | `system_prompts` | Enables and includes a collection of awesome system prompts |
+| `xmas` | Example of utilizing the Extensions APIs to give llms.py some Christmas spirit |
 
 **Install a tool:**
 ```bash
@@ -497,3 +454,9 @@ llms --serve 8000
 
 **Happy holidays from the llms.py team!** 🎄
 
+
+---
+
+<ScreenshotsGallery className="mb-8" gridClass="grid grid-cols-1 md:grid-cols-2 gap-4" images={{
+    'New Model Selector': '/img/v3/model-selector.webp',
+}} />
