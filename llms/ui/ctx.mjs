@@ -43,6 +43,18 @@ export class ExtensionScope {
     post(url, options) {
         return this.ctx.ai.post(combinePaths(this.baseUrl, url), options)
     }
+    put(url, options) {
+        return this.ctx.ai.post(combinePaths(this.baseUrl, url), {
+            ...options,
+            method: 'PUT'
+        })
+    }
+    patch(url, options) {
+        return this.ctx.ai.post(combinePaths(this.baseUrl, url), {
+            ...options,
+            method: 'PATCH'
+        })
+    }
     async postForm(url, options) {
         return await this.ctx.ai.postForm(combinePaths(this.baseUrl, url), options)
     }
@@ -65,6 +77,9 @@ export class ExtensionScope {
     }
     async createJsonResult(res) {
         return this.ctx.ai.createJsonResult(res)
+    }
+    createErrorStatus(status) {
+        return this.ctx.ai.createErrorStatus(status)
     }
     createErrorResult(e) {
         return this.ctx.ai.createErrorResult(e)
@@ -263,6 +278,12 @@ export class AppContext {
         return toggle
     }
 
+    createErrorStatus(status) {
+        return this.ai.createErrorStatus(status)
+    }
+    createErrorResult(e) {
+        return this.ai.createErrorResult(e)
+    }
     setError(error, msg = null) {
         this.state.error = error
         if (error) {

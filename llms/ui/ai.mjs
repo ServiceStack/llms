@@ -74,12 +74,27 @@ export const o = {
             return { responseStatus }
         }
     },
+    createErrorStatus({ message, errorCode, stackTrace, errors, meta }) {
+        const ret = {
+            errorCode: errorCode || 'Error',
+            message: message,
+        }
+        if (stackTrace) {
+            ret.stackTrace = stackTrace
+        }
+        if (errors && Array.isArray(errors)) {
+            ret.errors = errors
+        }
+        if (meta) {
+            ret.meta = meta
+        }
+        return ret
+    },
     createErrorResult(e) {
         return new ApiResult({
-            responseStatus: {
-                errorCode: 'Error',
-                message: `${e.message ?? e}`
-            }
+            error: e.errorCode
+                ? this.createErrorStatus(e)
+                : this.createErrorStatus({ message: `${e.message ?? e}` })
         })
     },
     async getConfig() {
