@@ -95,7 +95,7 @@
             ]
         },
         "out:image": {
-            "model": "black-forest-labs/flux.1-dev",
+            "model": "gemini-2.5-flash-image",
             "messages": [
                 {
                     "role": "user",
