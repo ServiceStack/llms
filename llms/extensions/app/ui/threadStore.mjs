@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { appendQueryString, createErrorStatus } from '@servicestack/client'
+import { appendQueryString } from '@servicestack/client'
 
 /**
  * Returns an ever-increasing unique integer id.
@@ -170,7 +170,7 @@ async function redoMessageFromThread(threadId, timestamp) {
     // Find the index of the message to redo
     const messageIndex = thread.messages.findIndex(m => m.timestamp === timestamp)
     if (messageIndex === -1) {
-        setError(createErrorStatus(`Message not found for timestamp ${timestamp}`))
+        setError({ message: `Message not found for timestamp ${timestamp}` })
         return
     }
 
@@ -188,7 +188,8 @@ async function redoMessageFromThread(threadId, timestamp) {
     const updatedMessages = thread.messages.slice(0, messageIndex + 1)
 
     // Update the thread with the new messages
-    const api = await queueChat(threadId, { messages: updatedMessages })
+    const request = { messages: updatedMessages }
+    const api = await queueChat({ request, thread })
     if (api.response) {
         replaceThread(api.response)
     } else {
@@ -346,12 +347,19 @@ async function startNewThread({ title, model }) {
     return thread
 }
 
-async function queueChat(threadId, body, options = {}) {
-    const api = await ctx.postJson(`/ext/app/threads/${threadId}/chat`, {
+async function queueChat(ctxRequest, options = {}) {
+    if (!ctxRequest.request) return ctx.createErrorResult({ message: 'No request provided' })
+    if (!ctxRequest.thread) return ctx.createErrorResult({ message: 'No thread provided' })
+    if (!ctxRequest.request.metadata) {
+        ctxRequest.request.metadata = {}
+    }
+    ctx.chatRequestFilters.forEach(f => f(ctxRequest))
+    const { thread, request } = ctxRequest
+    const api = await ctx.postJson(`/ext/app/threads/${thread.id}/chat`, {
         ...options,
-        body: typeof body == 'string'
-            ? body
-            : JSON.stringify(body),
+        body: typeof request == 'string'
+            ? request
+            : JSON.stringify(request),
     })
     return api
 }

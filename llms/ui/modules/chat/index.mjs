@@ -738,7 +738,7 @@ const ChatPrompt = {
                 console.debug(`thread title is '${thread.title}'`, request.title)
             }
 
-            const api = await ctx.threads.queueChat(threadId, request)
+            const api = await ctx.threads.queueChat({ request, thread })
             if (api.response) {
                 // success
                 ctx.chat.editingMessage.value = null
