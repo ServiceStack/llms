@@ -374,6 +374,9 @@ async def process_chat(chat, provider_id=None):
         raise Exception("No chat provided")
     if "stream" not in chat:
         chat["stream"] = False
+    # Some providers don't support empty tools
+    if "tools" in chat and len(chat["tools"]) == 0:
+        del chat["tools"]
     if "messages" not in chat:
         return chat
 
@@ -706,6 +709,7 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
 async def response_json(response):
     text = await response.text()
     if response.status >= 400:
+        _dbg(f"HTTP {response.status} {response.reason}: {text}")
         raise HTTPError(response.status, reason=response.reason, body=text, headers=dict(response.headers))
     response.raise_for_status()
     body = json.loads(text)
