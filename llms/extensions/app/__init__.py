@@ -341,13 +341,22 @@ def install(ctx):
 
     ctx.register_chat_request_filter(chat_request)
 
-    async def tool_request(tool_chat, context):
-        ctx.dbg("tool_request")
+    async def tool_request(chat_request, context):
+        messages = chat_request.get("messages", [])
+        ctx.dbg(f"tool_request: messages {len(messages)}")
         thread_id = context.get("threadId", None)
         if not thread_id:
             ctx.dbg("Missing threadId")
             return
         user = context.get("user", None)
+        await g_db.update_thread_async(
+            thread_id,
+            {
+                "messages": messages,
+            },
+            user=user,
+        )
+
         completed_at = g_db.get_thread_column(thread_id, "completedAt", user=user)
         if completed_at:
             context["completed"] = True

@@ -204,6 +204,12 @@ def id_to_name(id):
     return id.replace("-", " ").title()
 
 
+def pluralize(word, count):
+    if count == 1:
+        return word
+    return word + "s"
+
+
 def get_file_mime_type(filename):
     mime_type, _ = mimetypes.guess_type(filename)
     return mime_type or "application/octet-stream"
@@ -1427,6 +1433,8 @@ async def g_chat_completion(chat, context=None):
                     current_chat["messages"].append(message)
                     tool_history.append(message)
 
+                    await g_app.on_chat_tool(current_chat, context)
+
                     for tool_call in tool_calls:
                         function_name = tool_call["function"]["name"]
                         try:
@@ -1450,8 +1458,7 @@ async def g_chat_completion(chat, context=None):
                         current_chat["messages"].append(tool_msg)
                         tool_history.append(tool_msg)
 
-                    for filter_func in g_app.chat_tool_filters:
-                        await filter_func(current_chat, context)
+                    await g_app.on_chat_tool(current_chat, context)
 
                     if should_cancel_thread(context):
                         return
@@ -2442,6 +2449,15 @@ class AppExtensions:
                 await filter_func(e, context)
             except Exception as e:
                 _err("chat error filter failed", e)
+
+    async def on_chat_tool(self, chat, context):
+        m_len = len(chat.get("messages", []))
+        t_len = len(self.chat_tool_filters)
+        _dbg(
+            f"on_tool_call for thread {context.get('threadId', None)} with {m_len} {pluralize('message', m_len)}, invoking {t_len} {pluralize('filter', t_len)}:"
+        )
+        for filter_func in self.chat_tool_filters:
+            await filter_func(chat, context)
 
     def exit(self, exit_code=0):
         if len(self.shutdown_handlers) > 0:

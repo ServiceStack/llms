@@ -444,7 +444,7 @@ class AppDB:
         event.wait()
         return ret[0]
 
-    def prepare_thread(self, thread, id=None):
+    def prepare_thread(self, thread, id=None, user=None):
         now = datetime.now()
         if id:
             thread["id"] = id
@@ -454,19 +454,19 @@ class AppDB:
         if "messages" in thread:
             for m in thread["messages"]:
                 self.ctx.cache_message_inline_data(m)
-        return thread
+        return with_user(thread, user=user)
 
     def create_thread(self, thread: Dict[str, Any], user=None):
-        return self.insert("thread", with_user(self.prepare_thread(thread), user=user))
+        return self.insert("thread", self.prepare_thread(thread, user=user))
 
     async def create_thread_async(self, thread: Dict[str, Any], user=None):
-        return await self.insert_async("thread", with_user(self.prepare_thread(thread), user=user))
+        return await self.insert_async("thread", self.prepare_thread(thread, user=user))
 
     def update_thread(self, id, thread: Dict[str, Any], user=None):
-        return self.update("thread", with_user(self.prepare_thread(thread, id), user=user))
+        return self.update("thread", self.prepare_thread(thread, id, user=user))
 
     async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
-        return await self.update_async("thread", with_user(self.prepare_thread(thread, id), user=user))
+        return await self.update_async("thread", self.prepare_thread(thread, id, user=user))
 
     def delete_thread(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
