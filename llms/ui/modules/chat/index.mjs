@@ -236,7 +236,7 @@ export function useChatPrompt(ctx) {
         return request
     }
 
-    async function completion({ request, model, thread, controller }) {
+    async function completion({ request, thread, model, controller, redirect }) {
         try {
             let error
             if (!model) {
@@ -248,9 +248,7 @@ export function useChatPrompt(ctx) {
             }
 
             if (!model) {
-                return new ApiResult({
-                    error: createErrorStatus(`Model ${request.model || ''} not found`, 'NotFound')
-                })
+                return ctx.createErrorResult({ message: `Model ${request.model || ''} not found`, errorCode: 'NotFound' })
             }
 
             if (!request.messages) request.messages = []
@@ -258,10 +256,10 @@ export function useChatPrompt(ctx) {
 
             if (!thread) {
                 const title = getTextContent(request) || 'New Chat'
-                thread = await ctx.threads.startNewThread({ title, model })
+                thread = await ctx.threads.startNewThread({ title, model, redirect })
             }
 
-            const threadId = thread?.id || ctx.threads.generateThreadId()
+            const threadId = thread?.id
 
             const ctxRequest = {
                 request,
@@ -280,7 +278,7 @@ export function useChatPrompt(ctx) {
 
             let response = null
             if (!res.ok) {
-                error = createErrorStatus('', `HTTP ${res.status} ${res.statusText}`)
+                error = ctx.createErrorStatus({ message: `HTTP ${res.status} ${res.statusText}` })
                 let errorBody = null
                 try {
                     errorBody = await res.text()
@@ -333,22 +331,6 @@ export function useChatPrompt(ctx) {
                         if (msg.role === 'assistant') {
                             msg.model = model.name // tag with model
                         }
-                    }
-                }
-
-                // Add assistant response (save entire message including reasoning)
-                const assistantMessage = response.choices?.[0]?.message
-
-                const usage = response.usage
-                if (usage) {
-                    if (response.metadata?.pricing) {
-                        const [input, output] = response.metadata.pricing.split('/')
-                        usage.duration = response.metadata.duration ?? (Date.now() - startTime)
-                        usage.input = input
-                        usage.output = output
-                        usage.tokens = usage.completion_tokens
-                        usage.price = usage.output
-                        usage.cost = ctx.fmt.tokenCost(usage.prompt_tokens / 1_000_000 * parseFloat(input) + usage.completion_tokens / 1_000_000 * parseFloat(output))
                     }
                 }
 
@@ -664,7 +646,7 @@ const ChatPrompt = {
 
             // Create thread if none exists
             if (!ctx.threads.currentThread.value) {
-                thread = await ctx.threads.startNewThread({ model: props.model })
+                thread = await ctx.threads.startNewThread({ model: props.model, redirect: true })
             } else {
                 thread = ctx.threads.currentThread.value
             }

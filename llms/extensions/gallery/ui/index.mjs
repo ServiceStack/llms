@@ -390,6 +390,7 @@ const GalleryPage = {
             ctx.threads.startNewThread({
                 title: selected.prompt,
                 model: ctx.chat.getSelectedModel(),
+                redirect: true,
             })
         }
 

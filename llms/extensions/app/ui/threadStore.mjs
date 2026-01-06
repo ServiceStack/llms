@@ -21,11 +21,6 @@ const isLoading = ref(false)
 let ctx = null
 let ext = null
 
-// Generate unique thread ID
-function generateThreadId() {
-    return Date.now().toString()
-}
-
 function setError(error, msg = null) {
     ctx?.setError(error, msg)
 }
@@ -312,7 +307,7 @@ function getLatestCachedThread() {
     return threads.value[0]
 }
 
-async function startNewThread({ title, model }) {
+async function startNewThread({ title, model, redirect }) {
     if (!model) {
         console.error('No model selected')
         return
@@ -338,8 +333,10 @@ async function startNewThread({ title, model }) {
     })
 
     console.log('newThread', newThread, model)
-    // Navigate to the new thread URL
-    ctx.to(`/c/${newThread.id}`)
+    if (redirect) {
+        // Navigate to the new thread URL
+        ctx.to(`/c/${newThread.id}`)
+    }
 
     // Get the thread to check for duplicates
     let thread = await getThread(newThread.id)
@@ -388,7 +385,6 @@ export function useThreadStore() {
         clearCurrentThread,
         getGroupedThreads,
         getLatestCachedThread,
-        generateThreadId,
         startNewThread,
         replaceThread,
         queueChat,
