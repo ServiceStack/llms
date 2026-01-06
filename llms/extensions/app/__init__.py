@@ -60,7 +60,7 @@ def install(ctx):
         return to
 
     def thread_dto(row):
-        return row and to_dto(row, ["messages", "modalities", "args", "modelInfo", "stats"])
+        return row and to_dto(row, ["messages", "modalities", "args", "modelInfo", "stats", "metadata"])
 
     def request_dto(row):
         return row and to_dto(row, ["usage"])
@@ -174,12 +174,13 @@ def install(ctx):
         if not thread:
             raise Exception("Thread not found")
 
+        metadata = thread.get("metadata", {})
         chat = {
             "model": thread.get("model"),
             "messages": thread.get("messages"),
             "modalities": thread.get("modalities"),
             "systemPrompt": thread.get("systemPrompt"),
-            "metadata": thread.get("metadata", {}),
+            "metadata": metadata,
         }
         for k, v in thread.get("args", {}).items():
             if k in ctx.request_args:
@@ -189,7 +190,8 @@ def install(ctx):
             "chat": chat,
             "user": user,
             "threadId": id,
-            "tools": chat.get("metadata").get("tools", "all"),
+            "metadata": metadata,
+            "tools": metadata.get("tools", "all"),
         }
 
         # execute chat in background thread

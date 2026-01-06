@@ -91,6 +91,7 @@ class AppDB:
                 "publishedAt": "TIMESTAMP",
                 "startedAt": "TIMESTAMP",
                 "completedAt": "TIMESTAMP",
+                "metadata": "JSON",
                 "error": "TEXT",
                 "ref": "TEXT",
             },
