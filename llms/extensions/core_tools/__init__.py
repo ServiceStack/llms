@@ -523,7 +523,7 @@ def install(ctx):
     # Examples of registering tools using automatic definition generation
     ctx.register_tool(memory_read)
     ctx.register_tool(memory_write)
-    ctx.register_tool(semantic_search)
+    # ctx.register_tool(semantic_search) # TODO: implement
     ctx.register_tool(read_file)
     ctx.register_tool(write_file)
     ctx.register_tool(list_directory)
