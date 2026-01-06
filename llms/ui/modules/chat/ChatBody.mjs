@@ -20,9 +20,50 @@ const MessageUsage = {
     }
 }
 
+const MessageReasoning = {
+    template: `
+    <div class="mt-2 mb-2">
+        <button type="button" @click="toggleReasoning(message.id)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
+            <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.id) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
+            <span>{{ isReasoningExpanded(message.id) ? 'Hide reasoning' : 'Show reasoning' }}</span>
+        </button>
+        <div v-if="isReasoningExpanded(message.id)" class="reasoning mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
+            <div v-if="typeof reasoning === 'string'" v-html="$fmt.markdown(reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
+            <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto">{{ formatReasoning(reasoning) }}</pre>
+        </div>
+    </div>
+    `,
+    props: {
+        reasoning: String,
+        message: Object,
+    },
+    setup(props) {
+        const expandedReasoning = ref(new Set())
+        const isReasoningExpanded = (id) => expandedReasoning.value.has(id)
+        const toggleReasoning = (id) => {
+            const s = new Set(expandedReasoning.value)
+            if (s.has(id)) {
+                s.delete(id)
+            } else {
+                s.add(id)
+            }
+            expandedReasoning.value = s
+        }
+        const formatReasoning = (r) => typeof r === 'string' ? r : JSON.stringify(r, null, 2)
+
+        return {
+            expandedReasoning,
+            isReasoningExpanded,
+            toggleReasoning,
+            formatReasoning,
+        }
+    }
+}
+
 export default {
     components: {
         MessageUsage,
+        MessageReasoning,
     },
     template: `
         <div class="flex flex-col h-full">
@@ -110,16 +151,8 @@ export default {
                                 ></div>
 
                                 <!-- Collapsible reasoning section -->
-                                <div v-if="message.role === 'assistant' && message.reasoning" class="mt-2 mb-2">
-                                    <button type="button" @click="toggleReasoning(message.id)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
-                                        <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.id) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
-                                        <span>{{ isReasoningExpanded(message.id) ? 'Hide reasoning' : 'Show reasoning' }}</span>
-                                    </button>
-                                    <div v-if="isReasoningExpanded(message.id)" class="reasoning mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
-                                        <div v-if="typeof message.reasoning === 'string'" v-html="$fmt.markdown(message.reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
-                                        <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto">{{ formatReasoning(message.reasoning) }}</pre>
-                                    </div>
-                                </div>
+                                <MessageReasoning v-if="message.role === 'assistant' && (message.reasoning || message.thinking || message.reasoning_content)" 
+                                    :reasoning="message.reasoning || message.thinking || message.reasoning_content" :message="message" />
 
                                 <!-- Tool Calls & Outputs -->
                                 <div v-if="message.tool_calls && message.tool_calls.length > 0" class="mb-3 space-y-4">
@@ -435,20 +468,6 @@ export default {
             }
         }
 
-        // Reasoning collapse state and helpers
-        const expandedReasoning = ref(new Set())
-        const isReasoningExpanded = (id) => expandedReasoning.value.has(id)
-        const toggleReasoning = (id) => {
-            const s = new Set(expandedReasoning.value)
-            if (s.has(id)) {
-                s.delete(id)
-            } else {
-                s.add(id)
-            }
-            expandedReasoning.value = s
-        }
-        const formatReasoning = (r) => typeof r === 'string' ? r : JSON.stringify(r, null, 2)
-
         const copyMessageContent = async (message) => {
             let content = ''
             if (Array.isArray(message.content)) {
@@ -651,9 +670,6 @@ export default {
             selectedModelObj,
             messagesContainer,
             copying,
-            isReasoningExpanded,
-            toggleReasoning,
-            formatReasoning,
             copyMessageContent,
             redoMessage,
             editMessage,
