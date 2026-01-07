@@ -22,6 +22,9 @@ export class ExtensionScope {
     savePrefs() {
         storageObject(this.storageKey, this.prefs)
     }
+    setState(o) {
+        Object.assign(this.state, o)
+    }
     get(url, options) {
         return this.ctx.ai.get(combinePaths(this.baseUrl, url), options)
     }
@@ -232,7 +235,6 @@ export class AppContext {
     }
     setState(o) {
         Object.assign(this.state, o)
-        //this.events.publish('update:state', this.state)
     }
     setLayout(o) {
         Object.assign(this.layout, o)

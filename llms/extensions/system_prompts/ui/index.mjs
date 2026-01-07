@@ -142,7 +142,7 @@ const SystemPromptEditor = {
                     System Prompt
                 </label>
                 <div v-if="hasMessages" class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ !threadSystemPrompt ? '' : prompts.find(x => x.value === threadSystemPrompt)?.name || 'Custom' }}
+                    {{ !ext.prefs.systemPrompt ? '' : prompts.find(x => x.value === ext.prefs.systemPrompt)?.name || 'Custom' }}
                 </div>
                 <div v-else class="mb-2 relative" ref="containerRef">
                     <div class="flex items-center gap-2">
@@ -154,16 +154,16 @@ const SystemPromptEditor = {
                             <svg class="size-4 text-gray-500 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12z"/></svg>
                         </button>
                         <button type="button" 
-                            @click="showFinder = !showFinder"
+                            @click="ext.setPrefs({ showFinder: !ext.prefs.showFinder })"
                             class="inline-flex items-center gap-x-1.5 rounded-md bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800">
                             Explore Prompts
                         </button>
                     </div>
-                    <PromptFinder v-model="showFinder" :prompts="prompts" @select="onSelect" />
+                    <PromptFinder v-model="ext.prefs.showFinder" :prompts="prompts" @select="onSelect" />
                 </div>
             </div>
             <div v-if="hasMessages" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm">
-                {{threadSystemPrompt || 'No System Prompt was used' }}
+                {{$threads.currentThread.value?.systemPrompt || 'No System Prompt was used' }}
             </div>
             <div v-else>
                 <textarea
@@ -186,32 +186,29 @@ const SystemPromptEditor = {
         /**@type {AppContext} */
         const ctx = inject('ctx')
         const containerRef = ref()
-        const showFinder = ref(false)
-        const prefs = ext.getPrefs()
         const hasMessages = computed(() => ctx.threads.currentThread.value?.messages?.length > 0)
-        const threadSystemPrompt = computed(() => ctx.threads.currentThread.value?.systemPrompt || '')
         const selected = computed(() =>
             props.prompts.find(x => x.value === props.modelValue) ?? { name: "Custom", value: props.modelValue })
 
         function onSelect(prompt) {
+            ext.setPrefs({ prompt: prompt }) // {"id","name","value"}
             emit('update:modelValue', prompt.value)
         }
 
         function closeFinder(e) {
-            if (showFinder.value && containerRef.value && !containerRef.value.contains(e.target)) {
-                showFinder.value = false
+            if (ext.prefs.showFinder && containerRef.value && !containerRef.value.contains(e.target)) {
+                ext.setPrefs({ showFinder: false })
             }
         }
 
-        watch(() => props.modelValue, promptValue => {
-            prefs.prompt = selected.value
-            ext.setPrefs(prefs)
+        watch(() => props.modelValue, systemPrompt => {
+            ext.setPrefs({ systemPrompt })
         })
 
         onMounted(() => {
             document.addEventListener('click', closeFinder)
-            if (prefs.prompt) {
-                emit('update:modelValue', prefs.prompt.value)
+            if (ext.prefs.prompt) {
+                emit('update:modelValue', ext.prefs.prompt)
             }
         })
         onUnmounted(() => {
@@ -219,11 +216,10 @@ const SystemPromptEditor = {
         })
 
         return {
-            threadSystemPrompt,
+            ext,
             hasMessages,
             selected,
             containerRef,
-            showFinder,
             onSelect,
         }
     }
@@ -238,9 +234,13 @@ export default {
             PromptFinder,
             SystemPromptEditor,
             SystemPromptsPanel: {
-                template: `<SystemPromptEditor :prompts="$state.prompts" v-model="$state.selectedPrompt" />`,
+                template: `<SystemPromptEditor :prompts="ext.state.prompts" v-model="ext.prefs.prompt" />`,
+                setup() {
+                    return { ext }
+                }
             }
         })
+        ext.setPrefs({ systemPrompt: '' })
 
         ctx.setTopIcons({
             system_prompts: {
@@ -251,12 +251,6 @@ export default {
             }
         })
 
-        ctx.createThreadFilters.push(thread => {
-            const prefs = ext.getPrefs()
-            thread.systemPrompt = prefs?.prompt?.value || ""
-            console.log('createThreadFilters', prefs, thread)
-        })
-
         ctx.chatRequestFilters.push(({ request, thread }) => {
 
             const hasSystemPrompt = request.messages.find(x => x.role === 'system')
@@ -265,11 +259,12 @@ export default {
                 return
             }
 
-            if (thread.systemPrompt) {
+            // Only add the selected system prompt for new requests
+            if (ext.prefs.systemPrompt && request.messages.length <= 1) {
                 // add message to start
                 request.messages.unshift({
                     role: 'system',
-                    content: thread.systemPrompt
+                    content: ext.prefs.systemPrompt
                 })
             }
         })
@@ -280,6 +275,6 @@ export default {
     async load(ctx) {
         const api = await ext.getJson(`/prompts.json`)
         const prompts = api.response || []
-        ctx.setState({ prompts })
+        ext.setState({ prompts })
     }
 }
