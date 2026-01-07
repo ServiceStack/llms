@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llms-py"
-version = "3.0.0"
+version = "3.0.1"
 description = "A lightweight CLI tool and OpenAI-compatible server for querying multiple Large Language Model (LLM) providers"
 readme = "README.md"
 license = "BSD-3-Clause"
