@@ -13,7 +13,7 @@
     "defaults": {
         "headers": {
             "Content-Type": "application/json",
-            "User-Agent": "llmspy.org/1.0"
+            "User-Agent": "llmspy.org/3.0"
         },
         "text": {
             "model": "kimi-k2",
@@ -199,10 +199,10 @@
             }
         },
         "github-copilot": {
-            "enabled": false
+            "enabled": true
         },
         "github-models": {
-            "enabled": false,
+            "enabled": true,
             "check": {
                 "messages": [
                     {
@@ -227,13 +227,13 @@
             "temperature": 1.0
         },
         "ollama": {
-            "enabled": true,
+            "enabled": false,
             "id": "ollama",
             "npm": "ollama",
             "api": "http://localhost:11434"
         },
         "lmstudio": {
-            "enabled": true,
+            "enabled": false,
             "npm": "lmstudio",
             "api": "http://127.0.0.1:1234/v1",
             "models": {}
@@ -348,7 +348,7 @@
             "enabled": true
         },
         "moonshotai": {
-            "enabled": false
+            "enabled": true
         },
         "nvidia": {
             "enabled": true,
@@ -369,7 +369,7 @@
             "enabled": true
         },
         "fireworks-ai": {
-            "enabled": false
+            "enabled": true
         },
         "openrouter": {
             "enabled": true,
