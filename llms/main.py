@@ -29,7 +29,7 @@ from importlib import resources  # Py≥3.9  (pip install importlib_resources fo
 from io import BytesIO
 from pathlib import Path
 from typing import get_type_hints
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urljoin
 
 import aiohttp
 from aiohttp import web
@@ -1617,7 +1617,7 @@ async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=Non
                 for file in generated_files:
                     if file.startswith("/~cache"):
                         print(get_cache_path(file[8:]))
-                        print(f"http://localhost:8000/{file}")
+                        print(urljoin("http://localhost:8000", file))
                     else:
                         print(file)
 
