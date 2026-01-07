@@ -25,16 +25,6 @@ def install(ctx):
                 g_db = AppDB(ctx, db_path)
                 ctx.register_shutdown_handler(g_db.close)
 
-                threads_json = "/home/mythz/src/ServiceStack/llms/llms/extensions/app/threads.json"
-                requests_json = "/home/mythz/src/ServiceStack/llms/llms/extensions/app/requests.json"
-                with open(threads_json) as f:
-                    threads = json.load(f)["threads"]
-                    threads.reverse()
-                with open(requests_json) as f:
-                    requests = json.load(f)["requests"]
-                    requests.reverse()
-                # g_db.import_db(threads, requests)
-
             except Exception as e:
                 ctx.err("Failed to init AppDB", e)
         return g_db
