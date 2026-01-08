@@ -54,6 +54,24 @@ def writer_thread(ctx, db_path, task_queue, stop_event):
         conn.close()
 
 
+def to_dto(ctx, row, json_columns):
+    # as=column -> [0,1,2]
+    if not isinstance(row, dict):
+        return row
+
+    to = {}
+    for k, v in row.items():
+        if k in json_columns and v is not None and isinstance(v, str):
+            try:
+                to[k] = json.loads(v)
+            except Exception as e:
+                print(f"Failed to parse JSON for {k}: {v} ({type(v)})", e)
+                to[k] = v
+        else:
+            to[k] = v
+    return to
+
+
 def valid_columns(all_columns, fields):
     if fields:
         if not isinstance(fields, list):

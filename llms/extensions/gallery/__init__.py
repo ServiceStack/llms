@@ -23,12 +23,15 @@ def install(ctx):
     if not get_db():
         return
 
+    def media_dto(row):
+        return row and g_db.to_dto(row, ["reactions", "category", "tags", "ratings", "objects", "metadata"])
+
     def on_cache_save(context):
         url = context.get("url", None)
         info = context.get("info", {})
         user = context.get("user", None)
         ctx.log(f"cache saved: {url}")
-        ctx.log(json.dumps(info, indent=2))
+        ctx.dbg(json.dumps(info, indent=2))
 
         if "url" not in info:
             info["url"] = url
@@ -38,7 +41,8 @@ def install(ctx):
 
     async def query_media(request):
         rows = g_db.query_media(request.query, user=ctx.get_username(request))
-        return web.json_response(rows)
+        dtos = [media_dto(row) for row in rows]
+        return web.json_response(dtos)
 
     ctx.add_get("media", query_media)
 

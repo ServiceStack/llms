@@ -2,7 +2,7 @@ import datetime
 import os
 from typing import Any, Dict
 
-from llms.db import DbManager, order_by
+from llms.db import DbManager, order_by, to_dto
 
 
 def with_user(data, user):
@@ -125,6 +125,9 @@ class GalleryDB:
                     self.db.exec(conn, f"ALTER TABLE media ADD COLUMN {col} {dtype}")
                 except Exception as e:
                     self.ctx.err(f"adding column {col}", e)
+
+    def to_dto(self, row, json_columns):
+        return to_dto(self.ctx, row, json_columns)
 
     def get_user_filter(self, user=None, params=None):
         if user is None:

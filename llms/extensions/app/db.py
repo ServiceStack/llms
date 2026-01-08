@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from llms.db import DbManager, order_by, select_columns, valid_columns
+from llms.db import DbManager, order_by, select_columns, valid_columns, to_dto
 
 
 def with_user(data, user):
@@ -260,6 +260,9 @@ class AppDB:
             f"INSERT INTO request ({', '.join(sql_columns)}) VALUES ({', '.join(['?'] * len(sql_params))})",
             sql_params,
         ).lastrowid
+
+    def to_dto(self, row, json_columns):
+        return to_dto(self.ctx, row, json_columns)
 
     def get_user_filter(self, user=None, params=None):
         if user is None:

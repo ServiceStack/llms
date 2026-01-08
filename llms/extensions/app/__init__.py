@@ -28,28 +28,11 @@ def install(ctx):
     if not get_db():
         return
 
-    def to_dto(row, json_columns):
-        # as=column -> [0,1,2]
-        if not isinstance(row, dict):
-            return row
-
-        to = {}
-        for k, v in row.items():
-            if k in json_columns and v is not None and isinstance(v, str):
-                try:
-                    to[k] = json.loads(v)
-                except Exception as e:
-                    ctx.err(f"Failed to parse JSON for {k}: {v} ({type(v)})", e)
-                    to[k] = v
-            else:
-                to[k] = v
-        return to
-
     def thread_dto(row):
-        return row and to_dto(row, ["messages", "modalities", "args", "modelInfo", "stats", "metadata"])
+        return row and g_db.to_dto(row, ["messages", "modalities", "args", "modelInfo", "stats", "metadata"])
 
     def request_dto(row):
-        return row and to_dto(row, ["usage"])
+        return row and g_db.to_dto(row, ["usage"])
 
     def prompt_to_title(prompt):
         return prompt[:100] + ("..." if len(prompt) > 100 else "") if prompt else None
