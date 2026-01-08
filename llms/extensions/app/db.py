@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from llms.main import DbManager
+from llms.db import DbManager, order_by, select_columns, valid_columns
 
 
 def with_user(data, user):
@@ -14,44 +14,6 @@ def with_user(data, user):
     else:
         data["user"] = user
         return data
-
-
-def valid_columns(all_columns, fields):
-    if fields:
-        if not isinstance(fields, list):
-            fields = fields.split(",")
-        cols = []
-        for k in fields:
-            k = k.strip()
-            if k in all_columns:
-                cols.append(k)
-        return cols
-    return []
-
-
-def table_columns(all_columns, fields):
-    cols = valid_columns(all_columns, fields)
-    return ", ".join(cols) if len(cols) > 0 else ", ".join(all_columns)
-
-
-def select_columns(all_columns, fields, select=None):
-    columns = table_columns(all_columns, fields)
-    if select == "distinct":
-        return f"SELECT DISTINCT {columns}"
-    return f"SELECT {columns}"
-
-
-def order_by(all_columns, sort):
-    cols = []
-    for k in sort.split(","):
-        k = k.strip()
-        by = ""
-        if k[0] == "-":
-            by = " DESC"
-            k = k[1:]
-        if k in all_columns:
-            cols.append(f"{k}{by}")
-    return f"ORDER BY {', '.join(cols)} " if len(cols) > 0 else ""
 
 
 class AppDB:

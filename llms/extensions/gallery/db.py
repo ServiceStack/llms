@@ -2,7 +2,7 @@ import datetime
 import os
 from typing import Any, Dict
 
-from llms.main import DbManager
+from llms.db import DbManager, order_by
 
 
 def with_user(data, user):
@@ -22,19 +22,6 @@ def ratio_format(ratio):
     if int(w) > int(h):
         return 1
     return 0
-
-
-def order_by(all_columns, sort):
-    cols = []
-    for k in sort.split(","):
-        k = k.strip()
-        by = ""
-        if k[0] == "-":
-            by = " DESC"
-            k = k[1:]
-        if k in all_columns:
-            cols.append(f"{k}{by}")
-    return f"ORDER BY {', '.join(cols)} " if len(cols) > 0 else ""
 
 
 class GalleryDB:
