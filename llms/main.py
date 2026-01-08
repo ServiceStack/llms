@@ -618,7 +618,7 @@ def save_bytes_to_cache(base64_data, filename, file_info, ignore_info=False):
         _dbg(f"Cached bytes exists: {relative_path}")
         if ignore_info:
             return url, None
-        return url, json.load(open(info_path))
+        return url, json_from_file(info_path)
 
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
@@ -665,7 +665,7 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
         _dbg(f"Saved image exists: {relative_path}")
         if ignore_info:
             return url, None
-        return url, json.load(open(info_path))
+        return url, json_from_file(info_path)
 
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
@@ -2179,6 +2179,13 @@ def text_from_file(filename):
     return None
 
 
+def json_from_file(filename):
+    if os.path.exists(filename):
+        with open(filename, encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
 async def text_from_resource_or_url(filename):
     text = text_from_resource(filename)
     if not text:
@@ -2521,6 +2528,9 @@ class ExtensionContext:
     def text_from_file(self, path):
         return text_from_file(path)
 
+    def json_from_file(self, path):
+        return load_json(path)
+
     def log(self, message):
         if self.verbose:
             print(f"[{self.name}] {message}", flush=True)
@@ -2625,6 +2635,9 @@ class ExtensionContext:
 
     def get_cache_path(self, path=""):
         return get_cache_path(path)
+
+    def get_file_mime_type(self, filename):
+        return get_file_mime_type(filename)
 
     def chat_request(self, template=None, text=None, model=None, system_prompt=None):
         return self.app.chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
@@ -3366,7 +3379,7 @@ def main():
             # if file and its .info.json already exists, return it
             info_path = os.path.splitext(full_path)[0] + ".info.json"
             if os.path.exists(full_path) and os.path.exists(info_path):
-                return web.json_response(json.load(open(info_path)))
+                return web.json_response(json_from_file(info_path))
 
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
