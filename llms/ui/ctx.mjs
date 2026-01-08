@@ -7,6 +7,7 @@ export class ExtensionScope {
     constructor(ctx, id) {
         /**@type {AppContext} */
         this.ctx = ctx
+        this.router = ctx.router
         this.id = id
         this.baseUrl = `${ctx.ai.base}/ext/${this.id}`
         this.storageKey = `llms.${this.id}`
@@ -96,6 +97,22 @@ export class ExtensionScope {
     }
     toast(msg) {
         this.ctx.toast(msg)
+    }
+    to(route) {
+        if (typeof route == 'string') {
+            route = route.startsWith(this.baseUrl)
+                ? route
+                : combinePaths(this.baseUrl, route)
+            const path = { path: route }
+            console.log(`to/${this.id}`, path)
+            this.router.push(path)
+        } else {
+            route.path = route.path.startsWith(this.baseUrl)
+                ? route.path
+                : combinePaths(this.baseUrl, route.path)
+            console.log(`to/${this.id}`, route)
+            this.router.push(route)
+        }
     }
 }
 
