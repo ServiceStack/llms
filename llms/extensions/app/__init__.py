@@ -7,13 +7,9 @@ from typing import Any
 
 from aiohttp import web
 
-g_db = None
+from .db import AppDB
 
-try:
-    from llms.extensions.app.db import AppDB
-except ImportError as e:
-    print(f"Failed to import AppDB: {e}")
-    AppDB = None
+g_db = None
 
 
 def install(ctx):

@@ -3,13 +3,9 @@ import os
 
 from aiohttp import web
 
-g_db = None
+from .db import GalleryDB
 
-try:
-    from llms.extensions.gallery.db import GalleryDB
-except ImportError as e:
-    print(f"Failed to import GalleryDB: {e}")
-    GalleryDB = None
+g_db = None
 
 
 def install(ctx):
