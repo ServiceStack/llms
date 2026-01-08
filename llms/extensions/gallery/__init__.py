@@ -9,7 +9,7 @@ g_db = None
 
 
 def install(ctx):
-    def get_gallery_db():
+    def get_db():
         global g_db
         if g_db is None and GalleryDB:
             try:
@@ -20,7 +20,7 @@ def install(ctx):
                 ctx.err("Failed to init GalleryDB", e)
         return g_db
 
-    if not get_gallery_db():
+    if not get_db():
         return
 
     def on_cache_save(context):
