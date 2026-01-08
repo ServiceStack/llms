@@ -19,6 +19,7 @@ def install(ctx):
             try:
                 db_path = os.path.join(ctx.get_user_path(), "gallery", "gallery.sqlite")
                 g_db = GalleryDB(ctx, db_path)
+                ctx.register_shutdown_handler(g_db.db.close)
             except Exception as e:
                 ctx.err("Failed to init GalleryDB", e)
         return g_db
