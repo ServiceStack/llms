@@ -27,14 +27,15 @@ def install(ctx):
         return
 
     def on_cache_save(context):
-        url = context["url"]
-        info = context["info"]
+        url = context.get("url", None)
+        info = context.get("info", {})
+        user = context.get("user", None)
         ctx.log(f"cache saved: {url}")
         ctx.log(json.dumps(info, indent=2))
 
         if "url" not in info:
             info["url"] = url
-        g_db.insert_media(info)
+        g_db.insert_media(info, user=user)
 
     ctx.register_cache_saved_filter(on_cache_save)
 

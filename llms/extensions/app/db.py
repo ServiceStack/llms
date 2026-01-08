@@ -1,10 +1,9 @@
 import json
 import os
-import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from .db_manager import DbManager
+from llms.main import DbManager
 
 
 def with_user(data, user):
@@ -375,76 +374,6 @@ class AppDB:
             self.ctx.err(f"query_threads ({take}, {skip})", e)
             return []
 
-    def insert(self, table, info, callback=None):
-        if not info:
-            raise Exception("info is required")
-
-        columns = self.columns[table]
-        args = {}
-        known_columns = columns.keys()
-        for k, val in info.items():
-            if k in known_columns and k != "id":
-                args[k] = self.db.value(val)
-
-        insert_keys = list(args.keys())
-        insert_body = ", ".join(insert_keys)
-        insert_values = ", ".join(["?" for _ in insert_keys])
-
-        sql = f"INSERT INTO {table} ({insert_body}) VALUES ({insert_values})"
-
-        self.db.write(sql, tuple(args[k] for k in insert_keys), callback)
-
-    async def insert_async(self, table, info):
-        event = threading.Event()
-
-        ret = [None]
-
-        def cb(lastrowid, rowcount, error=None):
-            nonlocal ret
-            if error:
-                raise error
-            ret[0] = lastrowid
-            event.set()
-
-        self.insert(table, info, cb)
-        event.wait()
-        return ret[0]
-
-    def update(self, table, info, callback=None):
-        if not info:
-            raise Exception("info is required")
-
-        columns = self.columns[table]
-        args = {}
-        known_columns = columns.keys()
-        for k, val in info.items():
-            if k in known_columns and k != "id":
-                args[k] = self.db.value(val)
-
-        update_keys = list(args.keys())
-        update_body = ", ".join([f"{k} = :{k}" for k in update_keys])
-
-        args["id"] = info["id"]
-        sql = f"UPDATE {table} SET {update_body} WHERE id = :id"
-
-        self.db.write(sql, args, callback)
-
-    async def update_async(self, table, info):
-        event = threading.Event()
-
-        ret = [None]
-
-        def cb(lastrowid, rowcount, error=None):
-            nonlocal ret
-            if error:
-                raise error
-            ret[0] = rowcount
-            event.set()
-
-        self.update(table, info, cb)
-        event.wait()
-        return ret[0]
-
     def prepare_thread(self, thread, id=None, user=None):
         now = datetime.now()
         if id:
@@ -458,16 +387,16 @@ class AppDB:
         return with_user(thread, user=user)
 
     def create_thread(self, thread: Dict[str, Any], user=None):
-        return self.insert("thread", self.prepare_thread(thread, user=user))
+        return self.db.insert("thread", self.columns["thread"], self.prepare_thread(thread, user=user))
 
     async def create_thread_async(self, thread: Dict[str, Any], user=None):
-        return await self.insert_async("thread", self.prepare_thread(thread, user=user))
+        return await self.db.insert_async("thread", self.columns["thread"], self.prepare_thread(thread, user=user))
 
     def update_thread(self, id, thread: Dict[str, Any], user=None):
-        return self.update("thread", self.prepare_thread(thread, id, user=user))
+        return self.db.update("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
 
     async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
-        return await self.update_async("thread", self.prepare_thread(thread, id, user=user))
+        return await self.db.update_async("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
 
     def delete_thread(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
@@ -609,21 +538,21 @@ class AppDB:
 
     def create_request(self, request: Dict[str, Any], user=None):
         request["createdAt"] = request["updatedAt"] = datetime.now()
-        return self.insert("request", with_user(request, user=user))
+        return self.db.insert("request", self.columns["request"], with_user(request, user=user))
 
     async def create_request_async(self, request: Dict[str, Any], user=None):
         request["createdAt"] = request["updatedAt"] = datetime.now()
-        return await self.insert_async("request", with_user(request, user=user))
+        return await self.db.insert_async("request", self.columns["request"], with_user(request, user=user))
 
     def update_request(self, id, request: Dict[str, Any], user=None):
         request["id"] = id
         request["updatedAt"] = datetime.now()
-        return self.update("request", with_user(request, user=user))
+        return self.db.update("request", self.columns["request"], with_user(request, user=user))
 
     async def update_request_async(self, id, request: Dict[str, Any], user=None):
         request["id"] = id
         request["updatedAt"] = datetime.now()
-        return await self.update_async("request", with_user(request, user=user))
+        return await self.db.update_async("request", self.columns["request"], with_user(request, user=user))
 
     def delete_request(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
