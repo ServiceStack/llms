@@ -2503,6 +2503,7 @@ class ExtensionContext:
         self.verbose = g_verbose
         self.aspect_ratios = app.aspect_ratios
         self.request_args = app.request_args
+        self.disabled = False
 
     def chat_to_prompt(self, chat):
         return chat_to_prompt(chat)
@@ -2799,6 +2800,10 @@ def install_extensions():
                         _dbg(f"Extension {item} has no __init__.py")
                 else:
                     _dbg(f"Extension {init_file} not found")
+
+                if ctx.disabled:
+                    _log(f"Extension {item} was disabled")
+                    continue
 
                 # if ui folder exists, serve as static files at /ext/{item}/
                 ui_path = os.path.join(item_path, "ui")
