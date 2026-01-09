@@ -143,7 +143,7 @@ def install(ctx):
         if not thread:
             raise Exception("Thread not found")
 
-        metadata = thread.get("metadata", {})
+        metadata = thread.get("metadata") or {}
         chat = {
             "model": thread.get("model"),
             "messages": thread.get("messages"),
@@ -151,9 +151,12 @@ def install(ctx):
             "systemPrompt": thread.get("systemPrompt"),
             "metadata": metadata,
         }
-        for k, v in thread.get("args", {}).items():
+        args = thread.get("args") or {}
+        for k, v in args.items():
             if k in ctx.request_args:
                 chat[k] = v
+
+        ctx.dbg("CHAT\n" + json.dumps(chat, indent=2))
 
         context = {
             "chat": chat,
