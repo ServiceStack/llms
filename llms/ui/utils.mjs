@@ -1,5 +1,5 @@
 import { toRaw } from "vue"
-import { rightPart } from "@servicestack/client"
+import { rightPart, toDate } from "@servicestack/client"
 
 export function toJsonArray(json) {
     try {
@@ -178,6 +178,13 @@ export function utilsFormatters() {
         })
     }
 
+    function date(d) {
+        date = toDate(d)
+        return date.toLocaleDateString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        })
+    }
+
 
     return {
         currFmt: currFmt2,
@@ -191,6 +198,7 @@ export function utilsFormatters() {
         time,
         pluralize,
         shortDate,
+        date,
     }
 }
 
