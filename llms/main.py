@@ -1049,8 +1049,9 @@ class OpenAiCompatible:
     async def chat(self, chat):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
 
-        if "modalities" in chat:
-            for modality in chat.get("modalities", []):
+        modalities = chat.get("modalities") or []
+        if len(modalities) > 0:
+            for modality in modalities:
                 # use default implementation for text modalities
                 if modality == "text":
                     continue
@@ -2530,7 +2531,7 @@ class ExtensionContext:
         return text_from_file(path)
 
     def json_from_file(self, path):
-        return load_json(path)
+        return json_from_file(path)
 
     def log(self, message):
         if self.verbose:
@@ -3433,9 +3434,9 @@ def main():
         async def cache_handler(request):
             path = request.match_info["tail"]
             full_path = get_cache_path(path)
+            info_path = os.path.splitext(full_path)[0] + ".info.json"
 
             if "info" in request.query:
-                info_path = os.path.splitext(full_path)[0] + ".info.json"
                 if not os.path.exists(info_path):
                     return web.Response(text="404: Not Found", status=404)
 
@@ -3464,11 +3465,23 @@ def main():
             except Exception:
                 return web.Response(text="403: Forbidden", status=403)
 
-            with open(full_path, "rb") as f:
-                content = f.read()
-
             mimetype = get_file_mime_type(full_path)
-            return web.Response(body=content, content_type=mimetype)
+            if "download" in request.query:
+                # download file as an attachment
+                info = json_from_file(info_path) or {}
+                mimetype = info.get("type", mimetype)
+                filename = info.get("name") or os.path.basename(full_path)
+                mtime = info.get("date", os.path.getmtime(full_path))
+                mdate = datetime.fromtimestamp(mtime).isoformat()
+                return web.FileResponse(
+                    full_path,
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"; modification-date="{mdate}"',
+                        "Content-Type": mimetype,
+                    },
+                )
+            else:
+                return web.FileResponse(full_path, headers={"Content-Type": mimetype})
 
         app.router.add_get("/~cache/{tail:.*}", cache_handler)
 
