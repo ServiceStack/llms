@@ -34,7 +34,7 @@ def writer_thread(ctx, db_path, task_queue, stop_event):
                 sql, args, callback = task  # Optional callback for results
 
                 try:
-                    ctx.dbg("SQL>" + ("\n" if "\n" in sql else " ") + sql)
+                    ctx.dbg("SQL>" + ("\n" if "\n" in sql else " ") + sql + ("\n" if args else "") + str(args))
                     cursor = conn.execute(sql, args)
                     conn.commit()
                     ctx.dbg(f"lastrowid {cursor.lastrowid}, rowcount {cursor.rowcount}")
@@ -111,16 +111,22 @@ def order_by(all_columns, sort):
 
 
 class DbManager:
-    def __init__(self, ctx, db_path):
+    def __init__(self, ctx, db_path, clone=None):
         if db_path is None:
             raise ValueError("db_path is required")
         self.ctx = ctx
         self.db_path = db_path
-        self.task_queue = Queue()
-        self.stop_event = Event()
-        self.writer_thread = Thread(target=writer_thread, args=(ctx, db_path, self.task_queue, self.stop_event))
-        self.writer_thread.start()
         self.read_only_pool = Queue()
+        if not clone:
+            self.task_queue = Queue()
+            self.stop_event = Event()
+            self.writer_thread = Thread(target=writer_thread, args=(ctx, db_path, self.task_queue, self.stop_event))
+            self.writer_thread.start()
+        else:
+            # share singleton writer thread in clones
+            self.task_queue = clone.task_queue
+            self.stop_event = clone.stop_event
+            self.writer_thread = clone.writer_thread
 
     def create_reader_connection(self):
         return create_reader_connection(self.db_path)
@@ -281,7 +287,7 @@ class DbManager:
         event.wait()
         return ret[0]
 
-    def update(self, table, info, columns, callback=None):
+    def update(self, table, columns, info, callback=None):
         if not info:
             raise Exception("info is required")
 
@@ -311,7 +317,7 @@ class DbManager:
             ret[0] = rowcount
             event.set()
 
-        self.update(table, info, columns, cb)
+        self.update(table, columns, info, cb)
         event.wait()
         return ret[0]
 
