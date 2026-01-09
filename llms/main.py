@@ -1283,6 +1283,9 @@ def api_providers():
 
 
 def to_error_message(e):
+    # check if has 'message' attribute
+    if hasattr(e, "message"):
+        return e.message
     return str(e)
 
 
