@@ -145,6 +145,9 @@
         "groq": {
             "enabled": true
         },
+        "cerebras": {
+            "enabled": true
+        },
         "codestral": {
             "enabled": true,
             "id": "codestral",
