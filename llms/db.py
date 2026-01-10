@@ -4,9 +4,14 @@ import threading
 from queue import Empty, Queue
 from threading import Event, Thread
 
+POOL = True
+
 
 def create_reader_connection(db_path):
-    conn = sqlite3.connect(db_path, timeout=1.0, check_same_thread=False)  # Lower - reads should be fast
+    # isolation_level=None leaves the connection in autocommit mode
+    conn = sqlite3.connect(
+        db_path, timeout=1.0, check_same_thread=False, isolation_level=None
+    )  # Lower - reads should be fast
     conn.execute("PRAGMA query_only=1")  # Read-only optimization
     return conn
 
@@ -135,10 +140,20 @@ class DbManager:
         return create_writer_connection(self.db_path)
 
     def resolve_connection(self):
-        try:
-            return self.read_only_pool.get_nowait()
-        except Empty:
+        if POOL:
+            try:
+                return self.read_only_pool.get_nowait()
+            except Empty:
+                return self.create_reader_connection()
+        else:
             return self.create_reader_connection()
+
+    def release_connection(self, conn):
+        if POOL:
+            conn.rollback()
+            self.read_only_pool.put(conn)
+        else:
+            conn.close()
 
     def write(self, query, args=None, callback=None):
         """
@@ -178,7 +193,7 @@ class DbManager:
         finally:
             if connection is None:
                 conn.row_factory = None
-                self.read_only_pool.put(conn)
+                self.release_connection(conn)
 
     def one(self, sql, parameters=None, connection=None):
         """
@@ -195,7 +210,7 @@ class DbManager:
         finally:
             if connection is None:
                 conn.row_factory = None
-                self.read_only_pool.put(conn)
+                self.release_connection(conn)
 
     def scalar(self, sql, parameters=None, connection=None):
         """
@@ -212,7 +227,7 @@ class DbManager:
         finally:
             if connection is None:
                 conn.row_factory = None
-                self.read_only_pool.put(conn)
+                self.release_connection(conn)
 
     def column(self, sql, parameters=None, connection=None):
         """
@@ -226,7 +241,7 @@ class DbManager:
             return [row[0] for row in cursor.fetchall()]
         finally:
             if connection is None:
-                self.read_only_pool.put(conn)
+                self.release_connection(conn)
 
     def dict(self, sql, parameters=None, connection=None):
         """
@@ -243,7 +258,7 @@ class DbManager:
         finally:
             if connection is None:
                 conn.row_factory = None
-                self.read_only_pool.put(conn)
+                self.release_connection(conn)
 
     # Helper to safely dump JSON if value exists
     def value(self, val):
