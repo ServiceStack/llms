@@ -113,7 +113,7 @@ def install_openai(ctx):
             ctx.log(json.dumps(response, indent=2))
             raise Exception("No 'data' field in response.")
 
-        async def chat(self, chat, provider=None):
+        async def chat(self, chat, provider=None, context=None):
             headers = self.get_headers(provider, chat)
 
             if chat["model"] in self.map_image_models:
@@ -145,7 +145,7 @@ def install_openai(ctx):
                     text = await response.text()
                     ctx.log(text[:1024] + (len(text) > 1024 and "..." or ""))
                     if response.status < 300:
-                        return ctx.log_json(await self.to_response(json.loads(text), chat, started_at))
+                        return ctx.log_json(await self.to_response(json.loads(text), chat, started_at, context=context))
                     else:
                         raise Exception(f"Failed to generate image {response.status}")
 

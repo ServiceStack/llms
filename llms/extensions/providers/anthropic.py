@@ -27,7 +27,7 @@ def install_anthropic(ctx):
                 self.headers["anthropic-version"] = "2023-06-01"
             self.chat_url = f"{self.api}/messages"
 
-        async def chat(self, chat):
+        async def chat(self, chat, context=None):
             chat["model"] = self.provider_model(chat["model"]) or chat["model"]
 
             chat = await self.process_chat(chat, provider_id=self.id)
@@ -149,10 +149,14 @@ def install_anthropic(ctx):
                     data=json.dumps(anthropic_request),
                     timeout=aiohttp.ClientTimeout(total=120),
                 ) as response:
-                    return ctx.log_json(self.to_response(await self.response_json(response), chat, started_at))
+                    return ctx.log_json(
+                        self.to_response(await self.response_json(response), chat, started_at, context=context)
+                    )
 
-        def to_response(self, response, chat, started_at):
+        def to_response(self, response, chat, started_at, context=None):
             """Convert Anthropic response format to OpenAI-compatible format."""
+            if context is not None:
+                context["providerResponse"] = response
             # Transform Anthropic response to OpenAI format
             ret = {
                 "id": response.get("id", ""),

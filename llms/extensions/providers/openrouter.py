@@ -39,7 +39,7 @@ def install_openrouter(ctx):
 
             return response
 
-        async def chat(self, chat, provider=None):
+        async def chat(self, chat, provider=None, context=None):
             headers = self.get_headers(provider, chat)
             if provider is not None:
                 chat["model"] = provider.provider_model(chat["model"]) or chat["model"]
@@ -67,6 +67,8 @@ def install_openrouter(ctx):
                 ) as response:
                     if metadata:
                         chat["metadata"] = metadata
-                    return ctx.log_json(self.to_response(await self.response_json(response), chat, started_at))
+                    return ctx.log_json(
+                        self.to_response(await self.response_json(response), chat, started_at, context=context)
+                    )
 
     ctx.add_provider(OpenRouterGenerator)

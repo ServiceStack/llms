@@ -40,7 +40,7 @@ def install_chutes(ctx):
                 "iLustMix",
             ]
 
-        async def chat(self, chat, provider=None):
+        async def chat(self, chat, provider=None, context=None):
             headers = {"Authorization": f"Bearer {self.api_key}"}
             if provider is not None:
                 headers["Authorization"] = f"Bearer {provider.api_key}"

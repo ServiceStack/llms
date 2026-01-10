@@ -54,7 +54,7 @@ def install_nvidia(ctx):
                     }
             raise Exception("No artifacts in response")
 
-        async def chat(self, chat, provider=None):
+        async def chat(self, chat, provider=None, context=None):
             headers = self.get_headers(provider, chat)
             if provider is not None:
                 chat["model"] = provider.provider_model(chat["model"]) or chat["model"]
@@ -100,6 +100,6 @@ def install_nvidia(ctx):
                     data=json.dumps(gen_request),
                     timeout=aiohttp.ClientTimeout(total=120),
                 ) as response:
-                    return self.to_response(await self.response_json(response), chat, started_at)
+                    return self.to_response(await self.response_json(response), chat, started_at, context=context)
 
     ctx.add_provider(NvidiaGenAi)

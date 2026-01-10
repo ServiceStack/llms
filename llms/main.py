@@ -375,7 +375,7 @@ async def process_chat(chat, provider_id=None):
     if "stream" not in chat:
         chat["stream"] = False
     # Some providers don't support empty tools
-    if "tools" in chat and len(chat["tools"]) == 0:
+    if "tools" in chat and (chat["tools"] is None or len(chat["tools"]) == 0):
         del chat["tools"]
     if "messages" not in chat:
         return chat
@@ -870,7 +870,7 @@ class GeneratorBase:
     def to_response(self, response, chat, started_at):
         raise NotImplementedError
 
-    async def chat(self, chat, provider=None):
+    async def chat(self, chat, provider=None, context=None):
         return {
             "choices": [
                 {
@@ -1030,7 +1030,7 @@ class OpenAiCompatible:
     def response_json(self, response):
         return response_json(response)
 
-    def to_response(self, response, chat, started_at):
+    def to_response(self, response, chat, started_at, context=None):
         if "metadata" not in response:
             response["metadata"] = {}
         response["metadata"]["duration"] = int((time.time() - started_at) * 1000)
@@ -1038,6 +1038,8 @@ class OpenAiCompatible:
             pricing = self.model_cost(chat["model"])
             if pricing and "input" in pricing and "output" in pricing:
                 response["metadata"]["pricing"] = f"{pricing['input']}/{pricing['output']}"
+        if context is not None:
+            context["providerResponse"] = response
         return response
 
     def chat_summary(self, chat):
@@ -1046,7 +1048,7 @@ class OpenAiCompatible:
     def process_chat(self, chat, provider_id=None):
         return process_chat(chat, provider_id)
 
-    async def chat(self, chat):
+    async def chat(self, chat, context=None):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
 
         modalities = chat.get("modalities") or []
@@ -1057,7 +1059,7 @@ class OpenAiCompatible:
                     continue
                 modality_provider = self.modalities.get(modality)
                 if modality_provider:
-                    return await modality_provider.chat(chat, self)
+                    return await modality_provider.chat(chat, self, context=context)
                 else:
                     raise Exception(f"Provider {self.name} does not support '{modality}' modality")
 
@@ -1111,7 +1113,7 @@ class OpenAiCompatible:
                 self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)
             ) as response:
                 chat["metadata"] = metadata
-                return self.to_response(await response_json(response), chat, started_at)
+                return self.to_response(await response_json(response), chat, started_at, context=context)
 
 
 class MistralProvider(OpenAiCompatible):
@@ -1379,21 +1381,7 @@ async def g_chat_completion(chat, context=None):
             accumulated_cost = 0.0
 
             # Inject global tools if present
-            current_chat = chat.copy()
-            if g_app.tool_definitions:
-                only_tools_str = context.get("tools", "all")
-                include_all_tools = only_tools_str == "all"
-                only_tools = only_tools_str.split(",")
-
-                if include_all_tools or len(only_tools) > 0:
-                    if "tools" not in current_chat:
-                        current_chat["tools"] = []
-
-                    existing_tools = {t["function"]["name"] for t in current_chat["tools"]}
-                    for tool_def in g_app.tool_definitions:
-                        name = tool_def["function"]["name"]
-                        if name not in existing_tools and (include_all_tools or name in only_tools):
-                            current_chat["tools"].append(tool_def)
+            current_chat = g_app.create_chat_with_tools(chat, use_tools=context.get("tools", "all"))
 
             # Apply pre-chat filters ONCE
             context["chat"] = current_chat
@@ -1409,7 +1397,7 @@ async def g_chat_completion(chat, context=None):
                 if should_cancel_thread(context):
                     return
 
-                response = await provider.chat(current_chat)
+                response = await provider.chat(current_chat, context=context)
 
                 if should_cancel_thread(context):
                     return
@@ -1431,8 +1419,9 @@ async def g_chat_completion(chat, context=None):
                 choice = response.get("choices", [])[0] if response.get("choices") else {}
                 message = choice.get("message", {})
                 tool_calls = message.get("tool_calls")
+                supports_tool_calls = model_info.get("tool_call", False)
 
-                if tool_calls:
+                if tool_calls and supports_tool_calls:
                     # Append the assistant's message with tool calls to history
                     if "messages" not in current_chat:
                         current_chat["messages"] = []
@@ -2483,6 +2472,27 @@ class AppExtensions:
         _dbg(f"exit({exit_code})")
         sys.exit(exit_code)
 
+    def create_chat_with_tools(self, chat, use_tools="all"):
+        # Inject global tools if present
+        current_chat = chat.copy()
+        tools = current_chat.get("tools")
+        if tools is None:
+            tools = current_chat["tools"] = []
+        if self.tool_definitions and len(tools) == 0:
+            include_all_tools = use_tools == "all"
+            only_tools_list = use_tools.split(",")
+
+            if include_all_tools or len(only_tools_list) > 0:
+                if "tools" not in current_chat:
+                    current_chat["tools"] = []
+
+                existing_tools = {t["function"]["name"] for t in current_chat["tools"]}
+                for tool_def in self.tool_definitions:
+                    name = tool_def["function"]["name"]
+                    if name not in existing_tools and (include_all_tools or name in only_tools_list):
+                        current_chat["tools"].append(tool_def)
+        return current_chat
+
 
 def handler_name(handler):
     if hasattr(handler, "__name__"):
@@ -2685,6 +2695,9 @@ class ExtensionContext:
 
     def to_content(self, result):
         return to_content(result)
+
+    def create_chat_with_tools(self, chat, use_tools="all"):
+        return self.app.create_chat_with_tools(chat, use_tools)
 
 
 def get_extensions_path():
