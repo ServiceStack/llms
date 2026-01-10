@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from llms.db import DbManager, order_by, select_columns, valid_columns, to_dto
+from llms.db import DbManager, order_by, select_columns, to_dto, valid_columns
 
 
 def with_user(data, user):
@@ -42,6 +42,7 @@ class AppDB:
                 "modalities": "JSON",
                 "messages": "JSON",
                 "args": "JSON",
+                "tools": "JSON",
                 "toolHistory": "JSON",
                 "cost": "REAL",
                 "inputTokens": "INTEGER",
@@ -55,6 +56,7 @@ class AppDB:
                 "metadata": "JSON",
                 "error": "TEXT",
                 "ref": "TEXT",
+                "providerResponse": "JSON",
             },
             "request": {
                 "id": "INTEGER",
@@ -273,12 +275,8 @@ class AppDB:
             return "WHERE user = :user", args
 
     def get_thread(self, id, user=None):
-        try:
-            sql_where, params = self.get_user_filter(user, {"id": id})
-            return self.db.one(f"SELECT * FROM thread {sql_where} AND id = :id", params)
-        except Exception as e:
-            self.ctx.err(f"get_thread ({id}, {user})", e)
-            return None
+        sql_where, params = self.get_user_filter(user, {"id": id})
+        return self.db.one(f"SELECT * FROM thread {sql_where} AND id = :id", params)
 
     def get_thread_column(self, id, column, user=None):
         if column not in self.columns["thread"]:

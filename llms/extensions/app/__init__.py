@@ -28,8 +28,46 @@ def install(ctx):
     if not get_db():
         return
 
+    thread_fields = [
+        "id",
+        "threadId",
+        "createdAt",
+        "updatedAt",
+        "title",
+        "model",
+        "modelInfo",
+        "modalities",
+        "messages",
+        "args",
+        "cost",
+        "inputTokens",
+        "outputTokens",
+        "stats",
+        "provider",
+        "providerModel",
+        "publishedAt",
+        "startedAt",
+        "completedAt",
+        "metadata",
+        "error",
+        "ref",
+    ]
+
     def thread_dto(row):
-        return row and g_db.to_dto(row, ["messages", "modalities", "args", "modelInfo", "stats", "metadata"])
+        return row and g_db.to_dto(
+            row,
+            [
+                "messages",
+                "tools",
+                "toolHistory",
+                "modalities",
+                "args",
+                "modelInfo",
+                "stats",
+                "metadata",
+                "providerResponse",
+            ],
+        )
 
     def request_dto(row):
         return row and g_db.to_dto(row, ["usage"])
@@ -46,7 +84,10 @@ def install(ctx):
         return messages
 
     async def query_threads(request):
-        rows = g_db.query_threads(request.query, user=ctx.get_username(request))
+        query = request.query.copy()
+        if "fields" not in query:
+            query["fields"] = thread_fields
+        rows = g_db.query_threads(query, user=ctx.get_username(request))
         dtos = [thread_dto(row) for row in rows]
         return web.json_response(dtos)
 
@@ -59,6 +100,13 @@ def install(ctx):
         return web.json_response(thread_dto(row) if row else "")
 
     ctx.add_post("threads", create_thread)
+
+    async def get_thread(request):
+        id = request.match_info["id"]
+        row = g_db.get_thread(id, user=ctx.get_username(request))
+        return web.json_response(thread_dto(row) if row else "")
+
+    ctx.add_get("threads/{id}", get_thread)
 
     async def update_thread(request):
         thread = await request.json()
@@ -98,8 +146,10 @@ def install(ctx):
         if not thread:
             raise Exception("Thread not found")
 
+        tools = chat.get("tools", thread.get("tools", []))
         update_thread = {
             "messages": messages,
+            "tools": tools,
             "startedAt": datetime.now(),
             "completedAt": None,
             "error": None,
@@ -149,6 +199,7 @@ def install(ctx):
             "messages": thread.get("messages"),
             "modalities": thread.get("modalities"),
             "systemPrompt": thread.get("systemPrompt"),
+            "tools": thread.get("tools"),  # tools request
             "metadata": metadata,
         }
         args = thread.get("args") or {}
@@ -163,7 +214,7 @@ def install(ctx):
             "user": user,
             "threadId": id,
             "metadata": metadata,
-            "tools": metadata.get("tools", "all"),
+            "tools": metadata.get("tools", "all"),  # only tools: all|none|<tool1>,<tool2>,...
         }
 
         # execute chat in background thread
@@ -277,6 +328,7 @@ def install(ctx):
         metadata = chat.get("metadata", {})
         model = chat.get("model", None)
         messages = timestamp_messages(chat.get("messages", []))
+        tools = chat.get("tools", [])
         title = context.get("title") or prompt_to_title(ctx.last_user_prompt(chat) if chat else None)
         started_at = context.get("startedAt")
         if not started_at:
@@ -289,6 +341,7 @@ def install(ctx):
                 "modelInfo": model_info,
                 "title": title,
                 "messages": messages,
+                "tools": tools,
                 "systemPrompt": ctx.chat_to_system_prompt(chat),
                 "modalities": chat.get("modalities", ["text"]),
                 "startedAt": started_at,
@@ -303,6 +356,7 @@ def install(ctx):
                 "modelInfo": model_info,
                 "startedAt": started_at,
                 "messages": messages,
+                "tools": tools,
                 "completedAt": None,
                 "error": None,
                 "metadata": metadata,
@@ -336,6 +390,29 @@ def install(ctx):
             context["completed"] = True
 
     ctx.register_chat_tool_filter(tool_request)
+
+    def truncate_long_strings(obj, max_length=10000):
+        """
+        Recursively traverse a dictionary/list structure and replace
+        string values longer than max_length with their length indicator.
+
+        Args:
+            obj: The object to process (dict, list, or other value)
+            max_length: Maximum string length before truncation (default 10000)
+
+        Returns:
+            A new object with long strings replaced by "({length})"
+        """
+        if isinstance(obj, dict):
+            return {key: truncate_long_strings(value, max_length) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [truncate_long_strings(item, max_length) for item in obj]
+        elif isinstance(obj, str):
+            if len(obj) > max_length:
+                return f"({len(obj)})"
+            return obj
+        else:
+            return obj
 
     async def chat_response(openai_response, context):
         ctx.dbg("create_response")
@@ -388,7 +465,6 @@ def install(ctx):
             "totalTokens": total_tokens,
             "usage": usage,
             "completedAt": completed_at,
-            "toolHistory": o.get("tool_history", None),
             "ref": o.get("id", None),
         }
         tasks.append(g_db.create_request_async(request, user=user))
@@ -418,15 +494,23 @@ def install(ctx):
             }
             messages.append(assistant_message)
 
+            tools = chat.get("tools", [])
             update_thread = {
                 "model": model,
                 "providerModel": o.get("model"),
                 "modelInfo": model_info,
                 "messages": messages,
+                "tools": tools,
                 "completedAt": completed_at,
             }
+            tool_history = o.get("tool_history", None)
+            if tool_history:
+                update_thread["toolHistory"] = tool_history
             if "error" in metadata:
                 update_thread["error"] = metadata["error"]
+            provider_response = context.get("providerResponse", None)
+            if provider_response:
+                update_thread["providerResponse"] = truncate_long_strings(provider_response)
             tasks.append(g_db.update_thread_async(thread_id, update_thread, user=user))
         else:
             ctx.dbg("Missing thread_id")

@@ -15,6 +15,7 @@ export const nextId = (() => {
 
 
 const threads = ref([])
+const threadDetails = ref({})
 const currentThread = ref(null)
 const isLoading = ref(false)
 
@@ -196,7 +197,7 @@ async function loadThreads() {
     isLoading.value = true
 
     try {
-        const api = await ext.getJson('/threads?take=50')
+        const api = await ext.getJson('/threads?take=30')
         threads.value = api.response || []
         return threads.value
     } finally {
@@ -239,6 +240,7 @@ async function setCurrentThreadFromRoute(threadId, router) {
         return null
     }
 
+    loadThreadDetails(threadId)
     const thread = setCurrentThread(threadId)
     if (thread) {
         return thread
@@ -307,7 +309,7 @@ function getLatestCachedThread() {
     return threads.value[0]
 }
 
-async function startNewThread({ title, model, redirect }) {
+async function startNewThread({ title, model, tools, redirect }) {
     if (!model) {
         console.error('No model selected')
         return
@@ -330,6 +332,7 @@ async function startNewThread({ title, model, redirect }) {
         title,
         model: model.name,
         info: ctx.utils.toModelInfo(model),
+        tools,
     })
 
     console.log('newThread', newThread, model)
@@ -361,6 +364,19 @@ async function queueChat(ctxRequest, options = {}) {
     return api
 }
 
+async function loadThreadDetails(id, opt = null) {
+    if (!threadDetails.value[id] || opt?.force) {
+        const api = await ctx.getJson(`/ext/app/threads/${id}`)
+        if (api.response) {
+            threadDetails.value[id] = api.response
+        }
+        if (api.error) {
+            console.error(api.error)
+        }
+    }
+    return threadDetails.value[id]
+}
+
 // Export the store
 export function useThreadStore() {
     return {
@@ -388,6 +404,8 @@ export function useThreadStore() {
         startNewThread,
         replaceThread,
         queueChat,
+        threadDetails,
+        loadThreadDetails,
         isWatchingThread,
         startWatchingThread,
         stopWatchingThread,
