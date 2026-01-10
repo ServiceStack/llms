@@ -79,15 +79,60 @@ def install_google(ctx):
             if "Authorization" in self.headers:
                 del self.headers["Authorization"]
 
-        async def chat(self, chat):
+        def provider_model(self, model):
+            if model.lower().startswith("gemini-"):
+                return model
+            return super().provider_model(model)
+
+        def model_info(self, model):
+            info = super().model_info(model)
+            if info:
+                return info
+            if model.lower().startswith("gemini-"):
+                return {
+                    "id": model,
+                    "name": model,
+                    "cost": {"input": 0, "output": 0},
+                }
+            return None
+
+        async def chat(self, chat, context=None):
             chat["model"] = self.provider_model(chat["model"]) or chat["model"]
+            model_info = (context.get("modelInfo") if context is not None else None) or self.model_info(chat["model"])
 
             chat = await self.process_chat(chat)
             generation_config = {}
+            tools = None
+            supports_tool_calls = model_info.get("tool_call", False)
+
+            if "tools" in chat and supports_tool_calls:
+                function_declarations = []
+                gemini_tools = {}
+
+                for tool in chat["tools"]:
+                    if tool["type"] == "function":
+                        f = tool["function"]
+                        function_declarations.append(
+                            {
+                                "name": f["name"],
+                                "description": f.get("description"),
+                                "parameters": f.get("parameters"),
+                            }
+                        )
+                    elif tool["type"] == "file_search":
+                        gemini_tools["file_search"] = tool["file_search"]
+
+                if function_declarations:
+                    gemini_tools["function_declarations"] = function_declarations
+
+                tools = [gemini_tools] if gemini_tools else None
 
             # Filter out system messages and convert to proper Gemini format
             contents = []
             system_prompt = None
+
+            # Track tool call IDs to names for response mapping
+            tool_id_map = {}
 
             async with aiohttp.ClientSession() as session:
                 for message in chat["messages"]:
@@ -101,8 +146,55 @@ def install_google(ctx):
                         elif isinstance(content, str):
                             system_prompt = content
                     elif "content" in message:
+                        role = "user"
+                        if "role" in message:
+                            if message["role"] == "user":
+                                role = "user"
+                            elif message["role"] == "assistant":
+                                role = "model"
+                            elif message["role"] == "tool":
+                                role = "function"
+
+                        parts = []
+
+                        # Handle tool calls in assistant messages
+                        if message.get("role") == "assistant" and "tool_calls" in message:
+                            for tool_call in message["tool_calls"]:
+                                tool_id_map[tool_call["id"]] = tool_call["function"]["name"]
+                                parts.append(
+                                    {
+                                        "functionCall": {
+                                            "name": tool_call["function"]["name"],
+                                            "args": json.loads(tool_call["function"]["arguments"]),
+                                        }
+                                    }
+                                )
+
+                        # Handle tool responses from user
+                        if message.get("role") == "tool":
+                            # Gemini expects function response in 'functionResponse' part
+                            # We need to find the name associated with this tool_call_id
+                            tool_call_id = message.get("tool_call_id")
+                            name = tool_id_map.get(tool_call_id)
+                            # If we can't find the name (maybe from previous turn not in history or restart),
+                            # we might have an issue. But let's try to proceed.
+                            # Fallback: if we can't find the name, skip or try to infer?
+                            # Gemini strict validation requires the name.
+                            if name:
+                                # content is the string response
+                                # Some implementations pass the content directly.
+                                # Google docs say: response: { "name": "...", "content": { ... } }
+                                # Actually "response" field in functionResponse is a Struct/Map.
+                                parts.append(
+                                    {
+                                        "functionResponse": {
+                                            "name": name,
+                                            "response": {"name": name, "content": message["content"]},
+                                        }
+                                    }
+                                )
+
                         if isinstance(message["content"], list):
-                            parts = []
                             for item in message["content"]:
                                 if "type" in item:
                                     if item["type"] == "image_url" and "image_url" in item:
@@ -142,29 +234,23 @@ def install_google(ctx):
                                 if "text" in item:
                                     text = item["text"]
                                     parts.append({"text": text})
-                            if len(parts) > 0:
-                                contents.append(
-                                    {
-                                        "role": message["role"]
-                                        if "role" in message and message["role"] == "user"
-                                        else "model",
-                                        "parts": parts,
-                                    }
-                                )
-                        else:
-                            content = message["content"]
+                        elif message["content"]:  # String content
+                            parts.append({"text": message["content"]})
+
+                        if len(parts) > 0:
                             contents.append(
                                 {
-                                    "role": message["role"]
-                                    if "role" in message and message["role"] == "user"
-                                    else "model",
-                                    "parts": [{"text": content}],
+                                    "role": role,
+                                    "parts": parts,
                                 }
                             )
 
                 gemini_chat = {
                     "contents": contents,
                 }
+
+                if tools:
+                    gemini_chat["tools"] = tools
 
                 if self.safety_settings:
                     gemini_chat["safetySettings"] = self.safety_settings
@@ -192,18 +278,12 @@ def install_google(ctx):
                 if len(generation_config) > 0:
                     gemini_chat["generationConfig"] = generation_config
 
-                if "tools" in chat:
-                    # gemini_chat["tools"] = chat["tools"]
-                    ctx.log("Error: tools not supported in Gemini")
-                elif self.tools:
-                    # gemini_chat["tools"] = self.tools.copy()
-                    ctx.log("Error: tools not supported in Gemini")
-
                 if "modalities" in chat:
                     generation_config["responseModalities"] = [modality.upper() for modality in chat["modalities"]]
                     if "image" in chat["modalities"] and "image_config" in chat:
                         # delete thinkingConfig
-                        del generation_config["thinkingConfig"]
+                        if "thinkingConfig" in generation_config:
+                            del generation_config["thinkingConfig"]
                         config_map = {
                             "aspect_ratio": "aspectRatio",
                             "image_size": "imageSize",
@@ -212,10 +292,15 @@ def install_google(ctx):
                             config_map[k]: v for k, v in chat["image_config"].items() if k in config_map
                         }
                     if "audio" in chat["modalities"] and self.speech_config:
-                        del generation_config["thinkingConfig"]
+                        if "thinkingConfig" in generation_config:
+                            del generation_config["thinkingConfig"]
                         generation_config["speechConfig"] = self.speech_config.copy()
                         # Currently Google Audio Models only accept AUDIO
                         generation_config["responseModalities"] = ["AUDIO"]
+
+                # Ensure generationConfig is set if we added anything to it
+                if len(generation_config) > 0:
+                    gemini_chat["generationConfig"] = generation_config
 
                 started_at = int(time.time() * 1000)
                 gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
@@ -237,6 +322,8 @@ def install_google(ctx):
                             timeout=aiohttp.ClientTimeout(total=120),
                         ) as res:
                             obj = await self.response_json(res)
+                            if context is not None:
+                                context["providerResponse"] = obj
                     except Exception as e:
                         ctx.log(f"Error: {res.status} {res.reason}: {e}")
                         text = await res.text()
@@ -271,7 +358,7 @@ def install_google(ctx):
                     "model": obj.get("modelVersion", chat["model"]),
                 }
                 choices = []
-                for i, candidate in enumerate(obj["candidates"]):
+                for i, candidate in enumerate(obj.get("candidates", [])):
                     role = "assistant"
                     if "content" in candidate and "role" in candidate["content"]:
                         role = "assistant" if candidate["content"]["role"] == "model" else candidate["content"]["role"]
@@ -281,6 +368,8 @@ def install_google(ctx):
                     reasoning = ""
                     images = []
                     audios = []
+                    tool_calls = []
+
                     if "content" in candidate and "parts" in candidate["content"]:
                         text_parts = []
                         reasoning_parts = []
@@ -290,6 +379,16 @@ def install_google(ctx):
                                     reasoning_parts.append(part["text"])
                                 else:
                                     text_parts.append(part["text"])
+                            if "functionCall" in part:
+                                fc = part["functionCall"]
+                                tool_calls.append(
+                                    {
+                                        "id": f"call_{len(tool_calls)}_{int(time.time())}",  # Gemini doesn't return ID, generate one
+                                        "type": "function",
+                                        "function": {"name": fc["name"], "arguments": json.dumps(fc["args"])},
+                                    }
+                                )
+
                             if "inlineData" in part:
                                 inline_data = part["inlineData"]
                                 mime_type = inline_data.get("mimeType", "image/png")
@@ -354,7 +453,7 @@ def install_google(ctx):
                         "finish_reason": candidate.get("finishReason", "stop"),
                         "message": {
                             "role": role,
-                            "content": content,
+                            "content": content if content else None,
                         },
                     }
                     if reasoning:
@@ -363,6 +462,10 @@ def install_google(ctx):
                         choice["message"]["images"] = images
                     if len(audios) > 0:
                         choice["message"]["audios"] = audios
+                    if len(tool_calls) > 0:
+                        choice["message"]["tool_calls"] = tool_calls
+                        # If we have tool calls, content can be null but message should probably exist
+
                     choices.append(choice)
                 response["choices"] = choices
                 if "usageMetadata" in obj:
