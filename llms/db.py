@@ -6,7 +6,7 @@ from threading import Event, Thread
 
 
 def create_reader_connection(db_path):
-    conn = sqlite3.connect(db_path, timeout=1.0)  # Lower - reads should be fast
+    conn = sqlite3.connect(db_path, timeout=1.0, check_same_thread=False)  # Lower - reads should be fast
     conn.execute("PRAGMA query_only=1")  # Read-only optimization
     return conn
 
