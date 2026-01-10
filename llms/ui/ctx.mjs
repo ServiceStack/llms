@@ -136,6 +136,7 @@ export class AppContext {
         this.chatErrorFilters = []
         this.createThreadFilters = []
         this.updateThreadFilters = []
+        this.threadFooterComponents = {}
         this.top = {}
         this.left = {}
         this.layout = reactive(storageObject(`llms.layout`))
@@ -295,6 +296,9 @@ export class AppContext {
         }
         this.toggleLayout('left', toggle)
         return toggle
+    }
+    setThreadFooters(components) {
+        Object.assign(this.threadFooterComponents, components)
     }
 
     createErrorStatus(status) {

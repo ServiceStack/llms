@@ -371,6 +371,7 @@ export default {
                                 </div>
                             </div>
                         </div>
+                        <ThreadFooter v-if="$threads.threadDetails.value[currentThread.id]" :thread="$threads.threadDetails.value[currentThread.id]" />
                     </div>
                 </div>
 

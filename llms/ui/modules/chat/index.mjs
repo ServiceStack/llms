@@ -782,6 +782,21 @@ const HomeTools = {
     `,
 }
 
+const ThreadFooter = {
+    template: `
+    <div>
+        <div v-for="(componentDef,id) in $ctx.threadFooterComponents">
+            <component v-if="componentDef.show(thread)" :is="componentDef.component" :thread="thread" />
+        </div>
+    </div>
+    `,
+    props: {
+        thread: Object,
+    },
+    setup(props) {
+    }
+}
+
 export default {
     /**@param {AppContext} ctx */
     install(ctx) {
@@ -792,6 +807,7 @@ export default {
             ChatBody,
             HomeTools,
             Home,
+            ThreadFooter,
         })
         ctx.setGlobals({
             chat: useChatPrompt(ctx)
@@ -823,6 +839,8 @@ export default {
         if (prefs.model) {
             ctx.state.selectedModel = prefs.model
         }
-        ctx.state.selectedAspectRatio = prefs.aspectRatio || '1:1'
+        ctx.setState({
+            selectedAspectRatio: prefs.aspectRatio || '1:1',
+        })
     }
 }
