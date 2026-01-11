@@ -1288,6 +1288,8 @@ def to_error_message(e):
     # check if has 'message' attribute
     if hasattr(e, "message"):
         return e.message
+    if hasattr(e, "status"):
+        return str(e.status)
     return str(e)
 
 
