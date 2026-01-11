@@ -30,6 +30,7 @@ export class ExtensionScope {
         return this.ctx.ai.get(combinePaths(this.baseUrl, url), options)
     }
     delete(url, options) {
+        this.ctx.clearError()
         return this.ctx.ai.get(combinePaths(this.baseUrl, url), {
             ...options,
             method: 'DELETE'
@@ -39,41 +40,49 @@ export class ExtensionScope {
         return this.ctx.ai.getJson(combinePaths(this.baseUrl, url), options)
     }
     async deleteJson(url, options) {
+        this.ctx.clearError()
         return this.ctx.ai.getJson(combinePaths(this.baseUrl, url), {
             ...options,
             method: 'DELETE'
         })
     }
     post(url, options) {
+        this.ctx.clearError()
         return this.ctx.ai.post(combinePaths(this.baseUrl, url), options)
     }
     put(url, options) {
+        this.ctx.clearError()
         return this.ctx.ai.post(combinePaths(this.baseUrl, url), {
             ...options,
             method: 'PUT'
         })
     }
     patch(url, options) {
+        this.ctx.clearError()
         return this.ctx.ai.post(combinePaths(this.baseUrl, url), {
             ...options,
             method: 'PATCH'
         })
     }
     async postForm(url, options) {
+        this.ctx.clearError()
         return await this.ctx.ai.postForm(combinePaths(this.baseUrl, url), options)
     }
     async postJson(url, body) {
+        this.ctx.clearError()
         return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), {
             body: body instanceof FormData ? body : JSON.stringify(body)
         })
     }
     async putJson(url, body) {
+        this.ctx.clearError()
         return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), {
             method: 'PUT',
             body: body instanceof FormData ? body : JSON.stringify(body)
         })
     }
     async patchJson(url, body) {
+        this.ctx.clearError()
         return this.ctx.ai.postJson(combinePaths(this.baseUrl, url), {
             method: 'PATCH',
             body: body instanceof FormData ? body : JSON.stringify(body)
