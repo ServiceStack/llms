@@ -116,6 +116,9 @@ function replaceThread(thread) {
     if (currentThread.value?.id === thread.id) {
         currentThread.value = thread
     }
+    if (thread.completedAt || thread.error) {
+        threadDetails.value[thread.id] = thread
+    }
     startWatchingThread()
     return thread
 }

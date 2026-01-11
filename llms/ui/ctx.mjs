@@ -136,6 +136,7 @@ export class AppContext {
         this.chatErrorFilters = []
         this.createThreadFilters = []
         this.updateThreadFilters = []
+        this.threadHeaderComponents = {}
         this.threadFooterComponents = {}
         this.top = {}
         this.left = {}
@@ -296,6 +297,9 @@ export class AppContext {
         }
         this.toggleLayout('left', toggle)
         return toggle
+    }
+    setThreadHeaders(components) {
+        Object.assign(this.threadHeaderComponents, components)
     }
     setThreadFooters(components) {
         Object.assign(this.threadFooterComponents, components)

@@ -38,6 +38,7 @@ def install(ctx):
         "modelInfo",
         "modalities",
         "messages",
+        "tools",
         "args",
         "cost",
         "inputTokens",

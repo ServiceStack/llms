@@ -1,5 +1,5 @@
 
-import { ref, watch, nextTick, inject } from 'vue'
+import { ref, watch, computed, nextTick, inject } from 'vue'
 import { $$, createElement, lastRightPart, ApiResult, createErrorStatus, pick } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
 import ChatBody from './ChatBody.mjs'
@@ -782,18 +782,79 @@ const HomeTools = {
     `,
 }
 
-const ThreadFooter = {
+const ThreadHeader = {
     template: `
-    <div>
-        <div v-for="(componentDef,id) in $ctx.threadFooterComponents">
-            <component v-if="componentDef.show(thread)" :is="componentDef.component" :thread="thread" />
+    <div v-if="showComponents.length" class="flex items-center justify-center gap-2">
+        <div v-for="component in showComponents">
+            <component :is="component" :thread="thread" />
         </div>
     </div>
     `,
-    props: {
-        thread: Object,
-    },
+    props: { thread: Object },
     setup(props) {
+        const ctx = inject('ctx')
+        const showComponents = computed(() => {
+            const args = { thread: props.thread }
+            return Object.values(ctx.threadHeaderComponents).filter(def => def.show(args)).map(def => def.component)
+        })
+        return {
+            showComponents,
+        }
+    }
+}
+
+const ThreadFooter = {
+    template: `
+    <div v-if="showComponents.length">
+        <div v-for="component in showComponents">
+            <component :is="component" :thread="thread" />
+        </div>
+    </div>
+    `,
+    props: { thread: Object },
+    setup(props) {
+        const ctx = inject('ctx')
+        const showComponents = computed(() => {
+            const args = { thread: props.thread }
+            return Object.values(ctx.threadFooterComponents).filter(def => def.show(args)).map(def => def.component)
+        })
+        return {
+            showComponents,
+        }
+    }
+}
+
+const ThreadModel = {
+    template: `
+    <span @click="$chat.setSelectedModel({ name: thread.model})" 
+        class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors border hover:border-gray-300 dark:hover:border-gray-700">
+        <ProviderIcon class="size-4 mr-1" :provider="$chat.getProviderForModel(thread.model)" />
+        {{thread.model}}
+    </span>
+    `,
+    props: { thread: Object },
+}
+
+const ThreadTools = {
+    template: `
+    <div class="text-sm flex items-center gap-1 flex items-center px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 border cursor-help" :title="title">
+        <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 10h3V7L6.5 3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1-3 3l-6-6a6 6 0 0 1-8-8z"/></svg>
+        <span v-if="toolFns.length==1">{{toolFns[0].function.name}}</span>
+        <span v-else-if="toolFns.length>1">{{toolFns.length}} Tools</span>
+    </div>
+    `,
+    props: { thread: Object },
+    setup(props) {
+        const toolFns = computed(() => props.thread.tools.filter(x => x.type === 'function'))
+        const title = computed(() => toolFns.value.length == 1
+            ? toolFns.value[0].function.name
+            : toolFns.value.length > 1
+                ? toolFns.value.map(x => x.function.name).join('\n')
+                : '')
+        return {
+            toolFns,
+            title,
+        }
     }
 }
 
@@ -807,6 +868,7 @@ export default {
             ChatBody,
             HomeTools,
             Home,
+            ThreadHeader,
             ThreadFooter,
         })
         ctx.setGlobals({
@@ -834,6 +896,17 @@ export default {
             { path: '/', component: Home, meta },
             { path: '/c/:id', component: ChatBody, meta },
         ])
+
+        ctx.setThreadHeaders({
+            model: {
+                component: ThreadModel,
+                show({ thread }) { return thread.messages.length && thread.model }
+            },
+            tools: {
+                component: ThreadTools,
+                show({ thread }) { return (thread.tools || []).filter(x => x.type === 'function').length }
+            }
+        })
 
         const prefs = ctx.getPrefs()
         if (prefs.model) {
