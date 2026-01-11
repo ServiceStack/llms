@@ -39,7 +39,7 @@ def writer_thread(ctx, db_path, task_queue, stop_event):
                 sql, args, callback = task  # Optional callback for results
 
                 try:
-                    ctx.dbg("SQL>" + ("\n" if "\n" in sql else " ") + sql + ("\n" if args else "") + str(args))
+                    ctx.dbg("SQL>" + ("\n" if "\n" in sql else " ") + sql + ("\n" if args else " ") + str(args))
                     cursor = conn.execute(sql, args)
                     conn.commit()
                     ctx.dbg(f"lastrowid {cursor.lastrowid}, rowcount {cursor.rowcount}")
@@ -172,7 +172,9 @@ class DbManager:
 
     def log_sql(self, sql, parameters=None):
         if self.ctx.debug:
-            self.ctx.dbg("SQL>" + ("\n" if "\n" in sql else " ") + sql + ("\n" if parameters else "") + str(parameters))
+            self.ctx.dbg(
+                "SQL>" + ("\n" if "\n" in sql else " ") + sql + ("\n" if parameters else " ") + str(parameters)
+            )
 
     def exec(self, connection, sql, parameters=None):
         self.log_sql(sql, parameters)
