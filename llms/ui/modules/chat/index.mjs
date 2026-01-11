@@ -900,7 +900,7 @@ export default {
         ctx.setThreadHeaders({
             model: {
                 component: ThreadModel,
-                show({ thread }) { return thread.messages.length && thread.model }
+                show({ thread }) { return thread.model }
             },
             tools: {
                 component: ThreadTools,
