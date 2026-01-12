@@ -1,10 +1,11 @@
 import json
+import os
 import sqlite3
 import threading
 from queue import Empty, Queue
 from threading import Event, Thread
 
-POOL = True
+POOL = os.getenv("LLMS_POOL", "0") == "1"
 
 
 def create_reader_connection(db_path):
