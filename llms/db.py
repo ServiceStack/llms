@@ -5,7 +5,7 @@ import threading
 from queue import Empty, Queue
 from threading import Event, Thread
 
-POOL = os.getenv("LLMS_POOL", "0") == "1"
+POOL = os.getenv("LLMS_POOL", "1") == "1"
 
 
 def create_reader_connection(db_path):
@@ -292,17 +292,20 @@ class DbManager:
     async def insert_async(self, table, columns, info):
         event = threading.Event()
 
-        ret = [None]
+        ret = [None, None]
 
         def cb(lastrowid, rowcount, error=None):
             nonlocal ret
             if error:
-                raise error
-            ret[0] = lastrowid
+                ret[1] = error
+            else:
+                ret[0] = lastrowid
             event.set()
 
         self.insert(table, columns, info, cb)
         event.wait()
+        if ret[1]:
+            raise ret[1]
         return ret[0]
 
     def update(self, table, columns, info, callback=None):
@@ -326,17 +329,20 @@ class DbManager:
     async def update_async(self, table, columns, info):
         event = threading.Event()
 
-        ret = [None]
+        ret = [None, None]
 
         def cb(lastrowid, rowcount, error=None):
             nonlocal ret
             if error:
-                raise error
-            ret[0] = rowcount
+                ret[1] = error
+            else:
+                ret[0] = rowcount
             event.set()
 
         self.update(table, columns, info, cb)
         event.wait()
+        if ret[1]:
+            raise ret[1]
         return ret[0]
 
     def close(self):
