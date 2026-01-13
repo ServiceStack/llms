@@ -620,9 +620,9 @@ def install(ctx):
 
     ctx.add_index_footer(
         f"""
-        <link rel="stylesheet" href="{ctx.ext_prefix}/codemirror/lib/codemirror.css">
+        <link rel="stylesheet" href="{ctx.ext_prefix}/codemirror/codemirror.css">
         <link rel="stylesheet" href="{ctx.ext_prefix}/codemirror/theme/mocha.css">
-        <script src="{ctx.ext_prefix}/codemirror/lib/codemirror.js"></script>
+        <script src="{ctx.ext_prefix}/codemirror/codemirror.js"></script>
         <script src="{ctx.ext_prefix}/codemirror/mode/clike/clike.js"></script>
         <script src="{ctx.ext_prefix}/codemirror/mode/javascript/javascript.js"></script>
         <script src="{ctx.ext_prefix}/codemirror/mode/python/python.js"></script>
