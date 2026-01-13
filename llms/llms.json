@@ -16,7 +16,7 @@
             "User-Agent": "llmspy.org/3.0"
         },
         "text": {
-            "model": "kimi-k2",
+            "model": "Kimi K2 Instruct",
             "messages": [
                 {
                     "role": "user",
