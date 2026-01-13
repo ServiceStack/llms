@@ -40,6 +40,8 @@ docker-compose up -d
 Multi-stage Docker build that:
 - Uses Python 3.11 slim base image
 - Builds the package from source
+- Installs `bun` runtime
+- Installs `dotnet-sdk` 10.0
 - Runs as non-root user for security
 - Includes health checks
 - Exposes port 8000
