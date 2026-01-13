@@ -115,6 +115,7 @@ export function addCopyButtons() {
 
 export function useChatPrompt(ctx) {
     const messageText = ref('')
+    const promptHistory = ref([])
     const attachedFiles = ref([])
     const hasImage = () => attachedFiles.value.some(f => imageExts.includes(lastRightPart(f.name, '.')))
     const hasAudio = () => attachedFiles.value.some(f => audioExts.includes(lastRightPart(f.name, '.')))
@@ -363,6 +364,7 @@ export function useChatPrompt(ctx) {
         createContent,
         createRequest,
         applySettings,
+        promptHistory,
         messageText,
         attachedFiles,
         editingMessage,
@@ -420,6 +422,7 @@ const ChatPrompt = {
                     <textarea
                         ref="refMessage"
                         v-model="messageText"
+                        @keydown="onKeyDown"
                         @keydown.enter.exact.prevent="sendMessage"
                         @keydown.enter.shift.exact="addNewLine"
                         @paste="onPaste"
@@ -491,6 +494,7 @@ const ChatPrompt = {
         const config = ctx.state.config
         const {
             messageText,
+            promptHistory,
             hasImage,
             hasAudio,
             hasFile,
@@ -500,6 +504,8 @@ const ChatPrompt = {
         const fileInput = ref(null)
         const refMessage = ref(null)
         const showSettings = ref(false)
+        const historyIndex = ref(-1)
+        const isNavigatingHistory = ref(false)
 
         // File attachments (+) handlers
         const triggerFilePicker = () => {
@@ -639,6 +645,14 @@ const ChatPrompt = {
             // 1. Construct Structured Content (Text + Attachments)
             let text = messageText.value.trim()
 
+            if (text) {
+                const idx = promptHistory.value.indexOf(text)
+                if (idx !== -1) {
+                    promptHistory.value.splice(idx, 1)
+                }
+                promptHistory.value.push(text)
+            }
+
             messageText.value = ''
             let content = ctx.chat.createContent({ text, files: ctx.chat.attachedFiles.value })
 
@@ -742,6 +756,49 @@ const ChatPrompt = {
             //messageText.value += '\n'
         }
 
+        const onKeyDown = (e) => {
+            if (e.key === 'ArrowUp') {
+                if (refMessage.value.selectionStart === 0 && refMessage.value.selectionEnd === 0) {
+                    if (promptHistory.value.length > 0) {
+                        e.preventDefault()
+                        if (historyIndex.value === -1) {
+                            historyIndex.value = promptHistory.value.length - 1
+                        } else {
+                            historyIndex.value = Math.max(0, historyIndex.value - 1)
+                        }
+                        isNavigatingHistory.value = true
+                        messageText.value = promptHistory.value[historyIndex.value]
+                        nextTick(() => {
+                            refMessage.value.setSelectionRange(0, 0)
+                        })
+                    }
+                }
+            } else if (e.key === 'ArrowDown') {
+                if (historyIndex.value !== -1) {
+                    e.preventDefault()
+                    if (historyIndex.value < promptHistory.value.length - 1) {
+                        historyIndex.value++
+                        isNavigatingHistory.value = true
+                        messageText.value = promptHistory.value[historyIndex.value]
+                    } else {
+                        historyIndex.value = -1
+                        isNavigatingHistory.value = true
+                        messageText.value = ''
+                    }
+                    nextTick(() => {
+                        refMessage.value.setSelectionRange(0, 0)
+                    })
+                }
+            }
+        }
+
+        watch(messageText, (newValue) => {
+            if (!isNavigatingHistory.value) {
+                historyIndex.value = -1
+            }
+            isNavigatingHistory.value = false
+        })
+
         watch(() => ctx.state.selectedAspectRatio, newValue => {
             ctx.setPrefs({ aspectRatio: newValue })
         })
@@ -769,6 +826,7 @@ const ChatPrompt = {
             removeAttachment,
             sendMessage,
             addNewLine,
+            onKeyDown,
             imageAspectRatios,
         }
     }
