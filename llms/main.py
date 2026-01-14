@@ -1829,7 +1829,10 @@ def print_status():
 
 
 def home_llms_path(filename):
-    return f"{os.getenv('HOME')}/.llms/{filename}"
+    home_dir = os.getenv("LLMS_HOME", os.path.join(os.getenv("HOME"), ".llms"))
+    relative_path = os.path.join(home_dir, filename)
+    # return resolved full absolute path
+    return os.path.abspath(os.path.normpath(relative_path))
 
 
 def get_cache_path(path=""):
@@ -2703,7 +2706,7 @@ class ExtensionContext:
 
 
 def get_extensions_path():
-    return os.getenv("LLMS_EXTENSIONS_DIR", os.path.join(Path.home(), ".llms", "extensions"))
+    return os.getenv("LLMS_EXTENSIONS_DIR", home_llms_path("extensions"))
 
 
 def get_disabled_extensions():
