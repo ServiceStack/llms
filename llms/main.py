@@ -2734,6 +2734,11 @@ def get_extensions_dirs():
     disabled_extensions = get_disabled_extensions()
 
     builtin_extensions_dir = _ROOT / "extensions"
+    if not os.path.exists(builtin_extensions_dir):
+        # look for local ./extensions dir from script
+        builtin_extensions_dir = os.path.join(os.path.dirname(__file__), "extensions")
+
+    _dbg(f"Loading extensions from {builtin_extensions_dir}")
     if os.path.exists(builtin_extensions_dir):
         for item in os.listdir(builtin_extensions_dir):
             if os.path.isdir(os.path.join(builtin_extensions_dir, item)):
