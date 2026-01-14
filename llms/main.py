@@ -3471,8 +3471,10 @@ def main():
                     cache_root = Path(get_cache_path())
                     requested_path = Path(info_path).resolve()
                     if not str(requested_path).startswith(str(cache_root)):
+                        _dbg(f"Forbidden: {requested_path} is not in {cache_root}")
                         return web.Response(text="403: Forbidden", status=403)
-                except Exception:
+                except Exception as e:
+                    _err(f"Forbidden: {requested_path} is not in {cache_root}", e)
                     return web.Response(text="403: Forbidden", status=403)
 
                 with open(info_path) as f:
@@ -3487,8 +3489,10 @@ def main():
                 cache_root = Path(get_cache_path())
                 requested_path = Path(full_path).resolve()
                 if not str(requested_path).startswith(str(cache_root)):
+                    _dbg(f"Forbidden: {requested_path} is not in {cache_root}")
                     return web.Response(text="403: Forbidden", status=403)
             except Exception:
+                _err(f"Forbidden: {requested_path} is not in {cache_root}", e)
                 return web.Response(text="403: Forbidden", status=403)
 
             mimetype = get_file_mime_type(full_path)
