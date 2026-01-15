@@ -466,11 +466,11 @@ const ChatPrompt = {
                     </div>
 
                     <!-- Image Aspect Ratio Selector -->
-                    <div v-if="$chat.canGenerateImage(model)" class="min-w-[120px]">
+                    <div v-if="$chat.canGenerateImage(model)">
                         <select name="aspect_ratio" v-model="$state.selectedAspectRatio" 
                                 class="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300 pl-2 pr-6 py-1 focus:ring-blue-500 focus:border-blue-500">
                             <option v-for="(ratio, size) in imageAspectRatios" :key="size" :value="size">
-                                {{ size }} ({{ ratio }})
+                                {{ ratio }}
                             </option>
                         </select>
                     </div>
