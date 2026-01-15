@@ -757,6 +757,12 @@ def chat_to_username(chat):
     return None
 
 
+def chat_to_aspect_ratio(chat):
+    if "image_config" in chat and "aspect_ratio" in chat["image_config"]:
+        return chat["image_config"]["aspect_ratio"]
+    return None
+
+
 def last_user_prompt(chat):
     prompt = ""
     if "messages" in chat:
@@ -2539,8 +2545,8 @@ class ExtensionContext:
     def to_file_info(self, chat, info=None, response=None):
         return to_file_info(chat, info=info, response=response)
 
-    def save_image_to_cache(self, base64_data, filename, image_info):
-        return save_image_to_cache(base64_data, filename, image_info)
+    def save_image_to_cache(self, base64_data, filename, image_info, ignore_info=False):
+        return save_image_to_cache(base64_data, filename, image_info, ignore_info=ignore_info)
 
     def save_bytes_to_cache(self, bytes_data, filename, file_info):
         return save_bytes_to_cache(bytes_data, filename, file_info)
@@ -2708,6 +2714,9 @@ class ExtensionContext:
 
     def create_chat_with_tools(self, chat, use_tools="all"):
         return self.app.create_chat_with_tools(chat, use_tools)
+
+    def chat_to_aspect_ratio(self, chat):
+        return chat_to_aspect_ratio(chat)
 
 
 def get_extensions_path():

@@ -66,15 +66,13 @@ def install_chutes(ctx):
             if chat["model"] in self.model_negative_prompt:
                 payload["negative_prompt"] = self.negative_prompt
 
-            image_config = chat.get("image_config", {})
-            aspect_ratio = image_config.get("aspect_ratio")
-            if aspect_ratio:
-                dimension = ctx.app.aspect_ratios.get(aspect_ratio)
-                if dimension:
-                    w, h = dimension.split("×")
-                    width, height = int(w), int(h)
-                    payload["width"] = width
-                    payload["height"] = height
+            aspect_ratio = ctx.chat_to_aspect_ratio(chat) or "1:1"
+            dimension = ctx.app.aspect_ratios.get(aspect_ratio)
+            if dimension:
+                w, h = dimension.split("×")
+                width, height = int(w), int(h)
+                payload["width"] = width
+                payload["height"] = height
 
             if chat["model"] in self.model_resolutions:
                 # if models use resolution, remove width and height

@@ -66,17 +66,15 @@ def install_nvidia(ctx):
             }
             modalities = chat.get("modalities", ["text"])
             if "image" in modalities:
-                image_config = chat.get("image_config", {})
-                aspect_ratio = image_config.get("aspect_ratio")
-                if aspect_ratio:
-                    dimension = ctx.app.aspect_ratios.get(aspect_ratio)
-                    if dimension:
-                        width, height = dimension.split("×")
-                        gen_request["width"] = int(width)
-                        gen_request["height"] = int(height)
-                    else:
-                        gen_request["width"] = self.width
-                        gen_request["height"] = self.height
+                aspect_ratio = ctx.chat_to_aspect_ratio(chat) or "1:1"
+                dimension = ctx.app.aspect_ratios.get(aspect_ratio)
+                if dimension:
+                    width, height = dimension.split("×")
+                    gen_request["width"] = int(width)
+                    gen_request["height"] = int(height)
+                else:
+                    gen_request["width"] = self.width
+                    gen_request["height"] = self.height
 
                 gen_request["mode"] = self.mode
                 gen_request["cfg_scale"] = self.cfg_scale

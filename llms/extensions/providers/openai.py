@@ -119,9 +119,7 @@ def install_openai(ctx):
             if chat["model"] in self.map_image_models:
                 chat["model"] = self.map_image_models[chat["model"]]
 
-            aspect_ratio = "1:1"
-            if "image_config" in chat and "aspect_ratio" in chat["image_config"]:
-                aspect_ratio = chat["image_config"].get("aspect_ratio", "1:1")
+            aspect_ratio = ctx.chat_to_aspect_ratio(chat) or "1:1"
             payload = {
                 "model": chat["model"],
                 "prompt": ctx.last_user_prompt(chat),
