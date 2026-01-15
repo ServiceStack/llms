@@ -352,5 +352,43 @@
                 }
             }
         }
+    },
+    "zai": {
+        "models": {
+            "glm-image": {
+                "name": "GLM-Image",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.015
+                }
+            }
+        }
+    },
+    "zai-coding-plan": {
+        "models": {
+            "glm-image": {
+                "name": "GLM-Image",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.015
+                }
+            }
+        }
     }
 }

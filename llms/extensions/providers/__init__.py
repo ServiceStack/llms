@@ -5,6 +5,7 @@ from .google import install_google
 from .nvidia import install_nvidia
 from .openai import install_openai
 from .openrouter import install_openrouter
+from .zai import install_zai
 
 
 def install(ctx):
@@ -15,6 +16,7 @@ def install(ctx):
     install_nvidia(ctx)
     install_openai(ctx)
     install_openrouter(ctx)
+    install_zai(ctx)
 
 
 __install__ = install

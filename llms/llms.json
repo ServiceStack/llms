@@ -223,7 +223,13 @@
         },
         "zai-coding-plan": {
             "enabled": true,
-            "temperature": 0.7
+            "temperature": 0.7,
+            "modalities": {
+                "image": {
+                    "name": "Z.ai Image",
+                    "npm": "zai/image"
+                }
+            }
         },
         "minimax": {
             "enabled": true,
@@ -314,7 +320,13 @@
         },
         "zai": {
             "enabled": true,
-            "temperature": 0.7
+            "temperature": 0.7,
+            "modalities": {
+                "image": {
+                    "name": "Z.ai Image",
+                    "npm": "zai/image"
+                }
+            }
         },
         "mistral": {
             "enabled": true,
