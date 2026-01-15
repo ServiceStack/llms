@@ -444,7 +444,9 @@ def install(ctx):
         input_tokens = usage.get("prompt_tokens", 0)
         output_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
-        cost = o.get("cost", ((input_price * input_tokens) + (output_price * output_tokens)) / 1000000)
+        cost = usage.get("cost") or o.get(
+            "cost", ((input_price * input_tokens) + (output_price * output_tokens)) / 1000000
+        )
 
         request = {
             "user": user,

@@ -97,14 +97,14 @@ export function pluralize(word, count) {
 const currFmt2 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 const currFmt6 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
 
-export function tokenCost(price, tokens = 1) {
+export function tokenCost(price, tokens = 1000000) {
     if (!price) return ''
-    var ret = currFmt2.format(parseFloat(price) * tokens)
+    var ret = currFmt2.format(parseFloat(price) * (tokens / 1000000))
     return ret.endsWith('.00') ? ret.slice(0, -3) : ret
 }
-export function tokenCostLong(price, tokens = 1) {
+export function tokenCostLong(price, tokens = 1000000) {
     if (!price) return ''
-    const ret = currFmt6.format(parseFloat(price) * tokens)
+    const ret = currFmt6.format(parseFloat(price) * (tokens / 1000000))
     return ret.endsWith('.000000') ? ret.slice(0, -7) : ret
 }
 export function formatCost(cost) {

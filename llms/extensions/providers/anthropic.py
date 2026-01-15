@@ -221,7 +221,7 @@ def install_anthropic(ctx):
             # Add metadata
             if "metadata" not in ret:
                 ret["metadata"] = {}
-            ret["metadata"]["duration"] = int((time.time() - started_at) * 1000)
+            ret["metadata"]["duration"] = int(time.time() - started_at)
 
             if chat is not None and "model" in chat:
                 cost = self.model_cost(chat["model"])

@@ -370,7 +370,7 @@ export const Analytics = {
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Duration</div>
-                                                    <div v-if="request.duration" class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $fmt.humanifyMs(request.duration) }}</div>
+                                                    <div v-if="request.duration" class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ $fmt.humanifyMs(request.duration * 1000) }}</div>
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Speed</div>
