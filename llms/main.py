@@ -2692,6 +2692,11 @@ class ExtensionContext:
     def get_user_path(self, username=None):
         return self.app.get_user_path(username)
 
+    def context_to_username(self, context):
+        if context and "request" in context:
+            return self.get_username(context["request"])
+        return None
+
     def should_cancel_thread(self, context):
         return should_cancel_thread(context)
 
