@@ -2333,6 +2333,8 @@ class AppExtensions:
         self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
         self.chat_request_filters = []
+        self.extensions = []
+        self.loaded = False
         self.chat_tool_filters = []
         self.chat_response_filters = []
         self.chat_error_filters = []
@@ -2816,6 +2818,8 @@ def install_extensions():
 
     _log(f"Installing {ext_count} extension{'' if ext_count == 1 else 's'}...")
 
+    extensions = []
+
     for item_path in extension_dirs:
         item = os.path.basename(item_path)
 
@@ -2855,10 +2859,43 @@ def install_extensions():
                 if os.path.exists(os.path.join(ui_path, "index.mjs")):
                     ctx.register_ui_extension("index.mjs")
 
+                # include __load__ and __run__ hooks if they exist
+                load_func = getattr(module, "__load__", None)
+                if callable(load_func) and not asyncio.iscoroutinefunction(load_func):
+                    _log(f"Warning: Extension {item} __load__ must be async")
+                    load_func = None
+
+                run_func = getattr(module, "__run__", None)
+                if callable(run_func) and asyncio.iscoroutinefunction(run_func):
+                    _log(f"Warning: Extension {item} __run__ must be sync")
+                    run_func = None
+
+                extensions.append({"name": item, "module": module, "ctx": ctx, "load": load_func, "run": run_func})
             except Exception as e:
                 _err(f"Failed to install extension {item}", e)
         else:
             _dbg(f"Extension {item} not found: {item_path} is not a directory {os.path.exists(item_path)}")
+
+    return extensions
+
+
+async def load_extensions():
+    """
+    Calls the `__load__(ctx)` async function in all installed extensions concurrently.
+    """
+    tasks = []
+    for ext in g_app.extensions:
+        if ext.get("load"):
+            tasks.append(ext["load"](ext["ctx"]))
+
+    if len(tasks) > 0:
+        _log(f"Loading {len(tasks)} extensions...")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                # Gather returns results in order corresponding to tasks
+                extension = g_app.extensions[i]
+                _err(f"Failed to load extension {extension['name']}", result)
 
 
 def run_extension_cli():
@@ -3204,9 +3241,16 @@ def main():
         asyncio.run(update_extensions(cli_args.update))
         exit(0)
 
-    install_extensions()
+    g_app.extensions = install_extensions()
 
-    asyncio.run(reload_providers())
+    # Use a persistent event loop to ensure async connections (like MCP)
+    # established in load_extensions() remain active during cli_chat()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(reload_providers())
+    loop.run_until_complete(load_extensions())
+    g_app.loaded = True
 
     # print names
     _log(f"enabled providers: {', '.join(g_handlers.keys())}")
@@ -3259,7 +3303,9 @@ def main():
         # Check validity of models for a provider
         provider_name = cli_args.check
         model_names = extra_args if len(extra_args) > 0 else None
-        asyncio.run(check_models(provider_name, model_names))
+        provider_name = cli_args.check
+        model_names = extra_args if len(extra_args) > 0 else None
+        loop.run_until_complete(check_models(provider_name, model_names))
         g_app.exit(0)
 
     if cli_args.serve is not None:
@@ -3505,7 +3551,7 @@ def main():
                 if not str(requested_path).startswith(str(cache_root)):
                     _dbg(f"Forbidden: {requested_path} is not in {cache_root}")
                     return web.Response(text="403: Forbidden", status=403)
-            except Exception:
+            except Exception as e:
                 _err(f"Forbidden: {requested_path} is not in {cache_root}", e)
                 return web.Response(text="403: Forbidden", status=403)
 
@@ -4027,7 +4073,7 @@ def main():
             if cli_args.args is not None:
                 args = parse_args_params(cli_args.args)
 
-            asyncio.run(
+            loop.run_until_complete(
                 cli_chat(
                     chat,
                     tools=cli_args.tools,
