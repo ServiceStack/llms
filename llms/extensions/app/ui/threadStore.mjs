@@ -139,10 +139,11 @@ async function updateThread(threadId, updates) {
     }
 }
 
-async function deleteMessageFromThread(threadId, messageId) {
+async function deleteMessageFromThread(threadId, timestamp) {
     const thread = await getThread(threadId)
     if (!thread) throw new Error('Thread not found')
-    const updatedMessages = thread.messages.filter(m => m.id !== messageId)
+    const updatedMessages = thread.messages.filter(m => m.timestamp !== timestamp)
+    console.log('deleteMessageFromThread', threadId, timestamp, updatedMessages)
     await updateThread(threadId, { messages: updatedMessages })
 }
 
@@ -150,7 +151,7 @@ async function updateMessageInThread(threadId, messageId, updates) {
     const thread = await getThread(threadId)
     if (!thread) throw new Error('Thread not found')
 
-    const messageIndex = thread.messages.findIndex(m => m.id === messageId)
+    const messageIndex = thread.messages.findIndex(m => m.timestamp === messageId)
     if (messageIndex === -1) throw new Error('Message not found')
 
     const updatedMessages = [...thread.messages]

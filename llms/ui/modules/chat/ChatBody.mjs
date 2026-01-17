@@ -23,11 +23,11 @@ const MessageUsage = {
 const MessageReasoning = {
     template: `
     <div class="mt-2 mb-2">
-        <button type="button" @click="toggleReasoning(message.id)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
-            <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.id) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
-            <span>{{ isReasoningExpanded(message.id) ? 'Hide reasoning' : 'Show reasoning' }}</span>
+        <button type="button" @click="toggleReasoning(message.timestamp)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
+            <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.timestamp) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
+            <span>{{ isReasoningExpanded(message.timestamp) ? 'Hide reasoning' : 'Show reasoning' }}</span>
         </button>
-        <div v-if="isReasoningExpanded(message.id)" class="reasoning mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
+        <div v-if="isReasoningExpanded(message.timestamp)" class="reasoning mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
             <div v-if="typeof reasoning === 'string'" v-html="$fmt.markdown(reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
             <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto">{{ formatReasoning(reasoning) }}</pre>
         </div>
@@ -87,7 +87,7 @@ export default {
                         <div class="space-y-2" v-if="currentThread?.messages?.length">
                             <div
                                 v-for="message in currentThread.messages.filter(x => x.role !== 'system')"
-                                :key="message.id"
+                                :key="message.timestamp"
                                 v-show="!(message.role === 'tool' && isToolLinked(message))"
                                 class="flex items-start space-x-3 group"
                                 :class="message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''"
@@ -109,7 +109,7 @@ export default {
                                     </div>
 
                                     <!-- Delete button (shown on hover) -->
-                                    <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.id)"
+                                    <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.timestamp)"
                                         class="mx-auto opacity-0 group-hover:opacity-100 mt-2 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
                                         title="Delete message">
                                         <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
