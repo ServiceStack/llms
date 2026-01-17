@@ -67,7 +67,7 @@ const RecentResults = {
 
         const normalized = (s) => (s || '').toString().toLowerCase()
         const replaceChars = new Set('<>`*|#'.split(''))
-        const clean = s => [...s].map(c => replaceChars.has(c) ? ' ' : c).join('')
+        const clean = s => [...(s || '')].map(c => replaceChars.has(c) ? ' ' : c).join('')
 
         const loadMore = async (reset = false) => {
             if (reset) {
