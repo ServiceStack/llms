@@ -471,9 +471,9 @@ def install_google(ctx):
                 if "usageMetadata" in obj:
                     usage = obj["usageMetadata"]
                     response["usage"] = {
-                        "completion_tokens": usage["candidatesTokenCount"],
-                        "total_tokens": usage["totalTokenCount"],
-                        "prompt_tokens": usage["promptTokenCount"],
+                        "completion_tokens": usage.get("candidatesTokenCount", 0),
+                        "total_tokens": usage.get("totalTokenCount", 0),
+                        "prompt_tokens": usage.get("promptTokenCount", 0),
                     }
 
                 return ctx.log_json(self.to_response(response, chat, started_at))
