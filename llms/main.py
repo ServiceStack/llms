@@ -28,7 +28,7 @@ from datetime import datetime
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
-from typing import get_type_hints
+from typing import Optional, get_type_hints
 from urllib.parse import parse_qs, urlencode, urljoin
 
 import aiohttp
@@ -211,8 +211,8 @@ def pluralize(word, count):
 
 
 def get_file_mime_type(filename):
-    mime_type, _ = mimetypes.guess_type(filename)
-    return mime_type or "application/octet-stream"
+    mimetype, _ = mimetypes.guess_type(filename)
+    return mimetype or "application/octet-stream"
 
 
 def price_to_string(price: float | int | str | None) -> str | None:
@@ -369,6 +369,75 @@ def function_to_tool_definition(func):
     }
 
 
+async def download_file(url):
+    async with aiohttp.ClientSession() as session:
+        return await session_download_file(session, url)
+
+
+async def session_download_file(session, url, default_mimetype="application/octet-stream"):
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
+            response.raise_for_status()
+            content = await response.read()
+            mimetype = response.headers.get("Content-Type")
+            disposition = response.headers.get("Content-Disposition")
+            if mimetype and ";" in mimetype:
+                mimetype = mimetype.split(";")[0]
+            ext = None
+            if disposition:
+                start = disposition.index('filename="') + len('filename="')
+                end = disposition.index('"', start)
+                filename = disposition[start:end]
+                if not mimetype:
+                    mimetype = mimetypes.guess_type(filename)[0] or default_mimetype
+            else:
+                filename = url.split("/")[-1]
+                if "." not in filename:
+                    if mimetype is None:
+                        mimetype = default_mimetype
+                    ext = mimetypes.guess_extension(mimetype) or mimetype.split("/")[1]
+                    filename = f"{filename}.{ext}"
+
+            if not ext:
+                ext = Path(filename).suffix.lstrip(".")
+
+            info = {
+                "url": url,
+                "type": mimetype,
+                "name": filename,
+                "ext": ext,
+            }
+            return content, info
+    except Exception as e:
+        _err(f"Error downloading file: {url}", e)
+        raise e
+
+
+def read_binary_file(url):
+    try:
+        path = Path(url)
+        with open(url, "rb") as f:
+            content = f.read()
+            info_path = path.stem + ".info.json"
+            if os.path.exists(info_path):
+                with open(info_path) as f_info:
+                    info = json.load(f_info)
+                    return content, info
+
+            stat = path.stat()
+            info = {
+                "date": int(stat.st_mtime),
+                "name": path.name,
+                "ext": path.suffix.lstrip("."),
+                "type": mimetypes.guess_type(path.name)[0],
+                "url": f"/~cache/{path.name[:2]}/{path.name}",
+            }
+            return content, info
+    except Exception as e:
+        _err(f"Error reading file: {url}", e)
+        raise e
+
+
 async def process_chat(chat, provider_id=None):
     if not chat:
         raise Exception("No chat provided")
@@ -397,31 +466,20 @@ async def process_chat(chat, provider_id=None):
                                 url = get_cache_path(url[8:])
                             if is_url(url):
                                 _log(f"Downloading image: {url}")
-                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                                    response.raise_for_status()
-                                    content = await response.read()
-                                    # get mimetype from response headers
-                                    mimetype = get_file_mime_type(get_filename(url))
-                                    if "Content-Type" in response.headers:
-                                        mimetype = response.headers["Content-Type"]
-                                    # convert/resize image if needed
-                                    content, mimetype = convert_image_if_needed(content, mimetype)
-                                    # convert to data uri
-                                    image_url["url"] = (
-                                        f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                                    )
+                                content, info = await session_download_file(session, url, default_mimetype="image/png")
+                                mimetype = info["type"]
+                                # convert/resize image if needed
+                                content, mimetype = convert_image_if_needed(content, mimetype)
+                                # convert to data uri
+                                image_url["url"] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             elif is_file_path(url):
                                 _log(f"Reading image: {url}")
-                                with open(url, "rb") as f:
-                                    content = f.read()
-                                    # get mimetype from file extension
-                                    mimetype = get_file_mime_type(get_filename(url))
-                                    # convert/resize image if needed
-                                    content, mimetype = convert_image_if_needed(content, mimetype)
-                                    # convert to data uri
-                                    image_url["url"] = (
-                                        f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                                    )
+                                content, info = read_binary_file(url)
+                                mimetype = info["type"]
+                                # convert/resize image if needed
+                                content, mimetype = convert_image_if_needed(content, mimetype)
+                                # convert to data uri
+                                image_url["url"] = f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
                             elif url.startswith("data:"):
                                 # Extract existing data URI and process it
                                 if ";base64," in url:
@@ -443,29 +501,24 @@ async def process_chat(chat, provider_id=None):
                             url = input_audio["data"]
                             if url.startswith("/~cache/"):
                                 url = get_cache_path(url[8:])
-                            mimetype = get_file_mime_type(get_filename(url))
                             if is_url(url):
                                 _log(f"Downloading audio: {url}")
-                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                                    response.raise_for_status()
-                                    content = await response.read()
-                                    # get mimetype from response headers
-                                    if "Content-Type" in response.headers:
-                                        mimetype = response.headers["Content-Type"]
-                                    # convert to base64
-                                    input_audio["data"] = base64.b64encode(content).decode("utf-8")
-                                    if provider_id == "alibaba":
-                                        input_audio["data"] = f"data:{mimetype};base64,{input_audio['data']}"
-                                    input_audio["format"] = mimetype.rsplit("/", 1)[1]
+                                content, info = await session_download_file(session, url, default_mimetype="audio/mp3")
+                                mimetype = info["type"]
+                                # convert to base64
+                                input_audio["data"] = base64.b64encode(content).decode("utf-8")
+                                if provider_id == "alibaba":
+                                    input_audio["data"] = f"data:{mimetype};base64,{input_audio['data']}"
+                                input_audio["format"] = mimetype.rsplit("/", 1)[1]
                             elif is_file_path(url):
                                 _log(f"Reading audio: {url}")
-                                with open(url, "rb") as f:
-                                    content = f.read()
-                                    # convert to base64
-                                    input_audio["data"] = base64.b64encode(content).decode("utf-8")
-                                    if provider_id == "alibaba":
-                                        input_audio["data"] = f"data:{mimetype};base64,{input_audio['data']}"
-                                    input_audio["format"] = mimetype.rsplit("/", 1)[1]
+                                content, info = read_binary_file(url)
+                                mimetype = info["type"]
+                                # convert to base64
+                                input_audio["data"] = base64.b64encode(content).decode("utf-8")
+                                if provider_id == "alibaba":
+                                    input_audio["data"] = f"data:{mimetype};base64,{input_audio['data']}"
+                                input_audio["format"] = mimetype.rsplit("/", 1)[1]
                             elif is_base_64(url):
                                 pass  # use base64 data as-is
                             else:
@@ -476,24 +529,24 @@ async def process_chat(chat, provider_id=None):
                             url = file["file_data"]
                             if url.startswith("/~cache/"):
                                 url = get_cache_path(url[8:])
-                            mimetype = get_file_mime_type(get_filename(url))
                             if is_url(url):
                                 _log(f"Downloading file: {url}")
-                                async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
-                                    response.raise_for_status()
-                                    content = await response.read()
-                                    file["filename"] = get_filename(url)
-                                    file["file_data"] = (
-                                        f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                                    )
+                                content, info = await session_download_file(
+                                    session, url, default_mimetype="application/pdf"
+                                )
+                                mimetype = info["type"]
+                                file["filename"] = info["name"]
+                                file["file_data"] = (
+                                    f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                                )
                             elif is_file_path(url):
                                 _log(f"Reading file: {url}")
-                                with open(url, "rb") as f:
-                                    content = f.read()
-                                    file["filename"] = get_filename(url)
-                                    file["file_data"] = (
-                                        f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
-                                    )
+                                content, info = read_binary_file(url)
+                                mimetype = info["type"]
+                                file["filename"] = info["name"]
+                                file["file_data"] = (
+                                    f"data:{mimetype};base64,{base64.b64encode(content).decode('utf-8')}"
+                                )
                             elif url.startswith("data:"):
                                 if "filename" not in file:
                                     file["filename"] = "file"
@@ -583,8 +636,9 @@ def cache_message_inline_data(m):
                             ext = file_ext_from_mimetype(mimetype)
                             filename = f"{filename}.{ext}"
 
-                        cache_url, _ = save_bytes_to_cache(base64_data, filename, {}, ignore_info=True)
+                        cache_url, info = save_bytes_to_cache(base64_data, filename)
                         file_info["file_data"] = cache_url
+                        file_info["filename"] = info["name"]
                     except Exception as e:
                         _log(f"Error caching inline file: {e}")
 
@@ -598,7 +652,7 @@ class HTTPError(Exception):
         super().__init__(f"HTTP {status} {reason}")
 
 
-def save_bytes_to_cache(base64_data, filename, file_info, ignore_info=False):
+def save_bytes_to_cache(base64_data, filename, file_info=None, ignore_info=False):
     ext = filename.split(".")[-1]
     mimetype = get_file_mime_type(filename)
     content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
@@ -631,7 +685,8 @@ def save_bytes_to_cache(base64_data, filename, file_info, ignore_info=False):
         "type": mimetype,
         "name": filename,
     }
-    info.update(file_info)
+    if file_info:
+        info.update(file_info)
 
     # Save metadata
     info_path = os.path.splitext(full_path)[0] + ".info.json"
@@ -643,6 +698,14 @@ def save_bytes_to_cache(base64_data, filename, file_info, ignore_info=False):
     g_app.on_cache_saved_filters({"url": url, "info": info})
 
     return url, info
+
+
+def save_audio_to_cache(base64_data, filename, audio_info, ignore_info=False):
+    return save_bytes_to_cache(base64_data, filename, audio_info, ignore_info)
+
+
+def save_video_to_cache(base64_data, filename, file_info, ignore_info=False):
+    return save_bytes_to_cache(base64_data, filename, file_info, ignore_info)
 
 
 def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
@@ -1348,6 +1411,134 @@ def g_chat_request(template=None, text=None, model=None, system_prompt=None):
     return chat
 
 
+def tool_result_part(result: dict, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+    args = function_args or {}
+    type = result.get("type")
+    if type == "text":
+        return result.get("text"), None
+    elif type == "image":
+        format = result.get("format") or args.get("format") or "png"
+        filename = result.get("filename") or args.get("filename") or f"{function_name}-{int(time.time())}.{format}"
+        mime_type = get_file_mime_type(filename)
+        image_info = {"type": mime_type}
+        if "prompt" in args:
+            image_info["prompt"] = args["prompt"]
+        if "model" in args:
+            image_info["model"] = args["model"]
+        if "aspect_ratio" in args:
+            image_info["aspect_ratio"] = args["aspect_ratio"]
+        base64_data = result.get("data")
+        if not base64_data:
+            _dbg(f"Image data not found for {function_name}")
+            return None, None
+        url, _ = save_image_to_cache(base64_data, filename, image_info=image_info, ignore_info=True)
+        resource = {
+            "type": "image_url",
+            "image_url": {
+                "url": url,
+            },
+        }
+        text = f"![{args.get('prompt') or filename}]({url})\n"
+        return text, resource
+    elif type == "audio":
+        format = result.get("format") or args.get("format") or "mp3"
+        filename = result.get("filename") or args.get("filename") or f"{function_name}-{int(time.time())}.{format}"
+        mime_type = get_file_mime_type(filename)
+        audio_info = {"type": mime_type}
+        if "prompt" in args:
+            audio_info["prompt"] = args["prompt"]
+        if "model" in args:
+            audio_info["model"] = args["model"]
+        base64_data = result.get("data")
+        if not base64_data:
+            _dbg(f"Audio data not found for {function_name}")
+            return None, None
+        url, _ = save_audio_to_cache(base64_data, filename, audio_info=audio_info, ignore_info=True)
+        resource = {
+            "type": "audio_url",
+            "audio_url": {
+                "url": url,
+            },
+        }
+        text = f"[{args.get('prompt') or filename}]({url})\n"
+        return text, resource
+    elif type == "file":
+        filename = result.get("filename") or args.get("filename") or result.get("name") or args.get("name")
+        format = result.get("format") or args.get("format") or (get_filename(filename) if filename else "txt")
+        if not filename:
+            filename = f"{function_name}-{int(time.time())}.{format}"
+
+        mime_type = get_file_mime_type(filename)
+        file_info = {"type": mime_type}
+        if "prompt" in args:
+            file_info["prompt"] = args["prompt"]
+        if "model" in args:
+            file_info["model"] = args["model"]
+        base64_data = result.get("data")
+        if not base64_data:
+            _dbg(f"File data not found for {function_name}")
+            return None, None
+        url, info = save_bytes_to_cache(base64_data, filename, file_info=file_info)
+        resource = {
+            "type": "file",
+            "file": {
+                "file_data": url,
+                "filename": info["name"],
+            },
+        }
+        text = f"[{args.get('prompt') or filename}]({url})\n"
+        return text, resource
+    else:
+        try:
+            return json.dumps(result), None
+        except Exception as e:
+            _dbg(f"Error converting result to JSON: {e}")
+            try:
+                return str(result), None
+            except Exception as e:
+                _dbg(f"Error converting result to string: {e}")
+                return None, None
+
+
+def g_tool_result(result, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+    content = []
+    resources = []
+    args = function_args or {}
+    if isinstance(result, dict):
+        text, res = tool_result_part(result, function_name, args)
+        if text:
+            content.append(text)
+        if res:
+            resources.append(res)
+    elif isinstance(result, list):
+        for item in result:
+            text, res = tool_result_part(item, function_name, args)
+            if text:
+                content.append(text)
+            if res:
+                resources.append(res)
+    else:
+        content = [str(result)]
+
+    text = "\n".join(content)
+    return text, resources
+
+
+async def g_exec_tool(function_name, function_args):
+    if function_name in g_app.tools:
+        try:
+            func = g_app.tools[function_name]
+            is_async = inspect.iscoroutinefunction(func)
+            _dbg(f"Executing {'async' if is_async else 'sync'} tool '{function_name}' with args: {function_args}")
+            if is_async:
+                return g_tool_result(await func(**function_args), function_name, function_args)
+            else:
+                return g_tool_result(func(**function_args), function_name, function_args)
+        except Exception as e:
+            return f"Error executing tool '{function_name}': {to_error_message(e)}", None
+    return f"Error: Tool '{function_name}' not found", None
+
+
 async def g_chat_completion(chat, context=None):
     try:
         model = chat.get("model")
@@ -1445,18 +1636,9 @@ async def g_chat_completion(chat, context=None):
                         try:
                             function_args = json.loads(tool_call["function"]["arguments"])
                         except Exception as e:
-                            tool_result = f"Error parsing JSON arguments for tool {function_name}: {e}"
+                            tool_result = f"Error: Failed to parse JSON arguments for tool '{function_name}': {to_error_message(e)}"
                         else:
-                            tool_result = f"Error: Tool {function_name} not found"
-                            if function_name in g_app.tools:
-                                try:
-                                    func = g_app.tools[function_name]
-                                    if inspect.iscoroutinefunction(func):
-                                        tool_result = await func(**function_args)
-                                    else:
-                                        tool_result = func(**function_args)
-                                except Exception as e:
-                                    tool_result = f"Error executing tool {function_name}: {e}"
+                            tool_result = await g_exec_tool(function_name, function_args)
 
                         # Append tool result to history
                         tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": to_content(tool_result)}
@@ -2347,6 +2529,7 @@ class AppExtensions:
         self.shutdown_handlers = []
         self.tools = {}
         self.tool_definitions = []
+        self.tool_groups = {}
         self.index_headers = []
         self.index_footers = []
         self.request_args = {
@@ -2559,6 +2742,15 @@ class ExtensionContext:
     def json_from_file(self, path):
         return json_from_file(path)
 
+    def download_file(self, url):
+        return download_file(url)
+
+    def session_download_file(self, session, url):
+        return session_download_file(session, url)
+
+    def read_binary_file(self, url):
+        return read_binary_file(url)
+
     def log(self, message):
         if self.verbose:
             print(f"[{self.name}] {message}", flush=True)
@@ -2629,25 +2821,25 @@ class ExtensionContext:
 
         self.app.server_add_get.append((os.path.join(self.ext_prefix, "{path:.*}"), serve_static, {}))
 
+    def web_path(self, method, path):
+        full_path = os.path.join(self.ext_prefix, path) if path else self.ext_prefix
+        self.dbg(f"Registered {method:<6} {full_path}")
+        return full_path
+
     def add_get(self, path, handler, **kwargs):
-        self.dbg(f"Registered GET: {os.path.join(self.ext_prefix, path)}")
-        self.app.server_add_get.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+        self.app.server_add_get.append((self.web_path("GET", path), handler, kwargs))
 
     def add_post(self, path, handler, **kwargs):
-        self.dbg(f"Registered POST: {os.path.join(self.ext_prefix, path)}")
-        self.app.server_add_post.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+        self.app.server_add_post.append((self.web_path("POST", path), handler, kwargs))
 
     def add_put(self, path, handler, **kwargs):
-        self.dbg(f"Registered PUT: {os.path.join(self.ext_prefix, path)}")
-        self.app.server_add_put.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+        self.app.server_add_put.append((self.web_path("PUT", path), handler, kwargs))
 
     def add_delete(self, path, handler, **kwargs):
-        self.dbg(f"Registered DELETE: {os.path.join(self.ext_prefix, path)}")
-        self.app.server_add_delete.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+        self.app.server_add_delete.append((self.web_path("DELETE", path), handler, kwargs))
 
     def add_patch(self, path, handler, **kwargs):
-        self.dbg(f"Registered PATCH: {os.path.join(self.ext_prefix, path)}")
-        self.app.server_add_patch.append((os.path.join(self.ext_prefix, path), handler, kwargs))
+        self.app.server_add_patch.append((self.web_path("PATCH", path), handler, kwargs))
 
     def add_importmaps(self, dict):
         self.app.import_maps.update(dict)
@@ -2679,14 +2871,85 @@ class ExtensionContext:
     def get_provider(self, name):
         return g_handlers.get(name)
 
-    def register_tool(self, func, tool_def=None):
+    def sanitize_tool_def(self, tool_def):
+        """
+        Merge $defs parameter into tool_def property to reduce client/server complexity
+        """
+        # parameters = {
+        #     "$defs": {
+        #         "AspectRatio": {
+        #             "description": "Supported aspect ratios for image generation.",
+        #             "enum": [
+        #                 "1:1",
+        #                 "2:3",
+        #                 "16:9"
+        #             ],
+        #             "type": "string"
+        #         }
+        #     },
+        #     "properties": {
+        #         "prompt": {
+        #             "type": "string"
+        #         },
+        #         "model": {
+        #             "default": "gemini-2.5-flash-image",
+        #             "type": "string"
+        #         },
+        #         "aspect_ratio": {
+        #             "$ref": "#/$defs/AspectRatio",
+        #             "default": "1:1"
+        #         }
+        #     },
+        #     "required": [
+        #         "prompt"
+        #     ],
+        #     "type": "object"
+        # }
+        type = tool_def.get("type")
+        if type == "function":
+            func_def = tool_def.get("function", {})
+            parameters = func_def.get("parameters", {})
+            defs = parameters.get("$defs", {})
+            properties = parameters.get("properties", {})
+            for prop_name, prop_def in properties.items():
+                if "$ref" in prop_def:
+                    ref = prop_def["$ref"]
+                    if ref.startswith("#/$defs/"):
+                        def_name = ref.replace("#/$defs/", "")
+                        if def_name in defs:
+                            prop_def.update(defs[def_name])
+                            del prop_def["$ref"]
+            if "$defs" in parameters:
+                del parameters["$defs"]
+        return tool_def
+
+    def register_tool(self, func, tool_def=None, group=None):
         if tool_def is None:
             tool_def = function_to_tool_definition(func)
 
         name = tool_def["function"]["name"]
-        self.log(f"Registered tool: {name}")
+        if name in self.app.tools:
+            self.log(f"Overriding existing tool: {name}")
+            self.app.tool_definitions = [t for t in self.app.tool_definitions if t["function"]["name"] != name]
+            for g_tools in self.app.tool_groups.values():
+                if name in g_tools:
+                    g_tools.remove(name)
+        else:
+            self.log(f"Registered tool: {name}")
+
         self.app.tools[name] = func
-        self.app.tool_definitions.append(tool_def)
+        self.app.tool_definitions.append(self.sanitize_tool_def(tool_def))
+        if not group:
+            group = "custom"
+        if group not in self.app.tool_groups:
+            self.app.tool_groups[group] = []
+        self.app.tool_groups[group].append(name)
+
+    def get_tool_definition(self, name):
+        for tool_def in self.app.tool_definitions:
+            if tool_def["function"]["name"] == name:
+                return tool_def
+        return None
 
     def check_auth(self, request):
         return self.app.check_auth(request)
@@ -2710,6 +2973,15 @@ class ExtensionContext:
 
     def cache_message_inline_data(self, message):
         return cache_message_inline_data(message)
+
+    async def exec_tool(self, name, args):
+        return await g_exec_tool(name, args)
+
+    def tool_result(self, result, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+        return g_tool_result(result, function_name, function_args)
+
+    def tool_result_part(self, result: dict, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+        return tool_result_part(result, function_name, function_args)
 
     def to_content(self, result):
         return to_content(result)
@@ -2861,12 +3133,12 @@ def install_extensions():
 
                 # include __load__ and __run__ hooks if they exist
                 load_func = getattr(module, "__load__", None)
-                if callable(load_func) and not asyncio.iscoroutinefunction(load_func):
+                if callable(load_func) and not inspect.iscoroutinefunction(load_func):
                     _log(f"Warning: Extension {item} __load__ must be async")
                     load_func = None
 
                 run_func = getattr(module, "__run__", None)
-                if callable(run_func) and asyncio.iscoroutinefunction(run_func):
+                if callable(run_func) and inspect.iscoroutinefunction(run_func):
                     _log(f"Warning: Extension {item} __run__ must be sync")
                     run_func = None
 
@@ -2886,15 +3158,16 @@ async def load_extensions():
     tasks = []
     for ext in g_app.extensions:
         if ext.get("load"):
-            tasks.append(ext["load"](ext["ctx"]))
+            task = ext["load"](ext["ctx"])
+            tasks.append({"name": ext["name"], "task": task})
 
     if len(tasks) > 0:
         _log(f"Loading {len(tasks)} extensions...")
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*[t["task"] for t in tasks], return_exceptions=True)
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 # Gather returns results in order corresponding to tasks
-                extension = g_app.extensions[i]
+                extension = tasks[i]
                 _err(f"Failed to load extension {extension['name']}", result)
 
 
@@ -3511,11 +3784,6 @@ def main():
             return web.json_response(g_app.ui_extensions)
 
         app.router.add_get("/ext", extensions_handler)
-
-        async def tools_handler(request):
-            return web.json_response(g_app.tool_definitions)
-
-        app.router.add_get("/ext/tools", tools_handler)
 
         async def cache_handler(request):
             path = request.match_info["tail"]

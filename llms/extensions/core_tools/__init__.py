@@ -538,12 +538,13 @@ def get_current_time(tz_name: Optional[str] = None) -> str:
 def install(ctx):
     global g_ctx
     g_ctx = ctx
+    group = "core_tools"
     # Examples of registering tools using automatic definition generation
-    ctx.register_tool(memory_read)
-    ctx.register_tool(memory_write)
+    ctx.register_tool(memory_read, group=group)
+    ctx.register_tool(memory_write, group=group)
     # ctx.register_tool(semantic_search) # TODO: implement
-    ctx.register_tool(read_file)
-    ctx.register_tool(write_file)
+    ctx.register_tool(read_file, group=group)
+    ctx.register_tool(write_file, group=group)
     ctx.register_tool(
         edit_file,
         {
@@ -562,15 +563,16 @@ def install(ctx):
                 },
             },
         },
+        group=group,
     )
-    ctx.register_tool(list_directory)
-    ctx.register_tool(glob_paths)
-    ctx.register_tool(calc)
-    ctx.register_tool(run_python)
-    ctx.register_tool(run_typescript)
-    ctx.register_tool(run_javascript)
-    ctx.register_tool(run_csharp)
-    ctx.register_tool(get_current_time)
+    ctx.register_tool(list_directory, group=group)
+    ctx.register_tool(glob_paths, group=group)
+    ctx.register_tool(calc, group=group)
+    ctx.register_tool(run_python, group=group)
+    ctx.register_tool(run_typescript, group=group)
+    ctx.register_tool(run_javascript, group=group)
+    ctx.register_tool(run_csharp, group=group)
+    ctx.register_tool(get_current_time, group=group)
 
     def exec_language(language: str, code: str) -> Dict[str, Any]:
         if language == "python":

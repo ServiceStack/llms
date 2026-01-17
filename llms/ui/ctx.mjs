@@ -334,6 +334,9 @@ export class AppContext {
         this.state.error = null
     }
 
+    resolveUrl(url) {
+        return this.ai.resolveUrl(url)
+    }
     async getJson(url, options) {
         return await this.ai.getJson(url, options)
     }

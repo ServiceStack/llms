@@ -123,6 +123,7 @@ export function tokensTitle(usage) {
     return title.join('\n')
 }
 
+
 // Accessible in views via $fmt
 export function utilsFormatters() {
     function relativeTime(timestamp) {
@@ -202,6 +203,25 @@ export function utilsFormatters() {
     }
 }
 
+
+/**
+ * @param {object|array} type 
+ * @param {'div'|'table'|'thead'|'th'|'tr'|'td'} tag 
+ * @param {number} depth 
+ * @param {string} cls 
+ * @param {number} index 
+*/
+function htmlFormatClasses(type, tag, depth, cls, index) {
+    cls = cls.replace('shadow ring-1 ring-black/5 md:rounded-lg', '')
+    if (tag == 'th') {
+        cls += ' lowercase'
+    }
+    if (tag == 'td') {
+        cls += ' whitespace-pre-wrap'
+    }
+    return cls
+}
+
 /**
  * Returns an ever-increasing unique integer id.
  */
@@ -227,6 +247,7 @@ export function utilsFunctions() {
         deepClone,
         toModelInfo,
         pluralize,
+        htmlFormatClasses,
     }
 }
 

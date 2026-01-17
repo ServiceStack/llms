@@ -1,7 +1,218 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
-const MessageUsage = {
+export const TypeText = {
+    template: `
+        <div v-if="text.type === 'text'">
+            <div v-html="html"></div>
+        </div>
+    `,
+    props: {
+        text: {
+            type: Object,
+            required: true
+        }
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+        const html = computed(() => {
+            try {
+                return ctx.fmt.markdown(props.text.text)
+            } catch (e) {
+                console.error('TypeText: markdown', e)
+                return `<div class="whitespace-pre-wrap">${props.text.text}</div>`
+            }
+        })
+        return { html }
+    }
+}
+
+export const LightboxImage = {
+    template: `
+    <div>
+      <!-- Thumbnail -->
+      <div
+        class="cursor-zoom-in hover:opacity-90 transition-opacity"
+        @click="isOpen = true"
+      >
+        <img
+          :src="src"
+          :alt="alt"
+          :width="width"
+          :height="height"
+          :class="imageClass"
+        />
+      </div>
+
+      <!-- Lightbox Modal -->
+      <div v-if="isOpen"
+        class="fixed inset-0 z-100 flex items-center justify-center bg-black/90 p-4"
+        @click="isOpen = false"
+      >
+        <button type="button"
+          class="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+          @click="isOpen = false"
+          aria-label="Close lightbox"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        <div class="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+          <img
+            :src="src"
+            :alt="alt"
+            :width="width"
+            :height="height"
+            class="max-w-full max-h-full w-auto h-auto object-contain rounded"
+            @click.stop
+          />
+        </div>
+      </div>
+    </div>
+    `,
+    props: {
+        src: {
+            type: String,
+            required: true
+        },
+        alt: {
+            type: String,
+            default: ''
+        },
+        width: {
+            type: [Number, String],
+            default: undefined
+        },
+        height: {
+            type: [Number, String],
+            default: undefined
+        },
+        imageClass: {
+            type: String,
+            default: 'max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]'
+        }
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+        const isOpen = ref(false)
+
+        let sub
+        onMounted(() => {
+            sub = ctx.events.subscribe(`keydown:Escape`, () => isOpen.value = false)
+        })
+        onUnmounted(() => sub?.unsubscribe())
+
+        return {
+            isOpen
+        }
+    }
+}
+
+export const TypeImage = {
+    template: `
+        <div v-if="image.type === 'image_url'">
+            <LightboxImage :src="$ctx.resolveUrl(image.image_url.url)" />
+        </div>
+    `,
+    props: {
+        image: {
+            type: Object,
+            required: true
+        }
+    }
+}
+
+export const TypeAudio = {
+    template: `
+        <div v-if="audio.type === 'audio_url'">
+            <slot></slot>
+            <audio controls :src="$ctx.resolveUrl(audio.audio_url.url)" class="h-8 w-64"></audio>
+        </div>
+    `,
+    props: {
+        audio: {
+            type: Object,
+            required: true
+        }
+    }
+}
+
+export const TypeFile = {
+    template: `
+        <a v-if="file.type === 'file'" :href="$ctx.resolveUrl(file.file.file_data)" target="_blank" 
+            class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm text-blue-600 dark:text-blue-400 hover:underline">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+            <span class="max-w-xs truncate">{{ file.file.filename || 'Attachment' }}</span>
+        </a>
+    `,
+    props: {
+        file: {
+            type: Object,
+            required: true
+        }
+    }
+}
+
+export const ViewType = {
+    template: `
+    <div class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <TypeText v-if="result.type === 'text'" :text="result" />
+        <TypeImage v-else-if="result.type === 'image_url'" :image="result" />
+        <TypeAudio v-else-if="result.type === 'audio_url'" :audio="result" />
+        <TypeFile v-else-if="result.type === 'file'" :file="result" />
+        <div v-else>
+            <HtmlFormat :value="result" :classes="$utils.htmlFormatClasses" />
+        </div>
+    </div>
+    `,
+    props: {
+        result: {
+            type: Object,
+            required: true
+        }
+    }
+}
+export const ViewTypes = {
+    template: `
+    <div v-if="results?.length" class="flex flex-col gap-2">
+        <div v-if="texts.length > 0" :class="cls">
+            <div v-if="hasResources" v-for="(text, i) in texts" :key="'raw-' + i" class="text-xs whitespace-pre-wrap">{{text.text}}</div>
+            <TypeText v-else v-for="(text, i) in texts" :key="'text-' + i" :text="text" />
+        </div>
+        <div v-if="images.length > 0" :class="cls">
+            <TypeImage v-for="(image, i) in images" :key="'image-' + i" :image="image" />
+        </div>
+        <div v-if="audios.length > 0" :class="cls">
+            <TypeAudio v-for="(audio, i) in audios" :key="'audio-' + i" :audio="audio" />
+        </div>
+        <div v-if="files.length > 0" :class="cls">
+            <TypeFile v-for="(file, i) in files" :key="'file-' + i" :file="file" />
+        </div>
+        <div v-if="others.length > 0" :class="cls">
+            <HtmlFormat v-for="(other, i) in others" :key="'other-' + i" :value="other" :classes="$utils.htmlFormatClasses" />
+        </div>
+    </div>
+    `,
+    props: {
+        results: {
+            type: Array,
+            required: true
+        }
+    },
+    setup(props) {
+        const cls = "flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+        const texts = computed(() => props.results.filter(r => r.type === 'text'))
+        const images = computed(() => props.results.filter(r => r.type === 'image_url'))
+        const audios = computed(() => props.results.filter(r => r.type === 'audio_url'))
+        const files = computed(() => props.results.filter(r => r.type === 'file'))
+        const others = computed(() => props.results.filter(r => r.type !== 'text' && r.type !== 'image_url' && r.type !== 'audio_url' && r.type !== 'file'))
+        // If has resources, render as plain-text to avoid rendering resources multiple times
+        const hasResources = computed(() => images.value.length > 0 || audios.value.length > 0 || files.value.length > 0 || others.value.length > 0)
+        return { cls, texts, images, audios, files, others, hasResources }
+    }
+}
+
+
+export const MessageUsage = {
     template: `
     <div class="mt-2 text-xs opacity-70">                                        
         <span v-if="message.model" @click="$chat.setSelectedModel({ name: message.model })" title="Select model"><span class="cursor-pointer hover:underline">{{ message.model }}</span> &#8226; </span>
@@ -20,7 +231,7 @@ const MessageUsage = {
     }
 }
 
-const MessageReasoning = {
+export const MessageReasoning = {
     template: `
     <div class="mt-2 mb-2">
         <button type="button" @click="toggleReasoning(message.timestamp)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
@@ -60,11 +271,7 @@ const MessageReasoning = {
     }
 }
 
-export default {
-    components: {
-        MessageUsage,
-        MessageReasoning,
-    },
+export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
             <!-- Messages Area -->
@@ -164,7 +371,7 @@ export default {
                                             
                                             <!-- Arguments -->
                                             <div v-if="tool.function.arguments && tool.function.arguments != '{}'" class="not-prose px-3 py-2">
-                                                <HtmlFormat v-if="hasJsonStructure(tool.function.arguments)" :value="tryParseJson(tool.function.arguments)" :classes="customHtmlClasses" />
+                                                <HtmlFormat v-if="hasJsonStructure(tool.function.arguments)" :value="tryParseJson(tool.function.arguments)" :classes="$utils.htmlFormatClasses" />
                                                 <pre v-else class="tool-arguments">{{ tool.function.arguments }}</pre>
                                             </div>
 
@@ -192,7 +399,7 @@ export default {
                                                 <div class="not-prose px-3 py-2">
                                                     <pre v-if="prefs.toolFormat !== 'preview' || !hasJsonStructure(getToolOutput(tool.id).content)" class="tool-output">{{ getToolOutput(tool.id).content }}</pre>
                                                     <div v-else class="text-xs">
-                                                        <HtmlFormat v-if="tryParseJson(getToolOutput(tool.id).content)" :value="tryParseJson(getToolOutput(tool.id).content)" :classes="customHtmlClasses" />
+                                                        <HtmlFormat v-if="tryParseJson(getToolOutput(tool.id).content)" :value="tryParseJson(getToolOutput(tool.id).content)" :classes="$utils.htmlFormatClasses" />
                                                         <div v-else class="text-gray-500 italic p-2">Invalid JSON content</div>
                                                     </div>
                                                 </div>
@@ -222,45 +429,24 @@ export default {
                                     <!-- Assistant Images -->
                                     <div v-if="message.images && message.images.length > 0" class="mt-2 flex flex-wrap gap-2">
                                         <template v-for="(img, i) in message.images" :key="i">
-                                            <div v-if="img.type === 'image_url'" class="group relative cursor-pointer" @click="openLightbox(resolveUrl(img.image_url.url))">
-                                                <img :src="resolveUrl(img.image_url.url)" class="max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]" />
-                                            </div>
+                                            <TypeImage v-if="img.type === 'image_url'" :image="img" />
                                         </template>
                                     </div>
 
                                     <!-- Assistant Audios -->
                                     <div v-if="message.audios && message.audios.length > 0" class="mt-2 flex flex-wrap gap-2">
                                         <template v-for="(audio, i) in message.audios" :key="i">
-                                            <div v-if="audio.type === 'audio_url'" class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                                                <audio controls :src="resolveUrl(audio.audio_url.url)" class="h-8 w-64"></audio>
-                                            </div>
+                                            <TypeAudio v-if="audio.type === 'audio_url'" :audio="audio" 
+                                               class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                                                <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                                            </TypeAudio>
                                         </template>
                                     </div>
 
                                     <!-- User Message with separate attachments -->
                                     <div v-else-if="message.role !== 'assistant' && message.role !== 'tool'">
                                         <div v-html="$fmt.markdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
-                                        
-                                        <!-- Attachments Grid -->
-                                        <div v-if="hasAttachments(message)" class="mt-2 flex flex-wrap gap-2">
-                                            <template v-for="(part, i) in getAttachments(message)" :key="i">
-                                                <!-- Image -->
-                                                <div v-if="part.type === 'image_url'" class="group relative cursor-pointer" @click="openLightbox(part.image_url.url)">
-                                                    <img :src="part.image_url.url" class="max-w-[400px] max-h-96 rounded-lg border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-900 shadow-sm transition-transform hover:scale-[1.02]" />
-                                                </div>
-                                                <!-- Audio -->
-                                                <div v-else-if="part.type === 'input_audio'" class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                                                    <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-                                                    <audio controls :src="part.input_audio.data" class="h-8 w-48"></audio>
-                                                </div>
-                                                <!-- File -->
-                                                <a v-else-if="part.type === 'file'" :href="part.file.file_data" target="_blank" 
-                                                class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                                                    <span class="max-w-xs truncate">{{ part.file.filename || 'Attachment' }}</span>
-                                                </a>
-                                            </template>
-                                        </div>
+                                        <ViewTypes :results="getAttachments(message)" />
                                     </div>
 
                                     <MessageUsage :message="message" :usage="getMessageUsage(message)" />
@@ -377,21 +563,6 @@ export default {
             <div v-if="$ai.hasAccess" :class="$ctx.cls('chat-input', 'flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4')">
                 <ChatPrompt :model="$chat.getSelectedModel()" />
             </div>
-            
-            <!-- Lightbox -->
-            <div v-if="lightboxUrl" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer" 
-                @click="closeLightbox">
-                <button type="button" @click="closeLightbox"
-                    class="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-[101]"
-                    title="Close">
-                    <svg class="size-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-                <div class="relative max-w-full max-h-full">
-                    <img :src="lightboxUrl" class="max-w-full max-h-[90vh] object-contain rounded-sm shadow-2xl" @click.stop />
-                </div>
-            </div>
         </div>
     `,
     setup() {
@@ -414,14 +585,6 @@ export default {
         })
         const messagesContainer = ref(null)
         const copying = ref(null)
-        const lightboxUrl = ref(null)
-
-        const openLightbox = (url) => {
-            lightboxUrl.value = url
-        }
-        const closeLightbox = () => {
-            lightboxUrl.value = null
-        }
 
         const resolveUrl = (url) => {
             if (url && url.startsWith('~')) {
@@ -595,10 +758,7 @@ export default {
         }
 
         let sub
-        onMounted(() => {
-            sub = ctx.events.subscribe(`keydown:Escape`, closeLightbox)
-            setTimeout(ctx.chat.addCopyButtons, 1)
-        })
+        onMounted(() => setTimeout(ctx.chat.addCopyButtons, 1))
         onUnmounted(() => sub?.unsubscribe())
 
         const getToolOutput = (toolCallId) => {
@@ -634,23 +794,6 @@ export default {
         const hasJsonStructure = (str) => {
             return tryParseJson(str) != null
         }
-        /**
-         * @param {object|array} type 
-         * @param {'div'|'table'|'thead'|'th'|'tr'|'td'} tag 
-         * @param {number} depth 
-         * @param {string} cls 
-         * @param {number} index 
-        */
-        const customHtmlClasses = (type, tag, depth, cls, index) => {
-            cls = cls.replace('shadow ring-1 ring-black/5 md:rounded-lg', '')
-            if (tag == 'th') {
-                cls += ' lowercase'
-            }
-            if (tag == 'td') {
-                cls += ' whitespace-pre-wrap'
-            }
-            return cls
-        }
 
         function setPrefs(o) {
             Object.assign(prefs.value, o)
@@ -673,16 +816,12 @@ export default {
             configUpdated,
             getAttachments,
             hasAttachments,
-            lightboxUrl,
-            openLightbox,
-            closeLightbox,
             resolveUrl,
             getMessageUsage,
             getToolOutput,
             isToolLinked,
             tryParseJson,
             hasJsonStructure,
-            customHtmlClasses,
         }
     }
 }
