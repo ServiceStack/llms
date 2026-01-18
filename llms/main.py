@@ -1414,6 +1414,7 @@ def g_chat_request(template=None, text=None, model=None, system_prompt=None):
 def tool_result_part(result: dict, function_name: Optional[str] = None, function_args: Optional[dict] = None):
     args = function_args or {}
     type = result.get("type")
+    prompt = args.get("prompt") or args.get("text") or args.get("message")
     if type == "text":
         return result.get("text"), None
     elif type == "image":
@@ -1421,8 +1422,8 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
         filename = result.get("filename") or args.get("filename") or f"{function_name}-{int(time.time())}.{format}"
         mime_type = get_file_mime_type(filename)
         image_info = {"type": mime_type}
-        if "prompt" in args:
-            image_info["prompt"] = args["prompt"]
+        if prompt:
+            image_info["prompt"] = prompt
         if "model" in args:
             image_info["model"] = args["model"]
         if "aspect_ratio" in args:
@@ -1445,8 +1446,8 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
         filename = result.get("filename") or args.get("filename") or f"{function_name}-{int(time.time())}.{format}"
         mime_type = get_file_mime_type(filename)
         audio_info = {"type": mime_type}
-        if "prompt" in args:
-            audio_info["prompt"] = args["prompt"]
+        if prompt:
+            audio_info["prompt"] = prompt
         if "model" in args:
             audio_info["model"] = args["model"]
         base64_data = result.get("data")
@@ -1470,8 +1471,8 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
 
         mime_type = get_file_mime_type(filename)
         file_info = {"type": mime_type}
-        if "prompt" in args:
-            file_info["prompt"] = args["prompt"]
+        if prompt:
+            file_info["prompt"] = prompt
         if "model" in args:
             file_info["model"] = args["model"]
         base64_data = result.get("data")

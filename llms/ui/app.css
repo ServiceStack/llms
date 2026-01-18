@@ -6208,6 +6208,35 @@
     overflow-x: auto;
     padding: 1em;
   }
+  .tool-description pre {
+    background-color: #f8fafc !important;
+    color: #1f2937 !important;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0;
+    overflow-x: auto;
+  }
+  .tool-description code {
+    color: inherit !important;
+  }
+  .tool-description code.hljs {
+    background: transparent !important;
+    padding: 0;
+    font-size: 0.85em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  .dark .tool-description pre {
+    background-color: #1f2937 !important;
+    border-color: #374151;
+    color: #e5e7eb !important;
+  }
+  .dark .tool-description code {
+    color: inherit !important;
+  }
+  .dark .tool-description code.hljs {
+    color: #e5e7eb;
+  }
   .message pre {
     max-width: 100%;
     min-width: auto;

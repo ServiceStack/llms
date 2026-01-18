@@ -200,7 +200,7 @@ const Tools = {
                     </button>
                 </div>
 
-                <div class="p-4 flex-1 flex flex-col">
+                <div class="tool-description p-4 flex-1 flex flex-col">
                      <div v-if="tool.function.description" class="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-1 flex flex-col">
                         <div v-if="tool.function.description.length < 350">
                             <div v-html="$fmt.markdown(tool.function.description)"></div>
