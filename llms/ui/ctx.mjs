@@ -1,7 +1,7 @@
 
 import { reactive, markRaw } from 'vue'
 import { EventBus, humanize, combinePaths } from "@servicestack/client"
-import { storageObject } from './utils.mjs'
+import { storageObject, isHtml } from './utils.mjs'
 
 export class ExtensionScope {
     constructor(ctx, id) {
@@ -174,7 +174,8 @@ export class AppContext {
     async init() {
         Object.assign(this.state, await this.ai.init(this))
         Object.assign(this.fmt, {
-            markdown: this.renderMarkdown.bind(this)
+            markdown: this.renderMarkdown.bind(this),
+            content: this.renderContent.bind(this),
         })
     }
     setGlobals(globals) {
@@ -398,5 +399,14 @@ export class AppContext {
         //         .replaceAll('} \\]', '</span>\n')
         // }
         return this.marked.parse(content || '')
+    }
+
+    renderContent(content) {
+        // Check for HTML tags to detect HTML content
+        if (isHtml(content)) {
+            // If this is HTML content, return it in an iframe so it doesn't break the page
+            return `<iframe src="data:text/html;charset=utf-8,${encodeURIComponent(content)}"></iframe>`
+        }
+        return this.renderMarkdown(content)
     }
 }

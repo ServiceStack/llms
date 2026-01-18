@@ -9,7 +9,7 @@ import ChatModule from './modules/chat/index.mjs'
 import ModelSelectorModule from './modules/model-selector.mjs'
 import IconsModule from './modules/icons.mjs'
 import { utilsFunctions, utilsFormatters } from './utils.mjs'
-import { marked, markdownFormatters } from './markdown.mjs'
+import { marked } from './markdown.mjs'
 import { AppContext } from './ctx.mjs'
 
 const Components = {

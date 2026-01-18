@@ -662,11 +662,19 @@
         .message pre {
             max-width: 500px !important;
         }
+
+        .has-iframes {
+            min-width: 640px;
+        }
     }
 
     @media (min-width: 768px) {
         .message pre {
             max-width: 600px !important;
+        }
+
+        .has-iframes {
+            min-width: 640px;
         }
     }
 
@@ -676,6 +684,10 @@
         .message .prose pre {
             max-width: 700px !important;
         }
+
+        .has-iframes {
+            min-width: 740px;
+        }
     }
 
     @media (min-width: 1280px) {
@@ -683,6 +695,10 @@
         .message pre,
         .message .prose pre {
             max-width: 800px !important;
+        }
+
+        .has-iframes {
+            min-width: 840px;
         }
     }
 }

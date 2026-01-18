@@ -31,7 +31,7 @@ const LeftBar = {
 const LeftPanel = {
     template: `
         <div v-if="component" class="flex flex-col h-full border-r border-gray-200 dark:border-gray-700">
-            <button type="button" class="absolute top-2 right-2 p-1 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden z-20">
+            <button type="button" @click="$ctx.toggleLayout('left',false)" class="absolute top-2 right-2 p-1 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden z-20">
                 <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </button>
             <component :is="component" />

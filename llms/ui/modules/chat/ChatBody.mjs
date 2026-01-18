@@ -1,6 +1,17 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
+function tryParseJson(str) {
+    try {
+        return JSON.parse(str)
+    } catch (e) {
+        return null
+    }
+}
+function hasJsonStructure(str) {
+    return tryParseJson(str) != null
+}
+
 export const TypeText = {
     template: `
         <div v-if="text.type === 'text'">
@@ -294,6 +305,124 @@ export const MessageReasoning = {
     }
 }
 
+export const ToolArguments = {
+    template: `
+        <div ref="refArgs" v-if="dict" class="not-prose">
+            <div class="prose html-format">
+                <table class="table-object border-none">
+                    <tr v-for="(v, k) in dict" :key="k">
+                        <td class="align-top py-2 px-4 text-left text-sm font-medium tracking-wider whitespace-nowrap lowercase">{{ k }}</td>
+                        <td v-if="$utils.isHtml(v)" style="margin:0;padding:0;width:100%">
+                            <div v-html="embedHtml(v)" class="w-full h-full"></div>
+                        </td>
+                        <td v-else class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
+                            <HtmlFormat :value="v" :classes="$utils.htmlFormatClasses" />
+                        </td>
+                    </tr>
+                </table>            
+            </div>
+        </div>
+        <div v-else-if="list" class="not-prose px-3 py-2">
+            <HtmlFormat :value="list" :classes="$utils.htmlFormatClasses" />
+        </div>
+        <pre v-else-if="!isEmpty(value)" class="tool-arguments">{{ value }}</pre>
+    `,
+    props: {
+        value: String,
+    },
+    setup(props) {
+        const refArgs = ref()
+        function isEmpty(v) {
+            return !v || v === '{}' || v === '[]' || v === 'null' || v === 'undefined' || v === '""' || v === "''" || v === "``"
+        }
+        function embedHtml(html) {
+            const resizeScript = `<script>
+                let lastH = 0;
+                const sendHeight = () => {
+                    const body = document.body;
+                    if (!body) return;
+                    // Force re-calc
+                    const h = document.documentElement.getBoundingClientRect().height;
+                    if (Math.abs(h - lastH) > 2) {
+                        lastH = h;
+                        window.parent.postMessage({ type: 'iframe-resize', height: h }, '*');
+                    }
+                }
+                const ro = new ResizeObserver(sendHeight);
+                window.addEventListener('load', () => {
+                    // Inject styles to prevent infinite loops
+                    const style = document.createElement('style');
+                    style.textContent = 'html, body { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }';
+                    document.head.appendChild(style);
+                    
+                    const body = document.body;
+                    if (body) {
+                        ro.observe(body);
+                        ro.observe(document.documentElement);
+                        sendHeight();
+                    }
+                });
+            <\/script>`
+
+            const escaped = (html + resizeScript)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+            return `<iframe srcdoc="${escaped}" sandbox="allow-scripts" style="width:100%;height:auto;border:none;"></iframe>`
+        }
+        const dict = computed(() => {
+            if (isEmpty(props.value)) return null
+            const ret = tryParseJson(props.value)
+            return typeof ret === 'object' && !Array.isArray(ret) ? ret : null
+        })
+        const list = computed(() => {
+            if (isEmpty(props.value)) return null
+            const ret = tryParseJson(props.value)
+            return Array.isArray(ret) && ret.length > 0 ? ret : null
+        })
+
+        const handleMessage = (event) => {
+            if (event.data?.type === 'iframe-resize' && typeof event.data.height === 'number') {
+                const iframes = refArgs.value?.querySelectorAll('iframe')
+                iframes?.forEach(iframe => {
+                    if (iframe.contentWindow === event.source) {
+                        iframe.style.height = (event.data.height + 30) + 'px'
+                    }
+                })
+            }
+        }
+
+        onMounted(() => {
+            window.addEventListener('message', handleMessage)
+            const hasIframes = refArgs.value?.querySelector('iframe')
+            if (hasIframes) {
+                refArgs.value.classList.add('has-iframes')
+            }
+        })
+
+        onUnmounted(() => {
+            window.removeEventListener('message', handleMessage)
+        })
+
+        return {
+            refArgs,
+            dict,
+            list,
+            isEmpty,
+            embedHtml,
+        }
+    }
+}
+
+export const ToolOutput = {
+    template: ``,
+    setup(props) {
+
+    }
+}
+
 export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
@@ -392,11 +521,7 @@ export const ChatBody = {
                                                 <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Tool Call</span>
                                             </div>
                                             
-                                            <!-- Arguments -->
-                                            <div v-if="tool.function.arguments && tool.function.arguments != '{}'" class="not-prose px-3 py-2">
-                                                <HtmlFormat v-if="hasJsonStructure(tool.function.arguments)" :value="tryParseJson(tool.function.arguments)" :classes="$utils.htmlFormatClasses" />
-                                                <pre v-else class="tool-arguments">{{ tool.function.arguments }}</pre>
-                                            </div>
+                                            <ToolArguments :value="tool.function.arguments" />
 
                                             <!-- Tool Output (Nested) -->
                                             <div v-if="getToolOutput(tool.id)" class="border-t border-gray-200 dark:border-gray-700">
@@ -469,7 +594,7 @@ export const ChatBody = {
 
                                     <!-- User Message with separate attachments -->
                                     <div v-else-if="message.role !== 'assistant' && message.role !== 'tool'">
-                                        <div v-html="$fmt.markdown(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
+                                        <div v-html="$fmt.content(message.content)" class="prose prose-sm max-w-none dark:prose-invert break-words"></div>
                                         <ViewTypes :results="getAttachments(message)" />
                                     </div>
 
@@ -806,17 +931,6 @@ export const ChatBody = {
         const isToolLinked = (message) => {
             if (message.role !== 'tool') return false
             return currentThread.value?.messages?.some(m => m.role === 'assistant' && m.tool_calls?.some(tc => tc.id === message.tool_call_id))
-        }
-
-        const tryParseJson = (str) => {
-            try {
-                return JSON.parse(str)
-            } catch (e) {
-                return null
-            }
-        }
-        const hasJsonStructure = (str) => {
-            return tryParseJson(str) != null
         }
 
         function setPrefs(o) {

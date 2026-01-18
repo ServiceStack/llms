@@ -203,6 +203,13 @@ export function utilsFormatters() {
     }
 }
 
+const htmlStartTags = ['<!doctype', '<html', '<head', '<body', '<script', '<style', '<link']
+export function isHtml(s) {
+    if (!s || typeof s != 'string') return false
+    const lower = s.toLowerCase().trim()
+    const isHtml = htmlStartTags.some(tag => lower.startsWith(tag))
+    return isHtml
+}
 
 /**
  * @param {object|array} type 
@@ -247,6 +254,7 @@ export function utilsFunctions() {
         deepClone,
         toModelInfo,
         pluralize,
+        isHtml,
         htmlFormatClasses,
     }
 }
