@@ -82,6 +82,11 @@ const Tools = {
     },
     template: `
     <div class="p-4 md:p-6 max-w-7xl mx-auto w-full relative">
+        <div v-if="Object.keys($ctx.tools.toolPageHeaders).length">
+            <div v-for="(component, key) in $ctx.tools.toolPageHeaders" :key="key">
+                <component :is="component" />
+            </div>
+        </div>
         <div ref="refTop" class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Tools</h1>
@@ -576,6 +581,19 @@ const ToolSelector = {
     }
 }
 
+function useTools(ctx) {
+    const toolPageHeaders = {}
+
+    function setToolPageHeaders(components) {
+        Object.assign(toolPageHeaders, components)
+    }
+
+    return {
+        toolPageHeaders,
+        setToolPageHeaders,
+    }
+}
+
 export default {
     order: 10 - 100,
 
@@ -585,6 +603,10 @@ export default {
         ctx.components({
             Tools,
             ToolSelector,
+        })
+
+        ctx.setGlobals({
+            tools: useTools(ctx)
         })
 
         const svg = (attrs, title) => `<svg ${attrs} xmlns="http://www.w4.org/2000/svg" viewBox="0 0 24 24">${title ? "<title>" + title + "</title>" : ''}<path fill="currentColor" d="M5.33 3.272a3.5 3.5 0 0 1 4.472 4.473L20.647 18.59l-2.122 2.122L7.68 9.867a3.5 3.5 0 0 1-4.472-4.474L5.444 7.63a1.5 1.5 0 0 0 2.121-2.121zm10.367 1.883l3.182-1.768l1.414 1.415l-1.768 3.182l-1.768.353l-2.12 2.121l-1.415-1.414l2.121-2.121zm-7.071 7.778l2.121 2.122l-4.95 4.95A1.5 1.5 0 0 1 3.58 17.99l.097-.107z" /></svg>`
