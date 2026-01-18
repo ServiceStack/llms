@@ -41,7 +41,7 @@ try:
 except ImportError:
     HAS_PIL = False
 
-VERSION = "3.0.7"
+VERSION = "3.0.8"
 _ROOT = None
 DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
