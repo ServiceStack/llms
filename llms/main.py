@@ -1539,6 +1539,33 @@ async def g_exec_tool(function_name, function_args):
     return f"Error: Tool '{function_name}' not found", None
 
 
+def group_resources(resources: list):
+    """
+    converts list of parts into a grouped dictionary, e.g:
+    [{"type: "image_url", "image_url": {"url": "/image.jpg"}}] =>
+    {"images": [{"type": "image_url", "image_url": {"url": "/image.jpg"}}] }
+    """
+    grouped = {}
+    for res in resources:
+        type = res.get("type")
+        if not type:
+            continue
+        if type == "image_url":
+            group = "images"
+        elif type == "audio_url":
+            group = "audios"
+        elif type == "file_urls" or type == "file":
+            group = "files"
+        elif type == "text":
+            group = "texts"
+        else:
+            group = "others"
+        if group not in grouped:
+            grouped[group] = []
+        grouped[group].append(res)
+    return grouped
+
+
 async def g_chat_completion(chat, context=None):
     try:
         model = chat.get("model")
@@ -1638,10 +1665,13 @@ async def g_chat_completion(chat, context=None):
                         except Exception as e:
                             tool_result = f"Error: Failed to parse JSON arguments for tool '{function_name}': {to_error_message(e)}"
                         else:
-                            tool_result = await g_exec_tool(function_name, function_args)
+                            tool_result, resources = await g_exec_tool(function_name, function_args)
 
                         # Append tool result to history
                         tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": to_content(tool_result)}
+
+                        tool_msg.update(group_resources(resources))
+
                         current_chat["messages"].append(tool_msg)
                         tool_history.append(tool_msg)
 
@@ -2950,6 +2980,9 @@ class ExtensionContext:
             if tool_def["function"]["name"] == name:
                 return tool_def
         return None
+
+    def group_resources(self, resources: list):
+        return group_resources(resources)
 
     def check_auth(self, request):
         return self.app.check_auth(request)

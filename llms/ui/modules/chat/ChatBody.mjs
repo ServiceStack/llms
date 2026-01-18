@@ -210,6 +210,29 @@ export const ViewTypes = {
         return { cls, texts, images, audios, files, others, hasResources }
     }
 }
+export const ViewToolTypes = {
+    template: `<ViewTypes v-if="results?.length" :results="results" />`,
+    props: {
+        output: Object,
+    },
+    setup(props) {
+        const results = computed(() => {
+            const ret = []
+            if (!props.output) return ret
+            if (props.output.images) {
+                ret.push(...props.output.images)
+            }
+            if (props.output.audios) {
+                ret.push(...props.output.audios)
+            }
+            if (props.output.files) {
+                ret.push(...props.output.files)
+            }
+            return ret
+        })
+        return { results }
+    }
+}
 
 
 export const MessageUsage = {
@@ -403,6 +426,7 @@ export const ChatBody = {
                                                         <div v-else class="text-gray-500 italic p-2">Invalid JSON content</div>
                                                     </div>
                                                 </div>
+                                                <ViewToolTypes :output="getToolOutput(tool.id)" />
                                             </div>
                                         </div>
                                     </div>

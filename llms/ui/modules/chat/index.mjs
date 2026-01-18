@@ -2,7 +2,7 @@
 import { ref, watch, computed, nextTick, inject } from 'vue'
 import { $$, createElement, lastRightPart, ApiResult, createErrorStatus } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
-import { ChatBody, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, MessageUsage, MessageReasoning } from './ChatBody.mjs'
+import { ChatBody, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, ViewToolTypes, MessageUsage, MessageReasoning } from './ChatBody.mjs'
 import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
@@ -934,6 +934,7 @@ export default {
             TypeFile,
             ViewType,
             ViewTypes,
+            ViewToolTypes,
 
             HomeTools,
             Home,
