@@ -95,9 +95,9 @@ def calc(expression: str) -> str:
 
 def install(ctx):
     # Examples of registering tools using automatic definition generation
-    ctx.register_tool(get_current_time)
-    ctx.register_tool(read_file)
-    ctx.register_tool(list_directory)
+    ctx.register_tool(get_current_time, group="my_tools")
+    ctx.register_tool(read_file, group="my_tools")
+    ctx.register_tool(list_directory, group="my_tools")
 
     # Register calculate tool with manual definition
     ctx.register_tool(
@@ -119,6 +119,7 @@ def install(ctx):
                 },
             },
         },
+        group="my_tools",
     )
 
 
