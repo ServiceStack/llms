@@ -12,6 +12,47 @@ function hasJsonStructure(str) {
     return tryParseJson(str) != null
 }
 
+function isEmpty(v) {
+    return !v || v === '{}' || v === '[]' || v === 'null' || v === 'undefined' || v === '""' || v === "''" || v === "``"
+}
+function embedHtml(html) {
+    const resizeScript = `<script>
+        let lastH = 0;
+        const sendHeight = () => {
+            const body = document.body;
+            if (!body) return;
+            // Force re-calc
+            const h = document.documentElement.getBoundingClientRect().height;
+            if (Math.abs(h - lastH) > 2) {
+                lastH = h;
+                window.parent.postMessage({ type: 'iframe-resize', height: h }, '*');
+            }
+        }
+        const ro = new ResizeObserver(sendHeight);
+        window.addEventListener('load', () => {
+            // Inject styles to prevent infinite loops
+            const style = document.createElement('style');
+            style.textContent = 'html, body { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }';
+            document.head.appendChild(style);
+            
+            const body = document.body;
+            if (body) {
+                ro.observe(body);
+                ro.observe(document.documentElement);
+                sendHeight();
+            }
+        });
+    <\/script>`
+
+    const escaped = (html + resizeScript)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+    return `<iframe srcdoc="${escaped}" sandbox="allow-scripts" style="width:100%;height:auto;border:none;"></iframe>`
+}
+
 export const TypeText = {
     template: `
         <div v-if="text.type === 'text'">
@@ -332,46 +373,6 @@ export const ToolArguments = {
     },
     setup(props) {
         const refArgs = ref()
-        function isEmpty(v) {
-            return !v || v === '{}' || v === '[]' || v === 'null' || v === 'undefined' || v === '""' || v === "''" || v === "``"
-        }
-        function embedHtml(html) {
-            const resizeScript = `<script>
-                let lastH = 0;
-                const sendHeight = () => {
-                    const body = document.body;
-                    if (!body) return;
-                    // Force re-calc
-                    const h = document.documentElement.getBoundingClientRect().height;
-                    if (Math.abs(h - lastH) > 2) {
-                        lastH = h;
-                        window.parent.postMessage({ type: 'iframe-resize', height: h }, '*');
-                    }
-                }
-                const ro = new ResizeObserver(sendHeight);
-                window.addEventListener('load', () => {
-                    // Inject styles to prevent infinite loops
-                    const style = document.createElement('style');
-                    style.textContent = 'html, body { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }';
-                    document.head.appendChild(style);
-                    
-                    const body = document.body;
-                    if (body) {
-                        ro.observe(body);
-                        ro.observe(document.documentElement);
-                        sendHeight();
-                    }
-                });
-            <\/script>`
-
-            const escaped = (html + resizeScript)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;')
-            return `<iframe srcdoc="${escaped}" sandbox="allow-scripts" style="width:100%;height:auto;border:none;"></iframe>`
-        }
         const dict = computed(() => {
             if (isEmpty(props.value)) return null
             const ret = tryParseJson(props.value)
@@ -417,9 +418,47 @@ export const ToolArguments = {
 }
 
 export const ToolOutput = {
-    template: ``,
+    template: `
+        <div v-if="output" class="border-t border-gray-200 dark:border-gray-700">
+            <div class="px-3 py-1.5 flex justify-between items-center border-b border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800">
+                <div class="flex items-center gap-2 ">
+                    <svg class="size-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Output</span>
+                </div>    
+                <div v-if="hasJsonStructure(output.content)" class="flex items-center gap-2 text-[10px] uppercase tracking-wider font-medium select-none">
+                    <span @click="$ctx.setPrefs({ toolFormat: 'text' })" 
+                        class="cursor-pointer transition-colors"
+                        :class="$ctx.prefs.toolFormat !== 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
+                        text
+                    </span>
+                    <span class="text-gray-300 dark:text-gray-700">|</span>
+                    <span @click="$ctx.setPrefs({ toolFormat: 'preview' })" 
+                        class="cursor-pointer transition-colors"
+                        :class="$ctx.prefs.toolFormat == 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
+                        preview
+                    </span>
+                </div>
+            </div>
+            <div class="not-prose px-3 py-2">
+                <pre v-if="$ctx.prefs.toolFormat !== 'preview' || !hasJsonStructure(output.content)" class="tool-output">{{ output.content }}</pre>
+                <div v-else class="text-xs">
+                    <HtmlFormat v-if="tryParseJson(output.content)" :value="tryParseJson(output.content)" :classes="$utils.htmlFormatClasses" />
+                    <div v-else class="text-gray-500 italic p-2">Invalid JSON content</div>
+                </div>
+            </div>
+            <ViewToolTypes :output="output" class="p-2" />
+        </div>
+    `,
+    props: {
+        tool: Object,
+        output: Object,
+    },
     setup(props) {
 
+        return {
+            tryParseJson,
+            hasJsonStructure,
+        }
     }
 }
 
@@ -523,36 +562,8 @@ export const ChatBody = {
                                             
                                             <ToolArguments :value="tool.function.arguments" />
 
-                                            <!-- Tool Output (Nested) -->
-                                            <div v-if="getToolOutput(tool.id)" class="border-t border-gray-200 dark:border-gray-700">
-                                                <div class="px-3 py-1.5 flex justify-between items-center border-b border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800">
-                                                    <div class="flex items-center gap-2 ">
-                                                        <svg class="size-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                                                        <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Output</span>
-                                                    </div>    
-                                                    <div v-if="hasJsonStructure(getToolOutput(tool.id).content)" class="flex items-center gap-2 text-[10px] uppercase tracking-wider font-medium select-none">
-                                                        <span @click="setPrefs({ toolFormat: 'text' })" 
-                                                            class="cursor-pointer transition-colors"
-                                                            :class="prefs.toolFormat !== 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
-                                                            text
-                                                        </span>
-                                                        <span class="text-gray-300 dark:text-gray-700">|</span>
-                                                        <span @click="setPrefs({ toolFormat: 'preview' })" 
-                                                            class="cursor-pointer transition-colors"
-                                                            :class="prefs.toolFormat == 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
-                                                            preview
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div class="not-prose px-3 py-2">
-                                                    <pre v-if="prefs.toolFormat !== 'preview' || !hasJsonStructure(getToolOutput(tool.id).content)" class="tool-output">{{ getToolOutput(tool.id).content }}</pre>
-                                                    <div v-else class="text-xs">
-                                                        <HtmlFormat v-if="tryParseJson(getToolOutput(tool.id).content)" :value="tryParseJson(getToolOutput(tool.id).content)" :classes="$utils.htmlFormatClasses" />
-                                                        <div v-else class="text-gray-500 italic p-2">Invalid JSON content</div>
-                                                    </div>
-                                                </div>
-                                                <ViewToolTypes :output="getToolOutput(tool.id)" />
-                                            </div>
+                                            <ToolOutput :tool="tool" :output="getToolOutput(tool.id)" />
+
                                         </div>
                                     </div>
 
