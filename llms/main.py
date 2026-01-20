@@ -18,6 +18,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shlex
 import shutil
 import site
 import subprocess
@@ -25,6 +26,7 @@ import sys
 import time
 import traceback
 from datetime import datetime
+from enum import IntEnum
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
@@ -57,6 +59,12 @@ g_default_model = ""
 g_sessions = {}  # OAuth session storage: {session_token: {userId, userName, displayName, profileUrl, email, created}}
 g_oauth_states = {}  # CSRF protection: {state: {created, redirect_uri}}
 g_app = None  # ExtensionsContext Singleton
+
+
+class ExitCode(IntEnum):
+    SUCCESS = 0
+    FAILED = 1
+    UNHANDLED = 9
 
 
 def _log(message):
@@ -1853,12 +1861,18 @@ def config_str(key):
     return key in g_config and g_config[key] or None
 
 
-def load_config(config, providers, verbose=None):
+def load_config(config, providers, verbose=None, debug=None, disable_extensions: List[str] = None):
     global g_config, g_providers, g_verbose
     g_config = config
     g_providers = providers
-    if verbose:
+    if verbose is not None:
         g_verbose = verbose
+    if debug is not None:
+        global DEBUG
+        DEBUG = debug
+    if disable_extensions:
+        global DISABLE_EXTENSIONS
+        DISABLE_EXTENSIONS = disable_extensions
 
 
 def init_llms(config, providers):
@@ -2659,6 +2673,9 @@ class AppExtensions:
             return home_llms_path(os.path.join("user", username))
         return home_llms_path(os.path.join("user", "default"))
 
+    def get_providers(self) -> Dict[str, Any]:
+        return g_handlers
+
     def chat_request(
         self,
         template: Optional[str] = None,
@@ -2696,12 +2713,14 @@ class AppExtensions:
         for filter_func in self.chat_tool_filters:
             await filter_func(chat, context)
 
-    def exit(self, exit_code: int = 0):
+    def shutdown(self):
         if len(self.shutdown_handlers) > 0:
             _dbg(f"running {len(self.shutdown_handlers)} shutdown handlers...")
             for handler in self.shutdown_handlers:
                 handler()
 
+    def exit(self, exit_code: int = 0):
+        self.shutdown()
         _dbg(f"exit({exit_code})")
         sys.exit(exit_code)
 
@@ -2912,7 +2931,7 @@ class ExtensionContext:
         return self.app.chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
 
     async def chat_completion(self, chat: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Any:
-        return self.app.chat_completion(chat, context=context)
+        return await self.app.chat_completion(chat, context=context)
 
     def get_providers(self) -> Dict[str, Any]:
         return g_handlers
@@ -2960,7 +2979,7 @@ class ExtensionContext:
             parameters = func_def.get("parameters", {})
             defs = parameters.get("$defs", {})
             properties = parameters.get("properties", {})
-            for prop_name, prop_def in properties.items():
+            for _, prop_def in properties.items():
                 if "$ref" in prop_def:
                     ref = prop_def["$ref"]
                     if ref.startswith("#/$defs/"):
@@ -3105,7 +3124,21 @@ def get_extensions_dirs():
     return ret
 
 
+def verify_root_path():
+    global _ROOT
+    _ROOT = os.getenv("LLMS_ROOT", resolve_root())
+    if not _ROOT:
+        print("Resource root not found")
+        exit(1)
+
+
 def init_extensions(parser):
+    """
+    Programmatic entry point for the CLI.
+    Example: cli("ls minimax")
+    """
+    verify_root_path()
+
     """
     Initializes extensions by loading their __init__.py files and calling the __parser__ function if it exists.
     """
@@ -3260,14 +3293,7 @@ def run_extension_cli():
                     return False
 
 
-def main():
-    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_app
-
-    _ROOT = os.getenv("LLMS_ROOT", resolve_root())
-    if not _ROOT:
-        print("Resource root not found")
-        exit(1)
-
+def create_arg_parser():
     parser = argparse.ArgumentParser(description=f"llms v{VERSION}")
     parser.add_argument("--config", default=None, help="Path to config file", metavar="FILE")
     parser.add_argument("--providers", default=None, help="Path to models.dev providers file", metavar="FILE")
@@ -3336,11 +3362,13 @@ def main():
         help="Update an extension (use 'all' to update all extensions)",
         metavar="EXTENSION",
     )
+    return parser
 
-    # Load parser extensions, go through all extensions and load their parser arguments
-    init_extensions(parser)
 
-    cli_args, extra_args = parser.parse_known_args()
+def cli_exec(cli_args, extra_args):
+    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_app
+
+    verify_root_path()
 
     g_app = AppExtensions(cli_args, extra_args)
 
@@ -3376,12 +3404,12 @@ def main():
         else:
             asyncio.run(save_text_url(github_url("providers-extra.json"), home_providers_extra_path))
             print(f"Created default extra providers config at {home_providers_extra_path}")
-        exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.providers:
         if not os.path.exists(cli_args.providers):
             print(f"providers.json not found at {cli_args.providers}")
-            exit(1)
+            return ExitCode.FAILED
         g_providers = json.loads(text_from_file(cli_args.providers))
 
     if cli_args.config:
@@ -3410,7 +3438,7 @@ def main():
     if cli_args.update_providers:
         asyncio.run(update_providers(home_providers_path))
         print(f"Updated {home_providers_path}")
-        exit(0)
+        return ExitCode.SUCCESS
 
     # if home_providers_path is older than 1 day, update providers list
     if (
@@ -3443,7 +3471,7 @@ def main():
                 print("  llms --add <github-user>/<repo>")
 
             asyncio.run(list_extensions())
-            exit(0)
+            return ExitCode.SUCCESS
 
         async def install_extension(name):
             # Determine git URL and target directory name
@@ -3506,7 +3534,7 @@ def main():
                     os.rmdir(target_path)
 
         asyncio.run(install_extension(cli_args.add))
-        exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.remove is not None:
         if cli_args.remove == "ls":
@@ -3515,11 +3543,11 @@ def main():
             extensions = os.listdir(extensions_path)
             if len(extensions) == 0:
                 print("No extensions installed.")
-                exit(0)
+                return ExitCode.SUCCESS
             print("Installed extensions:")
             for extension in extensions:
                 print(f"  {extension}")
-            exit(0)
+            return ExitCode.SUCCESS
         # Remove an extension
         extension_name = cli_args.remove
         extensions_path = get_extensions_path()
@@ -3527,7 +3555,7 @@ def main():
 
         if not os.path.exists(target_path):
             print(f"Extension {extension_name} not found at {target_path}")
-            exit(1)
+            return ExitCode.FAILED
 
         print(f"Removing extension: {extension_name}...")
         try:
@@ -3535,9 +3563,9 @@ def main():
             print(f"Extension {extension_name} removed successfully.")
         except Exception as e:
             print(f"Failed to remove extension: {e}")
-            exit(1)
+            return ExitCode.FAILED
 
-        exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.update:
         if cli_args.update == "ls":
@@ -3546,7 +3574,7 @@ def main():
             extensions = os.listdir(extensions_path)
             if len(extensions) == 0:
                 print("No extensions installed.")
-                exit(0)
+                return ExitCode.SUCCESS
             print("Installed extensions:")
             for extension in extensions:
                 print(f"  {extension}")
@@ -3554,7 +3582,7 @@ def main():
             print("\nUsage:")
             print("  llms --update <extension>")
             print("  llms --update all")
-            exit(0)
+            return ExitCode.SUCCESS
 
         async def update_extensions(extension_name):
             extensions_path = get_extensions_path()
@@ -3571,7 +3599,7 @@ def main():
                     _log(result.stdout.decode("utf-8"))
 
         asyncio.run(update_extensions(cli_args.update))
-        exit(0)
+        return ExitCode.SUCCESS
 
     g_app.extensions = install_extensions()
 
@@ -3629,7 +3657,7 @@ def main():
         print(f"\n{model_count} models available from {provider_count} providers")
 
         print_status()
-        g_app.exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.check is not None:
         # Check validity of models for a provider
@@ -3638,7 +3666,7 @@ def main():
         provider_name = cli_args.check
         model_names = extra_args if len(extra_args) > 0 else None
         loop.run_until_complete(check_models(provider_name, model_names))
-        g_app.exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.serve is not None:
         # Disable inactive providers and save to config before starting server
@@ -3683,7 +3711,7 @@ def main():
                 print("ERROR: Authentication is enabled but GitHub OAuth is not properly configured.")
                 print("Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables,")
                 print("or disable authentication by setting 'auth.enabled' to false in llms.json")
-                exit(1)
+                return ExitCode.FAILED
 
             _log("Authentication enabled - GitHub OAuth configured")
 
@@ -4277,7 +4305,7 @@ def main():
 
         print(f"Starting server on port {port}...")
         web.run_app(app, host="0.0.0.0", port=port, print=_log)
-        g_app.exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.enable is not None:
         if cli_args.enable.endswith(","):
@@ -4296,7 +4324,7 @@ def main():
             if provider not in g_config["providers"]:
                 print(f"Provider '{provider}' not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
-                exit(1)
+                return ExitCode.FAILED
             if provider in g_config["providers"]:
                 provider_config, msg = enable_provider(provider)
                 print(f"\nEnabled provider {provider}:")
@@ -4307,7 +4335,7 @@ def main():
         print_status()
         if len(msgs) > 0:
             print("\n" + "\n".join(msgs))
-        g_app.exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.disable is not None:
         if cli_args.disable.endswith(","):
@@ -4325,24 +4353,24 @@ def main():
             if provider not in g_config["providers"]:
                 print(f"Provider {provider} not found")
                 print(f"Available providers: {', '.join(g_config['providers'].keys())}")
-                exit(1)
+                return ExitCode.FAILED
             disable_provider(provider)
             print(f"\nDisabled provider {provider}")
 
         print_status()
-        g_app.exit(0)
+        return ExitCode.SUCCESS
 
     if cli_args.default is not None:
         default_model = cli_args.default
         provider_model = get_provider_model(default_model)
         if provider_model is None:
             print(f"Model {default_model} not found")
-            exit(1)
+            return ExitCode.FAILED
         default_text = g_config["defaults"]["text"]
         default_text["model"] = default_model
         save_config(g_config)
         print(f"\nDefault model set to: {default_model}")
-        g_app.exit(0)
+        return ExitCode.SUCCESS
 
     if (
         cli_args.chat is not None
@@ -4364,13 +4392,13 @@ def main():
                 template = f"out:{cli_args.out}"
                 if template not in g_config["defaults"]:
                     print(f"Template for output modality '{cli_args.out}' not found")
-                    exit(1)
+                    return ExitCode.FAILED
                 chat = g_config["defaults"][template]
             if cli_args.chat is not None:
                 chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
                 if not os.path.exists(chat_path):
                     print(f"Chat request template not found: {chat_path}")
-                    exit(1)
+                    return ExitCode.FAILED
                 _log(f"Using chat: {chat_path}")
 
                 with open(chat_path) as f:
@@ -4411,19 +4439,48 @@ def main():
                     raw=cli_args.raw,
                 )
             )
-            g_app.exit(0)
+            return ExitCode.SUCCESS
         except Exception as e:
             print(f"{cli_args.logprefix}Error: {e}")
             if cli_args.verbose:
                 traceback.print_exc()
-            g_app.exit(1)
+            return ExitCode.FAILED
 
     handled = run_extension_cli()
+    return ExitCode.SUCCESS if handled else ExitCode.UNHANDLED
 
-    if not handled:
+
+def get_app():
+    return g_app
+
+
+def cli(command_line: str):
+    parser = create_arg_parser()
+
+    # Load parser extensions, go through all extensions and load their parser arguments
+    if load_extensions:
+        init_extensions(parser)
+
+    args = shlex.split(command_line)
+    cli_args, extra_args = parser.parse_known_args(args)
+    return cli_exec(cli_args, extra_args)
+
+
+def main():
+    parser = create_arg_parser()
+
+    # Load parser extensions, go through all extensions and load their parser arguments
+    init_extensions(parser)
+
+    cli_args, extra_args = parser.parse_known_args()
+    exit_code = cli_exec(cli_args, extra_args)
+
+    if exit_code == ExitCode.UNHANDLED:
         # show usage from ArgumentParser
         parser.print_help()
-        g_app.exit(0)
+        g_app.exit(0) if g_app else exit(0)
+
+    g_app.exit(exit_code) if g_app else exit(exit_code)
 
 
 if __name__ == "__main__":
