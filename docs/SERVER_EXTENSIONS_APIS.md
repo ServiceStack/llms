@@ -15,6 +15,72 @@ def init(ctx: ExtensionContext):
 
 ---
 
+## Example Extension
+
+Here's a complete example demonstrating common extension patterns:
+
+```python
+import os
+from aiohttp import web
+
+def init(ctx):
+    """Initialize the example extension."""
+    
+    # Register a custom tool
+    def greet_user(name: str, formal: bool = False) -> str:
+        """Greet a user by name.
+        
+        Args:
+            name: The user's name
+            formal: Whether to use formal greeting
+        
+        Returns:
+            A greeting message
+        """
+        if formal:
+            return f"Good day, {name}. How may I assist you?"
+        return f"Hey {name}! What's up?"
+    
+    ctx.register_tool(greet_user, group="social")
+    
+    # Register API routes
+    async def get_status(request):
+        is_auth, user = ctx.check_auth(request)
+        return web.json_response({
+            "extension": ctx.name,
+            "authenticated": is_auth,
+            "user": user.get("userName") if user else None
+        })
+    ctx.add_get("status", get_status)
+    
+    async def create_item(request):
+        is_auth, _ = ctx.check_auth(request)
+        if not is_auth:
+            return ctx.error_auth_required
+        
+        try:
+            data = await request.json()
+            # Process data...
+            return web.json_response({"success": True, "id": "123"})
+        except Exception as e:
+            return web.json_response(ctx.error_response(e), status=500)
+    ctx.add_post("items", create_item)
+    
+    # Register filters
+    async def log_requests(chat, context):
+        ctx.log(f"Chat request for thread: {context.get('threadId')}")
+    ctx.register_chat_request_filter(log_requests)
+    
+    # Cleanup on shutdown
+    def cleanup():
+        ctx.log("Extension shutting down, cleaning up...")
+    ctx.register_shutdown_handler(cleanup)
+    
+    ctx.log("Example extension initialized!")
+```
+
+---
+
 ## ExtensionContext
 
 The `ExtensionContext` class is the main interface for extensions. It provides access to the extension's configuration, logging, and registration methods.
@@ -30,8 +96,6 @@ The `ExtensionContext` class is the main interface for extensions. It provides a
 | `path` | `str` | File path of the extension |
 | `name` | `str` | Name of the extension (derived from filename) |
 | `ext_prefix` | `str` | URL prefix for extension routes (e.g., `/ext/myext`) |
-| `MOCK` | `bool` | Whether mock mode is enabled |
-| `MOCK_DIR` | `str` | Directory for mock data files |
 | `debug` | `bool` | Whether debug mode is enabled |
 | `verbose` | `bool` | Whether verbose logging is enabled |
 | `aspect_ratios` | `Dict[str, str]` | Available image aspect ratios (e.g., `"1:1": "1024×1024"`) |
@@ -234,10 +298,12 @@ Process a tool definition to inline `$defs` references.
 Execute a registered tool by name.
 
 ```python
-error, results = await ctx.exec_tool("search_database", {"query": "test"})
-if error:
-    ctx.err("Tool execution failed", Exception(error))
+text, resources = await ctx.exec_tool("search_database", {"query": "test"})
 ```
+
+The `text` captures the tool text response that can be embedded in AI Messages and further passed to other AI Reqeusts and tools.
+
+The `resources` contains a list of artifacts extracted from the tool results in the same structure as [Open AI content types](https://platform.openai.com/docs/api-reference/chat/create#chat_create-messages-user_message-content).
 
 #### `tool_result(result: Any, function_name: Optional[str] = None, function_args: Optional[Dict] = None) -> Dict[str, Any]`
 Format a tool execution result for return to the LLM.
@@ -584,70 +650,4 @@ The `request_args` dictionary defines supported chat request parameters:
     "color.js": "/ui/lib/color.js",
     "ctx.mjs": "/ui/ctx.mjs",
 }
-```
-
----
-
-## Example Extension
-
-Here's a complete example demonstrating common extension patterns:
-
-```python
-import os
-from aiohttp import web
-
-def init(ctx):
-    """Initialize the example extension."""
-    
-    # Register a custom tool
-    def greet_user(name: str, formal: bool = False) -> str:
-        """Greet a user by name.
-        
-        Args:
-            name: The user's name
-            formal: Whether to use formal greeting
-        
-        Returns:
-            A greeting message
-        """
-        if formal:
-            return f"Good day, {name}. How may I assist you?"
-        return f"Hey {name}! What's up?"
-    
-    ctx.register_tool(greet_user, group="social")
-    
-    # Register API routes
-    async def get_status(request):
-        is_auth, user = ctx.check_auth(request)
-        return web.json_response({
-            "extension": ctx.name,
-            "authenticated": is_auth,
-            "user": user.get("userName") if user else None
-        })
-    ctx.add_get("status", get_status)
-    
-    async def create_item(request):
-        is_auth, _ = ctx.check_auth(request)
-        if not is_auth:
-            return ctx.error_auth_required
-        
-        try:
-            data = await request.json()
-            # Process data...
-            return web.json_response({"success": True, "id": "123"})
-        except Exception as e:
-            return web.json_response(ctx.error_response(e), status=500)
-    ctx.add_post("items", create_item)
-    
-    # Register filters
-    async def log_requests(chat, context):
-        ctx.log(f"Chat request for thread: {context.get('threadId')}")
-    ctx.register_chat_request_filter(log_requests)
-    
-    # Cleanup on shutdown
-    def cleanup():
-        ctx.log("Extension shutting down, cleaning up...")
-    ctx.register_shutdown_handler(cleanup)
-    
-    ctx.log("Example extension initialized!")
 ```
