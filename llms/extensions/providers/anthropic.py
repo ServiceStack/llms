@@ -77,9 +77,17 @@ def install_anthropic(ctx):
 
                 anthropic_message = {"role": message.get("role"), "content": []}
 
+                # Handle interleaved thinking (must always be a list if present)
+                if "thinking" in message and message["thinking"]:
+                    anthropic_message["content"].append({"type": "thinking", "thinking": message["thinking"]})
+
                 content = message.get("content", "")
                 if isinstance(content, str):
-                    anthropic_message["content"] = content
+                    if anthropic_message["content"]:
+                        # If we have thinking, we must use blocks for text
+                        anthropic_message["content"].append({"type": "text", "text": content})
+                    else:
+                        anthropic_message["content"] = content
                 elif isinstance(content, list):
                     for item in content:
                         if item.get("type") == "text":

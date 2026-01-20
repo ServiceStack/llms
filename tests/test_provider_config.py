@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from llms.main import (  # noqa: E402
     create_provider,
     create_provider_kwargs,
-    get_provider_model,
     load_config,
 )
 
