@@ -28,7 +28,7 @@ from datetime import datetime
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, get_type_hints
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_type_hints
 from urllib.parse import parse_qs, urlencode, urljoin
 
 import aiohttp
@@ -2539,7 +2539,7 @@ class AppExtensions:
     APIs extensions can use to extend the app
     """
 
-    def __init__(self, cli_args, extra_args):
+    def __init__(self, cli_args: argparse.Namespace, extra_args: Dict[str, Any]):
         self.cli_args = cli_args
         self.extra_args = extra_args
         self.config = None
@@ -2615,12 +2615,12 @@ class AppExtensions:
             "ctx.mjs": "/ui/ctx.mjs",
         }
 
-    def set_config(self, config):
+    def set_config(self, config: Dict[str, Any]):
         self.config = config
         self.auth_enabled = self.config.get("auth", {}).get("enabled", False)
 
     # Authentication middleware helper
-    def check_auth(self, request):
+    def check_auth(self, request: web.Request) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Check if request is authenticated. Returns (is_authenticated, user_data)"""
         if not self.auth_enabled:
             return True, None
@@ -2639,7 +2639,7 @@ class AppExtensions:
 
         return False, None
 
-    def get_session(self, request):
+    def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
         session_token = get_session_token(request)
 
         if not session_token or session_token not in g_sessions:
@@ -2648,30 +2648,36 @@ class AppExtensions:
         session_data = g_sessions[session_token]
         return session_data
 
-    def get_username(self, request):
+    def get_username(self, request: web.Request) -> Optional[str]:
         session = self.get_session(request)
         if session:
             return session.get("userName")
         return None
 
-    def get_user_path(self, username=None):
+    def get_user_path(self, username: Optional[str] = None) -> str:
         if username:
             return home_llms_path(os.path.join("user", username))
         return home_llms_path(os.path.join("user", "default"))
 
-    def chat_request(self, template=None, text=None, model=None, system_prompt=None):
+    def chat_request(
+        self,
+        template: Optional[str] = None,
+        text: Optional[str] = None,
+        model: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+    ) -> Dict[str, Any]:
         return g_chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
 
-    async def chat_completion(self, chat, context=None):
+    async def chat_completion(self, chat: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Any:
         response = await g_chat_completion(chat, context)
         return response
 
-    def on_cache_saved_filters(self, context):
+    def on_cache_saved_filters(self, context: Dict[str, Any]):
         # _log(f"on_cache_saved_filters {len(self.cache_saved_filters)}: {context['url']}")
         for filter_func in self.cache_saved_filters:
             filter_func(context)
 
-    async def on_chat_error(self, e, context):
+    async def on_chat_error(self, e: Exception, context: Dict[str, Any]):
         # Apply chat error filters
         if "stackTrace" not in context:
             context["stackTrace"] = traceback.format_exc()
@@ -2681,16 +2687,16 @@ class AppExtensions:
             except Exception as e:
                 _err("chat error filter failed", e)
 
-    async def on_chat_tool(self, chat, context):
+    async def on_chat_tool(self, chat: Dict[str, Any], context: Dict[str, Any]):
         m_len = len(chat.get("messages", []))
         t_len = len(self.chat_tool_filters)
         _dbg(
-            f"on_tool_call for thread {context.get('threadId', None)} with {m_len} {pluralize('message', m_len)}, invoking {t_len} {pluralize('filter', t_len)}:"
+            f"on_tool_call for thread {context.get('threadId')} with {m_len} {pluralize('message', m_len)}, invoking {t_len} {pluralize('filter', t_len)}:"
         )
         for filter_func in self.chat_tool_filters:
             await filter_func(chat, context)
 
-    def exit(self, exit_code=0):
+    def exit(self, exit_code: int = 0):
         if len(self.shutdown_handlers) > 0:
             _dbg(f"running {len(self.shutdown_handlers)} shutdown handlers...")
             for handler in self.shutdown_handlers:
@@ -2699,7 +2705,7 @@ class AppExtensions:
         _dbg(f"exit({exit_code})")
         sys.exit(exit_code)
 
-    def create_chat_with_tools(self, chat, use_tools="all"):
+    def create_chat_with_tools(self, chat: Dict[str, Any], use_tools: str = "all") -> Dict[str, Any]:
         # Inject global tools if present
         current_chat = chat.copy()
         tools = current_chat.get("tools")
@@ -2728,7 +2734,7 @@ def handler_name(handler):
 
 
 class ExtensionContext:
-    def __init__(self, app, path):
+    def __init__(self, app: AppExtensions, path: str):
         self.app = app
         self.cli_args = app.cli_args
         self.extra_args = app.extra_args
@@ -2746,101 +2752,107 @@ class ExtensionContext:
         self.request_args = app.request_args
         self.disabled = False
 
-    def chat_to_prompt(self, chat):
+    def chat_to_prompt(self, chat: Dict[str, Any]) -> str:
         return chat_to_prompt(chat)
 
-    def chat_to_system_prompt(self, chat):
+    def chat_to_system_prompt(self, chat: Dict[str, Any]) -> str:
         return chat_to_system_prompt(chat)
 
-    def chat_response_to_message(self, response):
+    def chat_response_to_message(self, response: Dict[str, Any]) -> Dict[str, Any]:
         return chat_response_to_message(response)
 
-    def last_user_prompt(self, chat):
+    def last_user_prompt(self, chat: Dict[str, Any]) -> str:
         return last_user_prompt(chat)
 
-    def to_file_info(self, chat, info=None, response=None):
+    def to_file_info(
+        self, chat: Dict[str, Any], info: Optional[Dict[str, Any]] = None, response: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         return to_file_info(chat, info=info, response=response)
 
-    def save_image_to_cache(self, base64_data, filename, image_info, ignore_info=False):
+    def save_image_to_cache(
+        self, base64_data: Union[str, bytes], filename: str, image_info: Dict[str, Any], ignore_info: bool = False
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
         return save_image_to_cache(base64_data, filename, image_info, ignore_info=ignore_info)
 
-    def save_bytes_to_cache(self, bytes_data, filename, file_info):
+    def save_bytes_to_cache(
+        self, bytes_data: Union[str, bytes], filename: str, file_info: Optional[Dict[str, Any]]
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
         return save_bytes_to_cache(bytes_data, filename, file_info)
 
-    def text_from_file(self, path):
+    def text_from_file(self, path: str) -> str:
         return text_from_file(path)
 
-    def json_from_file(self, path):
+    def json_from_file(self, path: str) -> Any:
         return json_from_file(path)
 
-    def download_file(self, url):
+    def download_file(self, url: str) -> Tuple[bytes, Dict[str, Any]]:
         return download_file(url)
 
-    def session_download_file(self, session, url):
+    def session_download_file(self, session: aiohttp.ClientSession, url: str) -> Tuple[bytes, Dict[str, Any]]:
         return session_download_file(session, url)
 
-    def read_binary_file(self, url):
+    def read_binary_file(self, url: str) -> Tuple[bytes, Dict[str, Any]]:
         return read_binary_file(url)
 
-    def log(self, message):
+    def log(self, message: Any):
         if self.verbose:
             print(f"[{self.name}] {message}", flush=True)
         return message
 
-    def log_json(self, obj):
+    def log_json(self, obj: Any):
         if self.verbose:
             print(f"[{self.name}] {json.dumps(obj, indent=2)}", flush=True)
         return obj
 
-    def dbg(self, message):
+    def dbg(self, message: Any):
         if self.debug:
             print(f"DEBUG [{self.name}]: {message}", flush=True)
 
-    def err(self, message, e):
+    def err(self, message: str, e: Exception):
         print(f"ERROR [{self.name}]: {message}", e)
         if self.verbose:
             print(traceback.format_exc(), flush=True)
 
-    def error_message(self, e):
+    def error_message(self, e: Exception) -> str:
         return to_error_message(e)
 
-    def error_response(self, e, stacktrace=False):
+    def error_response(self, e: Exception, stacktrace: bool = False) -> Dict[str, Any]:
         return to_error_response(e, stacktrace=stacktrace)
 
-    def add_provider(self, provider):
+    def add_provider(self, provider: Any):
         self.log(f"Registered provider: {provider.__name__}")
         self.app.all_providers.append(provider)
 
-    def register_ui_extension(self, index):
+    def register_ui_extension(self, index: str):
         path = os.path.join(self.ext_prefix, index)
         self.log(f"Registered UI extension: {path}")
         self.app.ui_extensions.append({"id": self.name, "path": path})
 
-    def register_chat_request_filter(self, handler):
+    def register_chat_request_filter(self, handler: Callable):
         self.log(f"Registered chat request filter: {handler_name(handler)}")
         self.app.chat_request_filters.append(handler)
 
-    def register_chat_tool_filter(self, handler):
+    def register_chat_tool_filter(self, handler: Callable):
         self.log(f"Registered chat tool filter: {handler_name(handler)}")
         self.app.chat_tool_filters.append(handler)
 
-    def register_chat_response_filter(self, handler):
+    def register_chat_response_filter(self, handler: Callable):
         self.log(f"Registered chat response filter: {handler_name(handler)}")
         self.app.chat_response_filters.append(handler)
 
-    def register_chat_error_filter(self, handler):
+    def register_chat_error_filter(self, handler: Callable):
         self.log(f"Registered chat error filter: {handler_name(handler)}")
         self.app.chat_error_filters.append(handler)
 
-    def register_cache_saved_filter(self, handler):
+    def register_cache_saved_filter(self, handler: Callable):
         self.log(f"Registered cache saved filter: {handler_name(handler)}")
         self.app.cache_saved_filters.append(handler)
 
-    def register_shutdown_handler(self, handler):
+    def register_shutdown_handler(self, handler: Callable):
         self.log(f"Registered shutdown handler: {handler_name(handler)}")
         self.app.shutdown_handlers.append(handler)
 
-    def add_static_files(self, ext_dir):
+    def add_static_files(self, ext_dir: str):
         self.log(f"Registered static files: {ext_dir}")
 
         async def serve_static(request):
@@ -2852,57 +2864,63 @@ class ExtensionContext:
 
         self.app.server_add_get.append((os.path.join(self.ext_prefix, "{path:.*}"), serve_static, {}))
 
-    def web_path(self, method, path):
+    def web_path(self, method: str, path: str) -> str:
         full_path = os.path.join(self.ext_prefix, path) if path else self.ext_prefix
         self.dbg(f"Registered {method:<6} {full_path}")
         return full_path
 
-    def add_get(self, path, handler, **kwargs):
+    def add_get(self, path: str, handler: Callable, **kwargs: Any):
         self.app.server_add_get.append((self.web_path("GET", path), handler, kwargs))
 
-    def add_post(self, path, handler, **kwargs):
+    def add_post(self, path: str, handler: Callable, **kwargs: Any):
         self.app.server_add_post.append((self.web_path("POST", path), handler, kwargs))
 
-    def add_put(self, path, handler, **kwargs):
+    def add_put(self, path: str, handler: Callable, **kwargs: Any):
         self.app.server_add_put.append((self.web_path("PUT", path), handler, kwargs))
 
-    def add_delete(self, path, handler, **kwargs):
+    def add_delete(self, path: str, handler: Callable, **kwargs: Any):
         self.app.server_add_delete.append((self.web_path("DELETE", path), handler, kwargs))
 
-    def add_patch(self, path, handler, **kwargs):
+    def add_patch(self, path: str, handler: Callable, **kwargs: Any):
         self.app.server_add_patch.append((self.web_path("PATCH", path), handler, kwargs))
 
-    def add_importmaps(self, dict):
+    def add_importmaps(self, dict: Dict[str, str]):
         self.app.import_maps.update(dict)
 
-    def add_index_header(self, html):
+    def add_index_header(self, html: str):
         self.app.index_headers.append(html)
 
-    def add_index_footer(self, html):
+    def add_index_footer(self, html: str):
         self.app.index_footers.append(html)
 
-    def get_config(self):
+    def get_config(self) -> Optional[Dict[str, Any]]:
         return g_config
 
-    def get_cache_path(self, path=""):
+    def get_cache_path(self, path: str = "") -> str:
         return get_cache_path(path)
 
-    def get_file_mime_type(self, filename):
+    def get_file_mime_type(self, filename: str) -> str:
         return get_file_mime_type(filename)
 
-    def chat_request(self, template=None, text=None, model=None, system_prompt=None):
+    def chat_request(
+        self,
+        template: Optional[str] = None,
+        text: Optional[str] = None,
+        model: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+    ) -> Dict[str, Any]:
         return self.app.chat_request(template=template, text=text, model=model, system_prompt=system_prompt)
 
-    def chat_completion(self, chat, context=None):
+    async def chat_completion(self, chat: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Any:
         return self.app.chat_completion(chat, context=context)
 
-    def get_providers(self):
+    def get_providers(self) -> Dict[str, Any]:
         return g_handlers
 
-    def get_provider(self, name):
+    def get_provider(self, name: str) -> Optional[Any]:
         return g_handlers.get(name)
 
-    def sanitize_tool_def(self, tool_def):
+    def sanitize_tool_def(self, tool_def: Dict[str, Any]) -> Dict[str, Any]:
         """
         Merge $defs parameter into tool_def property to reduce client/server complexity
         """
@@ -2954,7 +2972,7 @@ class ExtensionContext:
                 del parameters["$defs"]
         return tool_def
 
-    def register_tool(self, func, tool_def=None, group=None):
+    def register_tool(self, func: Callable, tool_def: Optional[Dict[str, Any]] = None, group: Optional[str] = None):
         if tool_def is None:
             tool_def = function_to_tool_definition(func)
 
@@ -2976,54 +2994,61 @@ class ExtensionContext:
             self.app.tool_groups[group] = []
         self.app.tool_groups[group].append(name)
 
-    def get_tool_definition(self, name):
+    def get_tool_definition(self, name: str) -> Optional[Dict[str, Any]]:
         for tool_def in self.app.tool_definitions:
             if tool_def["function"]["name"] == name:
                 return tool_def
         return None
 
-    def group_resources(self, resources: list):
+    def group_resources(self, resources: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         return group_resources(resources)
 
-    def check_auth(self, request):
+    def check_auth(self, request: web.Request) -> Tuple[bool, Optional[Dict[str, Any]]]:
         return self.app.check_auth(request)
 
-    def get_session(self, request):
+    def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
         return self.app.get_session(request)
 
-    def get_username(self, request):
+    def get_username(self, request: web.Request) -> Optional[str]:
         return self.app.get_username(request)
 
-    def get_user_path(self, username=None):
+    def get_user_path(self, username: Optional[str] = None) -> str:
         return self.app.get_user_path(username)
 
-    def context_to_username(self, context):
+    def context_to_username(self, context: Optional[Dict[str, Any]]) -> Optional[str]:
         if context and "request" in context:
             return self.get_username(context["request"])
         return None
 
-    def should_cancel_thread(self, context):
+    def should_cancel_thread(self, context: Dict[str, Any]) -> bool:
         return should_cancel_thread(context)
 
-    def cache_message_inline_data(self, message):
+    def cache_message_inline_data(self, message: Dict[str, Any]):
         return cache_message_inline_data(message)
 
-    async def exec_tool(self, name, args):
+    async def exec_tool(self, name: str, args: Dict[str, Any]) -> Tuple[Optional[str], List[Dict[str, Any]]]:
         return await g_exec_tool(name, args)
 
-    def tool_result(self, result, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+    def tool_result(
+        self, result: Any, function_name: Optional[str] = None, function_args: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         return g_tool_result(result, function_name, function_args)
 
-    def tool_result_part(self, result: dict, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+    def tool_result_part(
+        self,
+        result: Dict[str, Any],
+        function_name: Optional[str] = None,
+        function_args: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         return tool_result_part(result, function_name, function_args)
 
-    def to_content(self, result):
+    def to_content(self, result: Any) -> str:
         return to_content(result)
 
-    def create_chat_with_tools(self, chat, use_tools="all"):
+    def create_chat_with_tools(self, chat: Dict[str, Any], use_tools: str = "all") -> Dict[str, Any]:
         return self.app.create_chat_with_tools(chat, use_tools)
 
-    def chat_to_aspect_ratio(self, chat):
+    def chat_to_aspect_ratio(self, chat: Dict[str, Any]) -> str:
         return chat_to_aspect_ratio(chat)
 
 
