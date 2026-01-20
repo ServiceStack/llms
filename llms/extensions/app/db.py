@@ -528,9 +528,9 @@ class AppDB:
         with self.db.create_writer_connection() as conn:
             conn.execute(
                 "UPDATE thread SET completedAt = :completedAt, error = :error WHERE completedAt IS NULL",
-                {"completedAt": datetime.now(), "error": "Server Shutdown"},
+                {"completedAt": datetime.now().isoformat(" "), "error": "Server Shutdown"},
             )
             conn.execute(
                 "UPDATE request SET completedAt = :completedAt, error = :error WHERE completedAt IS NULL",
-                {"completedAt": datetime.now(), "error": "Server Shutdown"},
+                {"completedAt": datetime.now().isoformat(" "), "error": "Server Shutdown"},
             )
