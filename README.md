@@ -4,6 +4,6 @@ Lightweight CLI, API and ChatGPT-like alternative to Open WebUI for accessing mu
 
 [llmspy.org](https://llmspy.org)
 
-[![](https://github.com/ServiceStack/llmspy.org/blob/main/public/img/llmspy-home.webp?raw=true)](https://llmspy.org)
+[![](https://github.com/ServiceStack/llmspy.org/blob/main/public/img/llmspy-home-v3.webp?raw=true)](https://llmspy.org)
 
 GitHub: [llmspy.org](https://github.com/ServiceStack/llmspy.org)
