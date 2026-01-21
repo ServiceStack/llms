@@ -63,6 +63,50 @@ def install_google(ctx):
                 to[k] = v
         return to
 
+    def sanitize_parameters(params):
+        """Sanitize tool parameters for Google provider."""
+
+        if not isinstance(params, dict):
+            return params
+
+        # Create a copy to avoid modifying original tool definition
+        p = params.copy()
+
+        # Remove forbidden fields
+        for forbidden in ["$schema", "additionalProperties"]:
+            if forbidden in p:
+                del p[forbidden]
+
+        # Recursively sanitize known nesting fields
+        # 1. Properties (dict of schemas)
+        if "properties" in p:
+            for k, v in p["properties"].items():
+                p["properties"][k] = sanitize_parameters(v)
+
+        # 2. Items (schema or list of schemas)
+        if "items" in p:
+            if isinstance(p["items"], list):
+                p["items"] = [sanitize_parameters(i) for i in p["items"]]
+            else:
+                p["items"] = sanitize_parameters(p["items"])
+
+        # 3. Combinators (list of schemas)
+        for combinator in ["allOf", "anyOf", "oneOf"]:
+            if combinator in p:
+                p[combinator] = [sanitize_parameters(i) for i in p[combinator]]
+
+        # 4. Not (schema)
+        if "not" in p:
+            p["not"] = sanitize_parameters(p["not"])
+
+        # 5. Definitions (dict of schemas)
+        for def_key in ["definitions", "$defs"]:
+            if def_key in p:
+                for k, v in p[def_key].items():
+                    p[def_key][k] = sanitize_parameters(v)
+
+        return p
+
     class GoogleProvider(OpenAiCompatible):
         sdk = "@ai-sdk/google"
 
@@ -112,11 +156,12 @@ def install_google(ctx):
                 for tool in chat["tools"]:
                     if tool["type"] == "function":
                         f = tool["function"]
+
                         function_declarations.append(
                             {
                                 "name": f["name"],
                                 "description": f.get("description"),
-                                "parameters": f.get("parameters"),
+                                "parameters": sanitize_parameters(f.get("parameters")),
                             }
                         )
                     elif tool["type"] == "file_search":
@@ -183,13 +228,19 @@ def install_google(ctx):
                             if name:
                                 # content is the string response
                                 # Some implementations pass the content directly.
-                                # Google docs say: response: { "name": "...", "content": { ... } }
-                                # Actually "response" field in functionResponse is a Struct/Map.
+                                # Google docs say: response: { "key": "value" }
+                                try:
+                                    response_data = json.loads(message["content"])
+                                    if not isinstance(response_data, dict):
+                                        response_data = {"content": message["content"]}
+                                except Exception:
+                                    response_data = {"content": message["content"]}
+
                                 parts.append(
                                     {
                                         "functionResponse": {
                                             "name": name,
-                                            "response": {"name": name, "content": message["content"]},
+                                            "response": response_data,
                                         }
                                     }
                                 )

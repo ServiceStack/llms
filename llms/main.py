@@ -1628,9 +1628,14 @@ async def g_chat_completion(chat, context=None):
             tool_history = []
             final_response = None
 
-            for _ in range(max_iterations):
+            for request_count in range(max_iterations):
                 if should_cancel_thread(context):
                     return
+
+                if DEBUG:
+                    messages = current_chat.get("messages", [])
+                    last_message = messages[-1] if messages else None
+                    _dbg(f"Provider {provider_name}, request {request_count}:\n{json.dumps(last_message, indent=2)}")
 
                 response = await provider.chat(current_chat, context=context)
 

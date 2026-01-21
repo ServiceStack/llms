@@ -229,3 +229,7 @@ class TestProviderConfiguration(unittest.TestCase):
         provider = create_provider(create_provider_kwargs(config["providers"]["openrouter"], providers["openrouter"]))
         self.assertEqual(provider.__class__.__name__, "OpenAiCompatible")
         self.assertEqual(len(provider.models), 96)
+
+
+if __name__ == "__main__":
+    unittest.main()
