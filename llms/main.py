@@ -1513,6 +1513,7 @@ def g_tool_result(result, function_name: Optional[str] = None, function_args: Op
     content = []
     resources = []
     args = function_args or {}
+    _dbg(f"{function_name} tool result type: {type(result)}")
     if isinstance(result, dict):
         text, res = tool_result_part(result, function_name, args)
         if text:
