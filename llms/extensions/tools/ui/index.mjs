@@ -191,7 +191,7 @@ const Tools = {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            <div v-for="tool in filteredTools" :key="tool.function.name"
+            <div v-for="tool in filteredTools" :key="tool.function.name" :id="'tool-' + tool.function.name"
                 class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
                 
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center">
@@ -262,13 +262,18 @@ const Tools = {
         const ctx = inject('ctx')
 
         // Execution State
-        const executingTool = ref(null)
         const execForm = ref({})
         const execResult = ref(null)
         const execError = ref(null)
         const loading = ref(false)
         const refForm = ref()
         const refTop = ref()
+
+        const executingTool = computed(() => {
+            const tool = ext.prefs.selectedTool
+            if (!tool) return null
+            return ctx.state.tool.definitions.find(x => x.function.name === tool)
+        })
 
         // UI State
         const expandedDescriptions = ref({})
@@ -284,7 +289,7 @@ const Tools = {
         })
 
         function startExec(tool) {
-            executingTool.value = tool
+            ext.setPrefs({ selectedTool: tool.function.name })
             execForm.value = {}
             execResult.value = null
             execError.value = null
@@ -309,7 +314,7 @@ const Tools = {
         }
 
         function closeExec() {
-            executingTool.value = null
+            ext.setPrefs({ selectedTool: null })
             execForm.value = {}
             execResult.value = null
             execError.value = null
@@ -588,9 +593,16 @@ function useTools(ctx) {
         Object.assign(toolPageHeaders, components)
     }
 
+    function selectTool({ group, tool }) {
+        ext.setPrefs({ selectedGroup: group, selectedTool: tool })
+    }
+
     return {
         toolPageHeaders,
         setToolPageHeaders,
+        selectTool,
+        get selectedGroup() { return ext.prefs.selectedGroup },
+        get selectedTool() { return ext.prefs.selectedTool },
     }
 }
 
