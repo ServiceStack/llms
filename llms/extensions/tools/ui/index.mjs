@@ -18,7 +18,7 @@ const ToolResult = {
                 preview
             </span>
         </div>
-        <div class="not-prose px-3 py-2">
+        <div class="not-prose py-2">
             <pre v-if="ext.prefs.toolFormat !== 'preview'" class="tool-output">{{ origResult }}</pre>
             <div v-else>
                 <ViewTypes v-if="Array.isArray(result)" :results="result" />

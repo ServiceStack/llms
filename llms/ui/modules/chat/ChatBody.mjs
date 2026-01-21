@@ -56,7 +56,7 @@ function embedHtml(html) {
 export const TypeText = {
     template: `
         <div v-if="text.type === 'text'">
-            <div v-html="html"></div>
+            <div v-html="html?.trim()" class="whitespace-pre-wrap"></div>
         </div>
     `,
     props: {
@@ -72,7 +72,7 @@ export const TypeText = {
                 return ctx.fmt.markdown(props.text.text)
             } catch (e) {
                 console.error('TypeText: markdown', e)
-                return `<div class="whitespace-pre-wrap">${props.text.text}</div>`
+                return `<div>${props.text.text}</div>`
             }
         })
         return { html }
