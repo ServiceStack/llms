@@ -1556,7 +1556,7 @@ def group_resources(resources: list):
     {"images": [{"type": "image_url", "image_url": {"url": "/image.jpg"}}] }
     """
     grouped = {}
-    for res in resources:
+    for res in resources or []:
         type = res.get("type")
         if not type:
             continue
