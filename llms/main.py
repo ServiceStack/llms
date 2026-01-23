@@ -31,6 +31,7 @@ from importlib import resources  # Py≥3.9  (pip install importlib_resources fo
 from io import BytesIO
 from pathlib import Path
 from typing import (
+    Annotated,
     Any,
     Callable,
     Dict,
@@ -379,7 +380,7 @@ def get_literal_values(typ):
 
 
 def function_to_tool_definition(func):
-    type_hints = get_type_hints(func)
+    type_hints = get_type_hints(func, include_extras=True)
     signature = inspect.signature(func)
     parameters = {"type": "object", "properties": {}, "required": []}
 
@@ -387,6 +388,16 @@ def function_to_tool_definition(func):
         param_type = type_hints.get(name, str)
         param_type_name = "string"
         enum_values = None
+        description = None
+
+        # Check for Annotated (for description)
+        if get_origin(param_type) is Annotated:
+            args = get_args(param_type)
+            param_type = args[0]
+            for arg in args[1:]:
+                if isinstance(arg, str):
+                    description = arg
+                    break
 
         # Check for Enum
         if inspect.isclass(param_type) and issubclass(param_type, Enum):
@@ -412,9 +423,12 @@ def function_to_tool_definition(func):
         elif param_type is bool:
             param_type_name = "boolean"
 
-        parameters["properties"][name] = {"type": param_type_name}
+        prop = {"type": param_type_name}
+        if description:
+            prop["description"] = description
         if enum_values:
-            parameters["properties"][name]["enum"] = enum_values
+            prop["enum"] = enum_values
+        parameters["properties"][name] = prop
 
         if param.default == inspect.Parameter.empty:
             parameters["required"].append(name)
