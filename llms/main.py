@@ -26,11 +26,23 @@ import sys
 import time
 import traceback
 from datetime import datetime
-from enum import IntEnum
+from enum import Enum, IntEnum
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 from urllib.parse import parse_qs, urlencode, urljoin
 
 import aiohttp
@@ -348,6 +360,24 @@ def to_content(result):
         return str(result)
 
 
+def get_literal_values(typ):
+    """Recursively extract values from Literal and Union types."""
+    origin = get_origin(typ)
+    if origin is Literal:
+        return list(get_args(typ))
+    elif origin is Union:
+        values = []
+        for arg in get_args(typ):
+            # Recurse for nested Unions or Literals
+            nested_values = get_literal_values(arg)
+            if nested_values:
+                for v in nested_values:
+                    if v not in values:
+                        values.append(v)
+        return values
+    return None
+
+
 def function_to_tool_definition(func):
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
@@ -356,7 +386,26 @@ def function_to_tool_definition(func):
     for name, param in signature.parameters.items():
         param_type = type_hints.get(name, str)
         param_type_name = "string"
-        if param_type is int:
+        enum_values = None
+
+        # Check for Enum
+        if inspect.isclass(param_type) and issubclass(param_type, Enum):
+            enum_values = [e.value for e in param_type]
+        else:
+            # Check for Literal / Union[Literal]
+            enum_values = get_literal_values(param_type)
+
+        if enum_values:
+            # Infer type from the first value
+            value_type = type(enum_values[0])
+            if value_type is int:
+                param_type_name = "integer"
+            elif value_type is float:
+                param_type_name = "number"
+            elif value_type is bool:
+                param_type_name = "boolean"
+
+        elif param_type is int:
             param_type_name = "integer"
         elif param_type is float:
             param_type_name = "number"
@@ -364,6 +413,9 @@ def function_to_tool_definition(func):
             param_type_name = "boolean"
 
         parameters["properties"][name] = {"type": param_type_name}
+        if enum_values:
+            parameters["properties"][name]["enum"] = enum_values
+
         if param.default == inspect.Parameter.empty:
             parameters["required"].append(name)
 
