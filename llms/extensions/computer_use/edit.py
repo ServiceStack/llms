@@ -1,6 +1,6 @@
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from .base import BaseTool, CLIResult, ToolError, ToolResult
 from .run import maybe_truncate, run
@@ -270,12 +270,12 @@ g_tool = None
 
 async def edit(
     command: Command_20250124,
-    path: str,
-    file_text: str | None = None,
-    view_range: list[int] | None = None,
-    old_str: str | None = None,
-    new_str: str | None = None,
-    insert_line: int | None = None,
+    path: Annotated[str, "The absolute path to the file or directory"],
+    file_text: Annotated[str | None, "The content to write to the file (required for create)"] = None,
+    view_range: Annotated[list[int] | None, "The range of lines to view (e.g. [1, 10])"] = None,
+    old_str: Annotated[str | None, "The string to replace (required for str_replace)"] = None,
+    new_str: Annotated[str | None, "The replacement string (required for str_replace and insert)"] = None,
+    insert_line: Annotated[int | None, "The line number after which to insert (required for insert)"] = None,
 ) -> list[dict[str, Any]]:
     """
     An filesystem editor tool that allows the agent to view, create, and edit files.

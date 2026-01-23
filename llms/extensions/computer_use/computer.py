@@ -5,7 +5,7 @@ import shlex
 import shutil
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal, TypedDict, get_args
+from typing import Annotated, Any, Literal, TypedDict, get_args
 from uuid import uuid4
 
 from .base import BaseTool, ToolError, ToolResult
@@ -471,6 +471,9 @@ g_tool = None
 
 
 def strip_list_brackets(s: str) -> str:
+    if not s:
+        return s
+    s = s.strip()
     if s.startswith("[") and s.endswith("]"):
         return s[1:-1]
     if s.startswith("(") and s.endswith(")"):
@@ -484,13 +487,13 @@ def str_to_list(s: str) -> list[int]:
 
 async def computer(
     action: Action_20251124,
-    text: str | None = None,
-    coordinate: tuple[int, int] | None = None,
+    text: Annotated[str | None, "The text to type or the key to press"] = None,
+    coordinate: Annotated[tuple[int, int] | None, "(x, y): The x and y coordinates to move the mouse to"] = None,
     scroll_direction: ScrollDirection | None = None,
-    scroll_amount: int | None = None,
-    duration: int | None = None,
-    key: str | None = None,
-    region: str | None = None,
+    scroll_amount: Annotated[int | None, "The number of lines to scroll"] = None,
+    duration: Annotated[float | None, "Duration in seconds"] = None,
+    key: Annotated[str | None, "The key sequence to press"] = None,
+    region: Annotated[str | None, "(x0, y0, x1, y1): The region to zoom into"] = None,
 ) -> list[dict[str, Any]]:
     """
     A tool that allows the agent to interact with the screen, keyboard, and mouse of the current computer.
@@ -510,7 +513,7 @@ async def computer(
         coordinate=coordinate_values,
         scroll_direction=scroll_direction if scroll_direction else None,
         scroll_amount=scroll_amount if scroll_amount else None,
-        duration=int(duration) if duration else None,
+        duration=float(duration) if duration else None,
         key=key if key else None,
         region=region_values,
     )

@@ -147,7 +147,10 @@ class BashTool20241022(BashTool20250124):
 g_tool = None
 
 
-async def run_bash(command: str | None = None, restart: bool = False):
+async def run_bash(
+    command: Annotated[str | None, "Command to run"],
+    restart: Annotated[bool, "Restart the bash session"] = False,
+):
     """
     A tool that allows the agent to run bash commands.
     """
