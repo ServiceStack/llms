@@ -1,6 +1,7 @@
 import asyncio
 import os
-from typing import Any, Literal
+import sys
+from typing import Annotated, Any, Literal
 
 from .base import BaseTool, CLIResult, ToolError, ToolResult
 
@@ -159,3 +160,23 @@ async def run_bash(command: str | None = None, restart: bool = False):
         raise result
     else:
         return result.to_tool_results()
+
+
+async def open(target: Annotated[str, "The URL or file path to open"]) -> list[dict[str, Any]]:
+    """
+    Open a URL or file using the appropriate system opener, uses `xdg-open` on Linux, `open` on macOS, and `start` on Windows.
+    """
+    target = target.strip()
+    if not target:
+        raise ValueError("No target specified")
+
+    platform = sys.platform
+
+    if platform == "darwin":
+        cmd = ["open", target]
+    elif platform == "win32":
+        cmd = ["cmd", "/c", "start", "", target]
+    else:  # Linux and other Unix-like
+        cmd = ["xdg-open", target]
+
+    return await run_bash(" ".join(cmd))
