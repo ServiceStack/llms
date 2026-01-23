@@ -1802,7 +1802,9 @@ async def g_chat_completion(chat, context=None):
             continue
 
     # If we get here, all providers failed
-    raise first_exception
+    if first_exception:
+        raise first_exception
+    raise Exception("All providers failed")
 
 
 async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=None, raw=False):
