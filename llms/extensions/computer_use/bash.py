@@ -150,7 +150,7 @@ g_tool = None
 async def run_bash(
     command: Annotated[str | None, "Command to run"],
     restart: Annotated[bool, "Restart the bash session"] = False,
-):
+) -> list[dict[str, Any]]:
     """
     A tool that allows the agent to run bash commands.
     """
@@ -165,7 +165,7 @@ async def run_bash(
         return result.to_tool_results()
 
 
-async def open(target: Annotated[str, "The URL or file path to open"]) -> list[dict[str, Any]]:
+async def open(target: Annotated[str, "URL or file path to open"]) -> list[dict[str, Any]]:
     """
     Open a URL or file using the appropriate system opener, uses `xdg-open` on Linux, `open` on macOS, and `start` on Windows.
     """
