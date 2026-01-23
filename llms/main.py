@@ -423,7 +423,7 @@ def function_to_tool_definition(func):
         "type": "function",
         "function": {
             "name": func.__name__,
-            "description": func.__doc__ or "",
+            "description": (func.__doc__ or "").strip(),
             "parameters": parameters,
         },
     }

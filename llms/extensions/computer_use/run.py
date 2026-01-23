@@ -1,6 +1,7 @@
 """Utility to run shell commands asynchronously with a timeout."""
 
 import asyncio
+import contextlib
 
 TRUNCATED_MESSAGE: str = "<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>"
 MAX_RESPONSE_LEN: int = 16000
@@ -28,11 +29,8 @@ async def run(
         return (
             process.returncode or 0,
             maybe_truncate(stdout.decode(), truncate_after=truncate_after),
-            maybe_truncate(stderr.decode(), truncate_after=truncate_after),
         )
     except asyncio.TimeoutError as exc:
-        try:
+        with contextlib.suppress(ProcessLookupError):
             process.kill()
-        except ProcessLookupError:
-            pass
         raise TimeoutError(f"Command '{cmd}' timed out after {timeout} seconds") from exc

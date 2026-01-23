@@ -488,7 +488,7 @@ async def computer(
     coordinate: tuple[int, int] | None = None,
     scroll_direction: ScrollDirection | None = None,
     scroll_amount: int | None = None,
-    duration: int | float | None = None,
+    duration: int | None = None,
     key: str | None = None,
     region: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -498,16 +498,19 @@ async def computer(
     global g_tool
     if g_tool is None:
         g_tool = ComputerTool20251124()
+    coordinate_values = None
+    if coordinate:
+        coordinate_values = tuple(str_to_list(coordinate))
     region_values = None
     if region:
         region_values = tuple(str_to_list(region))
     result = await g_tool(
         action=action,
         text=text if text else None,
-        coordinate=coordinate if coordinate else None,
+        coordinate=coordinate_values,
         scroll_direction=scroll_direction if scroll_direction else None,
         scroll_amount=scroll_amount if scroll_amount else None,
-        duration=duration if duration else None,
+        duration=int(duration) if duration else None,
         key=key if key else None,
         region=region_values,
     )
