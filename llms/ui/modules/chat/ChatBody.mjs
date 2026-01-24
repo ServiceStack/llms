@@ -359,10 +359,13 @@ export const ToolArguments = {
                         <td data-arg="string" v-else-if="typeof v === 'string'" class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
                             <div v-if="v.length > 200" class="relative">
                                 <button type="button" @click="maximized[k] = !maximized[k]" class="absolute top-0 right-3 opacity-0 group-hover:opacity-50 transition-opacity duration-200 rounded focus:outline-none focus:ring-0">
-                                    <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                        <path v-if="maximized[k]" fill="currentColor" d="M9 9H3V7h4V3h2zm0 6H3v2h4v4h2zm12 0h-6v6h2v-4h4zm-6-6h6V7h-4V3h-2z"/>
-                                        <path v-else fill="currentColor" d="M3 3h6v2H5v4H3zm0 18h6v-2H5v-4H3zm12 0h6v-6h-2v4h-4zm6-18h-6v2h4v4h2z"/>
-                                    </svg>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-xs text-gray-600 dark:text-gray-400" :title="v.length + ' characters'">{{ $fmt.humanifyNumber(v.length) }}</span>
+                                        <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                            <path v-if="maximized[k]" fill="currentColor" d="M9 9H3V7h4V3h2zm0 6H3v2h4v4h2zm12 0h-6v6h2v-4h4zm-6-6h6V7h-4V3h-2z"/>
+                                            <path v-else fill="currentColor" d="M3 3h6v2H5v4H3zm0 18h6v-2H5v-4H3zm12 0h6v-6h-2v4h-4zm6-18h-6v2h4v4h2z"/>
+                                        </svg>
+                                    </div>
                                 </button>
                                 <div v-if="!maximized[k]" class="max-h-60 overflow-y-auto">{{ v }}</div>
                                 <div v-else class="w-full h-full">{{ v }}</div>
