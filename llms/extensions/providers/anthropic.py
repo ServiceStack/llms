@@ -83,9 +83,10 @@ def install_anthropic(ctx):
 
                 content = message.get("content", "")
                 if isinstance(content, str):
-                    if anthropic_message["content"]:
-                        # If we have thinking, we must use blocks for text
-                        anthropic_message["content"].append({"type": "text", "text": content})
+                    if anthropic_message["content"] or message.get("tool_calls"):
+                        # If we have thinking or tools, we must use blocks for text
+                        if content:
+                            anthropic_message["content"].append({"type": "text", "text": content})
                     else:
                         anthropic_message["content"] = content
                 elif isinstance(content, list):
@@ -107,6 +108,24 @@ def install_anthropic(ctx):
                                             "source": {"type": "base64", "media_type": media_type, "data": base64_data},
                                         }
                                     )
+
+                # Handle tool_calls
+                if "tool_calls" in message and message["tool_calls"]:
+                    # specific check for content being a string and not empty, because we might have converted it above
+                    if isinstance(anthropic_message["content"], str):
+                        anthropic_message["content"] = []
+                        if content:
+                            anthropic_message["content"].append({"type": "text", "text": content})
+
+                    for tool_call in message["tool_calls"]:
+                        function = tool_call.get("function", {})
+                        tool_use = {
+                            "type": "tool_use",
+                            "id": tool_call.get("id"),
+                            "name": function.get("name"),
+                            "input": json.loads(function.get("arguments", "{}")),
+                        }
+                        anthropic_message["content"].append(tool_use)
 
                 anthropic_request["messages"].append(anthropic_message)
 
