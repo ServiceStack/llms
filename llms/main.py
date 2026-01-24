@@ -1651,6 +1651,9 @@ async def g_chat_completion(chat, context=None):
         if context is None:
             context = {"chat": chat, "tools": "all"}
 
+        if "request_id" not in context:
+            context["request_id"] = str(int(time.time() * 1000))
+
         # get first provider that has the model
         candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
         if len(candidate_providers) == 0:
@@ -2985,6 +2988,9 @@ class ExtensionContext:
 
     def add_index_footer(self, html: str):
         self.app.index_footers.append(html)
+
+    def get_home_path(self, name: str = "") -> str:
+        return home_llms_path(name)
 
     def get_config(self) -> Optional[Dict[str, Any]]:
         return g_config
