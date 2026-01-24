@@ -198,6 +198,7 @@
     --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     --default-font-family: var(--font-sans);
     --default-mono-font-family: var(--font-mono);
+    --default-ring-color: hsl(var(--ring));
   }
 }
 @layer base {
@@ -2467,6 +2468,9 @@
   }
   .text-sky-600 {
     color: var(--color-sky-600);
+  }
+  .text-slate-300 {
+    color: var(--color-slate-300);
   }
   .text-slate-500 {
     color: var(--color-slate-500);
