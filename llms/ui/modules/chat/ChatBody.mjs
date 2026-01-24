@@ -55,7 +55,7 @@ function embedHtml(html) {
 
 export const TypeText = {
     template: `
-        <div v-if="text.type === 'text'">
+        <div data-type="text" v-if="text.type === 'text'">
             <div v-html="html?.trim()" class="whitespace-pre-wrap"></div>
         </div>
     `,
@@ -161,7 +161,7 @@ export const LightboxImage = {
 
 export const TypeImage = {
     template: `
-        <div v-if="image.type === 'image_url'">
+        <div data-type="image" v-if="image.type === 'image_url'">
             <LightboxImage :src="$ctx.resolveUrl(image.image_url.url)" />
         </div>
     `,
@@ -175,7 +175,7 @@ export const TypeImage = {
 
 export const TypeAudio = {
     template: `
-        <div v-if="audio.type === 'audio_url'">
+        <div data-type="audio" v-if="audio.type === 'audio_url'">
             <slot></slot>
             <audio controls :src="$ctx.resolveUrl(audio.audio_url.url)" class="h-8 w-64"></audio>
         </div>
@@ -190,7 +190,7 @@ export const TypeAudio = {
 
 export const TypeFile = {
     template: `
-        <a v-if="file.type === 'file'" :href="$ctx.resolveUrl(file.file.file_data)" target="_blank" 
+        <a data-type="file" v-if="file.type === 'file'" :href="$ctx.resolveUrl(file.file.file_data)" target="_blank" 
             class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm text-blue-600 dark:text-blue-400 hover:underline">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
             <span class="max-w-xs truncate">{{ file.file.filename || 'Attachment' }}</span>
@@ -211,7 +211,7 @@ export const ViewType = {
         <TypeImage v-else-if="result.type === 'image_url'" :image="result" />
         <TypeAudio v-else-if="result.type === 'audio_url'" :audio="result" />
         <TypeFile v-else-if="result.type === 'file'" :file="result" />
-        <div v-else>
+        <div data-type="other" v-else>
             <HtmlFormat :value="result" :classes="$utils.htmlFormatClasses" />
         </div>
     </div>
@@ -352,11 +352,24 @@ export const ToolArguments = {
             <div class="prose html-format">
                 <table class="table-object border-none">
                     <tr v-for="(v, k) in dict" :key="k">
-                        <td class="align-top py-2 px-4 text-left text-sm font-medium tracking-wider whitespace-nowrap lowercase">{{ k }}</td>
-                        <td v-if="$utils.isHtml(v)" style="margin:0;padding:0;width:100%">
+                        <td data-arg="name" class="align-top py-2 px-4 text-left text-sm font-medium tracking-wider whitespace-nowrap lowercase">{{ k }}</td>
+                        <td data-arg="html" v-if="$utils.isHtml(v)" style="margin:0;padding:0;width:100%">
                             <div v-html="embedHtml(v)" class="w-full h-full"></div>
                         </td>
-                        <td v-else class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
+                        <td data-arg="string" v-else-if="typeof v === 'string'" class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
+                            <div v-if="v.length > 200" class="relative">
+                                <button type="button" @click="maximized[k] = !maximized[k]" class="absolute top-0 right-3 opacity-0 group-hover:opacity-50 transition-opacity duration-200 rounded focus:outline-none focus:ring-0">
+                                    <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                        <path v-if="maximized[k]" fill="currentColor" d="M9 9H3V7h4V3h2zm0 6H3v2h4v4h2zm12 0h-6v6h2v-4h4zm-6-6h6V7h-4V3h-2z"/>
+                                        <path v-else fill="currentColor" d="M3 3h6v2H5v4H3zm0 18h6v-2H5v-4H3zm12 0h6v-6h-2v4h-4zm6-18h-6v2h4v4h2z"/>
+                                    </svg>
+                                </button>
+                                <div v-if="!maximized[k]" class="max-h-60 overflow-y-auto">{{ v }}</div>
+                                <div v-else class="w-full h-full">{{ v }}</div>
+                            </div>
+                            <div v-else>{{ v }}</div>
+                        </td>
+                        <td data-arg="value" v-else class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
                             <HtmlFormat :value="v" :classes="$utils.htmlFormatClasses" />
                         </td>
                     </tr>
@@ -373,6 +386,7 @@ export const ToolArguments = {
     },
     setup(props) {
         const refArgs = ref()
+        const maximized = ref({})
         const dict = computed(() => {
             if (isEmpty(props.value)) return null
             const ret = tryParseJson(props.value)
@@ -409,6 +423,7 @@ export const ToolArguments = {
 
         return {
             refArgs,
+            maximized,
             dict,
             list,
             isEmpty,
@@ -524,7 +539,7 @@ export const ChatBody = {
                                         : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'"
                                 >
                                     <!-- Copy button in top right corner -->
-                                    <button
+                                    <button v-if="message.content"
                                         type="button"
                                         @click="copyMessageContent(message)"
                                         class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 focus:outline-none focus:ring-0"
