@@ -2,7 +2,7 @@
 import { ref, watch, computed, nextTick, inject } from 'vue'
 import { $$, createElement, lastRightPart, ApiResult, createErrorStatus } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
-import { ChatBody, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, ViewToolTypes, ToolArguments, ToolOutput, MessageUsage, MessageReasoning } from './ChatBody.mjs'
+import { ChatBody, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, ViewToolTypes, TextViewer, ToolArguments, ToolOutput, MessageUsage, MessageReasoning } from './ChatBody.mjs'
 import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
@@ -252,23 +252,14 @@ export function useChatPrompt(ctx) {
                 return ctx.createErrorResult({ message: `Model ${request.model || ''} not found`, errorCode: 'NotFound' })
             }
 
-            if (!request.messages) request.messages = []
-            if (!request.metadata) request.metadata = {}
-
             if (!thread) {
                 const title = getTextContent(request) || 'New Chat'
                 thread = await ctx.threads.startNewThread({ title, model, redirect })
             }
 
-            const threadId = thread?.id
-
-            const ctxRequest = {
-                request,
-                thread,
-            }
+            const ctxRequest = ctx.createChatContext({ request, thread })
             ctx.chatRequestFilters.forEach(f => f(ctxRequest))
-
-            console.debug('completion.request', request)
+            ctx.completeChatContext(ctxRequest)
 
             // Send to API
             const startTime = Date.now()
@@ -935,6 +926,7 @@ export default {
             ViewType,
             ViewTypes,
             ViewToolTypes,
+            TextViewer,
             ToolArguments,
             ToolOutput,
 

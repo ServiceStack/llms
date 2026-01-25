@@ -392,12 +392,11 @@ export class AppContext {
         if (Array.isArray(content)) {
             content = content.filter(c => c.type === 'text').map(c => c.text).join('\n')
         }
-        // Handled by katex
-        // if (content) {
-        //     content = content
-        //         .replaceAll(`\\[ \\boxed{`, '\n<span class="inline-block text-xl text-blue-500 bg-blue-50 dark:text-blue-400 dark:bg-blue-950 px-3 py-1 rounded">')
-        //         .replaceAll('} \\]', '</span>\n')
-        // }
+        if (content && content.startsWith('---')) {
+            const headerEnd = content.indexOf('---', 3)
+            const header = content.substring(3, headerEnd).trim()
+            content = '<div class="frontmatter">' + header + '</div>\n' + content.substring(headerEnd + 3)
+        }
         return this.marked.parse(content || '')
     }
 
@@ -408,5 +407,53 @@ export class AppContext {
             return `<iframe src="data:text/html;charset=utf-8,${encodeURIComponent(content)}"></iframe>`
         }
         return this.renderMarkdown(content)
+    }
+
+    createChatContext({ request, thread, context }) {
+        if (!request.messages) request.messages = []
+        if (!request.metadata) request.metadata = {}
+        if (!context) context = {}
+        Object.assign(context, {
+            systemPrompt: '',
+            requiredSystemPrompts: [],
+        }, context)
+        return {
+            request,
+            thread,
+            context,
+        }
+    }
+
+    completeChatContext({ request, thread, context }) {
+
+        let existingSystemPrompt = request.messages.find(m => m.role === 'system')?.content
+
+        let existingMessages = request.messages.filter(m => m.role == 'assistant' || m.role == 'tool')
+        if (existingMessages.length) {
+            const messageTypes = {}
+            request.messages.forEach(m => {
+                messageTypes[m.role] = (messageTypes[m.role] || 0) + 1
+            })
+            const summary = JSON.stringify(messageTypes).replace(/"/g, '')
+            console.debug(`completeChatContext(${summary})`, request)
+            return
+        }
+
+        let newSystemPrompts = context.requiredSystemPrompts ?? []
+        if (context.systemPrompt) {
+            newSystemPrompts.push(context.systemPrompt)
+        }
+        if (existingSystemPrompt) {
+            newSystemPrompts.push(existingSystemPrompt)
+        }
+
+        let newSystemPrompt = newSystemPrompts.join('\n\n')
+        if (newSystemPrompt) {
+            // add or replace system prompt
+            request.messages = request.messages.filter(m => m.role !== 'system')
+            request.messages.unshift({ role: 'system', content: newSystemPrompt })
+        }
+
+        console.debug(`completeChatContext()`, request)
     }
 }

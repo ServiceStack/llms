@@ -656,7 +656,7 @@ export default {
             }
         })
 
-        ctx.chatRequestFilters.push(({ request, thread }) => {
+        ctx.chatRequestFilters.push(({ request, thread, context }) => {
             // Tool Preferences
             const prefs = ctx.prefs
             if (prefs.onlyTools != null) {

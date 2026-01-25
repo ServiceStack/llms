@@ -354,11 +354,11 @@ async function startNewThread({ title, model, tools, redirect }) {
 async function queueChat(ctxRequest, options = {}) {
     if (!ctxRequest.request) return ctx.createErrorResult({ message: 'No request provided' })
     if (!ctxRequest.thread) return ctx.createErrorResult({ message: 'No thread provided' })
-    if (!ctxRequest.request.metadata) {
-        ctxRequest.request.metadata = {}
-    }
+    ctxRequest = ctx.createChatContext(ctxRequest)
     ctx.chatRequestFilters.forEach(f => f(ctxRequest))
     const { thread, request } = ctxRequest
+    ctx.completeChatContext(ctxRequest)
+
     const api = await ctx.postJson(`/ext/app/threads/${thread.id}/chat`, {
         ...options,
         body: typeof request == 'string'
@@ -381,6 +381,12 @@ async function loadThreadDetails(id, opt = null) {
     return threadDetails.value[id]
 }
 
+function getCurrentThreadSystemPrompt() {
+    return currentThread.value?.systemPrompt
+        ?? currentThread.value?.messages?.find(m => m.role == 'system')?.content
+        ?? ''
+}
+
 // Export the store
 export function useThreadStore() {
     return {
@@ -391,6 +397,7 @@ export function useThreadStore() {
         groupedThreads,
 
         // Actions
+        getCurrentThreadSystemPrompt,
         query,
         createThread,
         updateThread,

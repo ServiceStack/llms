@@ -166,6 +166,16 @@
         overflow: auto !important;
     }
 
+    .prose .frontmatter {
+        white-space: pre-wrap;
+        word-break: break-all;
+        margin-bottom: 1em;
+        padding: 0.5rem;
+        font-size: 0.8rem !important;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+    }
+
     /* highlight.js - vs.css */
     .hljs {
         background: white;

@@ -211,6 +211,19 @@ export function isHtml(s) {
     return isHtml
 }
 
+const htmlEntities = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+}
+
+export function encodeHtml(str) {
+    if (!str) return ''
+    return str.replace(/[&<>"']/g, m => htmlEntities[m]);
+}
+
 /**
  * @param {object|array} type 
  * @param {'div'|'table'|'thead'|'th'|'tr'|'td'} tag 
@@ -241,6 +254,16 @@ export const nextId = (() => {
     }
 })();
 
+export function fnv1a(str) {
+    let hash = 0x811c9dc5
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i)
+        hash = Math.imul(hash, 0x01000193)
+    }
+    return hash >>> 0
+}
+export const hashString = fnv1a
+
 export function utilsFunctions() {
     return {
         nextId,
@@ -256,6 +279,7 @@ export function utilsFunctions() {
         pluralize,
         isHtml,
         htmlFormatClasses,
+        encodeHtml,
+        hashString,
     }
 }
-

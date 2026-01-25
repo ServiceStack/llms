@@ -163,7 +163,7 @@ const SystemPromptEditor = {
                 </div>
             </div>
             <div v-if="hasMessages" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm">
-                {{$threads.currentThread.value?.systemPrompt || 'No System Prompt was used' }}
+                <TextViewer prefsName="systemPrompt" :text="$threads.getCurrentThreadSystemPrompt() || 'No System Prompt was used'" />
             </div>
             <div v-else>
                 <textarea
@@ -251,21 +251,17 @@ export default {
             }
         })
 
-        ctx.chatRequestFilters.push(({ request, thread }) => {
+        ctx.chatRequestFilters.push(({ request, thread, context }) => {
 
-            const hasSystemPrompt = request.messages.find(x => x.role === 'system')
+            const hasSystemPrompt = !!context.systemPrompt
+            console.log('system_prompts chatRequestFilters', hasSystemPrompt)
             if (hasSystemPrompt) {
                 console.log('Already has system prompt', hasSystemPrompt.content)
                 return
             }
 
-            // Only add the selected system prompt for new requests
-            if (ext.prefs.systemPrompt && request.messages.length <= 1) {
-                // add message to start
-                request.messages.unshift({
-                    role: 'system',
-                    content: ext.prefs.systemPrompt
-                })
+            if (ext.prefs.systemPrompt) {
+                context.systemPrompt = ext.prefs.systemPrompt
             }
         })
 

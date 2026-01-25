@@ -56,7 +56,7 @@ function embedHtml(html) {
 export const TypeText = {
     template: `
         <div data-type="text" v-if="text.type === 'text'">
-            <div v-html="html?.trim()" class="whitespace-pre-wrap"></div>
+            !<div v-html="html?.trim()" class="whitespace-pre-wrap"></div>
         </div>
     `,
     props: {
@@ -346,6 +346,124 @@ export const MessageReasoning = {
     }
 }
 
+export const TextViewer = {
+    template: `
+        <div v-if="text.length > 200" class="relative group">
+            <div class="absolute top-0 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center space-x-2 bg-gray-50/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-md px-2 py-1 z-10 border border-gray-200 dark:border-gray-700 shadow-sm">
+                <!-- Style Selector -->
+                <div class="relative flex items-center">
+                    <button type="button" @click="toggleDropdown" class="text-[10px] uppercase font-bold tracking-wider text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none flex items-center select-none">
+                        <span>{{ prefs || 'pre' }}</span>
+                        <svg class="mb-0.5 size-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <!-- Popover -->
+                    <div v-if="dropdownOpen" class="absolute right-0 top-full w-28 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 overflow-hidden">
+                        <button 
+                            v-for="style in textStyles" 
+                            :key="style"
+                            @click="setStyle(style)"
+                            class="block w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors uppercase tracking-wider font-medium"
+                            :class="{ 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20': prefs === style }"
+                        >
+                            {{ style }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+
+                <!-- Text Length -->
+                <span class="text-xs text-gray-500 dark:text-gray-400 tabular-nums" :title="text.length + ' characters'">
+                    {{ $fmt.humanifyNumber(text.length) }}
+                </span>
+
+                <!-- Maximize Toggle -->
+                <button type="button" @click="toggleMaximized" class="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 focus:outline-none p-0.5 rounded transition-colors" :title="isMaximized ? 'Minimize' : 'Maximize'">
+                    <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <path v-if="isMaximized" fill="currentColor" d="M9 9H3V7h4V3h2zm0 6H3v2h4v4h2zm12 0h-6v6h2v-4h4zm-6-6h6V7h-4V3h-2z"/>
+                        <path v-else fill="currentColor" d="M3 3h6v2H5v4H3zm0 18h6v-2H5v-4H3zm12 0h6v-6h-2v4h-4zm6-18h-6v2h4v4h2z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div :class="containerClass">
+                <div v-if="prefs === 'markdown'" class="prose prose-sm max-w-none dark:prose-invert">
+                    <div v-html="$fmt.markdown(text)"></div>
+                </div>
+                <div v-else :class="['p-0.5', contentClass]">{{ text }}</div>
+            </div>
+        </div>
+        <div v-else class="whitespace-pre-wrap">{{ text }}</div>    
+    `,
+    props: {
+        prefsName: String,
+        text: String,
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+        const textStyles = ['pre', 'normal', 'markdown']
+        const prefs = ref('pre')
+        const maximized = ref({})
+        const dropdownOpen = ref(false)
+        const hash = computed(() => ctx.utils.hashString(props.text))
+
+        const toggleDropdown = () => {
+            dropdownOpen.value = !dropdownOpen.value
+        }
+
+        const setStyle = (style) => {
+            prefs.value = style
+            dropdownOpen.value = false
+            const key = props.prefsName || 'default'
+            const currentPrefs = ctx.getPrefs().textStyle || {}
+            ctx.setPrefs({
+                textStyle: {
+                    ...currentPrefs,
+                    [key]: style
+                }
+            })
+        }
+
+        onMounted(() => {
+            const current = ctx.getPrefs()
+            const key = props.prefsName || 'default'
+            if (current.textStyle && current.textStyle[key]) {
+                prefs.value = current.textStyle[key]
+            }
+        })
+
+        const isMaximized = computed(() => maximized.value[hash.value])
+
+        const toggleMaximized = () => {
+            maximized.value[hash.value] = !maximized.value[hash.value]
+        }
+
+        const containerClass = computed(() => {
+            return isMaximized.value ? 'w-full h-full' : 'max-h-60 overflow-y-auto'
+        })
+
+        const contentClass = computed(() => {
+            if (prefs.value === 'pre') return 'whitespace-pre-wrap font-mono text-xs'
+            if (prefs.value === 'normal') return 'font-sans text-sm'
+            return ''
+        })
+
+        return {
+            hash,
+            textStyles,
+            prefs,
+            dropdownOpen,
+            toggleDropdown,
+            setStyle,
+            isMaximized,
+            toggleMaximized,
+            containerClass,
+            contentClass
+        }
+    }
+}
+
 export const ToolArguments = {
     template: `
         <div ref="refArgs" v-if="dict" class="not-prose">
@@ -356,21 +474,8 @@ export const ToolArguments = {
                         <td data-arg="html" v-if="$utils.isHtml(v)" style="margin:0;padding:0;width:100%">
                             <div v-html="embedHtml(v)" class="w-full h-full"></div>
                         </td>
-                        <td data-arg="string" v-else-if="typeof v === 'string'" class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
-                            <div v-if="v.length > 200" class="relative">
-                                <button type="button" @click="maximized[k] = !maximized[k]" class="absolute top-0 right-3 opacity-0 group-hover:opacity-50 transition-opacity duration-200 rounded focus:outline-none focus:ring-0">
-                                    <div class="flex items-center space-x-1">
-                                        <span class="text-xs text-gray-600 dark:text-gray-400" :title="v.length + ' characters'">{{ $fmt.humanifyNumber(v.length) }}</span>
-                                        <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                            <path v-if="maximized[k]" fill="currentColor" d="M9 9H3V7h4V3h2zm0 6H3v2h4v4h2zm12 0h-6v6h2v-4h4zm-6-6h6V7h-4V3h-2z"/>
-                                            <path v-else fill="currentColor" d="M3 3h6v2H5v4H3zm0 18h6v-2H5v-4H3zm12 0h6v-6h-2v4h-4zm6-18h-6v2h4v4h2z"/>
-                                        </svg>
-                                    </div>
-                                </button>
-                                <div v-if="!maximized[k]" class="max-h-60 overflow-y-auto">{{ v }}</div>
-                                <div v-else class="w-full h-full">{{ v }}</div>
-                            </div>
-                            <div v-else>{{ v }}</div>
+                        <td data-arg="string" v-else-if="typeof v === 'string'" class="align-top py-2 px-4 text-sm">
+                            <TextViewer prefsName="toolArgs" :text="v" />
                         </td>
                         <td data-arg="value" v-else class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
                             <HtmlFormat :value="v" :classes="$utils.htmlFormatClasses" />
@@ -457,9 +562,11 @@ export const ToolOutput = {
                     </span>
                 </div>
             </div>
-            <div class="not-prose px-3 py-2">
-                <pre v-if="$ctx.prefs.toolFormat !== 'preview' || !hasJsonStructure(output.content)" class="tool-output">{{ output.content }}</pre>
-                <div v-else class="text-xs">
+            <div class="px-3 py-2">
+                <div v-if="$ctx.prefs.toolFormat !== 'preview' || !hasJsonStructure(output.content)">
+                    <TextViewer prefsName="toolOutput" :text="output.content" />
+                </div>
+                <div v-else class="not-prose text-xs">
                     <HtmlFormat v-if="tryParseJson(output.content)" :value="tryParseJson(output.content)" :classes="$utils.htmlFormatClasses" />
                     <div v-else class="text-gray-500 italic p-2">Invalid JSON content</div>
                 </div>
