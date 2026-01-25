@@ -857,7 +857,7 @@ def chat_to_prompt(chat):
     prompt = ""
     if "messages" in chat:
         for message in chat["messages"]:
-            if message["role"] == "user":
+            if message.get("role") == "user":
                 # if content is string
                 if isinstance(message["content"], str):
                     if prompt:
@@ -876,7 +876,7 @@ def chat_to_prompt(chat):
 def chat_to_system_prompt(chat):
     if "messages" in chat:
         for message in chat["messages"]:
-            if message["role"] == "system":
+            if message.get("role") == "system":
                 # if content is string
                 if isinstance(message["content"], str):
                     return message["content"]
@@ -904,7 +904,7 @@ def last_user_prompt(chat):
     prompt = ""
     if "messages" in chat:
         for message in chat["messages"]:
-            if message["role"] == "user":
+            if message.get("role") == "user":
                 # if content is string
                 if isinstance(message["content"], str):
                     prompt = message["content"]
@@ -1807,7 +1807,10 @@ async def g_chat_completion(chat, context=None):
     # If we get here, all providers failed
     if first_exception:
         raise first_exception
-    raise Exception("All providers failed")
+
+    e = Exception("All providers failed")
+    await g_app.on_chat_error(e, context or {"chat": chat})
+    raise e
 
 
 async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=None, raw=False):
