@@ -158,7 +158,7 @@ async def run_bash(
     if g_tool is None:
         g_tool = BashTool20241022()
 
-    result = await g_tool(command, restart)
+    result = await g_tool(command=command, restart=restart)
     if isinstance(result, Exception):
         raise result
     else:
@@ -182,4 +182,4 @@ async def open(target: Annotated[str, "URL or file path to open"]) -> list[dict[
     else:  # Linux and other Unix-like
         cmd = ["xdg-open", target]
 
-    return await run_bash(" ".join(cmd))
+    return await run_bash(command=" ".join(cmd))

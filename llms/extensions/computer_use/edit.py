@@ -289,13 +289,13 @@ async def edit(
         view_range_values = [int(x) for x in view_range]
 
     result = await g_tool(
-        command,
-        path if path else None,
-        file_text if file_text else None,
-        view_range_values,
-        old_str if old_str else None,
-        new_str if new_str else None,
-        int(insert_line) if insert_line else None,
+        command=command,
+        path=path if path else None,
+        file_text=file_text if file_text else None,
+        view_range=view_range_values,
+        old_str=old_str if old_str else None,
+        new_str=new_str if new_str else None,
+        insert_line=int(insert_line) if insert_line else None,
     )
     if isinstance(result, Exception):
         raise result
