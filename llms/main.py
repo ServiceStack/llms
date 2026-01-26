@@ -2780,7 +2780,9 @@ class AppExtensions:
             context["stackTrace"] = traceback.format_exc()
         for filter_func in self.chat_error_filters:
             try:
-                await filter_func(e, context)
+                task = filter_func(e, context)
+                if asyncio.isfuture(task):
+                    await task
             except Exception as e:
                 _err("chat error filter failed", e)
 
