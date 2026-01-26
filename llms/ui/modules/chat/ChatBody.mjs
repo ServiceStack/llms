@@ -382,6 +382,12 @@ export const TextViewer = {
                     {{ $fmt.humanifyNumber(text.length) }}
                 </span>
 
+                <!-- Copy Button -->
+                <button type="button" @click="copyToClipboard" class="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 focus:outline-none p-0.5 rounded transition-colors" title="Copy to clipboard">
+                    <svg v-if="copied" class="size-4 text-green-600 dark:text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 18l-5.7-5.7l1.425-1.425L9.55 15.15l9.175-9.175L20.15 7.4z"/></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z"/></svg>
+                </button>
+
                 <!-- Maximize Toggle -->
                 <button type="button" @click="toggleMaximized" class="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 focus:outline-none p-0.5 rounded transition-colors" :title="isMaximized ? 'Minimize' : 'Maximize'">
                     <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -415,6 +421,15 @@ export const TextViewer = {
 
         const toggleDropdown = () => {
             dropdownOpen.value = !dropdownOpen.value
+        }
+
+        const copied = ref(false)
+        const copyToClipboard = () => {
+            navigator.clipboard.writeText(props.text)
+            copied.value = true
+            setTimeout(() => {
+                copied.value = false
+            }, 2000)
         }
 
         const setStyle = (style) => {
@@ -463,8 +478,11 @@ export const TextViewer = {
             setStyle,
             isMaximized,
             toggleMaximized,
+
             containerClass,
-            contentClass
+            contentClass,
+            copied,
+            copyToClipboard
         }
     }
 }
