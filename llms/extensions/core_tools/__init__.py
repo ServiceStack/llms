@@ -102,24 +102,6 @@ def write_file(path: str, content: str) -> bool:
     return True
 
 
-def edit_file(path: str, old_str: str, new_str: str) -> Dict[str, Any]:
-    """
-    Replaces first occurrence of old_str with new_str in file. If old_str is empty,
-    create/overwrite file with new_str.
-    :return: A dictionary with the path to the file and the action taken.
-    """
-    safe_path = _resolve_safe_path(path)
-    if old_str == "":
-        safe_path.write_text(new_str, encoding="utf-8")
-        return {"path": str(safe_path), "action": "created_file"}
-    original = safe_path.read_text(encoding="utf-8")
-    if original.find(old_str) == -1:
-        return {"path": str(safe_path), "action": "old_str not found"}
-    edited = original.replace(old_str, new_str, 1)
-    safe_path.write_text(edited, encoding="utf-8")
-    return {"path": str(safe_path), "action": "edited"}
-
-
 def list_directory(path: str) -> str:
     """List directory contents"""
     safe_path = _resolve_safe_path(path)
@@ -545,26 +527,6 @@ def install(ctx):
     # ctx.register_tool(semantic_search) # TODO: implement
     ctx.register_tool(read_file, group=group)
     ctx.register_tool(write_file, group=group)
-    ctx.register_tool(
-        edit_file,
-        {
-            "type": "function",
-            "function": {
-                "name": "edit_file",
-                "description": "Replaces first occurrence of old_str with new_str in file. If old_str is empty, create/overwrite file with new_str.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string", "description": "Path to the file to edit."},
-                        "old_str": {"type": "string", "description": "String to replace."},
-                        "new_str": {"type": "string", "description": "String to replace with."},
-                    },
-                    "required": ["path", "old_str", "new_str"],
-                },
-            },
-        },
-        group=group,
-    )
     ctx.register_tool(list_directory, group=group)
     ctx.register_tool(glob_paths, group=group)
     ctx.register_tool(calc, group=group)
