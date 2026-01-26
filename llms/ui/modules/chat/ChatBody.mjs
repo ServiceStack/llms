@@ -402,6 +402,9 @@ export const TextViewer = {
                 <div v-if="prefs === 'markdown'" class="prose prose-sm max-w-none dark:prose-invert">
                     <div v-html="$fmt.markdown(text)"></div>
                 </div>
+                <div v-else-if="prefs === 'preview' && jsonValue">
+                    <HtmlFormat :value="jsonValue" />
+                </div>
                 <div v-else :class="['p-0.5', contentClass]">{{ text }}</div>
             </div>
         </div>
@@ -413,11 +416,18 @@ export const TextViewer = {
     },
     setup(props) {
         const ctx = inject('ctx')
-        const textStyles = ['pre', 'normal', 'markdown']
         const prefs = ref('pre')
         const maximized = ref({})
         const dropdownOpen = ref(false)
         const hash = computed(() => ctx.utils.hashString(props.text))
+        const jsonValue = computed(() => ctx.utils.toJsonObject(props.text))
+        const textStyles = computed(() => {
+            const ret = ['pre', 'normal', 'markdown']
+            if (jsonValue.value) {
+                ret.push('preview')
+            }
+            return ret
+        })
 
         const toggleDropdown = () => {
             dropdownOpen.value = !dropdownOpen.value
@@ -473,6 +483,7 @@ export const TextViewer = {
             hash,
             textStyles,
             prefs,
+            jsonValue,
             dropdownOpen,
             toggleDropdown,
             setStyle,
