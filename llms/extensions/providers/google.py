@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -360,36 +361,57 @@ def install_google(ctx):
                 ctx.log(gemini_chat_summary(gemini_chat))
                 started_at = time.time()
 
-                if ctx.MOCK and "modalities" in chat:
-                    print("Mocking Google Gemini Image")
-                    with open(f"{ctx.MOCK_DIR}/gemini-image.json") as f:
-                        obj = json.load(f)
-                else:
-                    try:
-                        async with session.post(
-                            gemini_chat_url,
-                            headers=self.headers,
-                            data=json.dumps(gemini_chat),
-                            timeout=aiohttp.ClientTimeout(total=120),
-                        ) as res:
-                            obj = await self.response_json(res)
-                            if context is not None:
-                                context["providerResponse"] = obj
-                    except Exception as e:
-                        ctx.log(f"Error: {res.status} {res.reason}: {e}")
-                        text = await res.text()
+                max_retries = 3
+                for attempt in range(max_retries):
+                    if ctx.MOCK and "modalities" in chat:
+                        print("Mocking Google Gemini Image")
+                        with open(f"{ctx.MOCK_DIR}/gemini-image.json") as f:
+                            obj = json.load(f)
+                    else:
                         try:
-                            obj = json.loads(text)
-                        except:
-                            ctx.log(text)
-                            raise e
+                            if attempt > 0:
+                                await asyncio.sleep(attempt * 0.5)
+                                ctx.log(f"Retrying request (attempt {attempt + 1}/{max_retries})...")
 
-                if "error" in obj:
-                    ctx.log(f"Error: {obj['error']}")
-                    raise Exception(obj["error"]["message"])
+                            async with session.post(
+                                gemini_chat_url,
+                                headers=self.headers,
+                                data=json.dumps(gemini_chat),
+                                timeout=aiohttp.ClientTimeout(total=120),
+                            ) as res:
+                                obj = await self.response_json(res)
+                                if context is not None:
+                                    context["providerResponse"] = obj
+                        except Exception as e:
+                            ctx.err(f"{res.status} {res.reason}", e)
+                            text = await res.text()
+                            try:
+                                obj = json.loads(text)
+                            except Exception as parseEx:
+                                ctx.err("Failed to parse error response:\n" + text, parseEx)
+                                raise e from None
 
-                if ctx.debug:
-                    ctx.dbg(json.dumps(gemini_response_summary(obj), indent=2))
+                    if "error" in obj:
+                        ctx.log(f"Error: {obj['error']}")
+                        raise Exception(obj["error"]["message"])
+
+                    if ctx.debug:
+                        ctx.dbg(json.dumps(gemini_response_summary(obj), indent=2))
+
+                    # Check for empty response "anomaly"
+                    has_candidates = obj.get("candidates") and len(obj["candidates"]) > 0
+                    if has_candidates:
+                        candidate = obj["candidates"][0]
+                        raw_content = candidate.get("content", {})
+                        raw_parts = raw_content.get("parts", [])
+
+                        if not raw_parts and attempt < max_retries - 1:
+                            # It's an empty response candidates list
+                            ctx.dbg("Empty candidates parts detected. Retrying...")
+                            continue
+
+                    # If we got here, it's either a good response or we ran out of retries
+                    break
 
                 # calculate cost per generation
                 cost = None
@@ -504,7 +526,7 @@ def install_google(ctx):
                         "finish_reason": candidate.get("finishReason", "stop"),
                         "message": {
                             "role": role,
-                            "content": content if content else None,
+                            "content": content if content else "",
                         },
                     }
                     if reasoning:
