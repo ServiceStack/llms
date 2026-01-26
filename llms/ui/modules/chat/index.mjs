@@ -350,6 +350,105 @@ export function useChatPrompt(ctx) {
         ctx.setState({ selectedAspectRatio })
     }
 
+    async function sendUserMessage(text, { model, redirect = true } = {}) {
+        ctx.clearError()
+
+        if (!model) {
+            model = getSelectedModel()
+        }
+
+        let content = createContent({ text, files: attachedFiles.value })
+
+        let thread
+
+        // Create thread if none exists
+        if (!ctx.threads.currentThread.value) {
+            thread = await ctx.threads.startNewThread({ model, redirect })
+        } else {
+            thread = ctx.threads.currentThread.value
+        }
+
+        let threadId = thread.id
+        let messages = thread.messages || []
+        if (!threadId) {
+            console.error('No thread ID found', thread, ctx.threads.currentThread.value)
+            return
+        }
+
+        // Handle Editing / Redo Logic
+        const editingMsg = editingMessage.value
+        if (editingMsg) {
+            let messageIndex = messages.findIndex(m => m.timestamp === editingMsg)
+            if (messageIndex == -1) {
+                messageIndex = messages.findLastIndex(m => m.role === 'user')
+            }
+            console.log('Editing message', editingMsg, messageIndex, messages)
+
+            if (messageIndex >= 0) {
+                messages[messageIndex].content = content
+                // Truncate messages to only include up to the edited message
+                messages.length = messageIndex + 1
+            } else {
+                messages.push({
+                    timestamp: new Date().valueOf(),
+                    role: 'user',
+                    content,
+                })
+            }
+        } else {
+            // Regular Send Logic
+            const lastMessage = messages[messages.length - 1]
+
+            // Check duplicate based on text content extracted from potential array
+            const getLastText = (msgContent) => {
+                if (typeof msgContent === 'string') return msgContent
+                if (Array.isArray(msgContent)) return msgContent.find(c => c.type === 'text')?.text || ''
+                return ''
+            }
+            const newText = text // content[0].text
+            const lastText = lastMessage && lastMessage.role === 'user' ? getLastText(lastMessage.content) : null
+            const isDuplicate = lastText === newText
+
+            // Add user message only if it's not a duplicate
+            // Note: We are saving the FULL STRUCTURED CONTENT array here
+            if (!isDuplicate) {
+                messages.push({
+                    timestamp: new Date().valueOf(),
+                    role: 'user',
+                    content,
+                })
+            }
+        }
+
+        const request = createRequest({ model })
+
+        // Add Thread History
+        messages.forEach(m => {
+            request.messages.push(m)
+        })
+
+        // Update Thread Title if not set or is default
+        if (!thread.title || thread.title === 'New Chat' || request.title === 'New Chat') {
+            request.title = text.length > 100
+                ? text.slice(0, 100) + '...'
+                : text
+            console.debug(`changing thread title from '${thread.title}' to '${request.title}'`)
+        } else {
+            console.debug(`thread title is '${thread.title}'`, request.title)
+        }
+
+        const api = await ctx.threads.queueChat({ request, thread })
+        if (api.response) {
+            // success
+            editingMessage.value = null
+            attachedFiles.value = []
+            thread = api.response
+            ctx.threads.replaceThread(thread)
+        } else {
+            ctx.setError(api.error)
+        }
+    }
+
     return {
         completion,
         createContent,
@@ -374,6 +473,7 @@ export function useChatPrompt(ctx) {
         getTextContent,
         getAnswer,
         selectAspectRatio,
+        sendUserMessage,
     }
 }
 
@@ -490,6 +590,7 @@ const ChatPrompt = {
             hasAudio,
             hasFile,
             getTextContent,
+            sendUserMessage,
         } = ctx.chat
 
         const fileInput = ref(null)
@@ -631,8 +732,6 @@ const ChatPrompt = {
             if (!messageText.value?.trim() && !hasImage() && !hasAudio() && !hasFile()) return
             if (ctx.threads.isWatchingThread.value || !props.model) return
 
-            ctx.clearError()
-
             // 1. Construct Structured Content (Text + Attachments)
             let text = messageText.value.trim()
 
@@ -645,96 +744,8 @@ const ChatPrompt = {
             }
 
             messageText.value = ''
-            let content = ctx.chat.createContent({ text, files: ctx.chat.attachedFiles.value })
 
-            let thread
-
-            // Create thread if none exists
-            if (!ctx.threads.currentThread.value) {
-                thread = await ctx.threads.startNewThread({ model: props.model, redirect: true })
-            } else {
-                thread = ctx.threads.currentThread.value
-            }
-
-            let threadId = thread.id
-            let messages = thread.messages || []
-            if (!threadId) {
-                console.error('No thread ID found', thread, ctx.threads.currentThread.value)
-                return
-            }
-
-            // Handle Editing / Redo Logic
-            const editingMessage = ctx.chat.editingMessage.value
-            if (editingMessage) {
-                let messageIndex = messages.findIndex(m => m.timestamp === editingMessage)
-                if (messageIndex == -1) {
-                    messageIndex = messages.findLastIndex(m => m.role === 'user')
-                }
-                console.log('Editing message', editingMessage, messageIndex, messages)
-
-                if (messageIndex >= 0) {
-                    messages[messageIndex].content = content
-                    // Truncate messages to only include up to the edited message
-                    messages.length = messageIndex + 1
-                } else {
-                    messages.push({
-                        timestamp: new Date().valueOf(),
-                        role: 'user',
-                        content,
-                    })
-                }
-            } else {
-                // Regular Send Logic
-                const lastMessage = messages[messages.length - 1]
-
-                // Check duplicate based on text content extracted from potential array
-                const getLastText = (msgContent) => {
-                    if (typeof msgContent === 'string') return msgContent
-                    if (Array.isArray(msgContent)) return msgContent.find(c => c.type === 'text')?.text || ''
-                    return ''
-                }
-                const newText = text // content[0].text
-                const lastText = lastMessage && lastMessage.role === 'user' ? getLastText(lastMessage.content) : null
-                const isDuplicate = lastText === newText
-
-                // Add user message only if it's not a duplicate
-                // Note: We are saving the FULL STRUCTURED CONTENT array here
-                if (!isDuplicate) {
-                    messages.push({
-                        timestamp: new Date().valueOf(),
-                        role: 'user',
-                        content,
-                    })
-                }
-            }
-
-            const request = ctx.chat.createRequest({ model: props.model })
-
-            // Add Thread History
-            messages.forEach(m => {
-                request.messages.push(m)
-            })
-
-            // Update Thread Title if not set or is default
-            if (!thread.title || thread.title === 'New Chat' || request.title === 'New Chat') {
-                request.title = text.length > 100
-                    ? text.slice(0, 100) + '...'
-                    : text
-                console.debug(`changing thread title from '${thread.title}' to '${request.title}'`)
-            } else {
-                console.debug(`thread title is '${thread.title}'`, request.title)
-            }
-
-            const api = await ctx.threads.queueChat({ request, thread })
-            if (api.response) {
-                // success
-                ctx.chat.editingMessage.value = null
-                ctx.chat.attachedFiles.value = []
-                thread = api.response
-                ctx.threads.replaceThread(thread)
-            } else {
-                ctx.setError(api.error)
-            }
+            await sendUserMessage(text, { model: props.model })
 
             // Restore focus to the textarea
             nextTick(() => {
@@ -819,6 +830,7 @@ const ChatPrompt = {
             addNewLine,
             onKeyDown,
             imageAspectRatios,
+            sendUserMessage,
         }
     }
 }
