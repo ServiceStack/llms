@@ -11,10 +11,12 @@ import unittest
 # Add parent directory to path to import llms module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from typing import Annotated, Dict, List, Optional
+
 from llms.main import (
     apply_args_to_chat,
     chat_summary,
-    gemini_chat_summary,
+    function_to_tool_definition,
     get_file_mime_type,
     get_filename,
     is_base_64,
@@ -22,6 +24,69 @@ from llms.main import (
     parse_args_params,
     price_to_string,
 )
+
+
+class TestToolDefinition(unittest.TestCase):
+    """Test function_to_tool_definition."""
+
+    def test_simple_function(self):
+        def my_func(a: int, b: str):
+            """My description."""
+            pass
+
+        tool = function_to_tool_definition(my_func)
+        self.assertEqual(tool["function"]["name"], "my_func")
+        self.assertEqual(tool["function"]["description"], "My description.")
+        props = tool["function"]["parameters"]["properties"]
+        self.assertEqual(props["a"]["type"], "integer")
+        self.assertEqual(props["b"]["type"], "string")
+        self.assertIn("a", tool["function"]["parameters"]["required"])
+
+    def test_optional_args(self):
+        def func_opt(head: Optional[int] = None, tail: Optional[int] = None):
+            pass
+
+        tool = function_to_tool_definition(func_opt)
+        props = tool["function"]["parameters"]["properties"]
+        self.assertEqual(props["head"]["type"], "integer")
+        self.assertEqual(props["tail"]["type"], "integer")
+        self.assertNotIn("head", tool["function"]["parameters"]["required"])
+
+    def test_annotated_args(self):
+        def func_anno(path: Annotated[str, "Path to file"]):
+            pass
+
+        tool = function_to_tool_definition(func_anno)
+        props = tool["function"]["parameters"]["properties"]
+        self.assertEqual(props["path"]["type"], "string")
+        self.assertEqual(props["path"]["description"], "Path to file")
+
+    def test_annotated_optional(self):
+        def func_anno_opt(head: Annotated[Optional[int], "Number of lines"] = None):
+            pass
+
+        tool = function_to_tool_definition(func_anno_opt)
+        props = tool["function"]["parameters"]["properties"]
+        self.assertEqual(props["head"]["type"], "integer")
+        self.assertEqual(props["head"]["description"], "Number of lines")
+
+    def test_list_str(self):
+        def func_list(paths: List[str]):
+            pass
+
+        tool = function_to_tool_definition(func_list)
+        props = tool["function"]["parameters"]["properties"]
+        self.assertEqual(props["paths"]["type"], "array")
+        self.assertEqual(props["paths"]["items"]["type"], "string")
+
+    def test_list_dict(self):
+        def func_list_dict(edits: List[Dict[str, str]]):
+            pass
+
+        tool = function_to_tool_definition(func_list_dict)
+        props = tool["function"]["parameters"]["properties"]
+        self.assertEqual(props["edits"]["type"], "array")
+        self.assertEqual(props["edits"]["items"]["type"], "object")
 
 
 class TestUrlUtils(unittest.TestCase):
@@ -235,19 +300,6 @@ class TestChatSummary(unittest.TestCase):
         self.assertIsInstance(result, str)
         # Check that audio data is replaced with size
         self.assertNotIn("B" * 1000, result)
-
-    def test_gemini_chat_summary(self):
-        gemini_chat = {
-            "contents": [
-                {"parts": [{"text": "Hello"}, {"inline_data": {"data": "C" * 1000, "mime_type": "image/png"}}]}
-            ]
-        }
-        result = gemini_chat_summary(gemini_chat)
-        self.assertIsInstance(result, str)
-        json.loads(result)
-        # Check that inline_data is replaced with size
-        self.assertNotIn("C" * 1000, result)
-        self.assertIn("(1000)", result)
 
 
 if __name__ == "__main__":
