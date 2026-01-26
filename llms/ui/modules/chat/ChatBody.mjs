@@ -29,6 +29,11 @@ function embedHtml(html) {
             }
         }
         const ro = new ResizeObserver(sendHeight);
+        window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'stop-resize') {
+                ro.disconnect();
+            }
+        });
         window.addEventListener('load', () => {
             // Inject styles to prevent infinite loops
             const style = document.createElement('style');
@@ -507,11 +512,23 @@ export const ToolArguments = {
         })
 
         const handleMessage = (event) => {
+            console.log('handleMessage', event)
             if (event.data?.type === 'iframe-resize' && typeof event.data.height === 'number') {
                 const iframes = refArgs.value?.querySelectorAll('iframe')
                 iframes?.forEach(iframe => {
                     if (iframe.contentWindow === event.source) {
-                        iframe.style.height = (event.data.height + 30) + 'px'
+                        const messages = document.getElementById('messages')
+                        const maxHeight = messages ? messages.clientHeight : window.innerHeight
+                        const calculatedHeight = event.data.height + 30
+                        const targetHeight = Math.min(calculatedHeight, maxHeight)
+
+                        if (iframe.style.height !== targetHeight + 'px') {
+                            iframe.style.height = targetHeight + 'px'
+                        }
+
+                        if (calculatedHeight > maxHeight) {
+                            event.source.postMessage({ type: 'stop-resize' }, '*')
+                        }
                     }
                 })
             }
@@ -591,7 +608,7 @@ export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
             <!-- Messages Area -->
-            <div class="flex-1 overflow-y-auto" ref="messagesContainer">
+            <div id="messages" class="flex-1 overflow-y-auto" ref="messagesContainer">
                 <div class="mx-auto max-w-6xl px-4 py-6">
 
                     <div v-if="!$ai.hasAccess">
@@ -609,7 +626,7 @@ export const ChatBody = {
                         <ThreadHeader v-if="currentThread" :thread="currentThread" class="mb-2" />
                         <div class="space-y-2" v-if="currentThread?.messages?.length">
                             <div
-                                v-for="message in currentThread.messages.filter(x => x.role !== 'system')"
+                                v-for="message in currentThreadMessages"
                                 :key="message.timestamp"
                                 v-show="!(message.role === 'tool' && isToolLinked(message))"
                                 class="flex items-start space-x-3 group"
@@ -791,7 +808,7 @@ export const ChatBody = {
                             </div>
 
                             <!-- Thread error message bubble -->
-                            <div v-if="currentThread?.error" class="mt-8 flex items-center space-x-3">
+                            <div v-if="currentThread?.error" class="mt-8 flex items-center">
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0">
                                     <div class="size-8 rounded-full bg-red-600 dark:bg-red-500 text-white flex items-center justify-center text-lg font-bold">
@@ -799,13 +816,17 @@ export const ChatBody = {
                                     </div>
                                 </div>
                                 <!-- Error bubble -->
-                                <div class="max-w-[85%] rounded-lg px-3 py-1 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 shadow-sm">
+                                <div class="ml-3 max-w-[85%] rounded-lg px-3 py-1 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 shadow-sm">
                                     <div class="flex items-start space-x-2">
                                         <div class="flex-1 min-w-0">
                                             <div v-if="currentThread.error" class="text-base mb-1">{{ currentThread.error }}</div>
                                         </div>
                                     </div>
                                 </div>
+                                <button type="button" @click="$chat.sendUserMessage('retry')" title="Retry request"
+                                    class="ml-1 px-3 py-1 rounded text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900/30 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-all">
+                                    retry
+                                </button>
                             </div>
 
                             <!-- Error message bubble -->
@@ -839,7 +860,7 @@ export const ChatBody = {
                                 </div>
                             </div>
                         </div>
-                        <ThreadFooter v-if="$threads.threadDetails.value[currentThread.id]" :thread="$threads.threadDetails.value[currentThread.id]" />
+                        <ThreadFooter v-if="!$threads.watchingThread && $threads.threadDetails.value[currentThread.id]" :thread="$threads.threadDetails.value[currentThread.id]" />
                     </div>
                 </div>
             </div>
@@ -1074,12 +1095,17 @@ export const ChatBody = {
             ctx.setPrefs(prefs.value)
         }
 
+        const ignoreUserMessages = ['proceed', 'retry']
+        const currentThreadMessages = computed(() =>
+            currentThread.value?.messages?.filter(x => x.role !== 'system' && !(x.role === 'user' && Array.isArray(x.content) && ignoreUserMessages.includes(x.content[0]?.text))))
+
         return {
             prefs,
             setPrefs,
             config,
             models,
             currentThread,
+            currentThreadMessages,
             selectedModel,
             selectedModelObj,
             messagesContainer,
