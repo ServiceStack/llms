@@ -21,7 +21,7 @@ const ToolResult = {
         <div class="not-prose py-2">
             <pre v-if="ext.prefs.toolFormat !== 'preview'" class="tool-output">{{ origResult }}</pre>
             <div v-else>
-                <ViewTypes v-if="Array.isArray(result)" :results="result" />
+                <ViewTypes v-if="Array.isArray(result) && result[0]?.type" :results="result" />
                 <ViewType v-else :result="result" />
             </div>
         </div>

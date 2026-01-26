@@ -23,6 +23,7 @@ import shutil
 import site
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from datetime import datetime
@@ -379,6 +380,46 @@ def get_literal_values(typ):
     return None
 
 
+def _py_type_to_json_type(param_type):
+    param_type_name = "string"
+    enum_values = None
+    items = None
+
+    # Check for Enum
+    if inspect.isclass(param_type) and issubclass(param_type, Enum):
+        enum_values = [e.value for e in param_type]
+    elif get_origin(param_type) is list or get_origin(param_type) is list:
+        param_type_name = "array"
+        args = get_args(param_type)
+        if args:
+            items_type, _, _ = _py_type_to_json_type(args[0])
+            items = {"type": items_type}
+    elif get_origin(param_type) is dict:
+        param_type_name = "object"
+    else:
+        # Check for Literal / Union[Literal]
+        enum_values = get_literal_values(param_type)
+
+    if enum_values:
+        # Infer type from the first value
+        value_type = type(enum_values[0])
+        if value_type is int:
+            param_type_name = "integer"
+        elif value_type is float:
+            param_type_name = "number"
+        elif value_type is bool:
+            param_type_name = "boolean"
+
+    elif param_type is int:
+        param_type_name = "integer"
+    elif param_type is float:
+        param_type_name = "number"
+    elif param_type is bool:
+        param_type_name = "boolean"
+
+    return param_type_name, enum_values, items
+
+
 def function_to_tool_definition(func):
     type_hints = get_type_hints(func, include_extras=True)
     signature = inspect.signature(func)
@@ -386,8 +427,6 @@ def function_to_tool_definition(func):
 
     for name, param in signature.parameters.items():
         param_type = type_hints.get(name, str)
-        param_type_name = "string"
-        enum_values = None
         description = None
 
         # Check for Annotated (for description)
@@ -399,35 +438,24 @@ def function_to_tool_definition(func):
                     description = arg
                     break
 
-        # Check for Enum
-        if inspect.isclass(param_type) and issubclass(param_type, Enum):
-            enum_values = [e.value for e in param_type]
-        else:
-            # Check for Literal / Union[Literal]
-            enum_values = get_literal_values(param_type)
+        # Unwrap Optional / Union[T, None]
+        origin = get_origin(param_type)
+        if origin is Union:
+            args = get_args(param_type)
+            # Filter out NoneType
+            non_none_args = [arg for arg in args if arg is not type(None)]
+            if len(non_none_args) == 1:
+                param_type = non_none_args[0]
 
-        if enum_values:
-            # Infer type from the first value
-            value_type = type(enum_values[0])
-            if value_type is int:
-                param_type_name = "integer"
-            elif value_type is float:
-                param_type_name = "number"
-            elif value_type is bool:
-                param_type_name = "boolean"
-
-        elif param_type is int:
-            param_type_name = "integer"
-        elif param_type is float:
-            param_type_name = "number"
-        elif param_type is bool:
-            param_type_name = "boolean"
+        param_type_name, enum_values, items = _py_type_to_json_type(param_type)
 
         prop = {"type": param_type_name}
         if description:
             prop["description"] = description
         if enum_values:
             prop["enum"] = enum_values
+        if items:
+            prop["items"] = items
         parameters["properties"][name] = prop
 
         if param.default == inspect.Parameter.empty:
@@ -1600,9 +1628,112 @@ def g_tool_result(result, function_name: Optional[str] = None, function_args: Op
     return text, resources
 
 
+def convert_tool_args(function_name, function_args):
+    """
+    Convert tool arg values to their specified types.
+    types: string, number, integer, boolean, object, array, null
+    example prop_def = [
+        {
+            "type": "string"
+        },
+        {
+            "default": "name",
+            "type": "string",
+            "enum": ["name", "size"]
+        },
+        {
+            "default": [],
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+        },
+    ]
+    """
+    tool_def = g_app.get_tool_definition(function_name)
+    if not tool_def:
+        return function_args
+
+    if "function" in tool_def and "parameters" in tool_def["function"]:
+        parameters = tool_def.get("function", {}).get("parameters")
+        properties = parameters.get("properties", {})
+        required = parameters.get("required", [])
+        new_args = function_args.copy()
+
+        for key, value in function_args.items():
+            if key in properties and isinstance(value, str):
+                prop_type = properties[key].get("type")
+                str_val = value.strip()
+
+                if str_val == "":
+                    if prop_type in ("integer", "number"):
+                        new_args[key] = None
+                    else:
+                        new_args.pop(key)
+                    continue
+
+                if prop_type == "integer":
+                    with contextlib.suppress(ValueError, TypeError):
+                        new_args[key] = int(str_val)
+
+                elif prop_type == "number":
+                    with contextlib.suppress(ValueError, TypeError):
+                        new_args[key] = float(str_val)
+
+                elif prop_type == "boolean":
+                    lower_val = str_val.lower()
+                    if lower_val in ("true", "1", "yes"):
+                        new_args[key] = True
+                    elif lower_val in ("false", "0", "no"):
+                        new_args[key] = False
+
+                elif prop_type == "object":
+                    if str_val == "":
+                        new_args[key] = None
+                    else:
+                        with contextlib.suppress(json.JSONDecodeError, TypeError):
+                            new_args[key] = json.loads(str_val)
+
+                elif prop_type == "array":
+                    if str_val == "":
+                        new_args[key] = []
+                    else:
+                        # Simple CSV split for arrays; could be more robust with JSON parsing if wrapped in brackets
+                        # Check if it looks like a JSON array
+                        if str_val.startswith("[") and str_val.endswith("]"):
+                            with contextlib.suppress(json.JSONDecodeError):
+                                new_args[key] = json.loads(str_val)
+                        else:
+                            new_args[key] = [s.strip() for s in str_val.split(",")]
+
+        # Validate required parameters
+        missing = [key for key in required if key not in new_args]
+        if missing:
+            raise ValueError(f"Missing required arguments: {', '.join(missing)}")
+
+        return new_args
+
+    return function_args
+
+
 async def g_exec_tool(function_name, function_args):
+    _log(f"g_exec_tool: {function_name}")
     if function_name in g_app.tools:
         try:
+            # Type conversion based on tool definition
+            function_args = convert_tool_args(function_name, function_args)
+
             func = g_app.tools[function_name]
             is_async = inspect.iscoroutinefunction(func)
             _dbg(f"Executing {'async' if is_async else 'sync'} tool '{function_name}' with args: {function_args}")
@@ -1611,7 +1742,7 @@ async def g_exec_tool(function_name, function_args):
             else:
                 return g_tool_result(func(**function_args), function_name, function_args)
         except Exception as e:
-            return f"Error executing tool '{function_name}': {to_error_message(e)}", None
+            return f"Error executing tool '{function_name}':\n{to_error_message(e)}", None
     return f"Error: Tool '{function_name}' not found", None
 
 
@@ -2657,6 +2788,7 @@ class AppExtensions:
         self.tool_groups = {}
         self.index_headers = []
         self.index_footers = []
+        self.allowed_directories = []
         self.request_args = {
             "image_config": dict,  # e.g. { "aspect_ratio": "1:1" }
             "temperature": float,  # e.g: 0.7
@@ -2712,6 +2844,22 @@ class AppExtensions:
     def set_config(self, config: Dict[str, Any]):
         self.config = config
         self.auth_enabled = self.config.get("auth", {}).get("enabled", False)
+
+    def set_allowed_directories(
+        self, directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]]
+    ) -> None:
+        """Set the list of allowed directories."""
+        self.allowed_directories = [os.path.abspath(d) for d in directories]
+
+    def add_allowed_directory(self, path: str) -> None:
+        """Add an allowed directory."""
+        abs_path = os.path.abspath(path)
+        if abs_path not in self.allowed_directories:
+            self.allowed_directories.append(abs_path)
+
+    def get_allowed_directories(self) -> List[str]:
+        """Get the list of allowed directories."""
+        return self.allowed_directories
 
     # Authentication middleware helper
     def check_auth(self, request: web.Request) -> Tuple[bool, Optional[Dict[str, Any]]]:
@@ -2827,6 +2975,12 @@ class AppExtensions:
                         current_chat["tools"].append(tool_def)
         return current_chat
 
+    def get_tool_definition(self, name: str) -> Optional[Dict[str, Any]]:
+        for tool_def in self.tool_definitions:
+            if tool_def["function"]["name"] == name:
+                return tool_def
+        return None
+
 
 def handler_name(handler):
     if hasattr(handler, "__name__"):
@@ -2852,6 +3006,20 @@ class ExtensionContext:
         self.aspect_ratios = app.aspect_ratios
         self.request_args = app.request_args
         self.disabled = False
+
+    def set_allowed_directories(
+        self, directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]]
+    ) -> None:
+        """Set the list of allowed directories."""
+        self.app.set_allowed_directories(directories)
+
+    def add_allowed_directory(self, path: str) -> None:
+        """Add an allowed directory."""
+        self.app.add_allowed_directory(path)
+
+    def get_allowed_directories(self) -> List[str]:
+        """Get the list of allowed directories."""
+        return self.app.get_allowed_directories()
 
     def chat_to_prompt(self, chat: Dict[str, Any]) -> str:
         return chat_to_prompt(chat)
@@ -3099,10 +3267,7 @@ class ExtensionContext:
         self.app.tool_groups[group].append(name)
 
     def get_tool_definition(self, name: str) -> Optional[Dict[str, Any]]:
-        for tool_def in self.app.tool_definitions:
-            if tool_def["function"]["name"] == name:
-                return tool_def
-        return None
+        return self.app.get_tool_definition(name)
 
     def group_resources(self, resources: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         return group_resources(resources)
@@ -3685,6 +3850,10 @@ def cli_exec(cli_args, extra_args):
 
         asyncio.run(update_extensions(cli_args.update))
         return ExitCode.SUCCESS
+
+    g_app.add_allowed_directory(home_llms_path(".agent"))  # info for agents, e.g: skills
+    g_app.add_allowed_directory(os.getcwd())  # add current directory
+    g_app.add_allowed_directory(tempfile.gettempdir())  # add temp directory
 
     g_app.extensions = install_extensions()
 

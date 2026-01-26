@@ -61,7 +61,7 @@ function embedHtml(html) {
 export const TypeText = {
     template: `
         <div data-type="text" v-if="text.type === 'text'">
-            !<div v-html="html?.trim()" class="whitespace-pre-wrap"></div>
+            <div v-html="html?.trim()" class="whitespace-pre-wrap"></div>
         </div>
     `,
     props: {
