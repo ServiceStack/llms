@@ -368,6 +368,7 @@ def install_google(ctx):
                         with open(f"{ctx.MOCK_DIR}/gemini-image.json") as f:
                             obj = json.load(f)
                     else:
+                        res = None
                         try:
                             if attempt > 0:
                                 await asyncio.sleep(attempt * 0.5)
@@ -383,12 +384,16 @@ def install_google(ctx):
                                 if context is not None:
                                     context["providerResponse"] = obj
                         except Exception as e:
-                            ctx.err(f"{res.status} {res.reason}", e)
-                            text = await res.text()
-                            try:
-                                obj = json.loads(text)
-                            except Exception as parseEx:
-                                ctx.err("Failed to parse error response:\n" + text, parseEx)
+                            if res:
+                                ctx.err(f"{res.status} {res.reason}", e)
+                                try:
+                                    text = await res.text()
+                                    obj = json.loads(text)
+                                except Exception as parseEx:
+                                    ctx.err("Failed to parse error response:\n" + text, parseEx)
+                                    raise e from None
+                            else:
+                                ctx.err(f"Request failed: {str(e)}")
                                 raise e from None
 
                     if "error" in obj:
