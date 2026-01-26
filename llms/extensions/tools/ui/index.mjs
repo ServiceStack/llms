@@ -76,10 +76,92 @@ const ToolResult = {
     }
 }
 
-const Tools = {
-    components: {
-        ToolResult
+const JsonInput = {
+    template: `
+    <div class="flex flex-col gap-1">
+        <div class="relative">
+            <textarea 
+                v-model="localJson" 
+                @input="validate"
+                rows="5"
+                class="w-full p-2 font-mono text-xs border rounded-md resize-y focus:outline-none focus:ring-2 transition-colors"
+                :class="error 
+                    ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10 focus:ring-red-500' 
+                    : 'border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:ring-blue-500'"
+                spellcheck="false"
+            ></textarea>
+            <div v-if="isValid" class="absolute bottom-2 right-2 text-green-500 bg-white dark:bg-gray-800 rounded-full p-1 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+            </div>
+        </div>
+        <div v-if="error" class="text-xs text-red-600 dark:text-red-400 font-medium px-1">
+            {{ error }}
+        </div>
+    </div>
+    `,
+    props: {
+        modelValue: {
+            required: true
+        }
     },
+    emits: ['update:modelValue'],
+    setup(props, { emit }) {
+        // Initialize with formatted JSON
+        const localJson = ref(
+            props.modelValue !== undefined
+                ? JSON.stringify(props.modelValue, null, 4)
+                : ''
+        )
+        const error = ref(null)
+        const isValid = ref(true)
+
+        function validate() {
+            try {
+                if (!localJson.value.trim()) {
+                    // Decide if empty string is valid object/array or undefined
+                    // For now, let's say empty is NOT valid if the prop expects object
+                    // But maybe we can treat it as valid undefined/null?
+                    // Let's enforce valid JSON.
+                    if (localJson.value === '') {
+                        error.value = null
+                        isValid.value = true
+                        emit('update:modelValue', undefined)
+                        return
+                    }
+                }
+
+                const parsed = JSON.parse(localJson.value)
+                error.value = null
+                isValid.value = true
+                emit('update:modelValue', parsed)
+            } catch (e) {
+                error.value = e.message
+                isValid.value = false
+                // Do not emit invalid values
+            }
+        }
+
+        // Watch external changes only if they differ significantly from local
+        /* 
+           Note: two-way binding with text representation is tricky.
+           If we watch props.modelValue, we might re-format user's in-progress typing if we aren't careful.
+           Usually better to only update localJson if the prop changes "from outside".
+           For this simple tool, initial value is likely enough, or we can watch with a deep compare check.
+           For now, let's stick to initial + internal validation. 
+        */
+
+        return {
+            localJson,
+            error,
+            isValid,
+            validate
+        }
+    }
+}
+
+const Tools = {
     template: `
     <div class="p-4 md:p-6 max-w-7xl mx-auto w-full relative">
         <div v-if="Object.keys($ctx.tools.toolPageHeaders).length">
@@ -151,6 +233,10 @@ const Tools = {
                                      <option :value="false">False</option>
                                      <option :value="true">True</option>
                                 </select>
+                            </div>
+
+                            <div v-else-if="prop.type === 'object' || prop.type === 'array'">
+                                <JsonInput v-model="execForm[name]" />
                             </div>
 
                             <div v-else>
@@ -615,6 +701,8 @@ export default {
         ctx.components({
             Tools,
             ToolSelector,
+            ToolResult,
+            JsonInput,
         })
 
         ctx.setGlobals({
