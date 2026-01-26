@@ -1,4 +1,5 @@
 import { ref, inject, computed } from "vue"
+import { leftPart } from "@servicestack/client"
 
 let ext
 
@@ -317,6 +318,32 @@ export default {
 
             const skillsPrompt = SkillInstructions.replace('$$AVAILABLE_SKILLS$$', sb.join('\n')).trim()
             context.requiredSystemPrompts.push(skillsPrompt)
+        })
+
+        ctx.setThreadFooters({
+            skills: {
+                component: {
+                    template: `
+                        <div class="mt-2 w-full flex justify-center">
+                            <button type="button" @click="$ctx.chat.sendUserMessage('proceed')"
+                                class="px-3 py-1 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors select-none">
+                                proceed
+                            </button>
+                        </div>
+                    `
+                },
+                show({ thread }) {
+                    if (thread.messages.length < 2) return false
+                    const msgRoles = thread.messages.map(m => m.role)
+                    if (msgRoles[msgRoles.length - 1] != "assistant") return false
+                    const hasSkillToolCall = thread.messages.some(m =>
+                        m.tool_calls?.some(tc => tc.type == "function" && tc.function.name == "skill"))
+                    const systemPrompt = thread.messages.find(m => m.role == "system")?.content.toLowerCase() || ''
+                    const line1 = leftPart(systemPrompt.trim(), "\n")
+                    const hasPlanSystemPrompt = line1.includes("plan") || systemPrompt.includes("# plan")
+                    return hasSkillToolCall || hasPlanSystemPrompt
+                }
+            }
         })
 
         ctx.setState({

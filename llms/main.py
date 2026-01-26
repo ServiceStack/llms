@@ -1713,9 +1713,15 @@ def convert_tool_args(function_name, function_args):
                         # Check if it looks like a JSON array
                         if str_val.startswith("[") and str_val.endswith("]"):
                             with contextlib.suppress(json.JSONDecodeError):
-                                new_args[key] = json.loads(str_val)
+                                items = json.loads(str_val)
                         else:
-                            new_args[key] = [s.strip() for s in str_val.split(",")]
+                            items = [s.strip() for s in str_val.split(",")]
+                        item_type = properties[key].get("items", {}).get("type")
+                        if item_type == "integer":
+                            items = [int(i) for i in items]
+                        elif item_type == "number":
+                            items = [float(i) for i in items]
+                        new_args[key] = items
 
         # Validate required parameters
         missing = [key for key in required if key not in new_args]
