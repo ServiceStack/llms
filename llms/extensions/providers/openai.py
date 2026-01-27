@@ -18,6 +18,11 @@ def install_openai(ctx):
             super().__init__(**kwargs)
             self.modalities["image"] = OpenAiGenerator(**kwargs)
 
+        async def process_chat(self, chat, provider_id=None):
+            ret = await super().process_chat(chat, provider_id)
+            chat.pop("modalities", None)  # openai chat completion doesn't support modalities
+            return ret
+
     # https://platform.openai.com/docs/api-reference/images
     class OpenAiGenerator(GeneratorBase):
         sdk = "openai/image"

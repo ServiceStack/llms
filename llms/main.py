@@ -1305,7 +1305,7 @@ class GroqProvider(OpenAiCompatible):
         super().__init__(**kwargs)
 
     async def process_chat(self, chat, provider_id=None):
-        ret = await process_chat(chat, provider_id)
+        ret = await super().process_chat(chat, provider_id)
         chat.pop("modalities", None)  # groq doesn't support modalities
         messages = chat.get("messages", []).copy()
         for message in messages:
