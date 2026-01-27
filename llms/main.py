@@ -2974,6 +2974,11 @@ class AppExtensions:
                 if "tools" not in current_chat:
                     current_chat["tools"] = []
 
+                _dbg(
+                    f"create_chat_with_tools: all_tools:{include_all_tools}, only_tools:{only_tools_list}, chat tools: "
+                    + str(len(current_chat["tools"]))
+                )
+
                 existing_tools = {t["function"]["name"] for t in current_chat["tools"]}
                 for tool_def in self.tool_definitions:
                     name = tool_def["function"]["name"]
