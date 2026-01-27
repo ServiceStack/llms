@@ -31,7 +31,6 @@ def install_cerebras(ctx):
                 clean_chat["messages"].append(new_msg)
 
             clean_chat.pop("modalities", None)
-            clean_chat.pop("systemPrompt", None)
             return await super().chat(clean_chat, context)
 
     ctx.add_provider(CerebrasProvider)

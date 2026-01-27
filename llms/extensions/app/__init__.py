@@ -199,7 +199,6 @@ def install(ctx):
             "model": thread.get("model"),
             "messages": thread.get("messages"),
             "modalities": thread.get("modalities"),
-            "systemPrompt": thread.get("systemPrompt"),
             "tools": thread.get("tools"),  # tools request
             "metadata": metadata,
         }
