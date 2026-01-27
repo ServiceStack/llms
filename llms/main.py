@@ -1216,8 +1216,8 @@ class OpenAiCompatible:
     def chat_summary(self, chat):
         return chat_summary(chat)
 
-    def process_chat(self, chat, provider_id=None):
-        return process_chat(chat, provider_id)
+    async def process_chat(self, chat, provider_id=None):
+        return await process_chat(chat, provider_id)
 
     async def chat(self, chat, context=None):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
@@ -1272,7 +1272,7 @@ class OpenAiCompatible:
         if self.enable_thinking is not None:
             chat["enable_thinking"] = self.enable_thinking
 
-        chat = await process_chat(chat, provider_id=self.id)
+        chat = await self.process_chat(chat, provider_id=self.id)
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
         # remove metadata if any (conflicts with some providers, e.g. Z.ai)
@@ -1303,6 +1303,15 @@ class GroqProvider(OpenAiCompatible):
         if "api" not in kwargs:
             kwargs["api"] = "https://api.groq.com/openai/v1"
         super().__init__(**kwargs)
+
+    async def process_chat(self, chat, provider_id=None):
+        ret = await process_chat(chat, provider_id)
+        chat.pop("modalities", None)  # groq doesn't support modalities
+        messages = chat.get("messages", []).copy()
+        for message in messages:
+            message.pop("timestamp", None)  # groq doesn't support timestamp
+        ret["messages"] = messages
+        return ret
 
 
 class XaiProvider(OpenAiCompatible):

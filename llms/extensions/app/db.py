@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
@@ -344,9 +345,12 @@ class AppDB:
         else:
             thread["createdAt"] = now
         thread["updatedAt"] = now
+        initial_timestamp = int(time.time() * 1000) + 1
         if "messages" in thread:
-            for m in thread["messages"]:
+            for idx, m in enumerate(thread["messages"]):
                 self.ctx.cache_message_inline_data(m)
+                if "timestamp" not in m:
+                    m["timestamp"] = initial_timestamp + idx
         return with_user(thread, user=user)
 
     def create_thread(self, thread: Dict[str, Any], user=None):
