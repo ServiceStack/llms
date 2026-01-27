@@ -11,14 +11,21 @@ const SkillSelector = {
             <div class="flex items-center justify-between mb-4">
                 <span class="text-xs font-bold uppercase text-gray-500 tracking-wider">Include Skills</span>
                 <div class="flex items-center gap-2">
-                    <button @click="$ctx.setPrefs({ onlySkills: null })"
+                    <button type="button" v-if="!$ctx.tools?.isToolEnabled('skill')"
+                        class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                        @click="$ctx.tools?.enableTool('skill')"
+                        title="'skill' tool needs to be enabled to use Skills"
+                        >
+                        <span class="text-xs font-semibold text-red-700 dark:text-red-300">⚠️ Enable skill tool</span>
+                    </button>
+                    <button type="button" @click="$ctx.setPrefs({ onlySkills: null })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
                         :class="$prefs.onlySkills == null
                             ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-300 dark:border-green-800' 
                             : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
                         All Skills
                     </button>
-                    <button @click="$ctx.setPrefs({ onlySkills:[] })"
+                    <button type="button" @click="$ctx.setPrefs({ onlySkills:[] })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
                         :class="$prefs.onlySkills?.length === 0
                             ? 'bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800' 
@@ -264,23 +271,30 @@ export default {
                 component: {
                     template: svg([
                         `@click="$ctx.toggleTop('SkillSelector')"`,
-                        `:class="$prefs.onlySkills == null ? 'text-green-600 dark:text-green-300' : $prefs.onlySkills.length ? 'text-blue-600! dark:text-blue-300!' : ''"`
+                        `:class="!$tools?.isToolEnabled('skill') ? '' : $prefs.onlySkills == null ? 'text-green-600 dark:text-green-300' : $prefs.onlySkills.length ? 'text-blue-600! dark:text-blue-300!' : ''"`
                     ].join(' ')),
                 },
                 isActive({ top }) {
                     return top === 'SkillSelector'
                 },
                 get title() {
-                    return ctx.prefs.onlySkills == null
-                        ? `All Skills Included`
-                        : ctx.prefs.onlySkills.length
-                            ? `${ctx.prefs.onlySkills.length} ${ctx.utils.pluralize('Skill', ctx.prefs.onlySkills.length)} Included`
-                            : 'No Skills Included'
+                    return !ctx.tools?.isToolEnabled('skill')
+                        ? `skill tool not enabled`
+                        : ctx.prefs.onlySkills == null
+                            ? `All Skills Included`
+                            : ctx.prefs.onlySkills.length
+                                ? `${ctx.prefs.onlySkills.length} ${ctx.utils.pluralize('Skill', ctx.prefs.onlySkills.length)} Included`
+                                : 'No Skills Included'
                 }
             }
         })
 
         ctx.chatRequestFilters.push(({ request, thread, context }) => {
+
+            if (!ctx.tools?.isToolEnabled('skill')) {
+                console.log(`skills.chatRequestFilters: 'skill' tool is not enabled`)
+                return
+            }
 
             const prefs = ctx.prefs
             if (prefs.onlySkills != null) {

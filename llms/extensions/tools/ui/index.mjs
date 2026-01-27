@@ -2,6 +2,86 @@ import { inject, computed, ref, onMounted } from "vue"
 
 let ext
 
+function useTools(ctx) {
+
+    const availableTools = computed(() => ctx.state.tool.definitions.filter(x => x.function))
+    const toolPageHeaders = {}
+
+    function setToolPageHeaders(components) {
+        Object.assign(toolPageHeaders, components)
+    }
+
+    function selectTool({ group, tool }) {
+        ext.setPrefs({ selectedGroup: group, selectedTool: tool })
+    }
+
+    function getToolDefinition(name) {
+        return ctx.state.tool.definitions.find(d => d.function?.name === name)
+    }
+
+    function isToolEnabled(name) {
+        const toolDef = getToolDefinition(name)
+        if (!toolDef) return false
+        const onlyTools = ctx.prefs.onlyTools
+        if (onlyTools == null) return true
+        return Array.isArray(onlyTools) && onlyTools.includes(name)
+    }
+
+    function enableTool(name) {
+        let onlyTools = ctx.prefs.onlyTools
+        if (onlyTools == null) return // All tools are enabled
+
+        if (!Array.isArray(onlyTools)) {
+            onlyTools = [onlyTools]
+        }
+        else if (!onlyTools.includes(name)) {
+            onlyTools.push(name)
+        } else {
+            return // Already enabled
+        }
+        ctx.setPrefs({ onlyTools })
+    }
+
+    function disableTool(name) {
+        let onlyTools = ctx.prefs.onlyTools
+        if (onlyTools == null) {
+            // If currently 'All', clicking a tool means we enter custom mode with all OTHER tools selected
+            onlyTools = availableTools.value.map(t => t.function.name).filter(t => t !== name)
+        } else if (!Array.isArray(onlyTools)) {
+            onlyTools = []
+        } else {
+            onlyTools = onlyTools.filter(t => t !== name)
+        }
+        ctx.setPrefs({ onlyTools })
+    }
+
+    function toggleTool(name, enable = null) {
+        if (enable == null) {
+            enable = !isToolEnabled(name)
+        }
+        if (enable) {
+            enableTool(name)
+        } else {
+            disableTool(name)
+        }
+    }
+
+    return {
+        availableTools,
+        toolPageHeaders,
+        setToolPageHeaders,
+        selectTool,
+        getToolDefinition,
+        isToolEnabled,
+        enableTool,
+        disableTool,
+        toggleTool,
+        get selectedGroup() { return ext.prefs.selectedGroup },
+        get selectedTool() { return ext.prefs.selectedTool },
+    }
+}
+
+
 const ToolResult = {
     template: `
     <div>
@@ -487,14 +567,14 @@ const ToolSelector = {
                 <div class="flex items-center gap-2">
                     <button @click="$ctx.setPrefs({ onlyTools: null })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
-                        :class="$prefs.onlyTools == null
+                        :class="prefs.onlyTools == null
                             ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-300 dark:border-green-800' 
                             : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
                         All Tools
                     </button>
                     <button @click="$ctx.setPrefs({ onlyTools:[] })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
-                        :class="$prefs.onlyTools?.length === 0
+                        :class="prefs.onlyTools?.length === 0
                             ? 'bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800' 
                             : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
                         No Tools
@@ -547,10 +627,10 @@ const ToolSelector = {
                      <div v-show="!isCollapsed(group.name)" class="p-3 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">
                          <div class="flex flex-wrap gap-2">
                             <button v-for="tool in group.tools" :key="tool.function.name" type="button"
-                                @click="toggleTool(tool.function.name)"
+                                @click="$tools.toggleTool(tool.function.name)"
                                 :title="tool.function.description"
                                 class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors select-none text-left truncate max-w-[200px]"
-                                :class="isToolActive(tool.function.name)
+                                :class="$tools.isToolEnabled(tool.function.name)
                                     ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800' 
                                     : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
                                 {{ tool.function.name }}
@@ -565,10 +645,10 @@ const ToolSelector = {
         const ctx = inject('ctx')
         const collapsedState = ref({})
 
-        const availableTools = computed(() => ctx.state.tool.definitions.filter(x => x.function))
+        const prefs = computed(() => ctx.prefs)
 
         const toolGroups = computed(() => {
-            const defs = availableTools.value
+            const defs = ctx.tools.availableTools.value
             const groups = ctx.state.tool.groups || {}
 
             const definedGroups = []
@@ -591,33 +671,6 @@ const ToolSelector = {
             return definedGroups
         })
 
-        function isToolActive(name) {
-            const only = ctx.prefs.onlyTools
-            if (only == null) return true
-            if (Array.isArray(only)) {
-                return only.includes(name)
-            }
-            return false
-        }
-
-        function toggleTool(name) {
-            let onlyTools = ctx.prefs.onlyTools
-
-            // If currently 'All', clicking a tool means we enter custom mode with all OTHER tools selected (deselecting clicked)
-            if (onlyTools == null) {
-                onlyTools = availableTools.value.map(t => t.function.name).filter(t => t !== name)
-            } else {
-                // Currently Custom or None
-                if (onlyTools.includes(name)) {
-                    onlyTools = onlyTools.filter(t => t !== name)
-                } else {
-                    onlyTools = [...onlyTools, name]
-                }
-            }
-
-            ctx.setPrefs({ onlyTools })
-        }
-
         function toggleCollapse(groupName) {
             const key = groupName || '_other_'
             collapsedState.value[key] = !collapsedState.value[key]
@@ -630,19 +683,19 @@ const ToolSelector = {
 
         function setGroupTools(group, enable) {
             const groupToolNames = group.tools.map(t => t.function.name)
-            let onlyTools = ctx.prefs.onlyTools
+            let onlyTools = prefs.value.onlyTools
 
             if (enable) {
                 if (onlyTools == null) return
                 const newSet = new Set(onlyTools)
                 groupToolNames.forEach(n => newSet.add(n))
                 onlyTools = Array.from(newSet)
-                if (onlyTools.length === availableTools.value.length) {
+                if (onlyTools.length === ctx.tools.availableTools.value.length) {
                     onlyTools = null
                 }
             } else {
                 if (onlyTools == null) {
-                    onlyTools = availableTools.value
+                    onlyTools = ctx.tools.availableTools.value
                         .map(t => t.function.name)
                         .filter(n => !groupToolNames.includes(n))
                 } else {
@@ -654,41 +707,19 @@ const ToolSelector = {
         }
 
         function getActiveCount(group) {
-            const onlyTools = ctx.prefs.onlyTools
+            const onlyTools = prefs.value.onlyTools
             if (onlyTools == null) return group.tools.length
             return group.tools.filter(t => onlyTools.includes(t.function.name)).length
         }
 
         return {
-            availableTools,
+            prefs,
             toolGroups,
-            isToolActive,
-            toggleTool,
             toggleCollapse,
             isCollapsed,
             setGroupTools,
             getActiveCount
         }
-    }
-}
-
-function useTools(ctx) {
-    const toolPageHeaders = {}
-
-    function setToolPageHeaders(components) {
-        Object.assign(toolPageHeaders, components)
-    }
-
-    function selectTool({ group, tool }) {
-        ext.setPrefs({ selectedGroup: group, selectedTool: tool })
-    }
-
-    return {
-        toolPageHeaders,
-        setToolPageHeaders,
-        selectTool,
-        get selectedGroup() { return ext.prefs.selectedGroup },
-        get selectedTool() { return ext.prefs.selectedTool },
     }
 }
 
