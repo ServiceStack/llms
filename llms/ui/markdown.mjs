@@ -23,7 +23,8 @@ export function createMarked() {
     return ret
 }
 
-export const marked = createMarked();
+export const marked = createMarked()
+export const markedFallback = createMarked()
 
 export function renderMarkdown(content) {
     if (Array.isArray(content)) {

@@ -126,7 +126,7 @@ export class ExtensionScope {
 }
 
 export class AppContext {
-    constructor({ app, routes, ai, fmt, utils, marked }) {
+    constructor({ app, routes, ai, fmt, utils, marked, markedFallback }) {
         this.app = app
         this.routes = routes
         this.ai = ai
@@ -134,6 +134,7 @@ export class AppContext {
         this.utils = utils
         this._components = {}
         this.marked = marked
+        this.markedFallback = markedFallback
 
         this.state = reactive({})
         this.events = new EventBus()
@@ -397,7 +398,18 @@ export class AppContext {
             const header = content.substring(3, headerEnd).trim()
             content = '<div class="frontmatter">' + header + '</div>\n' + content.substring(headerEnd + 3)
         }
-        const html = this.marked.parse(content || '')
+        let html = content || ''
+        try {
+            html = this.marked.parse(content || '')
+        } catch (e) {
+            console.log('Failed to parse markdown, using fallback', e)
+            try {
+                html = this.markedFallback.parse(content || '')
+            } catch (e2) {
+                console.log('Failed to parse markdown, using raw content', e2)
+                html = content || ''
+            }
+        }
         return sanitizeHtml(html)
     }
 

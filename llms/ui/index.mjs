@@ -9,7 +9,7 @@ import ChatModule from './modules/chat/index.mjs'
 import ModelSelectorModule from './modules/model-selector.mjs'
 import IconsModule from './modules/icons.mjs'
 import { utilsFunctions, utilsFormatters } from './utils.mjs'
-import { marked } from './markdown.mjs'
+import { marked, markedFallback } from './markdown.mjs'
 import { AppContext } from './ctx.mjs'
 
 const Components = {
@@ -35,7 +35,7 @@ export async function createContext() {
     const utils = Object.assign({}, utilsFunctions())
     const routes = []
 
-    const ctx = new AppContext({ app, routes, ai, fmt, utils, marked })
+    const ctx = new AppContext({ app, routes, ai, fmt, utils, marked, markedFallback })
     app.provide('ctx', ctx)
     await ctx.init()
 
