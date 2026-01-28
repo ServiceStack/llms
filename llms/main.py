@@ -3880,9 +3880,9 @@ def cli_exec(cli_args, extra_args):
         asyncio.run(update_extensions(cli_args.update))
         return ExitCode.SUCCESS
 
-    g_app.add_allowed_directory(tempfile.gettempdir())  # add temp directory
-    g_app.add_allowed_directory(home_llms_path(".agent"))  # info for agents, e.g: skills
     g_app.add_allowed_directory(os.getcwd())  # add current directory
+    g_app.add_allowed_directory(home_llms_path(".agent"))  # info for agents, e.g: skills
+    g_app.add_allowed_directory(tempfile.gettempdir())  # add temp directory
 
     g_app.extensions = install_extensions()
 
