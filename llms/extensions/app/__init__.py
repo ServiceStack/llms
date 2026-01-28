@@ -223,7 +223,10 @@ def install(ctx):
                 await ctx.chat_completion(chat_req, context=context_req)
             except Exception as ex:
                 ctx.err("run_chat", ex)
-                # not necessary to update thread in db with error as it's done in chat_error filter
+                # shouldn't be necessary to update thread in db with error as it's done in chat_error filter
+                thread = thread_dto(g_db.get_thread(id, user=ctx.get_username(request)))
+                if thread and not thread.get("error"):
+                    await chat_error(ex, context)
 
         asyncio.create_task(run_chat(chat, context))
 

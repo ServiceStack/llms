@@ -874,8 +874,18 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
 async def response_json(response):
     text = await response.text()
     if response.status >= 400:
-        _dbg(f"HTTP {response.status} {response.reason}: {text}")
-        raise HTTPError(response.status, reason=response.reason, body=text, headers=dict(response.headers))
+        message = "HTTP " + str(response.status) + " " + response.reason
+        _dbg(f"HTTP {response.status} {response.reason}\n{dict(response.headers)}\n{text}")
+        try:
+            body = json.loads(text)
+            if "message" in body:
+                message = body["message"]
+            elif "error" in body:
+                message = body["error"]
+        except Exception:
+            if text:
+                message += ": " + text[:100]
+        raise Exception(message)
     response.raise_for_status()
     body = json.loads(text)
     return body
@@ -1946,12 +1956,11 @@ async def g_chat_completion(chat, context=None):
                 first_exception = e
                 context["stackTrace"] = traceback.format_exc()
             _err(f"Provider {provider_name} failed", first_exception)
-            await g_app.on_chat_error(e, context)
-
             continue
 
     # If we get here, all providers failed
     if first_exception:
+        await g_app.on_chat_error(first_exception, context or {"chat": chat})
         raise first_exception
 
     e = Exception("All providers failed")
@@ -3871,9 +3880,9 @@ def cli_exec(cli_args, extra_args):
         asyncio.run(update_extensions(cli_args.update))
         return ExitCode.SUCCESS
 
+    g_app.add_allowed_directory(tempfile.gettempdir())  # add temp directory
     g_app.add_allowed_directory(home_llms_path(".agent"))  # info for agents, e.g: skills
     g_app.add_allowed_directory(os.getcwd())  # add current directory
-    g_app.add_allowed_directory(tempfile.gettempdir())  # add temp directory
 
     g_app.extensions = install_extensions()
 
