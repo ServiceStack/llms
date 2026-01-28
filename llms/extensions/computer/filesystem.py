@@ -406,7 +406,7 @@ def directory_tree(
 ) -> str:
     """
     Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories.
-    Files have no children array, while directories always have a children array (which may be empty).
+    Files have no children array, while directories always have a children array (which may be empty). Respects any .gitignore rules from the root directory together with any exclude_patterns.
     The output is formatted with 2-space indentation for readability. Only works within allowed directories.
     """
     import json
@@ -416,6 +416,24 @@ def directory_tree(
     if exclude_patterns is None:
         exclude_patterns = []
 
+    def _parse_gitignore(directory: str) -> List[str]:
+        gitignore_path = os.path.join(directory, ".gitignore")
+        patterns = []
+        if os.path.exists(gitignore_path) and os.path.isfile(gitignore_path):
+            try:
+                with open(gitignore_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            patterns.append(line)
+            except Exception as e:
+                logger.warning(f"Error reading .gitignore in {directory}: {e}")
+        return patterns
+
+    # Parse .gitignore only in the root directory (Simple Global Mappings)
+    gitignore_patterns = _parse_gitignore(valid_path)
+    all_exclude_patterns = exclude_patterns + gitignore_patterns
+
     def _build_tree(current_path: str) -> List[Dict[str, Any]]:
         entries = []
         try:
@@ -423,14 +441,27 @@ def directory_tree(
                 items = sorted(it, key=lambda x: x.name)
 
             for entry in items:
-                # Check exclusion
-                rel_path = entry.path[root_path_len:]
-                # Check against patterns
+                # 1. Check exclusion patterns
+                rel_path_from_root = entry.path[root_path_len:]
+
                 should_exclude = False
-                for pattern in exclude_patterns:
-                    if fnmatch.fnmatch(rel_path, pattern) or fnmatch.fnmatch(entry.name, pattern):
+                for pattern in all_exclude_patterns:
+                    # Match against relative path or name
+                    # Support ending with / for directory matching
+                    is_dir_pattern = pattern.endswith("/")
+                    norm_pattern = pattern.rstrip("/")
+
+                    if fnmatch.fnmatch(rel_path_from_root, pattern) or fnmatch.fnmatch(entry.name, pattern):
                         should_exclude = True
                         break
+
+                    # Handle patterns like "node_modules/" matching "node_modules" directory
+                    if fnmatch.fnmatch(entry.name, norm_pattern):
+                        if is_dir_pattern and not entry.is_dir():
+                            continue
+                        should_exclude = True
+                        break
+
                 if should_exclude:
                     continue
 
