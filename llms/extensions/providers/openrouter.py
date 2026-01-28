@@ -14,7 +14,7 @@ def install_openrouter(ctx):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
 
-        def to_response(self, response, chat, started_at):
+        def to_response(self, response, chat, started_at, context=None):
             # go through all image responses and save them to cache
             cost = None
             if "usage" in response and "cost" in response["usage"]:
