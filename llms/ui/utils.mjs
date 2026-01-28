@@ -220,7 +220,7 @@ const htmlEntities = {
 }
 
 export function encodeHtml(str) {
-    if (!str) return ''
+    if (typeof str !== 'string' || !str) return ''
     return str.replace(/[&<>"']/g, m => htmlEntities[m]);
 }
 
@@ -240,6 +240,52 @@ function htmlFormatClasses(type, tag, depth, cls, index) {
         cls += ' whitespace-pre-wrap'
     }
     return cls
+}
+
+const dangerousTags = [
+    'script',
+    'iframe',
+    'object',
+    'embed',
+    'link',
+    'style',
+    'meta',
+    'base',
+    'frame',
+    'frameset',
+    'applet',
+    'noscript',
+    'template'
+]
+const anyDangerousTag = new RegExp(`<(${dangerousTags.join('|')})`, 'i')
+
+export function sanitizeHtml(html) {
+    if (!html || typeof html !== 'string') return html
+
+    let result = html
+    let lowerResult = result.toLowerCase()
+    function updateResult(r) {
+        result = r
+        lowerResult = result.toLowerCase()
+    }
+
+    if (anyDangerousTag.test(lowerResult)) {
+        for (const tag of dangerousTags) {
+            const tagOpen = `<${tag}`
+
+            if (lowerResult.indexOf(tagOpen) === -1) continue
+
+            const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
+            updateResult(result.replace(regex, ''))
+
+            if (lowerResult.indexOf(tagOpen) !== -1) {
+                const selfClosingRegex = new RegExp(`<${tag}[^>]*\\/?>`, 'gi')
+                updateResult(result.replace(selfClosingRegex, ''))
+            }
+        }
+    }
+
+    return result
 }
 
 /**
@@ -280,6 +326,7 @@ export function utilsFunctions() {
         isHtml,
         htmlFormatClasses,
         encodeHtml,
+        sanitizeHtml,
         hashString,
     }
 }

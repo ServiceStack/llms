@@ -15,6 +15,7 @@ function hasJsonStructure(str) {
 function isEmpty(v) {
     return !v || v === '{}' || v === '[]' || v === 'null' || v === 'undefined' || v === '""' || v === "''" || v === "``"
 }
+
 function embedHtml(html) {
     const resizeScript = `<script>
         let lastH = 0;
@@ -512,7 +513,7 @@ export const ToolArguments = {
                             <TextViewer prefsName="toolArgs" :text="v" />
                         </td>
                         <td data-arg="value" v-else class="align-top py-2 px-4 text-sm whitespace-pre-wrap">
-                            <HtmlFormat :value="v" :classes="$utils.htmlFormatClasses" />
+                            <HtmlFormat :value="v" :classes="$utils.htmlFormatClasses" :formatText="$utils.sanitizeHtml" />
                         </td>
                     </tr>
                 </table>            
@@ -527,6 +528,7 @@ export const ToolArguments = {
         value: String,
     },
     setup(props) {
+        const ctx = inject('ctx')
         const refArgs = ref()
         const maximized = ref({})
         const dict = computed(() => {

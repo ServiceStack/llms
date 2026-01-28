@@ -1,7 +1,7 @@
 
 import { reactive, markRaw } from 'vue'
 import { EventBus, humanize, combinePaths } from "@servicestack/client"
-import { storageObject, isHtml } from './utils.mjs'
+import { storageObject, isHtml, sanitizeHtml } from './utils.mjs'
 
 export class ExtensionScope {
     constructor(ctx, id) {
@@ -397,7 +397,8 @@ export class AppContext {
             const header = content.substring(3, headerEnd).trim()
             content = '<div class="frontmatter">' + header + '</div>\n' + content.substring(headerEnd + 3)
         }
-        return this.marked.parse(content || '')
+        const html = this.marked.parse(content || '')
+        return sanitizeHtml(html)
     }
 
     renderContent(content) {
