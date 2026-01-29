@@ -3470,6 +3470,7 @@ def install_extensions():
             sys.path.append(item_path)
             try:
                 ctx = ExtensionContext(g_app, item_path)
+                module = None
                 init_file = os.path.join(item_path, "__init__.py")
                 if os.path.exists(init_file):
                     spec = importlib.util.spec_from_file_location(item, init_file)
@@ -3503,12 +3504,12 @@ def install_extensions():
                     ctx.register_ui_extension("index.mjs")
 
                 # include __load__ and __run__ hooks if they exist
-                load_func = getattr(module, "__load__", None)
+                load_func = getattr(module, "__load__", None) if module else None
                 if callable(load_func) and not inspect.iscoroutinefunction(load_func):
                     _log(f"Warning: Extension {item} __load__ must be async")
                     load_func = None
 
-                run_func = getattr(module, "__run__", None)
+                run_func = getattr(module, "__run__", None) if module else None
                 if callable(run_func) and inspect.iscoroutinefunction(run_func):
                     _log(f"Warning: Extension {item} __run__ must be sync")
                     run_func = None
