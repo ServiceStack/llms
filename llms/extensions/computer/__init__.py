@@ -6,7 +6,6 @@ https://github.com/anthropics/claude-quickstarts/tree/main/computer-use-demo
 import os
 
 from .bash import open, run_bash
-from .computer import computer
 from .edit import edit
 from .filesystem import (
     create_directory,
@@ -24,13 +23,21 @@ from .filesystem import (
     search_files,
     write_file,
 )
-from .platform import get_display_num, get_screen_resolution
 
-width, height = get_screen_resolution()
-# set enviroment variables
-os.environ["WIDTH"] = str(width)
-os.environ["HEIGHT"] = str(height)
-os.environ["DISPLAY_NUM"] = str(get_display_num())
+# Try to detect screen resolution - may fail in headless environments (Docker, etc.)
+_has_display = False
+try:
+    from .platform import get_display_num, get_screen_resolution
+    width, height = get_screen_resolution()
+    # set environment variables
+    os.environ["WIDTH"] = str(width)
+    os.environ["HEIGHT"] = str(height)
+    os.environ["DISPLAY_NUM"] = str(get_display_num())
+    _has_display = True
+    from .computer import computer
+except RuntimeError:
+    # No display server available - computer tool will not be registered
+    computer = None
 
 
 def install(ctx):
@@ -39,7 +46,8 @@ def install(ctx):
     ctx.register_tool(run_bash, group="computer")
     ctx.register_tool(open, group="computer")
     ctx.register_tool(edit, group="computer")
-    ctx.register_tool(computer, group="computer")
+    if _has_display and computer is not None:
+        ctx.register_tool(computer, group="computer")
 
     ctx.register_tool(read_text_file, group="filesystem")
     ctx.register_tool(read_media_file, group="filesystem")
