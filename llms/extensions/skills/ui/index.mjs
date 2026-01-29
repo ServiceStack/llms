@@ -1,4 +1,4 @@
-import { ref, inject, computed } from "vue"
+import { ref, inject, computed, nextTick } from "vue"
 import { leftPart } from "@servicestack/client"
 
 let ext
@@ -119,8 +119,13 @@ const SkillSelector = {
                 skills
             }))
 
-            // Sort groups by name if needed, but for now rely on insertion order or backend order
-            definedGroups.sort((a, b) => a.name.localeCompare(b.name))
+            // Sort groups: writable (~/.llms/.agents) first, then alphabetically
+            definedGroups.sort((a, b) => {
+                const aEditable = a.name === '~/.llms/.agents'
+                const bEditable = b.name === '~/.llms/.agents'
+                if (aEditable !== bEditable) return aEditable ? -1 : 1
+                return a.name.localeCompare(b.name)
+            })
 
             if (otherSkills.length > 0) {
                 definedGroups.push({ name: '', skills: otherSkills })
@@ -213,6 +218,357 @@ const SkillSelector = {
     }
 }
 
+// Skills Page Component - Full management interface
+const SkillPage = {
+    template: `
+        <div class="h-full flex flex-col">
+            <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Manage Skills</h1>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ Object.keys(skills).length }} skills available</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="showCreateDialog = true" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        Create Skill
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 flex min-h-0">
+                <div class="w-72 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+                    <div class="p-2 border-b border-gray-200 dark:border-gray-700">
+                        <input v-model="searchQuery" type="text" placeholder="Search skills..." class="w-full px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div class="flex-1 overflow-y-auto">
+                        <div v-for="group in skillGroups" :key="group.name" class="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+                            <div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 flex items-center justify-between"><span>{{ group.name || 'Other' }}</span><svg v-if="!isGroupEditable(group.name)" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor" title="Read-only"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg></div>
+                            <div class="py-1">
+                                <div v-for="skill in group.skills" :key="skill.name">
+                                    <div @click="toggleSkillExpand(skill)" class="select-none w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2 cursor-pointer" :class="selectedSkill?.name === skill.name ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0" :class="{ '-rotate-90': !isSkillExpanded(skill.name) }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+                                        <span class="truncate font-medium flex-1" :class="selectedSkill?.name === skill.name ? 'text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300'">{{ skill.name }}</span>
+                                        <span v-if="skill.files?.length" class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium">{{ skill.files.length }}</span>
+                                    </div>
+                                    <div v-show="isSkillExpanded(skill.name)" class="pl-4 bg-white dark:bg-gray-900/50">
+                                        <div v-if="isEditable(skill)" class="px-3 py-1 flex items-center gap-1 border-b border-gray-100 dark:border-gray-800">
+                                            <button @click.stop="selectSkill(skill); showAddFileDialog = true" type="button" title="Add File" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 text-xs">+ file</button>
+                                            <button @click.stop="selectSkill(skill); confirmDeleteSkill()" type="button" title="Delete Skill" class="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 text-xs ml-auto">delete</button>
+                                        </div>
+                                        <div v-for="node in getFileTree(skill)" :key="node.path">
+                                            <SkillFileNode :node="node" :skill="skill" :selected-file="selectedSkill?.name === skill.name ? selectedFile : null" :is-editable="isEditable(skill)" @select="onFileSelect(skill, $event)" @delete="onFileDelete(skill, $event)" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-1 flex flex-col min-w-0">
+                    <template v-if="selectedFile">
+                        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ selectedSkill?.name }} /</span>
+                                <span class="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">{{ selectedFile }}</span>
+                                <span v-if="isEditing" class="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300">editing</span>
+                                <span v-if="hasUnsavedChanges" class="text-xs text-orange-500">•</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <template v-if="isEditing">
+                                    <button @click="saveFile" :disabled="saving" type="button" class="px-3 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ saving ? 'Saving...' : 'Save' }}</button>
+                                    <button @click="cancelEdit" type="button" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
+                                </template>
+                                <template v-else-if="isEditable(selectedSkill)">
+                                    <button @click="startEdit" type="button" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Edit</button>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-auto">
+                            <div v-if="loadingFile" class="flex items-center justify-center h-full text-gray-500">Loading...</div>
+                            <textarea v-else-if="isEditing" ref="editorRef" v-model="editContent" class="w-full h-full p-4 font-mono text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 resize-none focus:outline-none" spellcheck="false"></textarea>
+                            <div v-else class="p-4 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">{{ fileContent }}</div>
+                        </div>
+                    </template>
+                    <template v-else-if="selectedSkill">
+                        <div class="p-6">
+                            <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{{ selectedSkill.name }}</h2>
+                            <p class="text-gray-600 dark:text-gray-400 mb-4">{{ selectedSkill.description }}</p>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div><span class="text-gray-500 dark:text-gray-400">Group:</span><span class="ml-2 text-gray-900 dark:text-gray-100">{{ selectedSkill.group }}</span></div>
+                                <div><span class="text-gray-500 dark:text-gray-400">Files:</span><span class="ml-2 text-gray-900 dark:text-gray-100">{{ selectedSkill.files?.length || 0 }}</span></div>
+                                <div class="col-span-2"><span class="text-gray-500 dark:text-gray-400">Location:</span><span class="ml-2 font-mono text-xs text-gray-900 dark:text-gray-100 break-all">{{ selectedSkill.location }}</span></div>
+                            </div>
+                            <div class="mt-6"><p class="text-sm text-gray-500 dark:text-gray-400">Select a file from the tree to view or edit its contents.</p></div>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                            <div class="text-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
+                                <p>Select a skill to view its files</p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div v-if="showCreateDialog" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="showCreateDialog = false">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Create New Skill</h3></div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Skill Name</label>
+                            <input :value="newSkillName" @input="onSkillNameInput" type="text" placeholder="my-new-skill" class="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" @keyup.enter="createSkill" maxlength="40" />
+                            <p class="mt-1 text-xs text-gray-500">Lowercase letters, numbers, and hyphens only. Max 40 characters.</p>
+                        </div>
+                        <div v-if="createError" class="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{{ createError }}</div>
+                    </div>
+                    <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                        <button @click="showCreateDialog = false" type="button" class="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
+                        <button @click="createSkill" :disabled="creating || !newSkillName.trim()" type="button" class="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ creating ? 'Creating...' : 'Create' }}</button>
+                    </div>
+                </div>
+            </div>
+            <div v-if="showAddFileDialog" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="showAddFileDialog = false">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Add New File</h3></div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">File Path</label>
+                            <input v-model="newFilePath" type="text" placeholder="scripts/my-script.py" class="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" @keyup.enter="addFile" />
+                            <p class="mt-1 text-xs text-gray-500">Relative path from skill root (e.g., scripts/helper.py)</p>
+                        </div>
+                        <div v-if="addFileError" class="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{{ addFileError }}</div>
+                    </div>
+                    <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                        <button @click="showAddFileDialog = false" type="button" class="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
+                        <button @click="addFile" :disabled="addingFile || !newFilePath.trim()" type="button" class="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ addingFile ? 'Adding...' : 'Add' }}</button>
+                    </div>
+                </div>
+            </div>
+            <div v-if="deleteConfirm" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="deleteConfirm = null">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm mx-4">
+                    <div class="p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Confirm Delete</h3>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">{{ deleteConfirm.type === 'skill' ? 'Delete skill "' + deleteConfirm.name + '"? This cannot be undone.' : 'Delete "' + deleteConfirm.path + '"?' }}</p>
+                    </div>
+                    <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                        <button @click="deleteConfirm = null" type="button" class="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
+                        <button @click="executeDelete" :disabled="deleting" type="button" class="px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">{{ deleting ? 'Deleting...' : 'Delete' }}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const searchQuery = ref('')
+        const selectedSkill = ref(null)
+        const selectedFile = ref(null)
+        const fileContent = ref('')
+        const editContent = ref('')
+        const isEditing = ref(false)
+        const loadingFile = ref(false)
+        const saving = ref(false)
+        const showCreateDialog = ref(false)
+        const showAddFileDialog = ref(false)
+        const deleteConfirm = ref(null)
+        const newSkillName = ref('')
+        const creating = ref(false)
+        const createError = ref('')
+        const newFilePath = ref('')
+        const addingFile = ref(false)
+        const addFileError = ref('')
+        const deleting = ref(false)
+        const editorRef = ref(null)
+        const expandedSkills = ref({})
+        const skills = computed(() => ctx.state.skills || {})
+        const skillGroups = computed(() => {
+            const grouped = {}
+            const query = searchQuery.value.toLowerCase()
+            Object.values(skills.value).forEach(skill => {
+                if (query && !skill.name.toLowerCase().includes(query) && !skill.description?.toLowerCase().includes(query)) return
+                const group = skill.group || 'Other'
+                if (!grouped[group]) grouped[group] = []
+                grouped[group].push(skill)
+            })
+            return Object.entries(grouped).sort((a, b) => {
+                const aEditable = a[0] === '~/.llms/.agents'
+                const bEditable = b[0] === '~/.llms/.agents'
+                if (aEditable !== bEditable) return aEditable ? -1 : 1
+                return a[0].localeCompare(b[0])
+            }).map(([name, skills]) => ({ name, skills: skills.sort((a, b) => a.name.localeCompare(b.name)) }))
+        })
+        function getFileTree(skill) {
+            if (!skill?.files) return []
+            const files = [...skill.files].sort()
+            const tree = []
+            const dirs = {}
+            files.forEach(filePath => {
+                const parts = filePath.split('/')
+                if (parts.length === 1) {
+                    tree.push({ name: filePath, path: filePath, isFile: true })
+                } else {
+                    const dirName = parts[0]
+                    if (!dirs[dirName]) { dirs[dirName] = { name: dirName, path: dirName, isFile: false, children: [] }; tree.push(dirs[dirName]) }
+                    dirs[dirName].children.push({ name: parts.slice(1).join('/'), path: filePath, isFile: true })
+                }
+            })
+            return tree.sort((a, b) => { if (a.isFile !== b.isFile) return a.isFile ? 1 : -1; return a.name.localeCompare(b.name) })
+        }
+        const hasUnsavedChanges = computed(() => isEditing.value && editContent.value !== fileContent.value)
+        function isGroupEditable(groupName) { return groupName === '~/.llms/.agents' }
+        function isEditable(skill) { return skill?.group === '~/.llms/.agents' }
+        function isSkillExpanded(name) { return !!expandedSkills.value[name] }
+        function toggleSkillExpand(skill) {
+            expandedSkills.value[skill.name] = !expandedSkills.value[skill.name]
+            if (expandedSkills.value[skill.name]) {
+                selectedSkill.value = skill
+                selectedFile.value = null
+                fileContent.value = ''
+                isEditing.value = false
+            }
+        }
+        function selectSkill(skill) {
+            if (hasUnsavedChanges.value && !confirm('Discard unsaved changes?')) return
+            selectedSkill.value = skill; selectedFile.value = null; fileContent.value = ''; isEditing.value = false
+            expandedSkills.value[skill.name] = true
+        }
+        async function selectFile(filePath) {
+            if (hasUnsavedChanges.value && !confirm('Discard unsaved changes?')) return
+            selectedFile.value = filePath; isEditing.value = false; loadingFile.value = true
+            try {
+                const res = await ext.getJson(`/file/${selectedSkill.value.name}/${filePath}`)
+                fileContent.value = res.response ? res.response.content : `Error: ${res.error?.message || 'Failed to load'}`
+            } catch (e) { fileContent.value = `Error: ${e.message}` }
+            finally { loadingFile.value = false }
+        }
+        function onFileSelect(skill, filePath) {
+            if (hasUnsavedChanges.value && !confirm('Discard unsaved changes?')) return
+            selectedSkill.value = skill
+            selectFile(filePath)
+        }
+        function onFileDelete(skill, filePath) {
+            selectedSkill.value = skill
+            confirmDeleteFile(filePath)
+        }
+        function startEdit() { editContent.value = fileContent.value; isEditing.value = true; nextTick(() => editorRef.value?.focus()) }
+        function cancelEdit() { if (hasUnsavedChanges.value && !confirm('Discard changes?')) return; isEditing.value = false; editContent.value = '' }
+        async function saveFile() {
+            saving.value = true
+            try {
+                const res = await ext.postJson(`/file/${selectedSkill.value.name}`, { path: selectedFile.value, content: editContent.value })
+                if (res.response) { fileContent.value = editContent.value; isEditing.value = false; if (res.response.skill) { ctx.setState({ skills: { ...skills.value, [res.response.skill.name]: res.response.skill } }); selectedSkill.value = res.response.skill } }
+                else { alert(`Error: ${res.error?.message || 'Unknown'}`) }
+            } catch (e) { alert(`Error: ${e.message}`) }
+            finally { saving.value = false }
+        }
+        function onSkillNameInput(e) {
+            // Sanitize to lowercase letters, numbers, and hyphens only
+            const sanitized = e.target.value.toLowerCase().replace(/[^a-z0-9-\s]/g, '').replace(/\s+/g, '-')
+            newSkillName.value = sanitized
+            // Update input value if sanitization changed it
+            if (e.target.value !== sanitized) {
+                e.target.value = sanitized
+            }
+        }
+        async function createSkill() {
+            createError.value = ''; creating.value = true
+            try {
+                const res = await ext.postJson('/create', { name: newSkillName.value.trim() })
+                if (res.response) {
+                    ctx.setState({ skills: { ...skills.value, [res.response.skill.name]: res.response.skill } })
+                    selectedSkill.value = res.response.skill
+                    expandedSkills.value[res.response.skill.name] = true
+                    showCreateDialog.value = false
+                    newSkillName.value = ''
+                }
+                else { createError.value = res.error?.message || 'Failed' }
+            } catch (e) { createError.value = e.message }
+            finally { creating.value = false }
+        }
+        async function addFile() {
+            addFileError.value = ''; addingFile.value = true
+            try {
+                const res = await ext.postJson(`/file/${selectedSkill.value.name}`, { path: newFilePath.value.trim(), content: '' })
+                if (res.response) { if (res.response.skill) { ctx.setState({ skills: { ...skills.value, [res.response.skill.name]: res.response.skill } }); selectedSkill.value = res.response.skill }; selectedFile.value = newFilePath.value.trim(); fileContent.value = ''; showAddFileDialog.value = false; newFilePath.value = ''; startEdit() }
+                else { addFileError.value = res.error?.message || 'Failed' }
+            } catch (e) { addFileError.value = e.message }
+            finally { addingFile.value = false }
+        }
+        function confirmDeleteSkill() { deleteConfirm.value = { type: 'skill', name: selectedSkill.value.name } }
+        function confirmDeleteFile(filePath) { deleteConfirm.value = { type: 'file', path: filePath, skillName: selectedSkill.value.name } }
+        async function executeDelete() {
+            deleting.value = true
+            try {
+                if (deleteConfirm.value.type === 'skill') {
+                    const res = await ext.deleteJson(`/skill/${deleteConfirm.value.name}`)
+                    if (res.response?.deleted) { const s = { ...skills.value }; delete s[deleteConfirm.value.name]; ctx.setState({ skills: s }); selectedSkill.value = null; selectedFile.value = null; delete expandedSkills.value[deleteConfirm.value.name] }
+                    else { alert(`Error: ${res.error?.message || 'Failed'}`) }
+                } else {
+                    const res = await ext.deleteJson(`/file/${deleteConfirm.value.skillName}?path=${encodeURIComponent(deleteConfirm.value.path)}`)
+                    if (res.response) { if (res.response.skill) { ctx.setState({ skills: { ...skills.value, [res.response.skill.name]: res.response.skill } }); selectedSkill.value = res.response.skill }; if (selectedFile.value === deleteConfirm.value.path) { selectedFile.value = null; fileContent.value = '' } }
+                    else { alert(`Error: ${res.error?.message || 'Failed'}`) }
+                }
+            } catch (e) { alert(`Error: ${e.message}`) }
+            finally { deleting.value = false; deleteConfirm.value = null }
+        }
+        return { skills, searchQuery, skillGroups, selectedSkill, selectedFile, fileContent, editContent, isEditing, loadingFile, saving, hasUnsavedChanges, editorRef, showCreateDialog, showAddFileDialog, deleteConfirm, newSkillName, creating, createError, newFilePath, addingFile, addFileError, deleting, isEditable, isGroupEditable, selectSkill, selectFile, startEdit, cancelEdit, saveFile, createSkill, addFile, confirmDeleteSkill, confirmDeleteFile, executeDelete, expandedSkills, isSkillExpanded, toggleSkillExpand, getFileTree, onFileSelect, onFileDelete, onSkillNameInput }
+    }
+}
+
+const FileTreeNode = {
+    name: 'FileTreeNode',
+    template: `
+        <div>
+            <div v-if="node.isFile" @click="$emit('select', node.path)" class="group flex items-center gap-2 px-3 py-1 text-sm cursor-pointer transition-colors" :class="selectedFile === node.path ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span class="truncate flex-1">{{ node.name }}</span>
+                <button v-if="isEditable && node.path.toLowerCase() !== 'skill.md'" @click.stop="$emit('delete', node.path)" type="button" class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+            <div v-else>
+                <div @click="expanded = !expanded" class="flex items-center gap-2 px-3 py-1 text-sm cursor-pointer text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 transition-transform" :class="{ '-rotate-90': !expanded }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    <span class="font-medium">{{ node.name }}/</span>
+                </div>
+                <div v-show="expanded" class="pl-4">
+                    <FileTreeNode v-for="child in node.children" :key="child.path" :node="child" :selected-file="selectedFile" :is-editable="isEditable" @select="$emit('select', $event)" @delete="$emit('delete', $event)" />
+                </div>
+            </div>
+        </div>
+    `,
+    props: { node: { type: Object, required: true }, selectedFile: { type: String, default: null }, isEditable: { type: Boolean, default: false } },
+    emits: ['select', 'delete'],
+    setup() { return { expanded: ref(true) } }
+}
+
+const SkillFileNode = {
+    name: 'SkillFileNode',
+    template: `
+        <div>
+            <div v-if="node.isFile" @click="$emit('select', node.path)" class="group flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer transition-colors" :class="selectedFile === node.path ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span class="select-none truncate flex-1">{{ node.name }}</span>
+                <button v-if="isEditable && node.path.toLowerCase() !== 'skill.md'" @click.stop="$emit('delete', node.path)" type="button" class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+            <div v-else>
+                <div @click="expanded = !expanded" class="flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 transition-transform" :class="{ '-rotate-90': !expanded }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    <span class="select-none font-medium">{{ node.name }}/</span>
+                </div>
+                <div v-show="expanded" class="pl-3">
+                    <SkillFileNode v-for="child in node.children" :key="child.path" :node="child" :skill="skill" :selected-file="selectedFile" :is-editable="isEditable" @select="$emit('select', $event)" @delete="$emit('delete', $event)" />
+                </div>
+            </div>
+        </div>
+    `,
+    props: { node: { type: Object, required: true }, skill: { type: Object, required: true }, selectedFile: { type: String, default: null }, isEditable: { type: Boolean, default: false } },
+    emits: ['select', 'delete'],
+    setup() { return { expanded: ref(true) } }
+}
+
 function codeFragment(s) {
     return "`" + s + "`"
 }
@@ -262,9 +618,18 @@ export default {
     install(ctx) {
         ext = ctx.scope("skills")
 
-        ctx.components({ SkillSelector })
+        ctx.components({ SkillSelector, SkillPage, FileTreeNode, SkillFileNode })
 
         const svg = (attrs, title) => `<svg ${attrs} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${title ? "<title>" + title + "</title>" : ''}<path fill="currentColor" d="M20 17a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H9.46c.35.61.54 1.3.54 2h10v11h-9v2m4-10v2H9v13H7v-6H5v6H3v-8H1.5V9a2 2 0 0 1 2-2zM8 4a2 2 0 0 1-2 2a2 2 0 0 1-2-2a2 2 0 0 1 2-2a2 2 0 0 1 2 2"/></svg>`
+
+        ctx.setLeftIcons({
+            skills: {
+                component: { template: svg([`@click="$ctx.togglePath('/skills'), $ctx.toggleLayout('left',false)"`].join(' ')) },
+                isActive({ path }) { return path === '/skills' }
+            }
+        })
+
+        ctx.routes.push({ path: '/skills', component: SkillPage, meta: { title: 'Manage Skills' } })
 
         ctx.setTopIcons({
             skills: {

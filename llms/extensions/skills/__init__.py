@@ -1,5 +1,7 @@
+import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -8,6 +10,53 @@ import aiohttp
 from .parser import read_properties
 
 g_skills = {}
+g_home_skills = None
+
+
+def is_safe_path(base_path: str, requested_path: str) -> bool:
+    """Check if the requested path is safely within the base path."""
+    base = Path(base_path).resolve()
+    target = Path(requested_path).resolve()
+    try:
+        target.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
+def get_skill_files(skill_dir: Path) -> list:
+    """Get list of all files in a skill directory."""
+    files = []
+    for file in skill_dir.glob("**/*"):
+        if file.is_file():
+            full_path = str(file)
+            rel_path = full_path[len(str(skill_dir)) + 1 :]
+            files.append(rel_path)
+    return files
+
+
+def reload_skill(name: str, location: str, group: str):
+    """Reload a single skill's metadata."""
+    global g_skills
+    skill_dir = Path(location).resolve()
+    if not skill_dir.exists():
+        if name in g_skills:
+            del g_skills[name]
+        return None
+
+    props = read_properties(skill_dir)
+    files = get_skill_files(skill_dir)
+
+    skill_props = props.to_dict()
+    skill_props.update(
+        {
+            "group": group,
+            "location": str(skill_dir),
+            "files": files,
+        }
+    )
+    g_skills[props.name] = skill_props
+    return skill_props
 
 
 def sanitize(name: str) -> str:
@@ -52,8 +101,9 @@ def skill(name: Annotated[str, "skill name"], file: Annotated[str | None, "skill
 
 
 def install(ctx):
-    global g_skills
+    global g_skills, g_home_skills
     home_skills = ctx.get_home_path(os.path.join(".agent", "skills"))
+    g_home_skills = home_skills
     # if not folder exists
     if not os.path.exists(home_skills):
         os.makedirs(ctx.get_home_path(os.path.join(".agent")), exist_ok=True)
@@ -66,8 +116,9 @@ def install(ctx):
     skill_roots = {}
 
     # add .claude skills first, so they can be overridden by .agent skills
-    if os.path.exists("~/.claude/skills"):
-        skill_roots["~/.claude/skills"] = "~/.claude/skills"
+    claude_skills = os.path.expanduser("~/.claude/skills")
+    if os.path.exists(claude_skills):
+        skill_roots["~/.claude/skills"] = claude_skills
 
     if os.path.exists(os.path.join(".claude", "skills")):
         skill_roots[".claude/skills"] = os.path.join(".claude", "skills")
@@ -123,6 +174,234 @@ def install(ctx):
         return aiohttp.web.Response(text=skill(name, file))
 
     ctx.add_get("contents/{name}", get_skill)
+
+    async def get_file_content(request):
+        """Get the content of a specific file in a skill."""
+        name = request.match_info.get("name")
+        file_path = request.match_info.get("path")
+
+        skill_info = g_skills.get(name)
+        if not skill_info:
+            raise Exception(f"Skill '{name}' not found")
+
+        location = skill_info.get("location")
+        full_path = os.path.join(location, file_path)
+
+        if not is_safe_path(location, full_path):
+            raise Exception("Invalid file path")
+
+        if not os.path.exists(full_path):
+            raise Exception(f"File '{file_path}' not found")
+
+        try:
+            with open(full_path, encoding="utf-8") as f:
+                content = f.read()
+            return aiohttp.web.json_response({"content": content, "path": file_path})
+        except Exception as e:
+            raise Exception(str(e)) from e
+
+    ctx.add_get("file/{name}/{path:.*}", get_file_content)
+
+    async def save_file(request):
+        """Save/update a file in a skill. Only works for skills in home directory."""
+        name = request.match_info.get("name")
+
+        try:
+            data = await request.json()
+        except json.JSONDecodeError:
+            raise Exception("Invalid JSON body") from None
+
+        file_path = data.get("path")
+        content = data.get("content")
+
+        if not file_path or content is None:
+            raise Exception("Missing 'path' or 'content' in request body")
+
+        skill_info = g_skills.get(name)
+        if not skill_info:
+            raise Exception(f"Skill '{name}' not found")
+
+        location = skill_info.get("location")
+
+        # Only allow modifications to skills in home directory
+        if not is_safe_path(home_skills, location):
+            raise Exception("Cannot modify skills outside of home directory")
+
+        full_path = os.path.join(location, file_path)
+
+        if not is_safe_path(location, full_path):
+            raise Exception("Invalid file path")
+
+        try:
+            # Create parent directories if they don't exist
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            # Reload skill metadata
+            group = skill_info.get("group", "~/.llms/.agents")
+            updated_skill = reload_skill(name, location, group)
+
+            return aiohttp.web.json_response({"path": file_path, "skill": updated_skill})
+        except Exception as e:
+            raise Exception(str(e)) from e
+
+    ctx.add_post("file/{name}", save_file)
+
+    async def delete_file(request):
+        """Delete a file from a skill. Only works for skills in home directory."""
+        name = request.match_info.get("name")
+        file_path = request.query.get("path")
+
+        if not file_path:
+            raise Exception("Missing 'path' query parameter")
+
+        skill_info = g_skills.get(name)
+        if not skill_info:
+            raise Exception(f"Skill '{name}' not found")
+
+        location = skill_info.get("location")
+
+        # Only allow modifications to skills in home directory
+        if not is_safe_path(home_skills, location):
+            raise Exception("Cannot modify skills outside of home directory")
+
+        full_path = os.path.join(location, file_path)
+
+        if not is_safe_path(location, full_path):
+            raise Exception("Invalid file path")
+
+        # Prevent deleting SKILL.md
+        if file_path.lower() == "skill.md":
+            raise Exception("Cannot delete SKILL.md - delete the entire skill instead")
+
+        if not os.path.exists(full_path):
+            raise Exception(f"File '{file_path}' not found")
+
+        try:
+            os.remove(full_path)
+
+            # Clean up empty parent directories
+            parent = os.path.dirname(full_path)
+            while parent != location:
+                if os.path.isdir(parent) and not os.listdir(parent):
+                    os.rmdir(parent)
+                    parent = os.path.dirname(parent)
+                else:
+                    break
+
+            # Reload skill metadata
+            group = skill_info.get("group", "~/.llms/.agents")
+            updated_skill = reload_skill(name, location, group)
+
+            return aiohttp.web.json_response({"path": file_path, "skill": updated_skill})
+        except Exception as e:
+            raise Exception(str(e)) from e
+
+    ctx.add_delete("file/{name}", delete_file)
+
+    async def create_skill(request):
+        """Create a new skill using the skill-creator template."""
+        try:
+            data = await request.json()
+        except json.JSONDecodeError:
+            raise Exception("Invalid JSON body") from None
+
+        skill_name = data.get("name")
+        if not skill_name:
+            raise Exception("Missing 'name' in request body")
+
+        # Validate skill name format
+        import re
+
+        if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$", skill_name):
+            raise Exception("Skill name must be lowercase, use hyphens, start/end with alphanumeric")
+
+        if len(skill_name) > 40:
+            raise Exception("Skill name must be 40 characters or less")
+
+        skill_dir = os.path.join(home_skills, skill_name)
+
+        if os.path.exists(skill_dir):
+            raise Exception(f"Skill '{skill_name}' already exists")
+
+        # Use init_skill.py from skill-creator
+        init_script = os.path.join(ctx.path, "ui", "skills", "skill-creator", "scripts", "init_skill.py")
+
+        if not os.path.exists(init_script):
+            raise Exception("skill-creator not found")
+
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                [sys.executable, init_script, skill_name, "--path", home_skills],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode != 0:
+                raise Exception(f"Failed to create skill: {result.stderr}")
+
+            # Load the new skill
+            if os.path.exists(skill_dir):
+                skill_dir_path = Path(skill_dir).resolve()
+                props = read_properties(skill_dir_path)
+                files = get_skill_files(skill_dir_path)
+
+                skill_props = props.to_dict()
+                skill_props.update(
+                    {
+                        "group": "~/.llms/.agents",
+                        "location": str(skill_dir_path),
+                        "files": files,
+                    }
+                )
+                g_skills[props.name] = skill_props
+
+                return aiohttp.web.json_response({"skill": skill_props, "output": result.stdout})
+
+            raise Exception("Skill directory not created")
+
+        except subprocess.TimeoutExpired:
+            raise Exception("Skill creation timed out") from None
+        except Exception as e:
+            raise Exception(str(e)) from e
+
+    ctx.add_post("create", create_skill)
+
+    async def delete_skill(request):
+        """Delete an entire skill. Only works for skills in home directory."""
+        name = request.match_info.get("name")
+
+        skill_info = g_skills.get(name)
+
+        if skill_info:
+            location = skill_info.get("location")
+        else:
+            # Check if orphaned directory exists on disk (not loaded in g_skills)
+            potential_location = os.path.join(home_skills, name)
+            if os.path.exists(potential_location) and is_safe_path(home_skills, potential_location):
+                location = potential_location
+            else:
+                raise Exception(f"Skill '{name}' not found")
+
+        # Only allow deletion of skills in home directory
+        if not is_safe_path(home_skills, location):
+            raise Exception("Cannot delete skills outside of home directory")
+
+        try:
+            if os.path.exists(location):
+                shutil.rmtree(location)
+            if name in g_skills:
+                del g_skills[name]
+
+            return aiohttp.web.json_response({"deleted": name})
+        except Exception as e:
+            raise Exception(str(e)) from e
+
+    ctx.add_delete("skill/{name}", delete_skill)
 
     ctx.register_tool(skill, group="core_tools")
 
