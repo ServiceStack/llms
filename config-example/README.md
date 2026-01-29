@@ -1,6 +1,6 @@
 # Custom Configuration Example
 
-This directory shows how to use custom `llms.json` and `providers.json` configuration files with the Docker container.
+This directory shows how to use custom `llms.json` and `providers.json` configuration files with the Docker container. For full documentation, see [llmspy.org/docs/configuration](https://llmspy.org/docs/configuration).
 
 ## Quick Start
 
@@ -93,23 +93,22 @@ docker run -p 8000:8000 \
 
 ### Custom Provider Configuration
 
-Add a custom OpenAI-compatible provider:
+Add a custom OpenAI-compatible provider (LiteLLM, vLLM, text-generation-webui, etc.):
 
 ```json
 {
   "providers": {
-    "my-custom-provider": {
+    "my-backend": {
       "enabled": true,
-      "type": "OpenAiProvider",
-      "base_url": "https://api.example.com/v1",
-      "api_key": "$MY_CUSTOM_API_KEY",
-      "models": {
-        "my-model": "provider-model-name"
-      }
+      "npm": "openai-local",
+      "api": "http://localhost:8000/v1",
+      "api_key": "$MY_BACKEND_API_KEY"
     }
   }
 }
 ```
+
+The `openai-local` provider auto-discovers models via the `/models` endpoint. You can name the provider anything you want and use any environment variable for the API key. (Note: `npm` specifies the provider type, not an npm package.)
 
 ### Enable Only Free Providers
 

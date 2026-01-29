@@ -247,6 +247,12 @@
             "api": "http://127.0.0.1:1234/v1",
             "models": {}
         },
+        "openai-local": {
+            "enabled": false,
+            "npm": "openai-local",
+            "api": "http://localhost:8000/v1",
+            "api_key": "$OPENAI_LOCAL_API_KEY"
+        },
         "google": {
             "enabled": true,
             "safety_settings": [
