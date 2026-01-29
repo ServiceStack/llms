@@ -49,12 +49,12 @@ Throughout the entire workflow, operate in read-only mode. Do not write or updat
 - Out:
 
 ## Action items
-[ ] <Step 1>
-[ ] <Step 2>
-[ ] <Step 3>
-[ ] <Step 4>
-[ ] <Step 5>
-[ ] <Step 6>
+- [ ] <Step 1>
+- [ ] <Step 2>
+- [ ] <Step 3>
+- [ ] <Step 4>
+- [ ] <Step 5>
+- [ ] <Step 6>
 
 ## Open questions
 - <Question 1>
