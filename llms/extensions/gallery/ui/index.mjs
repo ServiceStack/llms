@@ -222,7 +222,7 @@ const GalleryPage = {
 
                         <!-- Footer Actions -->
                         <div class="p-6 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#161616] flex gap-2">
-                            <button type="button" @click="deleteMedia" class="flex items-center justify-center p-3 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors" title="Delete">
+                            <button type="button" @click="deleteMedia(item)" class="flex items-center justify-center p-3 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors" title="Delete">
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </button>
                              <a :href="lightboxItem.url" download class="flex-1 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 px-6 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-lg shadow-black/5 dark:shadow-white/5">
@@ -408,6 +408,7 @@ const GalleryPage = {
 
         async function deleteMedia(item) {
             const target = item && item.hash ? item : lightboxItem.value
+            console.log('deleteMedia', item, target)
             if (!target) return
 
             if (!confirm('Are you sure you want to delete this media?')) return
