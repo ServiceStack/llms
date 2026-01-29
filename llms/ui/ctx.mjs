@@ -297,17 +297,16 @@ export class AppContext {
         console.log('toggleTop', name, toggle, this.layout.top, this.layout.top === name)
         return this.layout.top === name
     }
-    togglePath(path, toggle) {
+    togglePath(path, { left = true } = {}) {
         const currentPath = this.router.currentRoute.value?.path
-        console.log('togglePath', path, currentPath, toggle)
+        console.log('togglePath', path, currentPath, left)
         if (currentPath != path) {
-            if (toggle === undefined) {
-                toggle = true
-            }
             this.router.push({ path })
         }
-        this.toggleLayout('left', toggle)
-        return toggle
+        if (left !== undefined) {
+            this.toggleLayout('left', left)
+        }
+        return left
     }
     setThreadHeaders(components) {
         Object.assign(this.threadHeaderComponents, components)
