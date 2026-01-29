@@ -232,12 +232,16 @@ const SkillPage = {
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                         Create Skill
                     </button>
+                    <button @click="$ctx.togglePath('/skills/store', { left:false })" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M18.319 14.433A8.001 8.001 0 0 0 6.343 3.868a8 8 0 0 0 10.564 11.976l.043.045l4.242 4.243a1 1 0 1 0 1.415-1.415l-4.243-4.242zm-2.076-9.15a6 6 0 1 1-8.485 8.485a6 6 0 0 1 8.485-8.485" clip-rule="evenodd"/></svg>
+                        Discover Skills
+                    </button>
                 </div>
             </div>
             <div class="flex-1 flex min-h-0">
                 <div class="w-72 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
                     <div class="p-2 border-b border-gray-200 dark:border-gray-700">
-                        <input v-model="searchQuery" type="text" placeholder="Search skills..." class="w-full px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" />
+                        <input v-model="searchQuery" type="text" placeholder="Search installed skills..." class="w-full px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div class="flex-1 overflow-y-auto">
                         <div v-for="group in skillGroups" :key="group.name" class="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
@@ -569,6 +573,204 @@ const SkillFileNode = {
     setup() { return { expanded: ref(true) } }
 }
 
+// Skill Store Component - Search and install available skills
+const SkillStore = {
+    template: `
+        <div class="h-full flex flex-col">
+            <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Skill Store</h1>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ total.toLocaleString() }} skills available</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="$ctx.togglePath('/skills', { left:false })" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
+                        Installed Skills
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                <div class="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input v-model="searchQuery" @input="onSearchInput" type="text" placeholder="Search available skills..." 
+                        class="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    <div v-if="searching" class="absolute right-3 top-1/2 -translate-y-1/2">
+                        <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <div v-if="results.length === 0 && !searching" class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                    <div class="text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <p>{{ searchQuery ? 'No skills found' : 'Search for skills to install' }}</p>
+                    </div>
+                </div>
+                <div v-else class="divide-y divide-gray-200 dark:divide-gray-700">
+                    <div v-for="skill in results" :key="skill.id" class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ skill.name }}</h3>
+                                <div class="mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                        </svg>
+                                        {{ formatInstalls(skill.installs) }}
+                                    </span>
+                                    <span class="inline-flex items-center gap-1 truncate" :title="skill.topSource">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clip-rule="evenodd" />
+                                        </svg>
+                                        {{ skill.topSource }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <button v-if="isInstalled(skill.id)" disabled type="button"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed">
+                                    Installed
+                                </button>
+                                <button v-else-if="installing.has(skill.id)" disabled type="button"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 cursor-wait inline-flex items-center gap-1.5">
+                                    <svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Installing...
+                                </button>
+                                <button v-else @click="installSkill(skill)" type="button"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                                    Install
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="installError[skill.id]" class="mt-2 text-xs text-red-600 dark:text-red-400">
+                            {{ installError[skill.id] }}
+                        </div>
+                    </div>
+                </div>
+                <div v-if="results.length > 0 && results.length < total" class="p-4 flex justify-center">
+                    <button @click="loadMore" :disabled="searching" type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
+                        {{ searching ? 'Loading...' : 'Load More' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const searchQuery = ref('')
+        const results = ref([])
+        const total = ref(0)
+        const searching = ref(false)
+        const installing = ref(new Set())
+        const installError = ref({})
+        const offset = ref(0)
+        const limit = 50
+        let searchTimeout = null
+
+        const installedSkills = computed(() => ctx.state.skills || {})
+
+        function isInstalled(skillId) {
+            // Check if skill is already installed by comparing id/name
+            return Object.values(installedSkills.value).some(s =>
+                s.name === skillId || s.name === skillId.replace(/-/g, ' ')
+            )
+        }
+
+        function formatInstalls(count) {
+            if (count >= 1000000) return (count / 1000000).toFixed(1) + 'M'
+            if (count >= 1000) return (count / 1000).toFixed(1) + 'k'
+            return count.toString()
+        }
+
+        async function search(append = false) {
+            searching.value = true
+            try {
+                const params = new URLSearchParams({
+                    q: searchQuery.value,
+                    limit: limit.toString(),
+                    offset: (append ? offset.value : 0).toString()
+                })
+                const res = await ext.getJson(`/search?${params}`)
+                if (res.response) {
+                    if (append) {
+                        results.value = [...results.value, ...res.response.results]
+                    } else {
+                        results.value = res.response.results
+                        offset.value = 0
+                    }
+                    total.value = res.response.total
+                    offset.value = results.value.length
+                }
+            } catch (e) {
+                console.error('Search failed:', e)
+            } finally {
+                searching.value = false
+            }
+        }
+
+        function onSearchInput() {
+            if (searchTimeout) clearTimeout(searchTimeout)
+            searchTimeout = setTimeout(() => search(false), 300)
+        }
+
+        function loadMore() {
+            search(true)
+        }
+
+        async function installSkill(skill) {
+            installing.value = new Set([...installing.value, skill.id])
+            delete installError.value[skill.id]
+
+            try {
+                const res = await ext.postJson(`/install/${skill.id}`)
+                if (res.error) {
+                    installError.value[skill.id] = res.error.message || 'Installation failed'
+                } else {
+                    // Refresh installed skills
+                    const api = await ext.getJson('/')
+                    if (api.response) {
+                        ctx.setState({ skills: api.response })
+                    }
+                }
+            } catch (e) {
+                installError.value[skill.id] = e.message || 'Installation failed'
+            } finally {
+                const newSet = new Set(installing.value)
+                newSet.delete(skill.id)
+                installing.value = newSet
+            }
+        }
+
+        // Initial load - show popular skills
+        search(false)
+
+        return {
+            searchQuery,
+            results,
+            total,
+            searching,
+            installing,
+            installError,
+            isInstalled,
+            formatInstalls,
+            onSearchInput,
+            loadMore,
+            installSkill
+        }
+    }
+}
+
 function codeFragment(s) {
     return "`" + s + "`"
 }
@@ -618,18 +820,19 @@ export default {
     install(ctx) {
         ext = ctx.scope("skills")
 
-        ctx.components({ SkillSelector, SkillPage, FileTreeNode, SkillFileNode })
+        ctx.components({ SkillSelector, SkillPage, SkillStore, FileTreeNode, SkillFileNode })
 
         const svg = (attrs, title) => `<svg ${attrs} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${title ? "<title>" + title + "</title>" : ''}<path fill="currentColor" d="M20 17a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H9.46c.35.61.54 1.3.54 2h10v11h-9v2m4-10v2H9v13H7v-6H5v6H3v-8H1.5V9a2 2 0 0 1 2-2zM8 4a2 2 0 0 1-2 2a2 2 0 0 1-2-2a2 2 0 0 1 2-2a2 2 0 0 1 2 2"/></svg>`
 
         ctx.setLeftIcons({
             skills: {
-                component: { template: svg([`@click="$ctx.togglePath('/skills'), $ctx.toggleLayout('left',false)"`].join(' ')) },
+                component: { template: svg([`@click="$ctx.togglePath('/skills', { left:false })"`].join(' ')) },
                 isActive({ path }) { return path === '/skills' }
             }
         })
 
         ctx.routes.push({ path: '/skills', component: SkillPage, meta: { title: 'Manage Skills' } })
+        ctx.routes.push({ path: '/skills/store', component: SkillStore, meta: { title: 'Skill Store' } })
 
         ctx.setTopIcons({
             skills: {

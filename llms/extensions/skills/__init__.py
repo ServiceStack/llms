@@ -12,6 +12,15 @@ from .parser import read_properties
 g_skills = {}
 g_home_skills = None
 
+# Example of what's returned from https://skills.sh/api/skills?limit=5000&offset=0 > ui/data/skills-top-5000.json
+# {
+#  "id": "vercel-react-best-practices",
+#  "name": "vercel-react-best-practices",
+#  "installs": 68580,
+#  "topSource": "vercel-labs/agent-skills"
+# }
+g_available_skills = []
+
 
 def is_safe_path(base_path: str, requested_path: str) -> bool:
     """Check if the requested path is safely within the base path."""
@@ -163,10 +172,81 @@ def install(ctx):
         except OSError:
             pass
 
+    g_available_skills = []
+    try:
+        with open(os.path.join(ctx.path, "ui", "data", "skills-top-5000.json")) as f:
+            top_skills = json.load(f)
+            g_available_skills = top_skills["skills"]
+    except Exception:
+        pass
+
     async def get_skills(request):
         return aiohttp.web.json_response(g_skills)
 
     ctx.add_get("", get_skills)
+
+    async def search_available_skills(request):
+        q = request.query.get("q", "")
+        limit = int(request.query.get("limit", 50))
+        offset = int(request.query.get("offset", 0))
+        q_lower = q.lower()
+        filtered_results = [
+            s for s in g_available_skills if q_lower in s.get("name", "") or q_lower in s.get("topSource", "")
+        ]
+        sorted_by_installs = sorted(filtered_results, key=lambda x: x.get("installs", 0), reverse=True)
+        results = sorted_by_installs[offset : offset + limit]
+        return aiohttp.web.json_response(
+            {
+                "results": results,
+                "total": len(sorted_by_installs),
+            }
+        )
+
+    ctx.add_get("search", search_available_skills)
+
+    async def install_skill(request):
+        id = request.match_info.get("id")
+        skill = next((s for s in g_available_skills if s.get("id") == id), None)
+        if not skill:
+            raise Exception(f"Skill '{id}' not found")
+
+        # Get the source repo (e.g., "vercel-labs/agent-skills")
+        source = skill.get("topSource")
+        if not source:
+            raise Exception(f"Skill '{id}' has no source repository")
+
+        # Install from GitHub
+        from .installer import install_from_github
+
+        result = await install_from_github(
+            repo_url=f"https://github.com/{source}.git",
+            skill_names=[id],
+            target_dir=home_skills,
+        )
+
+        if not result.get("success"):
+            raise Exception(result.get("error", "Installation failed"))
+
+        # Reload the installed skills into the registry
+        for installed in result.get("installed", []):
+            skill_path = installed.get("path")
+            if skill_path and os.path.exists(skill_path):
+                skill_dir = Path(skill_path).resolve()
+                props = read_properties(skill_dir)
+                files = get_skill_files(skill_dir)
+                skill_props = props.to_dict()
+                skill_props.update(
+                    {
+                        "group": "~/.llms/.agents",
+                        "location": str(skill_dir),
+                        "files": files,
+                    }
+                )
+                g_skills[props.name] = skill_props
+
+        return aiohttp.web.json_response(result)
+
+    ctx.add_post("install/{id}", install_skill)
 
     async def get_skill(request):
         name = request.match_info.get("name")
