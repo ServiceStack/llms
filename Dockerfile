@@ -1,6 +1,6 @@
 # Multi-stage build for llms-py
-FROM oven/bun:latest as bun
-FROM python:3.11-slim as builder
+FROM oven/bun:latest AS bun
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
