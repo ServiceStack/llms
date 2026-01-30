@@ -16,10 +16,10 @@ Create a config file at `~/.llms/users/default/github_auth/config.json`:
 ```json
 {
   "enabled": true,
-  "client_id": "$GITHUB_CLIENT_ID",
-  "client_secret": "$GITHUB_CLIENT_SECRET",
+  "client_id": "GITHUB_CLIENT_ID",
+  "client_secret": "GITHUB_CLIENT_SECRET",
   "redirect_uri": "http://localhost:8000/auth/github/callback",
-  "restrict_to": "$GITHUB_USERS"
+  "restrict_to": "GITHUB_USERS"
 }
 ```
 
