@@ -235,17 +235,23 @@
             "enabled": true,
             "temperature": 1.0
         },
+        "lmstudio": {
+            "enabled": false,
+            "npm": "lmstudio",
+            "api": "http://127.0.0.1:1234/v1",
+            "models": {}
+        },
         "ollama": {
             "enabled": false,
             "id": "ollama",
             "npm": "ollama",
             "api": "http://localhost:11434"
         },
-        "lmstudio": {
-            "enabled": false,
-            "npm": "lmstudio",
-            "api": "http://127.0.0.1:1234/v1",
-            "models": {}
+        "ollama-cloud": {
+            "enabled": true,
+            "env": [
+                "OLLAMA_API_KEY"
+            ]
         },
         "openai-local": {
             "enabled": false,
