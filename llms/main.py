@@ -1431,6 +1431,10 @@ class LMStudioProvider(OllamaProvider):
         return ret
 
 
+class OpenAiLocalProvider(LMStudioProvider):
+    sdk = "openai-local"
+
+
 def get_provider_model(model_name):
     for provider in g_handlers.values():
         provider_model = provider.provider_model(model_name)
@@ -2838,6 +2842,7 @@ class AppExtensions:
             CodestralProvider,
             OllamaProvider,
             LMStudioProvider,
+            OpenAiLocalProvider,
         ]
         self.aspect_ratios = {
             "1:1": "1024×1024",
