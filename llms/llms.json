@@ -1,14 +1,5 @@
 {
     "version": 3,
-    "auth": {
-        "enabled": false,
-        "github": {
-            "client_id": "GITHUB_CLIENT_ID",
-            "client_secret": "GITHUB_CLIENT_SECRET",
-            "redirect_uri": "http://localhost:8000/auth/github/callback",
-            "restrict_to": "GITHUB_USERS"
-        }
-    },
     "disable_extensions": [],
     "defaults": {
         "headers": {

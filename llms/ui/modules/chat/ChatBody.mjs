@@ -643,8 +643,7 @@ export const ChatBody = {
                 <div class="mx-auto max-w-6xl px-4 py-6">
 
                     <div v-if="!$ai.hasAccess">
-                        <OAuthSignIn v-if="$ai.authType === 'oauth'" @done="$ai.signIn($event)" />
-                        <SignIn v-else @done="$ai.signIn($event)" />
+                        <SignIn @done="$ai.signIn($event)" />
                     </div>
                     <!-- Welcome message when no thread is selected -->
                     <div v-else-if="!currentThread" class="text-center py-12">

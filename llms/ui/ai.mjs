@@ -165,7 +165,6 @@ export const o = {
         return { config, models, extensions, auth }
     },
 
-
     async uploadFile(file) {
         const formData = new FormData()
         formData.append('file', file)

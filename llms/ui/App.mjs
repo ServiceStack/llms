@@ -173,7 +173,10 @@ export default {
                         <div>
                             <ModelSelector :models="$state.models" v-model="$state.selectedModel" />
                         </div>
-                        <TopBar id="top-bar" />
+                        <div class="flex items-center gap-2">
+                            <TopBar id="top-bar" />
+                            <Avatar />
+                        </div>
                     </div>
                     <TopPanel v-if="$ai.hasAccess" id="top-panel" :class="$ctx.cls('top-panel', 'shrink-0')" />
                     <div id="page" :class="$ctx.cls('page', 'flex-1 overflow-y-auto min-h-0 flex flex-col')">
