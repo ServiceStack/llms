@@ -1400,6 +1400,7 @@ class OllamaProvider(OpenAiCompatible):
                 "id": k,
                 "name": v.replace(":", " "),
                 "modalities": {"input": ["text"], "output": ["text"]},
+                "tool_call": True,
                 "cost": {
                     "input": 0,
                     "output": 0,
