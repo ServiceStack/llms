@@ -871,8 +871,7 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
     return url, info
 
 
-async def response_json(response):
-    text = await response.text()
+def http_error_to_message(response, text):
     if response.status >= 400:
         message = "HTTP " + str(response.status) + " " + response.reason
         _dbg(f"HTTP {response.status} {response.reason}\n{dict(response.headers)}\n{text}")
@@ -885,6 +884,13 @@ async def response_json(response):
         except Exception:
             if text:
                 message += ": " + text[:100]
+        return message
+
+
+async def response_json(response):
+    text = await response.text()
+    if response.status >= 400:
+        message = http_error_to_message(response, text)
         raise Exception(message)
     response.raise_for_status()
     body = json.loads(text)
@@ -2233,7 +2239,7 @@ async def get_text(url):
         async with session.get(url) as resp:
             text = await resp.text()
             if resp.status >= 400:
-                raise HTTPError(resp.status, reason=resp.reason, body=text, headers=dict(resp.headers))
+                raise Exception(http_error_to_message(resp, text))
             return text
 
 
@@ -2958,7 +2964,7 @@ class AppExtensions:
         for filter_func in self.chat_error_filters:
             try:
                 task = filter_func(e, context)
-                if asyncio.isfuture(task):
+                if inspect.iscoroutine(task):
                     await task
             except Exception as e:
                 _err("chat error filter failed", e)
