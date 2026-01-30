@@ -2,6 +2,7 @@ requests.json
 threads.json
 llms-home
 games/
+.agent/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
