@@ -3,6 +3,9 @@ import { leftPart } from "@servicestack/client"
 
 let ext
 
+const LLMS_HOME_SKILLS = "~/.llms/.agent/skills"
+const LLMS_LOCAL_SKILLS = ".agent/skills"
+
 const SkillSelector = {
     template: `
         <div class="px-4 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
@@ -119,10 +122,10 @@ const SkillSelector = {
                 skills
             }))
 
-            // Sort groups: writable (~/.llms/.agents) first, then alphabetically
+            // Sort groups: writable (~/.llms/.agent/skills,.agent/skills) first, then alphabetically
             definedGroups.sort((a, b) => {
-                const aEditable = a.name === '~/.llms/.agents'
-                const bEditable = b.name === '~/.llms/.agents'
+                const aEditable = a.name === LLMS_HOME_SKILLS || a.name === LLMS_LOCAL_SKILLS
+                const bEditable = b.name === LLMS_HOME_SKILLS || b.name === LLMS_LOCAL_SKILLS
                 if (aEditable !== bEditable) return aEditable ? -1 : 1
                 return a.name.localeCompare(b.name)
             })
@@ -158,6 +161,10 @@ const SkillSelector = {
                     onlySkills = onlySkills.filter(s => s !== name)
                 } else {
                     onlySkills = [...onlySkills, name]
+                    // If has all skills set to 'All' (null)
+                    if (onlySkills.length === availableSkills.value.length) {
+                        onlySkills = null
+                    }
                 }
             }
 
@@ -395,8 +402,8 @@ const SkillPage = {
                 grouped[group].push(skill)
             })
             return Object.entries(grouped).sort((a, b) => {
-                const aEditable = a[0] === '~/.llms/.agents'
-                const bEditable = b[0] === '~/.llms/.agents'
+                const aEditable = a[0] === LLMS_HOME_SKILLS || a[0] === LLMS_LOCAL_SKILLS
+                const bEditable = b[0] === LLMS_HOME_SKILLS || b[0] === LLMS_LOCAL_SKILLS
                 if (aEditable !== bEditable) return aEditable ? -1 : 1
                 return a[0].localeCompare(b[0])
             }).map(([name, skills]) => ({ name, skills: skills.sort((a, b) => a.name.localeCompare(b.name)) }))
@@ -419,8 +426,8 @@ const SkillPage = {
             return tree.sort((a, b) => { if (a.isFile !== b.isFile) return a.isFile ? 1 : -1; return a.name.localeCompare(b.name) })
         }
         const hasUnsavedChanges = computed(() => isEditing.value && editContent.value !== fileContent.value)
-        function isGroupEditable(groupName) { return groupName === '~/.llms/.agents' }
-        function isEditable(skill) { return skill?.group === '~/.llms/.agents' }
+        function isGroupEditable(groupName) { return groupName === LLMS_HOME_SKILLS || groupName === LLMS_LOCAL_SKILLS }
+        function isEditable(skill) { return skill?.group === LLMS_HOME_SKILLS || skill?.group === LLMS_LOCAL_SKILLS }
         function isSkillExpanded(name) { return !!expandedSkills.value[name] }
         function toggleSkillExpand(skill) {
             expandedSkills.value[skill.name] = !expandedSkills.value[skill.name]
@@ -579,7 +586,7 @@ const SkillStore = {
         <div class="h-full flex flex-col">
             <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
                 <div>
-                    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Skill Store</h1>
+                    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Discover Skills</h1>
                     <p class="text-sm text-gray-500 dark:text-gray-400">{{ total.toLocaleString() }} skills available</p>
                 </div>
                 <div class="flex items-center gap-2">

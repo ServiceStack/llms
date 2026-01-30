@@ -21,6 +21,9 @@ g_home_skills = None
 # }
 g_available_skills = []
 
+LLMS_HOME_SKILLS = "~/.llms/.agent/skills"
+LLMS_LOCAL_SKILLS = ".agent/skills"
+
 
 def is_safe_path(base_path: str, requested_path: str) -> bool:
     """Check if the requested path is safely within the base path."""
@@ -132,10 +135,12 @@ def install(ctx):
     if os.path.exists(os.path.join(".claude", "skills")):
         skill_roots[".claude/skills"] = os.path.join(".claude", "skills")
 
-    skill_roots["~/.llms/.agents"] = home_skills
+    skill_roots[LLMS_HOME_SKILLS] = home_skills
 
-    if os.path.exists(os.path.join(".agent", "skills")):
-        skill_roots[".agents"] = os.path.join(".agent", "skills")
+    local_skills = os.path.join(".agent", "skills")
+    if os.path.exists(local_skills):
+        local_skills = str(Path(local_skills).resolve())
+        skill_roots[LLMS_LOCAL_SKILLS] = local_skills
 
     g_skills = {}
     for group, root in skill_roots.items():
@@ -237,7 +242,7 @@ def install(ctx):
                 skill_props = props.to_dict()
                 skill_props.update(
                     {
-                        "group": "~/.llms/.agents",
+                        "group": LLMS_HOME_SKILLS,
                         "location": str(skill_dir),
                         "files": files,
                     }
@@ -303,9 +308,9 @@ def install(ctx):
 
         location = skill_info.get("location")
 
-        # Only allow modifications to skills in home directory
-        if not is_safe_path(home_skills, location):
-            raise Exception("Cannot modify skills outside of home directory")
+        # Only allow modifications to skills in home or local .agent directory
+        if not is_safe_path(home_skills, location) and not (local_skills and is_safe_path(local_skills, location)):
+            raise Exception("Cannot modify skills outside of allowed directories")
 
         full_path = os.path.join(location, file_path)
 
@@ -319,7 +324,7 @@ def install(ctx):
                 f.write(content)
 
             # Reload skill metadata
-            group = skill_info.get("group", "~/.llms/.agents")
+            group = skill_info.get("group", LLMS_HOME_SKILLS)
             updated_skill = reload_skill(name, location, group)
 
             return aiohttp.web.json_response({"path": file_path, "skill": updated_skill})
@@ -342,9 +347,9 @@ def install(ctx):
 
         location = skill_info.get("location")
 
-        # Only allow modifications to skills in home directory
-        if not is_safe_path(home_skills, location):
-            raise Exception("Cannot modify skills outside of home directory")
+        # Only allow modifications to skills in home or local .agent directory
+        if not is_safe_path(home_skills, location) and not (local_skills and is_safe_path(local_skills, location)):
+            raise Exception("Cannot modify skills outside of allowed directories")
 
         full_path = os.path.join(location, file_path)
 
@@ -371,7 +376,7 @@ def install(ctx):
                     break
 
             # Reload skill metadata
-            group = skill_info.get("group", "~/.llms/.agents")
+            group = skill_info.get("group", LLMS_HOME_SKILLS)
             updated_skill = reload_skill(name, location, group)
 
             return aiohttp.web.json_response({"path": file_path, "skill": updated_skill})
@@ -433,7 +438,7 @@ def install(ctx):
                 skill_props = props.to_dict()
                 skill_props.update(
                     {
-                        "group": "~/.llms/.agents",
+                        "group": LLMS_HOME_SKILLS,
                         "location": str(skill_dir_path),
                         "files": files,
                     }
@@ -467,9 +472,9 @@ def install(ctx):
             else:
                 raise Exception(f"Skill '{name}' not found")
 
-        # Only allow deletion of skills in home directory
-        if not is_safe_path(home_skills, location):
-            raise Exception("Cannot delete skills outside of home directory")
+        # Only allow deletion of skills in home or local .agent directory
+        if not is_safe_path(home_skills, location) and not (local_skills and is_safe_path(local_skills, location)):
+            raise Exception("Cannot delete skills outside of allowed directories")
 
         try:
             if os.path.exists(location):

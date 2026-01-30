@@ -33,14 +33,21 @@ Access the skills panel by clicking the **Skills** icon in the top toolbar. The 
 
 ### Skill Groups
 
-Skills are organized into groups based on their source:
+Skills are organized into groups based on their source location. Skills are discovered from these directories in order:
 
-| Group | Description | Editable |
-|-------|-------------|----------|
-| `~/.llms/.agents` | Your personal skills collection | ✓ Yes |
-| Built-in | Skills bundled with the extension | ✗ No |
+| Group | Location | Description | Editable |
+|-------|----------|-------------|----------|
+| Project (Agent) | `.agent/skills/` | Skills local to the current project | ✓ Yes |
+| Project (Claude) | `.claude/skills/` | Claude-format skills in the current project | ✓ Yes |
+| User (Agent) | `~/.llms/.agents/skills/` | Your personal skills collection | ✓ Yes |
+| User (Claude) | `~/.claude/skills/` | Claude-format skills in your home directory | ✓ Yes |
+| Built-in | Extension directory | Skills bundled with the extension | ✗ No |
 
-Your personal skills (`~/.llms/.agents`) are fully editable. Built-in skills provide reference implementations you can learn from.
+**Project-level skills** (`.agent/` and `.claude/`) are specific to the workspace you're working in. They're ideal for project-specific workflows, coding standards, or team conventions.
+
+**User-level skills** (`~/.llms/.agents/` and `~/.claude/`) are available across all projects. Use these for personal workflows and preferences.
+
+Both `.agent` and `.claude` directory formats are supported for compatibility with different tooling conventions.
 
 ### Selecting Skills for a Conversation
 
