@@ -244,6 +244,23 @@ def install(ctx):
         return web.json_response(g_app.error_auth_required, status=401)
 
     ctx.add_get("/auth", auth_handler)
+
+    if ctx.debug:
+
+        async def debug_auth_handler(request):
+            return web.json_response(
+                {
+                    "get_session_token": auth_provider.get_session_token(request),
+                    "get_session": ctx.get_session(request),
+                    "get_username": ctx.get_username(request),
+                    "check_auth": ctx.check_auth(request),
+                    # "sessions": list(g_app.sessions.keys()),
+                    # "oauth_states": list(g_app.oauth_states.keys()),
+                }
+            )
+
+        ctx.add_get("/auth/debug", debug_auth_handler)
+
     ctx.add_get("/auth/github", github_auth_handler)
     ctx.add_get("/auth/github/callback", github_callback_handler)
     ctx.add_get("/auth/github/callback{tail:.*}", github_callback_handler)

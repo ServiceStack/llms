@@ -2798,6 +2798,9 @@ class AuthProvider:
 
     def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
         session_token = self.get_session_token(request)
+        # _dbg(
+        #     f"Session token: {session_token} / {len(self.app.sessions)} sessions = {session_token in self.app.sessions}"
+        # )
 
         if not session_token or session_token not in self.app.sessions:
             return None
