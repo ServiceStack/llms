@@ -1759,6 +1759,15 @@ def convert_tool_args(function_name, function_args):
 
     return function_args
 
+def get_tool_property(function_name, prop_name):
+    tool_def = g_app.get_tool_definition(function_name)
+    if not tool_def:
+        return None
+    if "function" in tool_def and "parameters" in tool_def["function"]:
+        parameters = tool_def.get("function", {}).get("parameters")
+        properties = parameters.get("properties", {})
+        return properties.get(prop_name)
+    return None
 
 async def g_exec_tool(function_name, function_args):
     _log(f"g_exec_tool: {function_name}")
@@ -1913,6 +1922,8 @@ async def g_chat_completion(chat, context=None):
                         except Exception as e:
                             tool_result = f"Error: Failed to parse JSON arguments for tool '{function_name}': {to_error_message(e)}"
                         else:
+                            if "user" in context and get_tool_property(function_name, "user"):
+                                function_args["user"] = context["user"]
                             tool_result, resources = await g_exec_tool(function_name, function_args)
 
                         # Append tool result to history
@@ -2948,6 +2959,14 @@ class AppExtensions:
                 return username
             return None
 
+    def assert_username(self, request: web.Request) -> str:
+        if not self.is_auth_enabled():
+            return None
+        username = self.get_username(request)
+        if not username:
+            raise Exception("Authentication required")
+        return username
+
     def check_auth(self, request: web.Request) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Check if request is authenticated. Returns (is_authenticated, user_data)"""
         if len(self.auth_providers) == 0:
@@ -3084,11 +3103,17 @@ class ExtensionContext:
         self.app.add_auth_provider(auth_provider)
         self.log(f"Added Auth Provider: {auth_provider.__class__.__name__}, Authentication is now enabled")
 
+    def is_auth_enabled(self) -> bool:
+        return self.app.is_auth_enabled()
+
     def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
         return self.app.get_session(request)
 
     def get_username(self, request: web.Request) -> Optional[str]:
         return self.app.get_username(request)
+
+    def assert_username(self, request: web.Request) -> Optional[str]:
+        return self.app.assert_username(request)
 
     def check_auth(self, request: web.Request) -> Tuple[bool, Optional[Dict[str, Any]]]:
         return self.app.check_auth(request)

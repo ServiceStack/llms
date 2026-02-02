@@ -3,9 +3,6 @@ import { leftPart } from "@servicestack/client"
 
 let ext
 
-const LLMS_HOME_SKILLS = "~/.llms/.agent/skills"
-const LLMS_LOCAL_SKILLS = ".agent/skills"
-
 const SkillSelector = {
     template: `
         <div class="px-4 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
@@ -122,10 +119,10 @@ const SkillSelector = {
                 skills
             }))
 
-            // Sort groups: writable (~/.llms/.agent/skills,.agent/skills) first, then alphabetically
+            // Sort groups: writable first, then alphabetically
             definedGroups.sort((a, b) => {
-                const aEditable = a.name === LLMS_HOME_SKILLS || a.name === LLMS_LOCAL_SKILLS
-                const bEditable = b.name === LLMS_HOME_SKILLS || b.name === LLMS_LOCAL_SKILLS
+                const aEditable = a.skills.some(s => s.writable)
+                const bEditable = b.skills.some(s => s.writable)
                 if (aEditable !== bEditable) return aEditable ? -1 : 1
                 return a.name.localeCompare(b.name)
             })
@@ -392,6 +389,7 @@ const SkillPage = {
         const editorRef = ref(null)
         const expandedSkills = ref({})
         const skills = computed(() => ctx.state.skills || {})
+
         const skillGroups = computed(() => {
             const grouped = {}
             const query = searchQuery.value.toLowerCase()
@@ -402,8 +400,8 @@ const SkillPage = {
                 grouped[group].push(skill)
             })
             return Object.entries(grouped).sort((a, b) => {
-                const aEditable = a[0] === LLMS_HOME_SKILLS || a[0] === LLMS_LOCAL_SKILLS
-                const bEditable = b[0] === LLMS_HOME_SKILLS || b[0] === LLMS_LOCAL_SKILLS
+                const aEditable = a[1].some(s => s.writable)
+                const bEditable = b[1].some(s => s.writable)
                 if (aEditable !== bEditable) return aEditable ? -1 : 1
                 return a[0].localeCompare(b[0])
             }).map(([name, skills]) => ({ name, skills: skills.sort((a, b) => a.name.localeCompare(b.name)) }))
@@ -426,8 +424,8 @@ const SkillPage = {
             return tree.sort((a, b) => { if (a.isFile !== b.isFile) return a.isFile ? 1 : -1; return a.name.localeCompare(b.name) })
         }
         const hasUnsavedChanges = computed(() => isEditing.value && editContent.value !== fileContent.value)
-        function isGroupEditable(groupName) { return groupName === LLMS_HOME_SKILLS || groupName === LLMS_LOCAL_SKILLS }
-        function isEditable(skill) { return skill?.group === LLMS_HOME_SKILLS || skill?.group === LLMS_LOCAL_SKILLS }
+        function isGroupEditable(groupName) { return Object.values(skills.value).some(s => s.group === groupName && s.writable) }
+        function isEditable(skill) { return skill?.writable }
         function isSkillExpanded(name) { return !!expandedSkills.value[name] }
         function toggleSkillExpand(skill) {
             expandedSkills.value[skill.name] = !expandedSkills.value[skill.name]
