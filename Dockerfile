@@ -34,11 +34,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     git \
-    && wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb \
     && dpkg -i packages-microsoft-prod.deb \
-    && rm packages-microsoft-prod.deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends dotnet-sdk-10.0 \
+    && rm packages-microsoft-prod.deb
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    dotnet-sdk-10.0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install bun
