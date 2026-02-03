@@ -174,7 +174,7 @@ def install_anthropic(ctx):
                     self.chat_url,
                     headers=self.headers,
                     data=json.dumps(anthropic_request),
-                    timeout=aiohttp.ClientTimeout(total=120),
+                    timeout=ctx.get_client_timeout(),
                 ) as response:
                     return ctx.log_json(
                         self.to_response(await self.response_json(response), chat, started_at, context=context)

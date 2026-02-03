@@ -62,6 +62,10 @@ DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
 MOCK_DIR = os.getenv("MOCK_DIR")
 DISABLE_EXTENSIONS = (os.getenv("LLMS_DISABLE") or "").split(",")
+DEFAULT_LIMITS = {
+    "client_timeout": 120,
+    "client_max_size": 20971520,
+}
 g_config_path = None
 g_config = None
 g_providers = None
@@ -475,7 +479,7 @@ async def download_file(url):
 
 async def session_download_file(session, url, default_mimetype="application/octet-stream"):
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=120)) as response:
+        async with session.get(url, timeout=get_client_timeout()) as response:
             response.raise_for_status()
             content = await response.read()
             mimetype = response.headers.get("Content-Type")
@@ -1294,7 +1298,7 @@ class OpenAiCompatible:
         async with aiohttp.ClientSession() as session:
             started_at = time.time()
             async with session.post(
-                self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=aiohttp.ClientTimeout(total=120)
+                self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=get_client_timeout()
             ) as response:
                 chat["metadata"] = metadata
                 return self.to_response(await response_json(response), chat, started_at, context=context)
@@ -1361,7 +1365,7 @@ class OllamaProvider(OpenAiCompatible):
             async with aiohttp.ClientSession() as session:
                 _log(f"GET {self.api}/api/tags")
                 async with session.get(
-                    f"{self.api}/api/tags", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)
+                    f"{self.api}/api/tags", headers=self.headers, timeout=get_client_timeout()
                 ) as response:
                     data = await response_json(response)
                     for model in data.get("models", []):
@@ -1422,7 +1426,7 @@ class LMStudioProvider(OllamaProvider):
             async with aiohttp.ClientSession() as session:
                 _log(f"GET {self.api}/models")
                 async with session.get(
-                    f"{self.api}/models", headers=self.headers, timeout=aiohttp.ClientTimeout(total=120)
+                    f"{self.api}/models", headers=self.headers, timeout=get_client_timeout()
                 ) as response:
                     data = await response_json(response)
                     for model in data.get("data", []):
@@ -2833,6 +2837,12 @@ class AuthProvider:
         return False, None
 
 
+def get_client_timeout(app=None):
+    app = app or g_app
+    timeout = app.limits.get("client_timeout", 120) if app else 120
+    return aiohttp.ClientTimeout(total=timeout)
+
+
 class AppExtensions:
     """
     APIs extensions can use to extend the app
@@ -2842,6 +2852,7 @@ class AppExtensions:
         self.cli_args = cli_args
         self.extra_args = extra_args
         self.config = None
+        self.limits = DEFAULT_LIMITS
         self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
         self.chat_request_filters = []
@@ -2921,6 +2932,12 @@ class AppExtensions:
 
     def set_config(self, config: Dict[str, Any]):
         self.config = config
+        self.limits = self.config.get("limits", DEFAULT_LIMITS)
+        self.limits["client_timeout"] = self.limits.get("client_timeout", 120)
+        self.limits["client_max_size"] = self.limits.get("client_max_size", 20971520)
+
+    def get_client_timeout(self):
+        return get_client_timeout(self)
 
     def set_allowed_directories(
         self, directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]]
@@ -3080,6 +3097,7 @@ class ExtensionContext:
     def __init__(self, app: AppExtensions, path: str):
         self.app = app
         self.config = app.config
+        self.limits = app.limits
         self.cli_args = app.cli_args
         self.extra_args = app.extra_args
         self.error_auth_required = app.error_auth_required
@@ -3097,6 +3115,9 @@ class ExtensionContext:
         self.sessions = app.sessions
         self.oauth_states = app.oauth_states
         self.disabled = False
+
+    def get_client_timeout(self):
+        return self.app.get_client_timeout()
 
     def add_auth_provider(self, auth_provider: AuthProvider) -> None:
         """Add an authentication provider."""

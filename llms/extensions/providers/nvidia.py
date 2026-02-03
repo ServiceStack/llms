@@ -96,7 +96,7 @@ def install_nvidia(ctx):
                     gen_url,
                     headers=headers,
                     data=json.dumps(gen_request),
-                    timeout=aiohttp.ClientTimeout(total=120),
+                    timeout=ctx.get_client_timeout(),
                 ) as response:
                     return self.to_response(await self.response_json(response), chat, started_at, context=context)
 

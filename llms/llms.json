@@ -124,6 +124,7 @@
         }
     },
     "limits": {
+        "client_timeout": 120,
         "client_max_size": 20971520
     },
     "convert": {

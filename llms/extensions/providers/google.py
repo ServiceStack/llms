@@ -378,7 +378,7 @@ def install_google(ctx):
                                 gemini_chat_url,
                                 headers=self.headers,
                                 data=json.dumps(gemini_chat),
-                                timeout=aiohttp.ClientTimeout(total=120),
+                                timeout=ctx.get_client_timeout(),
                             ) as res:
                                 obj = await self.response_json(res)
                                 if context is not None:
