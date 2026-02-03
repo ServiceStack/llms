@@ -496,15 +496,20 @@ def move_file(source: Annotated[str, "Source path"], destination: Annotated[str,
 
 
 def search_files(
-    path: Annotated[str, "Path to search in"],
     pattern: Annotated[str, "Glob pattern to match"],
+    path: Annotated[str, "Path to search in"] = None,
     exclude_patterns: Annotated[List[str], "Glob patterns to exclude"] = None,
+    sort_by: Annotated[Literal["path", "modified", "size"], "Sort by path, modified or size"] = "path",
+    max_results: int = 200,
 ) -> str:
     """
     Recursively search for files and directories matching a pattern. The patterns should be glob-style patterns that match paths relative to the working directory.
     Use pattern like '.ext' to match files in current directory, and '**/.ext' to match files in all subdirectories.
     Returns full paths to all matching items. Great for finding files when you don't know their exact location. Only searches within allowed directories.
+    If no path is provided, searches in the first allowed directory.
     """
+    if not path:
+        path = get_allowed_directories()[0]
     valid_path = _validate_path(path)
     results = []
     if exclude_patterns is None:
@@ -532,6 +537,16 @@ def search_files(
 
     except Exception as e:
         raise RuntimeError(f"Error searching files in {valid_path}: {e}") from e
+
+    if sort_by == "size":
+        results.sort(key=lambda p: os.path.getsize(p) if os.path.exists(p) else 0, reverse=True)
+    elif sort_by == "modified":
+        results.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
+    else:  # path
+        results.sort()
+
+    if max_results > 0:
+        results = results[:max_results]
 
     if not results:
         return "No matches found"
