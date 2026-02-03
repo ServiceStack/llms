@@ -6,7 +6,7 @@ const headers = { 'Accept': 'application/json' }
 const prefsKey = 'llms.prefs'
 
 export const o = {
-    version: '3.0.26',
+    version: '3.0.27',
     base,
     prefsKey,
     welcome: 'Welcome to llms.py',
