@@ -4,8 +4,6 @@ Core System Tools providing essential file operations, memory persistence, math 
 
 import ast
 import contextlib
-import glob
-import json
 import math
 import operator
 import os
@@ -20,165 +18,6 @@ from typing import Any, Dict, List, Optional
 from aiohttp import web
 
 g_ctx = None
-
-# -----------------------------
-# In-memory storage (replace later)
-# -----------------------------
-
-_MEMORY_STORE: Dict[str, Any] = {}
-_SEMANTIC_STORE: List[Dict[str, Any]] = []  # {id, text, metadata}
-
-
-# -----------------------------
-# Memory tools
-# -----------------------------
-
-
-def memory_read(key: str) -> Any:
-    """Read a value from persistent memory."""
-    return _MEMORY_STORE.get(key)
-
-
-def memory_write(key: str, value: Any) -> bool:
-    """Write a value to persistent memory."""
-    _MEMORY_STORE[key] = value
-    return True
-
-
-# -----------------------------
-# Path safety helpers
-# -----------------------------
-
-# Limit tools to only access files and folders within LLMS_BASE_DIR if specified, otherwise the current working directory
-_BASE_DIR = os.environ.get("LLMS_BASE_DIR") or os.path.realpath(os.getcwd())
-
-
-def _resolve_safe_path(path: str) -> str:
-    """
-    Resolve a path and ensure it stays within the current working directory.
-    Raises ValueError if the path escapes the base directory.
-    """
-    resolved = os.path.realpath(os.path.join(_BASE_DIR, path))
-    if not resolved.startswith(_BASE_DIR + os.sep) and resolved != _BASE_DIR:
-        raise ValueError("Access denied: path is outside the working directory")
-    return resolved
-
-
-# -----------------------------
-# Semantic search (placeholder)
-# -----------------------------
-
-
-def semantic_search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    """
-    Naive semantic search placeholder.
-    Replace with embeddings + vector DB.
-    """
-    results = []
-    for item in _SEMANTIC_STORE:
-        if query.lower() in item["text"].lower():
-            results.append(item)
-    return results[:top_k]
-
-
-# -----------------------------
-# File system tools (restricted to CWD)
-# -----------------------------
-
-
-def read_file(path: str) -> str:
-    """Read a text file from disk within the current working directory."""
-    safe_path = _resolve_safe_path(path)
-    with open(safe_path, encoding="utf-8") as f:
-        return f.read()
-
-
-def write_file(path: str, content: str) -> bool:
-    """Write text to a file within the current working directory (overwrites)."""
-    safe_path = _resolve_safe_path(path)
-    os.makedirs(os.path.dirname(safe_path) or _BASE_DIR, exist_ok=True)
-    with open(safe_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return True
-
-
-def list_directory(path: str) -> str:
-    """List directory contents"""
-    safe_path = _resolve_safe_path(path)
-    if not os.path.exists(safe_path):
-        return f"Error: Path not found: {path}"
-
-    entries = []
-    try:
-        for entry in os.scandir(safe_path):
-            stat = entry.stat()
-            entries.append(
-                {
-                    "name": "/" + entry.name if entry.is_dir() else entry.name,
-                    "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                }
-            )
-        return json.dumps({"path": os.path.relpath(safe_path, _BASE_DIR), "entries": entries}, indent=2)
-    except Exception as e:
-        return f"Error listing directory: {e}"
-
-
-def glob_paths(
-    pattern: str,
-    extensions: Optional[List[str]] = None,
-    sort_by: str = "path",  # "path" | "modified" | "size"
-    max_results: int = 100,
-) -> Dict[str, List[Dict[str, str]]]:
-    """
-    Find files and directories matching a glob pattern
-    """
-    if sort_by not in {"path", "modified", "size"}:
-        raise ValueError("sort_by must be one of: path, modified, size")
-
-    safe_pattern = _resolve_safe_path(pattern)
-
-    results = []
-
-    for path in glob.glob(safe_pattern, recursive=True):
-        resolved = os.path.realpath(path)
-
-        # Enforce CWD restriction (important for symlinks)
-        if not resolved.startswith(_BASE_DIR):
-            continue
-
-        is_dir = os.path.isdir(resolved)
-
-        # Extension filtering (files only)
-        if extensions and not is_dir:
-            ext = os.path.splitext(resolved)[1].lower().lstrip(".")
-            if ext not in {e.lower().lstrip(".") for e in extensions}:
-                continue
-
-        stat = os.stat(resolved)
-
-        results.append(
-            {
-                "path": os.path.relpath(resolved, _BASE_DIR),
-                "type": "directory" if is_dir else "file",
-                "size_bytes": stat.st_size,
-                "modified_time": stat.st_mtime,
-            }
-        )
-
-        if len(results) >= max_results:
-            break
-
-    # Sorting
-    if sort_by == "path":
-        results.sort(key=lambda x: x["path"])
-    elif sort_by == "modified":
-        results.sort(key=lambda x: x["modified_time"], reverse=True)
-    elif sort_by == "size":
-        results.sort(key=lambda x: x["size_bytes"], reverse=True)
-
-    return {"pattern": pattern, "count": len(results), "results": results}
-
 
 # -----------------------------
 # Expression evaluation tools
@@ -522,19 +361,12 @@ def install(ctx):
     g_ctx = ctx
     group = "core_tools"
     # Examples of registering tools using automatic definition generation
-    ctx.register_tool(memory_read, group=group)
-    ctx.register_tool(memory_write, group=group)
-    # ctx.register_tool(semantic_search) # TODO: implement
-    ctx.register_tool(read_file, group=group)
-    ctx.register_tool(write_file, group=group)
-    ctx.register_tool(list_directory, group=group)
-    ctx.register_tool(glob_paths, group=group)
+    ctx.register_tool(get_current_time, group=group)
     ctx.register_tool(calc, group=group)
     ctx.register_tool(run_python, group=group)
     ctx.register_tool(run_typescript, group=group)
     ctx.register_tool(run_javascript, group=group)
     ctx.register_tool(run_csharp, group=group)
-    ctx.register_tool(get_current_time, group=group)
 
     def exec_language(language: str, code: str) -> Dict[str, Any]:
         if language == "python":
