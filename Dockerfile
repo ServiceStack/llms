@@ -37,13 +37,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb \
-    && dpkg -i packages-microsoft-prod.deb \
-    && rm packages-microsoft-prod.deb
+# Install dotnet-sdk 10.0 using install script to bypass GPG SHA1 issues
+RUN wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh \
+    && chmod +x dotnet-install.sh \
+    && ./dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
+    && rm dotnet-install.sh
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    dotnet-sdk-10.0 \
-    && rm -rf /var/lib/apt/lists/*
+# Set dotnet environment variables
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH=$PATH:$DOTNET_ROOT
 
 # Install bun
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
