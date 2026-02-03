@@ -921,14 +921,23 @@ export default {
                 },
                 show({ thread }) {
                     if (thread.messages.length < 2) return false
-                    const msgRoles = thread.messages.map(m => m.role)
-                    if (msgRoles[msgRoles.length - 1] != "assistant") return false
+
+                    const lastMessage = thread.messages[thread.messages.length - 1]
+                    // only show if the last message is from the assistant
+                    if (lastMessage.role != "assistant") return false
+
+                    // and it has a skill tool call
                     const hasSkillToolCall = thread.messages.some(m =>
                         m.tool_calls?.some(tc => tc.type == "function" && tc.function.name == "skill"))
+                    // or a plan system prompt
                     const systemPrompt = thread.messages.find(m => m.role == "system")?.content.toLowerCase() || ''
                     const line1 = leftPart(systemPrompt.trim(), "\n")
                     const hasPlanSystemPrompt = line1.includes("plan") || systemPrompt.includes("# plan")
-                    return hasSkillToolCall || hasPlanSystemPrompt
+
+                    // or the last message has no content but has reasoning
+                    const hasOnlyThinking = !lastMessage.content?.trim() && lastMessage.reasoning?.trim()
+
+                    return hasSkillToolCall || hasPlanSystemPrompt || hasOnlyThinking
                 }
             }
         })
