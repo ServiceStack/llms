@@ -327,6 +327,17 @@ def install_google(ctx):
                 elif self.thinking_config:
                     generation_config["thinkingConfig"] = self.thinking_config
 
+                if "response_format" in chat:
+                    response_format = chat["response_format"]
+                    if isinstance(response_format, dict):
+                        if response_format.get("type") == "json_object":
+                            generation_config["responseMimeType"] = "application/json"
+                        elif response_format.get("type") == "json_schema":
+                            json_schema = response_format.get("json_schema", {})
+                            if "schema" in json_schema:
+                                generation_config["responseMimeType"] = "application/json"
+                                generation_config["responseJsonSchema"] = sanitize_parameters(json_schema["schema"])
+
                 if len(generation_config) > 0:
                     gemini_chat["generationConfig"] = generation_config
 

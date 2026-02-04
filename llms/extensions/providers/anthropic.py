@@ -165,6 +165,18 @@ def install_anthropic(ctx):
             if "tool_choice" in chat:
                 anthropic_request["tool_choice"] = chat["tool_choice"]
 
+            if "response_format" in chat:
+                response_format = chat["response_format"]
+                if response_format.get("type") == "json_schema":
+                    json_schema = response_format.get("json_schema", {})
+                    if "schema" in json_schema:
+                        anthropic_request["output_config"] = {
+                            "format": {
+                                "type": "json_schema",
+                                "schema": json_schema["schema"],
+                            }
+                        }
+
             ctx.log(f"POST {self.chat_url}")
             ctx.log(json.dumps(anthropic_request, indent=2))
 
