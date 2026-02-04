@@ -1763,6 +1763,7 @@ def convert_tool_args(function_name, function_args):
 
     return function_args
 
+
 def get_tool_property(function_name, prop_name):
     tool_def = g_app.get_tool_definition(function_name)
     if not tool_def:
@@ -1772,6 +1773,7 @@ def get_tool_property(function_name, prop_name):
         properties = parameters.get("properties", {})
         return properties.get(prop_name)
     return None
+
 
 async def g_exec_tool(function_name, function_args):
     _log(f"g_exec_tool: {function_name}")
@@ -2368,6 +2370,30 @@ def disable_provider(provider):
     provider_config["enabled"] = False
     save_config(g_config)
     init_llms(g_config, g_providers)
+
+
+def parse_json_response(text):
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strip markdown fences
+    cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip())
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Try to extract JSON object/array
+    match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+    if match:
+        return json.loads(match.group(1))
+
+    raise ValueError("Could not parse JSON from response")
 
 
 def resolve_root():
@@ -3031,8 +3057,8 @@ class AppExtensions:
                 task = filter_func(e, context)
                 if inspect.iscoroutine(task):
                     await task
-            except Exception as e:
-                _err("chat error filter failed", e)
+            except Exception as ex:
+                _err("chat error filter failed", ex)
 
     async def on_chat_tool(self, chat: Dict[str, Any], context: Dict[str, Any]):
         m_len = len(chat.get("messages", []))
@@ -3454,6 +3480,9 @@ class ExtensionContext:
 
     def chat_to_aspect_ratio(self, chat: Dict[str, Any]) -> str:
         return chat_to_aspect_ratio(chat)
+
+    def parse_json_response(self, text: str) -> Dict[str, Any]:
+        return parse_json_response(text)
 
 
 def get_extensions_path():

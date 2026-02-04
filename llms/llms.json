@@ -121,6 +121,60 @@
             ],
             "max_completion_tokens": 16,
             "stream": false
+        },
+        "compact": {
+            "model": "Gemini 2.5 Flash Lite",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a context compaction assistant. Your task is to condense chat conversation histories while preserving all information necessary for the AI to continue the conversation coherently.\n\n## Compaction Rules\n\n1. **Preserve**: User intent, decisions made, key facts established, code/data shared, current task state, any constraints or preferences expressed\n2. **Remove**: Pleasantries, redundant confirmations, superseded information, verbose explanations that led to simple conclusions, failed attempts that were abandoned\n3. **Summarize**: Multi-turn explorations into their conclusions, lengthy discussions into key points, iterative refinements into final versions\n4. **Keep verbatim**: Code snippets still relevant, specific names/values/URLs, exact user requirements, any content the user explicitly asked to remember\n\n## Output Format\n\nReturn a compacted message array in the same OpenAI chat format:\n- Merge assistant knowledge into a single \"context summary\" system or assistant message where appropriate\n- Preserve the most recent 2-3 exchanges verbatim to maintain conversational flow\n- Use concise prose, not bullet points, for summaries\n\n## Critical\n\nNever lose information that would cause the AI to:\n- Repeat questions already answered\n- Forget constraints or preferences stated\n- Lose track of the current task or goal\n- Miss context needed to understand recent messages"
+                },
+                {
+                    "role": "user",
+                    "content": "Compact the following conversation while preserving all context needed to continue it coherently. The conversation has {message_count} messages totaling approximately {token_count} tokens. Target approximately {target_tokens} tokens.\n\n<conversation>\n{messages_json}\n</conversation>\n\nReturn your response as a JSON object with a single \"messages\" key containing the compacted array. Do not include any text before or after the JSON. Do not wrap in markdown code fences.\n\nExample output structure:\n{\"messages\":[{\"role\":\"system\",\"content\":\"...\"},{\"role\":\"user\",\"content\":\"...\"}]}"
+                }
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "compacted_conversation",
+                    "strict": true,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "messages": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "role": {
+                                            "type": "string",
+                                            "enum": [
+                                                "system",
+                                                "user",
+                                                "assistant"
+                                            ]
+                                        },
+                                        "content": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "role",
+                                        "content"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            }
+                        },
+                        "required": [
+                            "messages"
+                        ],
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "stream": false
         }
     },
     "limits": {

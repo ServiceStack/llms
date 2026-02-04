@@ -635,6 +635,110 @@ export const ToolOutput = {
     }
 }
 
+export const CompactThreadButton = {
+    template: `
+        <button v-if="currentThread.messages.length > 10 || percentUsed > 40" type="button" @click.stop="compactThread()"
+            class="ml-3 px-2 pt-0.5 rounded-lg text-xs font-semibold border transition-all select-none disabled:opacity-60 disabled:cursor-not-allowed"
+            :class="buttonClass"
+            :style="buttonStyle"
+            :title="tooltipText"
+            :disabled="compacting">
+            <span v-if="compacting" class="inline-flex items-center gap-1">
+                <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>compacting...</span>
+            </span>
+            <span v-else class="inline-flex items-center gap-x-1 font-mono tabular-nums">
+                <span v-if="percentUsed !== null">{{ percentUsed }}% used</span>
+                <span>·</span>
+                <span>compact</span>
+            </span>
+        </button>
+    `,
+    props: {
+        currentThread: Object,
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+        const contextTokens = computed(() => props.currentThread.contextTokens)
+        const contextLimit = computed(() => props.currentThread.modelInfo?.limit?.context)
+        const compacting = ref(false)
+
+        // Calculate percentage (0-100)
+        const percentUsed = computed(() => {
+            if (!contextLimit.value || !contextTokens.value) return null
+            return Math.round((contextTokens.value / contextLimit.value) * 100)
+        })
+
+        // Calculate color intensity (0-1), maxing out at 70%
+        const colorIntensity = computed(() => {
+            if (percentUsed.value === null) return 0
+            // Scale so that 0% = 0 intensity, 70% = 1.0 intensity
+            return Math.min(1, percentUsed.value / 70)
+        })
+
+        // Dynamic button styling based on context usage
+        const buttonStyle = computed(() => {
+            const intensity = colorIntensity.value
+            // Only apply inline styles above the first threshold so class-based border is visible
+            if (intensity < 0.3) return {}
+
+            // Interpolate from neutral to warning colors
+            // Light mode: white -> orange-50/100
+            // Dark mode: gray-800 -> orange-900/800
+            const adjustedIntensity = (intensity - 0.3) / 0.7 // Scale 0.3-1.0 to 0-1
+
+            return {
+                backgroundColor: `rgba(255, 237, 213, ${adjustedIntensity * 0.8})`, // orange-100 with variable opacity
+                borderColor: `rgba(251, 146, 60, ${0.4 + adjustedIntensity * 0.6})`, // orange-400, starting at 40% opacity
+                color: `rgb(${Math.round(55 + (139 - 55) * adjustedIntensity)}, ${Math.round(65 - 40 * adjustedIntensity)}, ${Math.round(81 - 60 * adjustedIntensity)})` // gray-700 -> orange-900
+            }
+        })
+
+        // Class for dark mode and base styles
+        const buttonClass = computed(() => {
+            const intensity = colorIntensity.value
+            if (intensity < 0.3) {
+                return 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            } else if (intensity < 0.7) {
+                return 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/50'
+            } else {
+                return 'border-orange-400 dark:border-orange-600 bg-orange-100 dark:bg-orange-900/50 text-orange-900 dark:text-orange-200 hover:bg-orange-200 dark:hover:bg-orange-900/70'
+            }
+        })
+
+        const tooltipText = computed(() => {
+            if (!contextTokens.value || !contextLimit.value) return 'Compact thread'
+            return `${percentUsed.value}% context used - ${contextTokens.value.toLocaleString()} / ${contextLimit.value.toLocaleString()} tokens`
+        })
+
+        async function compactThread() {
+            compacting.value = true
+            const api = await ctx.postJson(`/ext/app/threads/${props.currentThread.id}/compact`)
+            if (api.response?.id) {
+                ctx.router.push(`/c/${api.response.id}`)
+            } else {
+                ctx.setError(api.error)
+            }
+            compacting.value = false
+        }
+
+        return {
+            compacting,
+            contextTokens,
+            contextLimit,
+            percentUsed,
+            colorIntensity,
+            buttonStyle,
+            buttonClass,
+            tooltipText,
+            compactThread,
+        }
+    }
+}
+
 export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
@@ -809,6 +913,7 @@ export const ChatBody = {
                                 <span :title="$fmt.statsTitle(currentThread.stats)">
                                     {{ currentThread.stats.cost ? $fmt.costLong(currentThread.stats.cost) + '  for ' : '' }} {{ $fmt.humanifyNumber(currentThread.stats.inputTokens) }} → {{ $fmt.humanifyNumber(currentThread.stats.outputTokens) }} tokens over {{ currentThread.stats.requests }} request{{currentThread.stats.requests===1?'':'s'}} in {{ $fmt.humanifyMs(currentThread.stats.duration * 1000) }}
                                 </span>
+                                <CompactThreadButton :currentThread="currentThread" />
                             </div>
 
                             <!-- Loading indicator -->

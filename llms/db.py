@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sqlite3
 import threading
 from queue import Empty, Queue
@@ -114,6 +115,92 @@ def order_by(all_columns, sort):
         if k in all_columns:
             cols.append(f"{k}{by}")
     return f"ORDER BY {', '.join(cols)} " if len(cols) > 0 else ""
+
+
+def count_tokens_approx(messages: list[dict]) -> int:
+    """
+    Approximate token count for chat completion messages without external libraries.
+
+    Handles various message formats:
+    - Simple string content: {"role": "user", "content": "hello"}
+    - Content arrays: {"role": "user", "content": [{"type": "text", "text": "hello"}]}
+    - Tool calls, images, etc.
+    """
+
+    def count_text_tokens(text: str) -> int:
+        if not text:
+            return 0
+
+        tokens = 0
+        chunks = re.findall(r"\d+|[a-zA-Z]+|[^\s\w]|\s+", text)
+        for chunk in chunks:
+            if not chunk.strip():
+                tokens += len(chunk) // 4
+            elif chunk.isdigit():
+                tokens += (len(chunk) + 2) // 3
+            elif chunk.isalpha():
+                tokens += 1 if len(chunk) <= 4 else (len(chunk) + 3) // 4
+            else:
+                tokens += len(chunk)
+        return tokens
+
+    def extract_text_content(value) -> str:
+        """Recursively extract text from various content structures."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            texts = []
+            for item in value:
+                if isinstance(item, dict):
+                    # Handle content blocks: {"type": "text", "text": "..."}
+                    if item.get("type") == "text" and "text" in item:
+                        texts.append(item["text"])
+                    # Handle tool use, tool results, etc.
+                    elif "content" in item:
+                        texts.append(extract_text_content(item["content"]))
+                    elif "text" in item:
+                        texts.append(item["text"])
+                elif isinstance(item, str):
+                    texts.append(item)
+            return " ".join(texts)
+        if isinstance(value, dict):
+            if "text" in value:
+                return value["text"]
+            if "content" in value:
+                return extract_text_content(value["content"])
+        return ""
+
+    total = 0
+    for message in messages:
+        # Message overhead
+        total += 4
+
+        role = message.get("role", "")
+        total += count_text_tokens(role)
+
+        content = message.get("content")
+        text = extract_text_content(content)
+        total += count_text_tokens(text)
+
+        # Handle thinking/reasoning content
+        for key in ["thinking", "reasoning", "reasoning_content"]:
+            if key in message:
+                text = extract_text_content(message[key])
+                total += count_text_tokens(text)
+
+        # Handle tool calls if present
+        if "tool_calls" in message:
+            for tool_call in message.get("tool_calls") or []:
+                if isinstance(tool_call, dict):
+                    fn = tool_call.get("function", {})
+                    total += count_text_tokens(fn.get("name", ""))
+                    total += count_text_tokens(fn.get("arguments", ""))
+    # Reply priming
+    total += 3
+
+    return total
 
 
 class DbManager:

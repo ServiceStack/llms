@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from llms.db import DbManager, order_by, select_columns, to_dto, valid_columns
+from llms.db import DbManager, count_tokens_approx, order_by, select_columns, to_dto, valid_columns
 
 
 def with_user(data, user):
@@ -58,6 +58,8 @@ class AppDB:
                 "error": "TEXT",
                 "ref": "TEXT",
                 "providerResponse": "JSON",
+                "contextTokens": "INTEGER",
+                "parentId": "INTEGER",
             },
             "request": {
                 "id": "INTEGER",
@@ -351,6 +353,7 @@ class AppDB:
                 self.ctx.cache_message_inline_data(m)
                 if "timestamp" not in m:
                     m["timestamp"] = initial_timestamp + idx
+            thread["contextTokens"] = count_tokens_approx(thread["messages"])
         return with_user(thread, user=user)
 
     def create_thread(self, thread: Dict[str, Any], user=None):

@@ -310,6 +310,8 @@ export function fnv1a(str) {
 }
 export const hashString = fnv1a
 
+export const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
 export function utilsFunctions() {
     return {
         nextId,
@@ -328,5 +330,6 @@ export function utilsFunctions() {
         encodeHtml,
         sanitizeHtml,
         hashString,
+        sleep,
     }
 }

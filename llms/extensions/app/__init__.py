@@ -1,11 +1,14 @@
 import asyncio
 import json
 import os
+import re
 import time
 from datetime import datetime
 from typing import Any
 
 from aiohttp import web
+
+from llms.db import count_tokens_approx
 
 from .db import AppDB
 
@@ -52,6 +55,7 @@ def install(ctx):
         "metadata",
         "error",
         "ref",
+        "contextTokens",
     ]
 
     def thread_dto(row):
@@ -320,6 +324,112 @@ def install(ctx):
         return web.json_response(summary)
 
     ctx.add_get("requests/summary/{day}", daily_requests_summary)
+
+    async def sync_thread(request):
+        user = ctx.get_username(request)
+        take = min(int(request.query.get("take", "200")), 1000)
+
+        threads = g_db.query_threads({"null": "contextTokens", "take": take}, user=user)
+        updated = 0
+        for thread in threads:
+            id = thread["id"]
+            messages = json.loads(thread["messages"])
+            context_tokens = count_tokens_approx(messages)
+            await g_db.update_thread_async(id, {"contextTokens": context_tokens}, user=user)
+            updated += 1
+
+        return web.json_response({"updated": updated})
+
+    ctx.add_get("threads/sync", sync_thread)
+
+    async def compact_thread(request):
+        id = request.match_info["id"]
+        user = ctx.get_username(request)
+        thread = g_db.get_thread(id, user=user)
+        if not thread:
+            raise Exception("Thread not found")
+
+        messages_json = thread["messages"]
+        thread_messages = json.loads(messages_json)
+        message_count = len(thread_messages)
+        token_count = count_tokens_approx(thread_messages)
+        target_tokens = int(token_count * 0.3)  # 30% of original
+
+        compact_template = ctx.config["defaults"]["compact"] if "compact" in ctx.config.get("defaults", {}) else None
+        if not compact_template:
+            raise Exception("'compact' template not found in llms.json defaults")
+
+        compact_template = compact_template.copy()
+        compact_template_messages = compact_template["messages"].copy()
+        user_message = compact_template_messages[-1].copy()
+        user_content = user_message.get("content", "")
+        if not user_content and not isinstance(user_content, str):
+            raise Exception("'compact' template has no user message")
+        if "{messages_json}" not in user_content:
+            raise Exception("'compact' template has no {messages_json} placeholder")
+        user_content = user_content.replace("{message_count}", str(message_count), 1)
+        user_content = user_content.replace("{token_count}", str(token_count), 1)
+        user_content = user_content.replace("{target_tokens}", str(target_tokens), 1)
+        user_content = user_content.replace("{messages_json}", messages_json, 1)
+        user_message["content"] = user_content
+        compact_template_messages[-1] = user_message
+        compact_template["messages"] = compact_template_messages
+
+        ctx.dbg(f"compact_thread: {id} / {message_count} / {token_count} / {target_tokens}\n{user_content}\n")
+        context = {"chat": compact_template, "tools": "none", "user": user}
+        response = await ctx.chat_completion(compact_template, context=context)
+
+        answer = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not answer:
+            raise Exception("No answer in compact response")
+
+        ctx.dbg(answer)
+        compact_messages_response = ctx.parse_json_response(answer)
+        if "messages" in compact_messages_response:
+            compact_messages = compact_messages_response["messages"]
+        elif (
+            isinstance(compact_messages_response, list)
+            and len(compact_messages_response) > 0
+            and compact_messages_response[0].get("role")
+        ):
+            compact_messages = compact_messages_response
+        else:
+            raise Exception("Invalid compact messages response")
+
+        threadId = context.get("threadId")
+        if not threadId:
+            raise Exception("Thread not found")
+        compact_tokens = count_tokens_approx(compact_messages)
+
+        update_thread = {
+            "user": user,
+            "title": thread.get("title"),
+            "systemPrompt": thread.get("systemPrompt"),
+            "model": thread.get("model"),
+            "modelInfo": thread.get("modelInfo"),
+            "modalities": thread.get("modalities"),
+            "messages": compact_messages,
+            "toolHistory": thread.get("toolHistory"),
+            "args": thread.get("args"),
+            "tools": thread.get("tools"),
+            "provider": thread.get("provider"),
+            "providerModel": thread.get("providerModel"),
+            "completedAt": datetime.now(),
+            "metadata": thread.get("metadata"),
+            "ref": thread.get("ref"),
+            "providerResponse": response,
+            "contextTokens": compact_tokens,
+            "parentId": thread.get("id"),
+        }
+        await g_db.update_thread_async(threadId, update_thread, user=user)
+
+        return web.json_response(
+            {
+                "id": threadId,
+            }
+        )
+
+    ctx.add_post("threads/{id}/compact", compact_thread)
 
     async def chat_request(openai_request, context):
         chat = openai_request
