@@ -131,7 +131,7 @@
                 },
                 {
                     "role": "user",
-                    "content": "Compact the following conversation while preserving all context needed to continue it coherently. The conversation has {message_count} messages totaling approximately {token_count} tokens. Target approximately {target_tokens} tokens.\n\n<conversation>\n{messages_json}\n</conversation>\n\nReturn your response as a JSON object with a single \"messages\" key containing the compacted array. Do not include any text before or after the JSON. Do not wrap in markdown code fences.\n\nExample output structure:\n{\"messages\":[{\"role\":\"system\",\"content\":\"...\"},{\"role\":\"user\",\"content\":\"...\"}]}"
+                    "content": "Compact the following conversation while preserving all context needed to continue it coherently. The conversation has {message_count} messages totaling approximately {token_count} tokens. Target approximately {target_tokens} tokens.\n\n<conversation>\n{messages_json}\n</conversation>\n\nReturn your response as a JSON object with a single \"messages\" key containing the compacted array."
                 }
             ],
             "response_format": {

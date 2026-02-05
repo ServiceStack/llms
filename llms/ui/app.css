@@ -419,6 +419,9 @@
   .top-4 {
     top: calc(var(--spacing) * 4);
   }
+  .top-12 {
+    top: calc(var(--spacing) * 12);
+  }
   .top-full {
     top: 100%;
   }
@@ -454,6 +457,9 @@
   }
   .left-1\/2 {
     left: calc(1/2 * 100%);
+  }
+  .left-2 {
+    left: calc(var(--spacing) * 2);
   }
   .left-3 {
     left: calc(var(--spacing) * 3);
@@ -499,6 +505,9 @@
   }
   .col-span-12 {
     grid-column: span 12 / span 12;
+  }
+  .float-left {
+    float: left;
   }
   .container {
     width: 100%;
@@ -556,6 +565,12 @@
   }
   .my-4 {
     margin-block: calc(var(--spacing) * 4);
+  }
+  .-mt-0 {
+    margin-top: calc(var(--spacing) * -0);
+  }
+  .-mt-0\.5 {
+    margin-top: calc(var(--spacing) * -0.5);
   }
   .-mt-1 {
     margin-top: calc(var(--spacing) * -1);
@@ -785,6 +800,9 @@
   }
   .h-4 {
     height: calc(var(--spacing) * 4);
+  }
+  .h-4\.5 {
+    height: calc(var(--spacing) * 4.5);
   }
   .h-5 {
     height: calc(var(--spacing) * 5);
@@ -2164,6 +2182,12 @@
   .pr-12 {
     padding-right: calc(var(--spacing) * 12);
   }
+  .pb-0 {
+    padding-bottom: calc(var(--spacing) * 0);
+  }
+  .pb-0\.5 {
+    padding-bottom: calc(var(--spacing) * 0.5);
+  }
   .pb-1 {
     padding-bottom: calc(var(--spacing) * 1);
   }
@@ -2291,6 +2315,14 @@
   }
   .text-\[11px\] {
     font-size: 11px;
+  }
+  .leading-2 {
+    --tw-leading: calc(var(--spacing) * 2);
+    line-height: calc(var(--spacing) * 2);
+  }
+  .leading-3 {
+    --tw-leading: calc(var(--spacing) * 3);
+    line-height: calc(var(--spacing) * 3);
   }
   .leading-4 {
     --tw-leading: calc(var(--spacing) * 4);

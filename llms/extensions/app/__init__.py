@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import re
 import time
 from datetime import datetime
 from typing import Any
@@ -56,6 +55,7 @@ def install(ctx):
         "error",
         "ref",
         "contextTokens",
+        "parentId",
     ]
 
     def thread_dto(row):
