@@ -54,6 +54,7 @@ def resolve_user_skills_path(ctx, user):
     user_path = ctx.get_user_path(user)
     return os.path.join(user_path, "skills")
 
+
 def resolve_skills_write_path(ctx, user=None):
     if user:
         user_skills_path = resolve_user_skills_path(ctx, user)
@@ -62,6 +63,7 @@ def resolve_skills_write_path(ctx, user=None):
     home_skills = ctx.get_home_path(os.path.join(".agent", "skills"))
     os.makedirs(home_skills, exist_ok=True)
     return home_skills
+
 
 def resolve_all_skills(ctx, user=None):
     home_skills = ctx.get_home_path(os.path.join(".agent", "skills"))
@@ -100,36 +102,40 @@ def resolve_all_skills(ctx, user=None):
                     or os.path.exists(os.path.join(entry.path, "skill.md"))
                 ):
                     skill_dir = Path(entry.path).resolve()
-                    props = read_properties(skill_dir)
+                    try:
+                        props = read_properties(skill_dir)
 
-                    # recursivly list all files in this directory
-                    files = []
-                    for file in skill_dir.glob("**/*"):
-                        if file.is_file():
-                            full_path = str(file)
-                            rel_path = full_path[len(str(skill_dir)) + 1 :]
-                            files.append(rel_path)
+                        # recursivly list all files in this directory
+                        files = []
+                        for file in skill_dir.glob("**/*"):
+                            if file.is_file():
+                                full_path = str(file)
+                                rel_path = full_path[len(str(skill_dir)) + 1 :]
+                                files.append(rel_path)
 
-                    writable = False
-                    if ctx.is_auth_enabled():
-                        writable = user_skills_path and is_safe_path(user_skills_path, skill_dir)
-                    else:
-                        writable = is_safe_path(home_skills, skill_dir) or is_safe_path(local_skills, skill_dir)
+                        writable = False
+                        if ctx.is_auth_enabled():
+                            writable = user_skills_path and is_safe_path(user_skills_path, skill_dir)
+                        else:
+                            writable = is_safe_path(home_skills, skill_dir) or is_safe_path(local_skills, skill_dir)
 
-                    skill_props = props.to_dict()
-                    skill_props.update(
-                        {
-                            "group": group,
-                            "location": str(skill_dir),
-                            "files": files,
-                            "writable": bool(writable),
-                        }
-                    )
-                    ret[props.name] = skill_props
+                        skill_props = props.to_dict()
+                        skill_props.update(
+                            {
+                                "group": group,
+                                "location": str(skill_dir),
+                                "files": files,
+                                "writable": bool(writable),
+                            }
+                        )
+                        ret[props.name] = skill_props
+                    except Exception as e:
+                        ctx.log(f"Failed to load skill {entry.name} from {skill_dir}: {e}")
 
         except OSError:
             pass
     return ret
+
 
 def assert_valid_location(ctx, location, user):
     if ctx.is_auth_enabled() and not user:
@@ -148,6 +154,7 @@ def assert_valid_location(ctx, location, user):
     # Otherwise only allow modifications to skills in home or local .agent directory
     if not is_safe_path(home_skills_path, location) and not is_safe_path(local_skills_path, location):
         raise Exception("Cannot modify skills outside of allowed directories")
+
 
 def install(ctx):
     home_skills = ctx.get_home_path(os.path.join(".agent", "skills"))
@@ -206,7 +213,7 @@ def install(ctx):
 
         user = ctx.assert_username(request)
         write_skill_path = resolve_skills_write_path(ctx, user=user)
-        
+
         # Install from GitHub
         from .installer import install_from_github
 
@@ -485,7 +492,10 @@ def install(ctx):
             files = skill.get("files")
             if files and len(files) > 1:
                 content += "\n\n## Skill Files:\n```\n"
-                return content
+                content += "\n".join(files)
+                content += "\n```"
+
+            return content
 
     ctx.register_tool(skill, group="core_tools")
 
