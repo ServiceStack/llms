@@ -1304,15 +1304,6 @@ class OpenAiCompatible:
                 return self.to_response(await response_json(response), chat, started_at, context=context)
 
 
-class MistralProvider(OpenAiCompatible):
-    sdk = "@ai-sdk/mistral"
-
-    def __init__(self, **kwargs):
-        if "api" not in kwargs:
-            kwargs["api"] = "https://api.mistral.ai/v1"
-        super().__init__(**kwargs)
-
-
 class GroqProvider(OpenAiCompatible):
     sdk = "@ai-sdk/groq"
 
@@ -2922,7 +2913,6 @@ class AppExtensions:
         }
         self.all_providers = [
             OpenAiCompatible,
-            MistralProvider,
             GroqProvider,
             XaiProvider,
             CodestralProvider,

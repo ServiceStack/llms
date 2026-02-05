@@ -390,5 +390,66 @@
                 }
             }
         }
+    },
+    "mistral": {
+        "models": {
+            "voxtral-mini-latest": {
+                "id": "voxtral-mini-latest",
+                "name": "Voxtral Mini Chat",
+                "family": "mistral",
+                "attachment": false,
+                "reasoning": false,
+                "tool_call": true,
+                "temperature": true,
+                "release_date": "2026-02-01",
+                "last_updated": "2026-02-01",
+                "modalities": {
+                    "input": [
+                        "audio",
+                        "text"
+                    ],
+                    "output": [
+                        "text"
+                    ]
+                },
+                "open_weights": false,
+                "cost": {
+                    "input": 0.04,
+                    "output": 0.04
+                },
+                "limit": {
+                    "context": 16384,
+                    "output": 16384
+                }
+            },
+            "voxtral-mini-transcription": {
+                "id": "voxtral-mini-transcription",
+                "name": "Voxtral Mini Transcription",
+                "family": "mistral",
+                "attachment": false,
+                "reasoning": false,
+                "tool_call": false,
+                "temperature": false,
+                "release_date": "2026-02-01",
+                "last_updated": "2026-02-01",
+                "modalities": {
+                    "input": [
+                        "audio"
+                    ],
+                    "output": [
+                        "text"
+                    ]
+                },
+                "open_weights": false,
+                "cost": {
+                    "input": 0.003,
+                    "output": 0
+                },
+                "limit": {
+                    "context": 16384,
+                    "output": 16384
+                }
+            }
+        }
     }
 }
