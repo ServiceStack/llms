@@ -5,7 +5,7 @@ import aiohttp
 
 
 def install_openrouter(ctx):
-    from llms.main import GeneratorBase
+    from llms.main import GeneratorBase, OpenAiCompatible
 
     # https://openrouter.ai/docs/guides/overview/multimodal/image-generation
     class OpenRouterGenerator(GeneratorBase):
@@ -53,6 +53,8 @@ def install_openrouter(ctx):
                 chat_url = provider.chat_url
                 # remove tools
                 chat.pop("tools", None)
+                # most image models fail if specifying text modality, e.g: ["image","text"]
+                chat["modalities"] = ["image"]
                 chat = await self.process_chat(chat, provider_id=self.id)
                 ctx.log(f"POST {chat_url}")
                 ctx.log(provider.chat_summary(chat))
@@ -71,4 +73,12 @@ def install_openrouter(ctx):
                         self.to_response(await self.response_json(response), chat, started_at, context=context)
                     )
 
+    class OpenRouterProvider(OpenAiCompatible):
+        sdk = "@openrouter/ai-sdk-provider"
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.modalities["image"] = OpenRouterGenerator(**kwargs)
+
     ctx.add_provider(OpenRouterGenerator)
+    ctx.add_provider(OpenRouterProvider)

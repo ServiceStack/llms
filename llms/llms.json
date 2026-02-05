@@ -431,13 +431,7 @@
         },
         "openrouter": {
             "enabled": true,
-            "id": "openrouter",
-            "modalities": {
-                "image": {
-                    "name": "OpenRouter Image",
-                    "npm": "openrouter/image"
-                }
-            }
+            "id": "openrouter"
         },
         "nvidia": {
             "enabled": true,
