@@ -479,6 +479,7 @@ export function useChatPrompt(ctx) {
 const VoiceInput = {
     template: `
         <button v-if="$state.config.extensions.includes('voice')" type="button" 
+            ref="voiceBtn"
             @click="toggleRecording"
             :class="['absolute bottom-12 right-2 size-8 flex items-center justify-center rounded-full hover:shadow transition-colors',
                 isRecording 
@@ -502,6 +503,7 @@ const VoiceInput = {
     `,
     setup() {
         const ctx = inject('ctx')
+        const voiceBtn = ref(null)
         const isRecording = ref(false)
 
         let mediaRecorder = null
@@ -561,6 +563,8 @@ const VoiceInput = {
                 }
                 mediaRecorder.start()
                 isRecording.value = true
+                // Focus the voice button to prevent textarea keyboard interference
+                voiceBtn.value?.focus()
             } catch (err) {
                 ctx.setError({ message: "Error accessing microphone: " + err.message })
                 isProcessing.value = false
@@ -584,6 +588,9 @@ const VoiceInput = {
                 e.preventDefault()
 
                 if (isProcessing.value) return
+
+                // Already triggered by key, ignore until key is released
+                if (triggeredByKey.value) return
 
                 if (!isRecording.value) {
                     // Start Recording (Press)
@@ -628,6 +635,7 @@ const VoiceInput = {
         })
 
         return {
+            voiceBtn,
             isProcessing,
             isRecording,
             toggleRecording,
