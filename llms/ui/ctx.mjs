@@ -299,14 +299,20 @@ export class AppContext {
     }
     togglePath(path, { left = true } = {}) {
         const currentPath = this.router.currentRoute.value?.path
-        console.log('togglePath', path, currentPath, left)
-        if (currentPath != path) {
+        const isSamePath = currentPath === path
+        console.log('togglePath', path, currentPath, left, isSamePath)
+        if (!isSamePath) {
             this.router.push({ path })
         }
-        if (left !== undefined) {
-            this.toggleLayout('left', left)
+        // When navigating to a new path, show sidebar (left=true)
+        // When clicking on same path, toggle the sidebar (left=undefined)
+        const toggleValue = isSamePath ? undefined : left
+        if (toggleValue !== undefined) {
+            this.toggleLayout('left', toggleValue)
+        } else {
+            this.toggleLayout('left') // toggle
         }
-        return left
+        return this.layoutVisible('left')
     }
     setThreadHeaders(components) {
         Object.assign(this.threadHeaderComponents, components)
