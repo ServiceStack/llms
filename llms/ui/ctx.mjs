@@ -315,6 +315,9 @@ export class AppContext {
         Object.assign(this.threadFooterComponents, components)
     }
 
+    async createJsonResult(res) {
+        return this.ai.createJsonResult(res)
+    }
     createErrorStatus(status) {
         return this.ai.createErrorStatus(status)
     }

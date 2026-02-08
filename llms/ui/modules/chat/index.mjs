@@ -1,8 +1,7 @@
-
-import { ref, watch, computed, nextTick, inject } from 'vue'
+import { ref, watch, computed, nextTick, inject, onMounted, onUnmounted } from 'vue'
 import { $$, createElement, lastRightPart, ApiResult, createErrorStatus } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
-import { ChatBody, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, ViewToolTypes, TextViewer, ToolArguments, ToolOutput, MessageUsage, MessageReasoning, CompactThreadButton } from './ChatBody.mjs'
+import { ChatBody, ErrorBubble, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, ViewToolTypes, TextViewer, ToolArguments, ToolOutput, MessageUsage, MessageReasoning, CompactThreadButton } from './ChatBody.mjs'
 import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
@@ -477,6 +476,157 @@ export function useChatPrompt(ctx) {
     }
 }
 
+const VoiceInput = {
+    template: `
+        <button v-if="$state.config.extensions.includes('voice')" type="button" 
+            @click="toggleRecording"
+            :class="['absolute bottom-12 right-2 size-8 flex items-center justify-center rounded-full hover:shadow transition-colors',
+                isRecording 
+                    ? 'border bg-red-100 border-red-400 text-red-600 dark:bg-red-900/30 dark:border-red-600 dark:text-red-400 animate-pulse' 
+                    : isProcessing
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 animate-spin'
+                        : 'bg-white text-gray-400 hover:text-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+            :title="isProcessing ? 'Processing...' : 'Record voice (Alt+D)'"
+        >
+            <svg v-if="isProcessing" class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+            </svg>
+            <svg v-else class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+        </button>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const isRecording = ref(false)
+
+        let mediaRecorder = null
+        let audioChunks = []
+
+        const isProcessing = ref(false)
+
+        const stopRecording = () => {
+            if (mediaRecorder && isRecording.value) {
+                isProcessing.value = true
+                mediaRecorder.stop()
+                isRecording.value = false
+                mediaRecorder.stream.getTracks().forEach(track => track.stop())
+            }
+        }
+
+        const startRecording = async () => {
+            if (isProcessing.value) return
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                mediaRecorder = new MediaRecorder(stream)
+                audioChunks = []
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data)
+                }
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+                    const fileName = `voice-${Date.now()}.webm`
+
+                    const audioFile = new File([audioBlob], fileName, { type: 'audio/webm' })
+                    const formData = new FormData()
+                    formData.append('file', audioFile)
+                    const res = await ctx.postForm('/transcribe', {
+                        body: formData
+                    })
+                    const api = await ctx.createJsonResult(res)
+                    if (api.response) {
+                        if (ctx.chat.messageText.value) {
+                            const lastChar = ctx.chat.messageText.value.slice(-1)
+                            ctx.chat.messageText.value += (lastChar === ' ' || lastChar === '\n' ? '' : ' ') + api.response.text
+                        } else {
+                            ctx.chat.messageText.value = api.response.text || ''
+                        }
+                        document.getElementById('messageText')?.focus()
+                    } else {
+                        ctx.setError(api.error)
+                    }
+                    isProcessing.value = false
+                }
+                mediaRecorder.start()
+                isRecording.value = true
+            } catch (err) {
+                ctx.setError({ message: "Error accessing microphone: " + err.message })
+                isProcessing.value = false
+            }
+        }
+
+        const toggleRecording = () => {
+            if (isProcessing.value) return
+            if (isRecording.value) {
+                stopRecording()
+            } else {
+                startRecording()
+            }
+        }
+
+        const triggeredByKey = ref(false)
+        const recordingStartTime = ref(0)
+
+        const onWindowKeyDown = (e) => {
+            if (e.altKey && (e.key === 'd' || e.code === 'KeyD') && !e.repeat) {
+                e.preventDefault()
+
+                if (isProcessing.value) return
+
+                if (!isRecording.value) {
+                    // Start Recording (Press)
+                    triggeredByKey.value = true
+                    recordingStartTime.value = Date.now()
+                    startRecording()
+                } else if (!triggeredByKey.value) {
+                    // Already recording but NOT by holding key (i.e. was toggled on)
+                    // Treat this press as a Toggle OFF command
+                    stopRecording()
+                }
+            }
+        }
+
+        const onWindowKeyUp = (e) => {
+            if (triggeredByKey.value && (e.key === 'd' || e.code === 'KeyD' || e.key === 'Alt')) {
+                // If either key is released, check duration
+                // We use a small threshold to distinguish between a tap (toggle) and a hold (PTT)
+                const duration = Date.now() - recordingStartTime.value
+                if (duration < 500) {
+                    // Short press -> Treated as Toggle ON. 
+                    // Do NOT stop recording.
+                    // Clear triggeredByKey so subsequent key events treat it as toggled state.
+                    triggeredByKey.value = false
+                } else {
+                    // Long press -> Treated as Push-to-Talk.
+                    // Stop recording immediately on release.
+                    stopRecording()
+                    triggeredByKey.value = false
+                }
+            }
+        }
+
+        onMounted(() => {
+            document.addEventListener('keydown', onWindowKeyDown)
+            document.addEventListener('keyup', onWindowKeyUp)
+        })
+
+        onUnmounted(() => {
+            document.removeEventListener('keydown', onWindowKeyDown)
+            document.removeEventListener('keyup', onWindowKeyUp)
+        })
+
+        return {
+            isProcessing,
+            isRecording,
+            toggleRecording,
+        }
+    }
+}
+
 const ChatPrompt = {
     template: `
     <div class="mx-auto max-w-3xl">
@@ -510,7 +660,7 @@ const ChatPrompt = {
 
             <div class="flex-1">
                 <div class="relative">
-                    <textarea
+                    <textarea id="messageText"
                         ref="refMessage"
                         v-model="messageText"
                         @keydown="onKeyDown"
@@ -521,15 +671,15 @@ const ChatPrompt = {
                         @dragleave="onDragLeave"
                         @drop="onDrop"
                         placeholder="Type message... (Enter to send, Shift+Enter for new line, drag & drop or paste files)"
-                        rows="3"
                         :class="[
-                            'block w-full rounded-md border px-3 py-2 pr-12 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1',
+                            'h-22 block w-full rounded-md border px-3 py-2 pr-12 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1',
                             isDragging
                                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-500'
                                 : 'border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500'
                         ]"
                         :disabled="$threads.watchingThread || !model"
                     ></textarea>
+                    <VoiceInput />
                     <button v-if="!$threads.watchingThread" title="Send (Enter)" type="button"
                         @click="sendMessage"
                         :disabled="!messageText.trim() || $threads.watchingThread || !model"
@@ -599,12 +749,7 @@ const ChatPrompt = {
         const historyIndex = ref(-1)
         const isNavigatingHistory = ref(false)
 
-        // File attachments (+) handlers
-        const triggerFilePicker = () => {
-            if (fileInput.value) fileInput.value.click()
-        }
-        const onFilesSelected = async (e) => {
-            const files = Array.from(e.target?.files || [])
+        const uploadFiles = async (files) => {
             if (files.length) {
                 // Upload files immediately
                 const uploadedFiles = await Promise.all(files.map(async f => {
@@ -636,6 +781,16 @@ const ChatPrompt = {
 
                 ctx.chat.attachedFiles.value.push(...uploadedFiles.filter(f => f))
             }
+        }
+
+        // File attachments (+) handlers
+        const triggerFilePicker = () => {
+            if (fileInput.value) fileInput.value.click()
+        }
+        const onFilesSelected = async (e) => {
+            const files = Array.from(e.target?.files || [])
+            await uploadFiles(files)
+
 
             // allow re-selecting the same file
             if (fileInput.value) fileInput.value.value = ''
@@ -926,6 +1081,8 @@ export default {
         ctx.components({
             SettingsDialog,
             ChatPrompt,
+            VoiceInput,
+            ErrorBubble,
 
             ChatBody,
             MessageUsage,

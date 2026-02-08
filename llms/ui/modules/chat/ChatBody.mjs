@@ -16,6 +16,41 @@ function isEmpty(v) {
     return !v || v === '{}' || v === '[]' || v === 'null' || v === 'undefined' || v === '""' || v === "''" || v === "``"
 }
 
+export const ErrorBubble = {
+    template: `
+    <!-- Error message bubble -->
+    <div v-if="$state.error" class="mt-8 flex items-start space-x-3">
+        <!-- Avatar outside the bubble -->
+        <div class="flex-shrink-0">
+            <div class="size-8 rounded-full bg-red-600 dark:bg-red-500 text-white flex items-center justify-center text-lg font-bold">
+                !
+            </div>
+        </div>
+
+        <!-- Error bubble -->
+        <div class="max-w-[85%] rounded-lg px-4 py-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 shadow-sm">
+            <div class="flex items-start space-x-2">
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-start">
+                        <div class="text-base font-medium mb-1">{{ $state.error?.errorCode || 'Error' }}</div>
+                        <button type="button" @click="$ctx.clearError()" title="Clear Error"
+                            class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-red-100 flex-shrink-0">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div v-if="$state.error?.message" class="text-base mb-1">{{ $state.error.message }}</div>
+                    <div v-if="$state.error?.stackTrace" class="mt-2 text-sm whitespace-pre-wrap break-words max-h-80 overflow-y-auto font-mono p-2 border border-red-200/70 dark:border-red-800/70">
+                        {{ $state.error.stackTrace }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `,
+}
+
 function embedHtml(html) {
     const resizeScript = `<script>
         let lastH = 0;
@@ -973,36 +1008,10 @@ export const ChatBody = {
                                 </button>
                             </div>
 
-                            <!-- Error message bubble -->
-                            <div v-if="$state.error" class="mt-8 flex items-start space-x-3">
-                                <!-- Avatar outside the bubble -->
-                                <div class="flex-shrink-0">
-                                    <div class="size-8 rounded-full bg-red-600 dark:bg-red-500 text-white flex items-center justify-center text-lg font-bold">
-                                        !
-                                    </div>
-                                </div>
-
-                                <!-- Error bubble -->
-                                <div class="max-w-[85%] rounded-lg px-4 py-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 shadow-sm">
-                                    <div class="flex items-start space-x-2">
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex justify-between items-start">
-                                                <div class="text-base font-medium mb-1">{{ $state.error?.errorCode || 'Error' }}</div>
-                                                <button type="button" @click="$ctx.clearError()" title="Clear Error"
-                                                    class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-red-100 flex-shrink-0">
-                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                            <div v-if="$state.error?.message" class="text-base mb-1">{{ $state.error.message }}</div>
-                                            <div v-if="$state.error?.stackTrace" class="mt-2 text-sm whitespace-pre-wrap break-words max-h-80 overflow-y-auto font-mono p-2 border border-red-200/70 dark:border-red-800/70">
-                                                {{ $state.error.stackTrace }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <ErrorBubble />
+                        </div>
+                        <div v-else>
+                            <ErrorBubble />
                         </div>
                         <ThreadFooter v-if="!$threads.watchingThread && $threads.threadDetails.value[currentThread.id]" :thread="$threads.threadDetails.value[currentThread.id]" />
                     </div>

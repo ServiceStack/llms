@@ -49,8 +49,9 @@ def install_mistral(ctx):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
 
-        async def chat(self, chat, provider=None, context=None):
-            headers = self.get_headers(provider, chat)
+        async def transcribe(self, file_bytes, filename, model=None, headers=None, context=None):
+            model = model or "voxtral-mini-latest"
+            headers = headers or self.get_headers()
             # Remove Content-Type to allow aiohttp to set it for FormData
             if "Content-Type" in headers:
                 del headers["Content-Type"]
@@ -59,6 +60,35 @@ def install_mistral(ctx):
             if "Authorization" in headers and "x-api-key" not in headers:
                 token = headers["Authorization"].replace("Bearer ", "")
                 headers["x-api-key"] = token
+
+            # Prepare FormData
+            data = aiohttp.FormData()
+            data.add_field("model", model)
+            data.add_field(
+                "file", file_bytes, filename=filename, content_type=mimetypes.guess_type(filename)[0] or "audio/mpeg"
+            )
+
+            ctx.log(f"POST {self.api_url} model={model} file={filename} ({len(file_bytes)} bytes)")
+
+            async with aiohttp.ClientSession() as session, session.post(
+                self.api_url, headers=headers, data=data
+            ) as response:
+                text = await response.text()
+                if response.status != 200:
+                    raise Exception(f"Mistral API Error {response.status}: {text}")
+
+                if context:
+                    context["providerResponse"] = text
+
+                try:
+                    result = json.loads(text)
+                except Exception:
+                    result = {"text": text}  # Fallback
+
+                return result
+
+        async def chat(self, chat, provider=None, context=None):
+            headers = self.get_headers(provider, chat)
 
             model = provider.provider_model(chat["model"]) or chat["model"] or "voxtral-mini-latest"
             # Replace internal alias with actual model name
@@ -110,50 +140,28 @@ def install_mistral(ctx):
             except Exception as e:
                 raise Exception(f"Failed to decode audio data: {e}") from e
 
-            # Prepare FormData
-            data = aiohttp.FormData()
-            data.add_field("model", model)
-            data.add_field(
-                "file", file_bytes, filename=filename, content_type=mimetypes.guess_type(filename)[0] or "audio/mpeg"
-            )
+            result = await self.transcribe(file_bytes, filename, model=model, headers=headers, context=context)
+            transcription = result.get("text", "")
 
-            ctx.log(f"POST {self.api_url} model={model} file={filename} ({len(file_bytes)} bytes)")
-
-            async with aiohttp.ClientSession() as session, session.post(
-                self.api_url, headers=headers, data=data
-            ) as response:
-                text = await response.text()
-                if response.status != 200:
-                    raise Exception(f"Mistral API Error {response.status}: {text}")
-
-                context["providerResponse"] = text
-
-                try:
-                    result = json.loads(text)
-                except Exception:
-                    result = {"text": text}  # Fallback
-
-                transcription = result.get("text", "")
-
-                ret = {
-                    "choices": [
-                        {
-                            "message": {
-                                "role": "assistant",
-                                "content": transcription,
-                            }
+            ret = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": transcription,
                         }
-                    ],
-                    "created": result.get("created", int(time.time())),
-                }
+                    }
+                ],
+                "created": result.get("created", int(time.time())),
+            }
 
-                if "model" in result:
-                    ret["model"] = result["model"]
+            if "model" in result:
+                ret["model"] = result["model"]
 
-                if "usage" in result:
-                    ret["usage"] = result["usage"]
+            if "usage" in result:
+                ret["usage"] = result["usage"]
 
-                return ret
+            return ret
 
     class MistralProvider(OpenAiCompatible):
         sdk = "@ai-sdk/mistral"

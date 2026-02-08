@@ -1047,7 +1047,7 @@ class GeneratorBase:
     async def response_json(self, response):
         return await response_json(response)
 
-    def get_headers(self, provider, chat):
+    def get_headers(self, provider=None, chat=None):
         headers = self.headers.copy()
         if provider is not None:
             headers["Authorization"] = f"Bearer {provider.api_key}"
@@ -3474,6 +3474,16 @@ class ExtensionContext:
     def parse_json_response(self, text: str) -> Dict[str, Any]:
         return parse_json_response(text)
 
+    def run_command(self, args):
+        try:
+            self.dbg(f"Running: {' '.join(args)}")
+            result = subprocess.run(args, check=True, capture_output=True)
+            if result.returncode != 0:
+                raise Exception(result.stderr)
+            return result
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"{args[0]} failed: {e.stderr}")  # noqa: B904
+
 
 def get_extensions_path():
     return os.getenv("LLMS_EXTENSIONS_DIR", home_llms_path("extensions"))
@@ -3738,6 +3748,7 @@ def create_arg_parser():
 
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
     parser.add_argument("--update-providers", action="store_true", help="Update local models.dev providers.json")
+    parser.add_argument("--reset-config", action="store_true", help="Reset ~/.llms/llms.json to default")
 
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -4354,6 +4365,7 @@ def cli_exec(cli_args, extra_args):
                 ret["defaults"] = g_config["defaults"]
             enabled, disabled = provider_status()
             ret["status"] = {"all": list(g_config["providers"].keys()), "enabled": enabled, "disabled": disabled}
+            ret["extensions"] = [ext.get("name") for ext in g_app.extensions]
             # Add auth configuration
             ret["requiresAuth"] = g_app.is_auth_enabled()
             ret["authTypes"] = [provider.__class__.__name__ for provider in g_app.auth_providers]
