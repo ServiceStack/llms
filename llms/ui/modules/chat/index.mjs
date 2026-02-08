@@ -522,12 +522,20 @@ const VoiceInput = {
             if (isProcessing.value) return
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                recordingStartTime.value = Date.now()
                 mediaRecorder = new MediaRecorder(stream)
                 audioChunks = []
                 mediaRecorder.ondataavailable = event => {
                     audioChunks.push(event.data)
                 }
                 mediaRecorder.onstop = async () => {
+                    // Ignore recordings less than 1 second - likely unintentional
+                    const recordingDuration = Date.now() - recordingStartTime.value
+                    if (recordingDuration < 1000) {
+                        console.debug(`Recording too short (${recordingDuration}ms), ignoring`)
+                        isProcessing.value = false
+                        return
+                    }
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
                     const fileName = `voice-${Date.now()}.webm`
 
