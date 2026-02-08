@@ -337,7 +337,7 @@ export const MessageUsage = {
             &#8226;
             {{ $fmt.humanifyNumber(usage.tokens) }} tokens
             <span v-if="usage.cost">&#183; {{ $fmt.tokenCostLong(usage.cost) }}</span>
-            <span v-if="usage.duration"> in {{ $fmt.humanifyMs(usage.duration * 1000) }}</span>
+            <span v-if="usage.duration"> in {{ $fmt.humanifyMs(usage.duration * 1000) }} <span v-if="usage.tokens > 0 && usage.duration > 0">({{ Math.round(usage.tokens / usage.duration) }} tk/s)</span></span>
         </span>
     </div>    
     `,
@@ -955,7 +955,7 @@ export const ChatBody = {
 
                             <div v-if="currentThread.stats && currentThread.stats.outputTokens" class="text-center text-gray-500 dark:text-gray-400 text-sm">
                                 <span :title="$fmt.statsTitle(currentThread.stats)">
-                                    {{ currentThread.stats.cost ? $fmt.costLong(currentThread.stats.cost) + '  for ' : '' }} {{ $fmt.humanifyNumber(currentThread.stats.inputTokens) }} → {{ $fmt.humanifyNumber(currentThread.stats.outputTokens) }} tokens over {{ currentThread.stats.requests }} request{{currentThread.stats.requests===1?'':'s'}} in {{ $fmt.humanifyMs(currentThread.stats.duration * 1000) }}
+                                    {{ currentThread.stats.cost ? $fmt.costLong(currentThread.stats.cost) + '  for ' : '' }} {{ $fmt.humanifyNumber(currentThread.stats.inputTokens) }} → {{ $fmt.humanifyNumber(currentThread.stats.outputTokens) }} tokens over {{ currentThread.stats.requests }} request{{currentThread.stats.requests===1?'':'s'}} in {{ $fmt.humanifyMs(currentThread.stats.duration * 1000) }} <span v-if="currentThread.stats.outputTokens > 0 && currentThread.stats.duration > 0">({{ Math.round(currentThread.stats.outputTokens / currentThread.stats.duration) }} tk/s)</span>
                                 </span>
                                 <CompactThreadButton :currentThread="currentThread" />
                             </div>
