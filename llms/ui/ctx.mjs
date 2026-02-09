@@ -136,7 +136,9 @@ export class AppContext {
         this.marked = marked
         this.markedFallback = markedFallback
 
-        this.state = reactive({})
+        this.state = reactive({
+            cacheBreaker: 1
+        })
         this.events = new EventBus()
         this.modalComponents = {}
         this.extensions = []
@@ -189,6 +191,15 @@ export class AppContext {
     }
     getColorScheme() {
         return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+    }
+    getUserAvatar() {
+        return this.resolveUrl(`/avatar/user?mode=${this.getColorScheme()}&t=${this.state.cacheBreaker}`)
+    }
+    getAgentAvatar() {
+        return this.resolveUrl(`/agents/avatar?mode=${this.getColorScheme()}&t=${this.state.cacheBreaker}`)
+    }
+    incCacheBreaker() {
+        this.state.cacheBreaker++
     }
     getPrefs() {
         return this.prefs

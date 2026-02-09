@@ -198,7 +198,190 @@ const ErrorViewer = {
         </div>
     `,
     setup() {
+    }
+}
 
+const SettingsPage = {
+    template: `
+    <div class="max-w-2xl mx-auto p-6">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-8">Settings</h1>
+        
+        <!-- User Avatar Section -->
+        <div class="mb-8 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">User Avatar</h2>
+            <div class="flex items-center gap-6">
+                <label for="userAvatarInput" class="relative group cursor-pointer">
+                    <img 
+                        :src="userAvatarUrl" 
+                        class="w-20 h-20 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shadow-md"
+                        alt="User Avatar"
+                    />
+                    <div class="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </div>
+                    <input id="userAvatarInput" type="file" class="hidden" accept="image/*" @change="uploadUserAvatar" />
+                </label>
+                <div class="flex-1">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        Upload a new image for your avatar
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <label for="userAvatarInput" class="cursor-pointer px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+                            <span>Choose File</span>
+                        </label>
+                        <span v-if="userUploading" class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Uploading...
+                        </span>
+                        <span v-if="userSuccess" class="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            Uploaded!
+                        </span>
+                    </div>
+                    <p v-if="userError" class="mt-2 text-sm text-red-600 dark:text-red-400">{{ userError }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Agent Avatar Section -->
+        <div class="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Agent Avatar</h2>
+            <div class="flex items-center gap-6">
+                <label for="agentAvatarInput" class="relative group cursor-pointer">
+                    <img 
+                        :src="agentAvatarUrl" 
+                        class="w-20 h-20 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shadow-md"
+                        alt="Agent Avatar"
+                    />
+                    <div class="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </div>
+                    <input id="agentAvatarInput" type="file" class="hidden" accept="image/*" @change="uploadAgentAvatar" />
+                </label>
+                <div class="flex-1">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        Upload a new image for your Agent's avatar
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <label for="agentAvatarInput" class="cursor-pointer px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+                            <span>Choose File</span>
+                        </label>
+                        <span v-if="agentUploading" class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Uploading...
+                        </span>
+                        <span v-if="agentSuccess" class="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            Uploaded!
+                        </span>
+                    </div>
+                    <p v-if="agentError" class="mt-2 text-sm text-red-600 dark:text-red-400">{{ agentError }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+
+        const userAvatarUrl = computed(() => ctx.getUserAvatar())
+        const agentAvatarUrl = computed(() => ctx.getAgentAvatar())
+
+        const userUploading = ref(false)
+        const userSuccess = ref(false)
+        const userError = ref('')
+        const agentUploading = ref(false)
+        const agentSuccess = ref(false)
+        const agentError = ref('')
+
+        async function uploadUserAvatar(event) {
+            const file = event.target.files?.[0]
+            if (!file) return
+
+            userUploading.value = true
+            userSuccess.value = false
+            userError.value = ''
+
+            try {
+                const formData = new FormData()
+                formData.append('file', file)
+
+                const response = await ctx.postForm('/user/avatar', { body: formData })
+                const result = await response.json()
+
+                if (response.ok && result.success) {
+                    userSuccess.value = true
+                    ctx.incCacheBreaker()
+                    setTimeout(() => { userSuccess.value = false }, 3000)
+                } else {
+                    userError.value = result.message || 'Upload failed'
+                }
+            } catch (e) {
+                userError.value = e.message || 'Upload failed'
+            } finally {
+                userUploading.value = false
+                event.target.value = ''
+            }
+        }
+
+        async function uploadAgentAvatar(event) {
+            const file = event.target.files?.[0]
+            if (!file) return
+
+            agentUploading.value = true
+            agentSuccess.value = false
+            agentError.value = ''
+
+            try {
+                const formData = new FormData()
+                formData.append('file', file)
+
+                const response = await ctx.postForm('/agents/avatar', { body: formData })
+                const result = await response.json()
+
+                if (response.ok && result.success) {
+                    agentSuccess.value = true
+                    ctx.incCacheBreaker()
+                    setTimeout(() => { agentSuccess.value = false }, 3000)
+                } else {
+                    agentError.value = result.message || 'Upload failed'
+                }
+            } catch (e) {
+                agentError.value = e.message || 'Upload failed'
+            } finally {
+                agentUploading.value = false
+                event.target.value = ''
+            }
+        }
+
+        return {
+            userAvatarUrl,
+            agentAvatarUrl,
+            userUploading,
+            userSuccess,
+            userError,
+            agentUploading,
+            agentSuccess,
+            agentError,
+            uploadUserAvatar,
+            uploadAgentAvatar,
+        }
     }
 }
 
@@ -210,6 +393,11 @@ export default {
             Avatar,
             SignIn,
             ErrorViewer,
+            SettingsPage,
         })
+
+        ctx.routes.push(...[
+            { path: '/settings', component: SettingsPage },
+        ])
     }
 }

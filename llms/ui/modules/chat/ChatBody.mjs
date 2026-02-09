@@ -879,17 +879,14 @@ export const ToolCall = {
 
 export const UserAvatar = {
     template: `
-        <img class="size-8 rounded-full" :src="'/avatar/user?mode=' + $ctx.getColorScheme()" />
+        <img class="size-8 rounded-full" :src="$ctx.getUserAvatar()" />
     `
 }
 
 export const AgentAvatar = {
     template: `
-        <img class="size-8 rounded-full bg-gray-200 dark:bg-gray-600" :src="'/agents/avatar/' + role + '?mode=' + $ctx.getColorScheme()" />
-    `,
-    props: {
-        role: String
-    }
+        <img class="size-8 rounded-full bg-gray-200 dark:bg-gray-600" :src="$ctx.getAgentAvatar()" />
+    `
 }
 
 export const ChatBody = {
@@ -930,7 +927,7 @@ export const ChatBody = {
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0 flex flex-col justify-center">
                                     <UserAvatar v-if="message.role === 'user'" />
-                                    <AgentAvatar v-else :role="message.role" />
+                                    <AgentAvatar v-else />
 
                                     <!-- Delete button (shown on hover) -->
                                     <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.timestamp)"

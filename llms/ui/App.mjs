@@ -5,20 +5,32 @@ import { AppContext } from "./ctx.mjs"
 // Vertical Sidebar Icons
 const LeftBar = {
     template: `
-        <div class="select-none flex flex-col space-y-2 pt-2.5 px-1">
-            <div v-for="(icon, id) in $ctx.left" :key="id" class="relative flex items-center justify-center">
-                <component :is="icon.component" 
-                    class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded block"
-                    :class="{ 'bg-gray-200 dark:bg-gray-700' : icon.isActive({ ...$layout }) }" 
-                    @mouseenter="tooltip = icon.id"
-                    @mouseleave="tooltip = ''"
-                    />
-                <div v-if="tooltip === icon.id && !icon.isActive({ ...$layout })" 
-                    class="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-800 rounded shadow-md z-50 whitespace-nowrap pointer-events-none" style="z-index: 60">
-                    {{icon.title ?? icon.name}}
-                </div>    
+        <div class="select-none flex flex-col justify-between h-full">
+            <!-- top icons -->
+            <div class="flex flex-col space-y-2 pt-2.5 px-1">
+                <div v-for="(icon, id) in $ctx.left" :key="id" class="relative flex items-center justify-center">
+                    <component :is="icon.component" 
+                        class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded block"
+                        :class="{ 'bg-gray-200 dark:bg-gray-700' : icon.isActive({ ...$layout }) }" 
+                        @mouseenter="tooltip = icon.id"
+                        @mouseleave="tooltip = ''"
+                        />
+                    <div v-if="tooltip === icon.id && !icon.isActive({ ...$layout })" 
+                        class="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-800 rounded shadow-md z-50 whitespace-nowrap pointer-events-none" style="z-index: 60">
+                        {{icon.title ?? icon.name}}
+                    </div>    
+                </div>
+            </div>
+            <!-- bottom icons -->
+            <div>
+                <div title="Settings" @click="$router.push($route.path == '/settings' ? '/' : '/settings')">
+                    <svg class="size-7 p-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded block" 
+                        :class="{ 'bg-gray-200 dark:bg-gray-700' : $route.path == '/settings' }" 
+                        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M19 7.5h-7.628a2.251 2.251 0 0 0-4.244 0H5V9h2.128a2.25 2.25 0 0 0 4.244 0H19zm0 7.5h-2.128a2.251 2.251 0 0 0-4.244 0H5v1.5h7.628a2.251 2.251 0 0 0 4.244 0H19z"/></svg>
+                </div>
             </div>
         </div>
+        
     `,
     setup() {
         const tooltip = ref('')
