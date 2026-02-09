@@ -54,7 +54,7 @@ def install_openai(ctx):
                 return "1024x1536"
             return "1024x1024"
 
-        async def to_response(self, response, chat, started_at):
+        async def to_response(self, response, chat, started_at, context=None):
             # go through all image responses and save them to cache
             # Try to extract and save images
             images = []
