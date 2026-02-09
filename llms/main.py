@@ -3012,9 +3012,9 @@ class AppExtensions:
 
         return False, None
 
-    def get_user_path(self, username: Optional[str] = None) -> str:
-        if username:
-            return home_llms_path(os.path.join("user", username))
+    def get_user_path(self, user: Optional[str] = None) -> str:
+        if user:
+            return home_llms_path(os.path.join("user", user))
         return home_llms_path(os.path.join("user", "default"))
 
     def get_providers(self) -> Dict[str, Any]:
@@ -3432,8 +3432,8 @@ class ExtensionContext:
     def get_username(self, request: web.Request) -> Optional[str]:
         return self.app.get_username(request)
 
-    def get_user_path(self, username: Optional[str] = None) -> str:
-        return self.app.get_user_path(username)
+    def get_user_path(self, user: Optional[str] = None) -> str:
+        return self.app.get_user_path(user)
 
     def context_to_username(self, context: Optional[Dict[str, Any]]) -> Optional[str]:
         if context and "request" in context:

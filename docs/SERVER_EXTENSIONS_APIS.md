@@ -471,7 +471,7 @@ if session:
 #### `get_username(request: web.Request) -> Optional[str]`
 Get the username from a request's session.
 
-#### `get_user_path(username: Optional[str] = None) -> str`
+#### `get_user_path(user: Optional[str] = None) -> str`
 Get the filesystem path for user-specific data.
 
 ```python

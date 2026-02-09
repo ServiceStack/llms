@@ -153,7 +153,7 @@ Get the session data for the current request.
 Get the authenticated username from the request.
 - **Returns**: `str` or `None`.
 
-### `get_user_path(username=None)`
+### `get_user_path(user=None)`
 Get the absolute path to a user's data directory.
 - **username**: `str` (Optional) - Specific username, otherwise uses current context or default.
 

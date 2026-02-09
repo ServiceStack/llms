@@ -14,10 +14,10 @@ def install(ctx):
     def get_user_prompts(request):
         candidate_paths = []
         # check if user is signed in
-        username = ctx.get_username(request)
-        if username:
+        user = ctx.get_username(request)
+        if user:
             # if signed in (Github OAuth), return the prompts for this user if exists
-            candidate_paths.append(os.path.join(ctx.get_user_path(username), "system_prompts", "prompts.json"))
+            candidate_paths.append(os.path.join(ctx.get_user_path(user), "system_prompts", "prompts.json"))
         # return default prompts for all users if exists
         candidate_paths.append(os.path.join(ctx.get_user_path(), "system_prompts", "prompts.json"))
         # otherwise return the default prompts from this repo
