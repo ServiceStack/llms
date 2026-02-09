@@ -19,7 +19,7 @@ def install_nvidia(ctx):
             self.mode = kwargs.get("mode", "base")
             self.gen_url = kwargs.get("api", "https://ai.api.nvidia.com/v1/genai")
 
-        def to_response(self, response, chat, started_at):
+        def to_response(self, response, chat, started_at, context=None):
             if "artifacts" in response:
                 for artifact in response["artifacts"]:
                     base64 = artifact.get("base64")
