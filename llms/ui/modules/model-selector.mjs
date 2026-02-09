@@ -685,7 +685,7 @@ const ModelSelectorModal = {
 const ModelTooltip = {
     template: `
         <div v-if="model" 
-            class="absolute z-50 mt-10 ml-0 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 text-sm w-72">
+            class="absolute z-50 top-full mt-1 left-0 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 text-sm w-72">
             <div class="font-semibold text-gray-900 dark:text-gray-100 mb-2">{{ model.name }}</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{ model.provider }}</div>
             
@@ -744,7 +744,7 @@ const ModelTooltip = {
 const ModelSelector = {
     template: `
         <!-- Model Selector Button -->
-        <div class="pl-1.5 flex space-x-2">
+        <div class="pl-1.5 relative">
             <button type="button" @click="openDialog"
                 class="select-none flex items-center space-x-2 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 transition-colors w-full md:w-auto md:min-w-48 max-w-96"
                 @mouseenter="showTooltip = true"
