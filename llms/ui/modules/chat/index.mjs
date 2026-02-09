@@ -1112,6 +1112,7 @@ export default {
             ViewTypes,
             ViewToolTypes,
             TextViewer,
+            ToolCall,
             ToolArguments,
             ToolOutput,
             CompactThreadButton,

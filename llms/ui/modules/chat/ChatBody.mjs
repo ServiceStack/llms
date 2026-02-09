@@ -775,6 +775,107 @@ export const CompactThreadButton = {
     }
 }
 
+export const ToolCall = {
+    template: `
+        <div v-if="collapsed" @click="collapsed = !collapsed" class="cursor-pointer rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+            <!-- Tool Call Header -->
+            <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800 space-x-4">
+                <div class="flex items-center gap-2">
+                    <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                    <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{{ tool.function.name }}</span>
+                    <span v-if="toolSummary" :title="toolSummary" class="font-mono text-xs text-gray-700 dark:text-gray-300 truncate overflow-hidden xl:max-w-2xl lg:max-w-xl md:max-w-lg sm:max-w-sm max-w-xs">{{ toolSummary }}</span>
+                </div>
+                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium whitespace-nowrap">Tool Call</span>
+            </div>
+        </div>
+        <div v-else class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+            <!-- Tool Call Header -->
+            <div @click="collapsed = !collapsed" class="cursor-pointer px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800 space-x-4">
+                <div class="flex items-center gap-2">
+                    <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                    <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{{ tool.function.name }}</span>
+                </div>
+                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium whitespace-nowrap">Tool Call</span>
+            </div>
+            
+            <ToolArguments :value="tool.function.arguments" />
+
+            <ToolOutput :tool="tool" :output="toolOutput" />
+        </div>    
+    `,
+    props: {
+        thread: {
+            type: Object,
+            required: true
+        },
+        tool: {
+            type: Object,
+            required: true
+        }
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+
+        const collapsed = ref(true)
+        const toolOutput = computed(() => props.thread?.messages?.find(m => m.role === 'tool' && m.tool_call_id === props.tool.id))
+        const toolFailed = computed(() => {
+            const output = toolOutput.value
+            return output?.content?.includes('Error')
+        })
+        const toolArgs = computed(() => ctx.utils.toJsonObject(props.tool.function.arguments))
+        const toolSummary = computed(() => {
+            const toolName = props.tool.function.name
+            const args = toolArgs.value
+            const output = toolOutput.value
+            if (toolName == 'run_bash' && args.command) {
+                return args.command
+            }
+            else if (toolName == 'skill' && args.name) {
+                return args.name
+            }
+            else if (args.path) {
+                if (toolName == 'read_text_file') {
+                    return args.path + ' (' + ctx.fmt.humanifyNumber(output?.content?.length || 0) + ')'
+                } else if (toolName == 'directory_tree') {
+                    const tree = ctx.utils.toJsonObject(output?.content)
+                    let dirCount = 0
+                    let fileCount = 0
+                    const countItems = (items) => {
+                        if (!items) return
+                        items.forEach(item => {
+                            if (item.type == 'file') {
+                                fileCount++
+                            } else if (item.type == 'directory') {
+                                dirCount++
+                                countItems(item.children)
+                            }
+                        })
+                    }
+                    countItems(tree)
+                    return `${args.path} 📁${dirCount} 📄${fileCount}`
+                }
+                return args.path
+            } else if (toolName == 'open' && args.target) {
+                return args.target
+            } else if (toolName == 'computer') {
+                if (args.action) {
+                    return args.action
+                }
+            } else if (toolName.startsWith('run_') && args.code) {
+                const firstLine = args.code.split('\n')[0]
+                return firstLine
+            }
+            return ''
+        })
+
+        return {
+            collapsed,
+            toolSummary,
+            toolOutput,
+            toolFailed,
+        }
+    }
+}
 export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
@@ -837,7 +938,12 @@ export const ChatBody = {
                                 </div>
 
                                 <!-- Message bubble -->
-                                <div
+                                <div v-if="message.role === 'assistant' && !message.content?.trim() && message.tool_calls && message.tool_calls.length > 0">
+                                    <div v-if="message.tool_calls && message.tool_calls.length > 0" class="mb-3 space-y-4">
+                                        <ToolCall v-for="(tool, i) in message.tool_calls" :key="i" :thread="currentThread" :tool="tool" />
+                                    </div>
+                                </div>
+                                <div v-else
                                     class="message rounded-lg px-4 py-3 relative group"
                                     :class="message.role === 'user'
                                         ? 'bg-blue-100 dark:bg-blue-900 text-gray-900 dark:text-gray-100 border border-blue-200 dark:border-blue-700'
@@ -870,21 +976,7 @@ export const ChatBody = {
 
                                     <!-- Tool Calls & Outputs -->
                                     <div v-if="message.tool_calls && message.tool_calls.length > 0" class="mb-3 space-y-4">
-                                        <div v-for="(tool, i) in message.tool_calls" :key="i" class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
-                                            <!-- Tool Call Header -->
-                                            <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800 space-x-4">
-                                                <div class="flex items-center gap-2">
-                                                    <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                                                    <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{{ tool.function.name }}</span>
-                                                </div>
-                                                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Tool Call</span>
-                                            </div>
-                                            
-                                            <ToolArguments :value="tool.function.arguments" />
-
-                                            <ToolOutput :tool="tool" :output="getToolOutput(tool.id)" />
-
-                                        </div>
+                                        <ToolCall v-for="(tool, i) in message.tool_calls" :key="i" :thread="currentThread" :tool="tool" />
                                     </div>
 
                                     <!-- Tool Output (Orphaned) -->
