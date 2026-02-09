@@ -150,6 +150,7 @@ export class AppContext {
         this.threadFooterComponents = {}
         this.top = {}
         this.left = {}
+        this.leftTop = {}
         this.layout = reactive(storageObject(`llms.layout`))
         this.prefs = reactive(storageObject(ai.prefsKey))
         this._onRouterBeforeEach = []
@@ -186,11 +187,32 @@ export class AppContext {
             this[name] = global
         })
     }
+    getColorScheme() {
+        return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+    }
     getPrefs() {
         return this.prefs
     }
     setPrefs(o) {
         storageObject(this.ai.prefsKey, Object.assign(this.prefs, o))
+    }
+    _validateComponents(componentMap) {
+        Object.entries(componentMap).forEach(([id, def]) => {
+            if (!def.component) {
+                console.error(`Component Definition ${id} is missing component property`)
+            }
+            def.id = id
+            if (!def.name) {
+                def.name = humanize(id)
+            }
+            if (typeof def.isActive != 'function') {
+                def.isActive = () => false
+            }
+        })
+        return componentMap
+    }
+    setLeftTop(componentMap) {
+        Object.assign(this.leftTop, this._validateComponents(componentMap))
     }
     _validateIcons(icons) {
         Object.entries(icons).forEach(([id, icon]) => {

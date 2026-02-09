@@ -431,6 +431,82 @@ def install(ctx):
 
     ctx.add_post("threads/{id}/compact", compact_thread)
 
+    async def get_user_avatar(req):
+        user = ctx.get_username(req)
+        mode = req.query.get("mode", "light")
+
+        # Cache for 1 hour # "Cache-Control": "public, max-age=3600",
+        headers = {"Content-Type": "image/svg+xml"}
+
+        candidate_paths = [
+            os.path.join(ctx.get_user_path(user=user), "avatar." + mode + ".png"),
+            os.path.join(ctx.get_user_path(user=user), "avatar." + mode + ".svg"),
+            os.path.join(ctx.get_user_path(user=user), "avatar.png"),
+            os.path.join(ctx.get_user_path(user=user), "avatar.svg"),
+            os.path.join(ctx.get_user_path(), "avatar." + mode + ".png"),
+            os.path.join(ctx.get_user_path(), "avatar." + mode + ".svg"),
+            os.path.join(ctx.get_user_path(), "avatar.png"),
+            os.path.join(ctx.get_user_path(), "avatar.svg"),
+        ]
+
+        for path in candidate_paths:
+            if os.path.exists(path):
+                headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
+                return web.FileResponse(path, headers=headers)
+
+        # Fall back to default 'user' avatar
+        bg_color = "#1e3a8a" if mode == "dark" else "#bfdbfe"
+        text_color = "#f3f4f6" if mode == "dark" else "#111827"
+
+        default_avatar = f"""
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="color:{text_color}">
+            <circle cx="16" cy="16" r="16" fill="{bg_color}"/>
+            <g transform="translate(4, 4)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </g>
+        </svg>
+        """
+        return web.Response(text=default_avatar, headers=headers)
+
+    ctx.add_get("/avatar/user", get_user_avatar)
+
+    async def get_agent_avatar(req):
+        role = req.match_info["role"]
+        mode = req.query.get("mode", "light")
+
+        # Cache for 1 hour # "Cache-Control": "public, max-age=3600",
+        headers = {"Content-Type": "image/svg+xml"}
+
+        candidate_paths = [
+            os.path.join(ctx.get_user_path(), role + "." + mode + ".png"),
+            os.path.join(ctx.get_user_path(), role + "." + mode + ".svg"),
+            os.path.join(ctx.get_user_path(), role + ".png"),
+            os.path.join(ctx.get_user_path(), role + ".svg"),
+            os.path.join(ctx.get_user_path(), "agent." + mode + ".png"),
+            os.path.join(ctx.get_user_path(), "agent." + mode + ".svg"),
+            os.path.join(ctx.get_user_path(), "agent.png"),
+            os.path.join(ctx.get_user_path(), "agent.svg"),
+        ]
+
+        for path in candidate_paths:
+            if os.path.exists(path):
+                headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
+                return web.FileResponse(path, headers=headers)
+
+        # Fall back to default 'agent' avatar
+        bg_color = "#1f2937" if mode == "dark" else "#eceef1"
+        text_color = "#f3f4f6" if mode == "dark" else "#111827"
+
+        default_avatar = f"""
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="color:{text_color}">
+            <circle cx="16" cy="16" r="16" fill="{bg_color}"/>
+            <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 20v-8a2.667 2.667 0 1 1 5.333 0v8m-5.333-4h5.333m5.334-6.667v10.667" transform="translate(2.667, 1.5)"/>
+        </svg>
+        """
+        return web.Response(text=default_avatar, headers=headers)
+
+    ctx.add_get("/agents/avatar/{role}", get_agent_avatar)
+
     async def chat_request(openai_request, context):
         chat = openai_request
         user = context.get("user", None)

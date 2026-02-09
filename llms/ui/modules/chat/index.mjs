@@ -1,7 +1,11 @@
 import { ref, watch, computed, nextTick, inject, onMounted, onUnmounted } from 'vue'
 import { $$, createElement, lastRightPart, ApiResult, createErrorStatus } from "@servicestack/client"
 import SettingsDialog, { useSettings } from './SettingsDialog.mjs'
-import { ChatBody, ErrorBubble, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes, ViewToolTypes, TextViewer, ToolArguments, ToolOutput, MessageUsage, MessageReasoning, CompactThreadButton } from './ChatBody.mjs'
+import {
+    ChatBody, ErrorBubble, LightboxImage, TypeText, TypeImage, TypeAudio, TypeFile, ViewType, ViewTypes,
+    ViewToolTypes, TextViewer, ToolCall, ToolArguments, ToolOutput, MessageUsage, MessageReasoning,
+    CompactThreadButton, UserAvatar, AgentAvatar
+} from './ChatBody.mjs'
 import { AppContext } from '../../ctx.mjs'
 
 const imageExts = 'png,webp,jpg,jpeg,gif,bmp,svg,tiff,ico'.split(',')
@@ -1121,6 +1125,8 @@ export default {
             Home,
             ThreadHeader,
             ThreadFooter,
+            UserAvatar,
+            AgentAvatar,
         })
         ctx.setGlobals({
             chat: useChatPrompt(ctx)

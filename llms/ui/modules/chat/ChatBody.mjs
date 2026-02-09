@@ -876,6 +876,22 @@ export const ToolCall = {
         }
     }
 }
+
+export const UserAvatar = {
+    template: `
+        <img class="size-8 rounded-full" :src="'/avatar/user?mode=' + $ctx.getColorScheme()" />
+    `
+}
+
+export const AgentAvatar = {
+    template: `
+        <img class="size-8 rounded-full bg-gray-200 dark:bg-gray-600" :src="'/agents/avatar/' + role + '?mode=' + $ctx.getColorScheme()" />
+    `,
+    props: {
+        role: String
+    }
+}
+
 export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
@@ -913,19 +929,8 @@ export const ChatBody = {
                             >
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0 flex flex-col justify-center">
-                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
-                                        :class="message.role === 'user'
-                                            ? 'bg-blue-100 dark:bg-blue-900 text-gray-900 dark:text-gray-100 border border-blue-200 dark:border-blue-700'
-                                            : message.role === 'tool'
-                                                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
-                                                : 'bg-gray-600 dark:bg-gray-500 text-white'"
-                                    >
-                                        <span v-if="message.role === 'user'">U</span>
-                                        <svg v-else-if="message.role === 'tool'" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                                        </svg>
-                                        <span v-else>AI</span>
-                                    </div>
+                                    <UserAvatar v-if="message.role === 'user'" />
+                                    <AgentAvatar v-else :role="message.role" />
 
                                     <!-- Delete button (shown on hover) -->
                                     <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.timestamp)"
@@ -1056,9 +1061,10 @@ export const ChatBody = {
                             <div v-if="$threads.watchingThread" class="flex items-start space-x-3 group">
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0">
-                                    <div class="w-8 h-8 rounded-full bg-gray-600 dark:bg-gray-500 text-white flex items-center justify-center text-sm font-medium">
-                                        AI
-                                    </div>
+                                    <svg class="size-8" viewBox="0 0 32 32" fill="none">
+                                        <circle cx="16" cy="16" r="15" class="fill-gray-600 dark:fill-gray-500" stroke="none"/>
+                                        <path fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 20v-8a2.667 2.667 0 1 1 5.333 0v8m-5.333-4h5.333m5.334-6.667v10.667" transform="translate(2.667, 1.5)"/>
+                                    </svg>
                                 </div>
 
                                 <!-- Loading bubble -->
@@ -1363,7 +1369,6 @@ export const ChatBody = {
             hasAttachments,
             resolveUrl,
             getMessageUsage,
-            getToolOutput,
             isToolLinked,
             tryParseJson,
             hasJsonStructure,

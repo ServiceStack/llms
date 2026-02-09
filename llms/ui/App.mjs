@@ -170,8 +170,9 @@ export default {
             <div id="main" :class="$ctx.cls('main', 'flex-1 flex flex-col')">
                 <div id="main-inner" :class="$ctx.cls('main-inner', 'flex flex-col h-full w-full overflow-hidden')">
                     <div v-if="$ai.hasAccess" id="header" :class="$ctx.cls('header', 'py-1 pr-1 flex items-center justify-between shrink-0')">
-                        <div>
+                        <div class="flex items-center gap-2">
                             <ModelSelector :models="$state.models" v-model="$state.selectedModel" />
+                            <component v-for="(c, id) in $ctx.leftTop" :is="c.component" />
                         </div>
                         <div class="flex items-center gap-2">
                             <TopBar id="top-bar" />
