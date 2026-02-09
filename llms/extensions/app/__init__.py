@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import time
@@ -471,17 +472,12 @@ def install(ctx):
     ctx.add_get("/avatar/user", get_user_avatar)
 
     async def get_agent_avatar(req):
-        role = req.match_info["role"]
         mode = req.query.get("mode", "light")
 
         # Cache for 1 hour # "Cache-Control": "public, max-age=3600",
         headers = {"Content-Type": "image/svg+xml"}
 
         candidate_paths = [
-            os.path.join(ctx.get_user_path(), role + "." + mode + ".png"),
-            os.path.join(ctx.get_user_path(), role + "." + mode + ".svg"),
-            os.path.join(ctx.get_user_path(), role + ".png"),
-            os.path.join(ctx.get_user_path(), role + ".svg"),
             os.path.join(ctx.get_user_path(), "agent." + mode + ".png"),
             os.path.join(ctx.get_user_path(), "agent." + mode + ".svg"),
             os.path.join(ctx.get_user_path(), "agent.png"),
@@ -505,7 +501,118 @@ def install(ctx):
         """
         return web.Response(text=default_avatar, headers=headers)
 
-    ctx.add_get("/agents/avatar/{role}", get_agent_avatar)
+    ctx.add_get("/agents/avatar", get_agent_avatar)
+
+    async def upload_user_avatar(request):
+        user = ctx.get_username(request)
+        user_path = ctx.get_user_path(user=user)
+
+        # Ensure the user directory exists
+        os.makedirs(user_path, exist_ok=True)
+
+        # Parse multipart form data
+        reader = await request.multipart()
+        field = await reader.next()
+
+        if field is None or field.name != "file":
+            raise Exception("No file provided")
+
+        filename = field.filename or ""
+        content_type = field.headers.get("Content-Type", "").lower()
+
+        # Read file data
+        file_data = await field.read()
+
+        # Determine file type from extension or content type
+        ext = os.path.splitext(filename)[1].lower() if filename else ""
+
+        if ext == ".svg" or content_type == "image/svg+xml":
+            # Save SVG directly
+            avatar_path = os.path.join(user_path, "avatar.svg")
+            with open(avatar_path, "wb") as f:
+                f.write(file_data)
+        elif ext == ".png" or content_type == "image/png":
+            # Save PNG directly
+            avatar_path = os.path.join(user_path, "avatar.png")
+            with open(avatar_path, "wb") as f:
+                f.write(file_data)
+        else:
+            # Try to convert to PNG using Pillow
+            try:
+                from PIL import Image
+
+                img = Image.open(io.BytesIO(file_data))
+                # Convert to RGB if necessary (for formats like JPEG)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGBA")
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                avatar_path = os.path.join(user_path, "avatar.png")
+                img.save(avatar_path, "PNG")
+            except ImportError:
+                raise Exception(
+                    "Only SVG and PNG formats are supported. Install Pillow to convert other image formats."
+                ) from None
+
+        return web.json_response({"success": True, "path": avatar_path})
+
+    ctx.add_post("/user/avatar", upload_user_avatar)
+
+    async def upload_agent_avatar(request):
+        user_path = ctx.get_user_path()
+
+        # Ensure the user directory exists
+        os.makedirs(user_path, exist_ok=True)
+
+        # Parse multipart form data
+        reader = await request.multipart()
+        field = await reader.next()
+
+        if field is None or field.name != "file":
+            raise Exception("No file provided")
+
+        filename = field.filename or ""
+        content_type = field.headers.get("Content-Type", "").lower()
+
+        # Read file data
+        file_data = await field.read()
+
+        # Determine file type from extension or content type
+        ext = os.path.splitext(filename)[1].lower() if filename else ""
+
+        if ext == ".svg" or content_type == "image/svg+xml":
+            # Save SVG directly
+            avatar_path = os.path.join(user_path, "agent.svg")
+            with open(avatar_path, "wb") as f:
+                f.write(file_data)
+        elif ext == ".png" or content_type == "image/png":
+            # Save PNG directly
+            avatar_path = os.path.join(user_path, "agent.png")
+            with open(avatar_path, "wb") as f:
+                f.write(file_data)
+        else:
+            # Try to convert to PNG using Pillow
+            try:
+                from PIL import Image
+
+                img = Image.open(io.BytesIO(file_data))
+                # Convert to RGB if necessary (for formats like JPEG)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGBA")
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                avatar_path = os.path.join(user_path, "agent.png")
+                img.save(avatar_path, "PNG")
+            except ImportError:
+                raise Exception(
+                    "Only SVG and PNG formats are supported. Install Pillow to convert other image formats."
+                ) from None
+
+        return web.json_response({"success": True, "path": avatar_path})
+
+    ctx.add_post("/agents/avatar", upload_agent_avatar)
 
     async def chat_request(openai_request, context):
         chat = openai_request
