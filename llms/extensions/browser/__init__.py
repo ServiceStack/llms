@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from pathlib import Path
 import subprocess
 import shutil
 import time
@@ -8,9 +9,6 @@ from collections import deque
 
 from aiohttp import web
 
-SCRIPTS_DIR = None
-PROFILE_DIR = None
-STATE_FILE = None
 AGENT_BROWSER_USER_AGENT = os.getenv(
     "AGENT_BROWSER_USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1500.52 Safari/537.36",
@@ -20,7 +18,6 @@ DEBUG_LOG_COUNTER = 0
 
 
 def install(ctx):
-    global SCRIPTS_DIR, PROFILE_DIR, STATE_FILE
 
     # Check for agent-browser binary
     if not shutil.which("agent-browser"):
@@ -28,15 +25,18 @@ def install(ctx):
         ctx.disabled = True
         return
 
-    user_path = ctx.get_user_path()
-    SCRIPTS_DIR = os.path.join(user_path, "browser", "scripts")
-    PROFILE_DIR = os.path.join(user_path, "browser", "profile")
-    STATE_FILE = os.path.join(user_path, "browser", "state.json")
+    def ensure_dir(path):
+        os.makedirs(path, exist_ok=True)
+        return path
 
-    os.makedirs(SCRIPTS_DIR, exist_ok=True)
-    os.makedirs(PROFILE_DIR, exist_ok=True)
+    def get_script_dir(req):
+        return ensure_dir(os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser", "scripts"))
 
-    _browser_env = {"AGENT_BROWSER_PROFILE": PROFILE_DIR, "AGENT_BROWSER_USER_AGENT": AGENT_BROWSER_USER_AGENT}
+    def get_profile_dir(req):
+        return ensure_dir(os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser", "profile"))
+
+    def get_state_file(req):
+        return os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser", "state.json")
 
     def _add_debug_log(cmd_str, result, duration):
         global DEBUG_LOG_COUNTER
@@ -53,33 +53,6 @@ def install(ctx):
                 "ms": round(duration * 1000),
             }
         )
-
-    def run_browser_cmd(*args, timeout=30, env=None):
-        """Run agent-browser command and return output."""
-        cmd = ["agent-browser"] + list(args)
-        cmd_str = " ".join(cmd)
-        t0 = time.monotonic()
-        try:
-            ctx.dbg(f"Running: {cmd_str}")
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env={**os.environ, **env} if env else None,
-            )
-            ret = {
-                "success": result.returncode == 0,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-            }
-        except subprocess.TimeoutExpired:
-            ret = {"success": False, "error": "Command timed out"}
-        except Exception as e:
-            ret = {"success": False, "error": str(e)}
-        _add_debug_log(cmd_str, ret, time.monotonic() - t0)
-        return ret
 
     async def run_browser_cmd_async(*args, timeout=30, env=None):
         """Run agent-browser command asynchronously."""
@@ -108,7 +81,7 @@ def install(ctx):
             ret = {"success": False, "error": str(e)}
         _add_debug_log(cmd_str, ret, time.monotonic() - t0)
         return ret
-
+    
     # =========================================================================
     # Status & Screenshot Endpoints
     # =========================================================================
@@ -206,6 +179,7 @@ def install(ctx):
         if not url:
             return web.json_response({"error": "URL required"}, status=400)
 
+        _browser_env = {"AGENT_BROWSER_PROFILE": get_profile_dir(req), "AGENT_BROWSER_USER_AGENT": AGENT_BROWSER_USER_AGENT}
         result = await run_browser_cmd_async("open", url, timeout=60, env=_browser_env)
         ctx.log(
             f"browser_open: Open result: success={result['success']}, stdout={result.get('stdout', '')[:100]}, stderr={result.get('stderr', '')[:100]}"
@@ -229,7 +203,7 @@ def install(ctx):
     async def browser_close(req):
         """Close browser session and save state."""
         # Save state before closing
-        await run_browser_cmd_async("state", "save", STATE_FILE)
+        await run_browser_cmd_async("state", "save", get_state_file(req))
         result = await run_browser_cmd_async("close")
         return web.json_response({"success": result["success"]})
 
@@ -326,17 +300,19 @@ def install(ctx):
 
     async def save_state(req):
         """Save browser session state."""
-        result = await run_browser_cmd_async("state", "save", STATE_FILE)
-        return web.json_response({"success": result["success"], "path": STATE_FILE if result["success"] else None})
+        state_file = get_state_file(req)
+        result = await run_browser_cmd_async("state", "save", state_file)
+        return web.json_response({"success": result["success"], "path": state_file if result["success"] else None})
 
     ctx.add_post("/browser/state/save", save_state)
 
     async def load_state(req):
         """Load browser session state."""
-        if not os.path.exists(STATE_FILE):
+        state_file = get_state_file(req)
+        if not os.path.exists(state_file):
             return web.json_response({"error": "No saved state found"}, status=404)
 
-        result = await run_browser_cmd_async("state", "load", STATE_FILE)
+        result = await run_browser_cmd_async("state", "load", state_file)
         return web.json_response({"success": result["success"]})
 
     ctx.add_post("/browser/state/load", load_state)
@@ -356,10 +332,11 @@ def install(ctx):
     async def list_scripts(req):
         """List automation scripts."""
         scripts = []
-        if os.path.exists(SCRIPTS_DIR):
-            for name in os.listdir(SCRIPTS_DIR):
+        scripts_dir = get_script_dir(req)
+        if os.path.exists(scripts_dir):
+            for name in os.listdir(scripts_dir):
                 if name.endswith(".sh"):
-                    path = os.path.join(SCRIPTS_DIR, name)
+                    path = os.path.join(scripts_dir, name)
                     scripts.append(
                         {"name": name, "path": path, "size": os.path.getsize(path), "modified": os.path.getmtime(path)}
                     )
@@ -372,7 +349,7 @@ def install(ctx):
         name = req.match_info["name"]
         if not name.endswith(".sh"):
             name += ".sh"
-        path = os.path.join(SCRIPTS_DIR, name)
+        path = os.path.join(get_script_dir(req), name)
 
         if not os.path.exists(path):
             return web.json_response({"error": "Script not found"}, status=404)
@@ -398,7 +375,7 @@ def install(ctx):
 
         # Sanitize name
         name = os.path.basename(name)
-        path = os.path.join(SCRIPTS_DIR, name)
+        path = os.path.join(get_script_dir(req), name)
 
         with open(path, "w") as f:
             f.write(content)
@@ -414,7 +391,7 @@ def install(ctx):
         name = req.match_info["name"]
         if not name.endswith(".sh"):
             name += ".sh"
-        path = os.path.join(SCRIPTS_DIR, os.path.basename(name))
+        path = os.path.join(get_script_dir(req), os.path.basename(name))
 
         if not os.path.exists(path):
             return web.json_response({"error": "Script not found"}, status=404)
@@ -429,7 +406,7 @@ def install(ctx):
         name = req.match_info["name"]
         if not name.endswith(".sh"):
             name += ".sh"
-        path = os.path.join(SCRIPTS_DIR, os.path.basename(name))
+        path = os.path.join(get_script_dir(req), os.path.basename(name))
 
         if not os.path.exists(path):
             return web.json_response({"error": "Script not found"}, status=404)
