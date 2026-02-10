@@ -434,6 +434,7 @@ def install(ctx):
         if not os.path.exists(path):
             return web.json_response({"error": "Script not found"}, status=404)
 
+        t0 = time.monotonic()
         try:
             proc = await asyncio.create_subprocess_exec(
                 "bash",
@@ -444,18 +445,22 @@ def install(ctx):
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
 
-            return web.json_response(
-                {
-                    "success": proc.returncode == 0,
-                    "stdout": stdout.decode() if stdout else "",
-                    "stderr": stderr.decode() if stderr else "",
-                    "returncode": proc.returncode,
-                }
-            )
+            result = {
+                "success": proc.returncode == 0,
+                "stdout": stdout.decode() if stdout else "",
+                "stderr": stderr.decode() if stderr else "",
+                "returncode": proc.returncode,
+            }
+            _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
+            return web.json_response(result)
         except asyncio.TimeoutError:
             proc.kill()
+            result = {"success": False, "error": "Script execution timed out", "returncode": -1, "stdout": "", "stderr": "Script execution timed out"}
+            _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
             return web.json_response({"error": "Script execution timed out"}, status=500)
         except Exception as e:
+            result = {"success": False, "error": str(e), "returncode": -1, "stdout": "", "stderr": str(e)}
+            _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
             return web.json_response({"error": str(e)}, status=500)
 
     ctx.add_post("/browser/scripts/{name}/run", run_script)
@@ -465,10 +470,11 @@ def install(ctx):
     # =========================================================================
 
     async def generate_script(req):
-        """Generate script from prompt using AI."""
+        """Generate or modify a script from prompt using AI."""
         data = await req.json()
         prompt = data.get("prompt", "")
         name = data.get("name", "generated-script.sh")
+        existing_script = data.get("existing_script", "")
 
         if not prompt:
             return web.json_response({"error": "Prompt required"}, status=400)
@@ -496,11 +502,16 @@ Always:
 
 Output ONLY the bash script, no explanations."""
 
+        if existing_script.strip():
+            user_message = f"Here is an existing browser automation script:\n\n```bash\n{existing_script}\n```\n\nModify this script to: {prompt}\n\nOutput the complete updated script."
+        else:
+            user_message = f"Create a browser automation script that: {prompt}"
+
         chat_request = {
             "model": ctx.config.get("defaults", {}).get("text", {}).get("model", "MiniMax-M2.1"),
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create a browser automation script that: {prompt}"},
+                {"role": "user", "content": user_message},
             ],
         }
 
@@ -528,7 +539,12 @@ Output ONLY the bash script, no explanations."""
     ctx.add_post("/browser/scripts/generate", generate_script)
 
     ctx.add_importmaps({"xterm": f"{ctx.ext_prefix}/xterm-esm.js"})
-    ctx.add_index_footer(f"""<link rel="stylesheet" href="{ctx.ext_prefix}/xterm.css">""")
+    ctx.add_index_footer(
+        f"""
+        <link rel="stylesheet" href="{ctx.ext_prefix}/xterm.css">
+        <script src="{ctx.ext_prefix}/shell.js"></script>
+        """
+    )
 
 
 __install__ = install

@@ -50,19 +50,29 @@ const BrowserPage = {
             <!-- Left Panel: Script Editor + Screenshot -->
             <div class="flex-1 flex flex-col overflow-hidden">
                 <!-- Inline Script Editor -->
-                <div v-if="showScriptEditor" class="flex-1 flex flex-col border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden" style="min-height: 200px">
-                    <div class="flex justify-between items-center px-2 py-1 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                <div v-if="showScriptEditor" class="flex-1 flex flex-col border-b border-gray-200 dark:border-gray-700 overflow-hidden" style="min-height: 200px; background: #1e1e2e">
+                    <div class="flex justify-between items-center px-2 py-1 flex-shrink-0 text-gray-510 hover:bg-gray-100 dark:hover:bg-gray-700 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900">
                         <div class="flex items-center gap-3">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ editingScript ? 'Edit Script' : 'New Script' }}</h3>
-                            <input type="text" v-model="scriptName" placeholder="script-name.sh" class="px-1 py-0 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-sm outline-none focus:border-blue-500 w-48" />
+                            <input type="text" v-model="scriptName" placeholder="script-name.sh" class="bg-gray-50 dark:bg-gray-900 px-1 py-0 border border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 rounded text-sm outline-none focus:border-blue-500 w-60" />
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button" @click="runScript(scriptName)" :disabled="!scriptName" class="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-colors" title="Run">▶ Run</button>
-                            <button type="button" @click="saveScript" :disabled="!scriptName || !scriptContent" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 transition-colors">Save</button>
-                            <button type="button" @click="showScriptEditor = false" class="px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">&times;</button>
+                            <button type="button" @click="saveScript" :disabled="!hasUnsavedChanges" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 transition-colors">Save</button>
+                            <button type="button" @click="closeScriptEditor" class="px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">&times;</button>
                         </div>
                     </div>
-                    <textarea v-model="scriptContent" spellcheck="false" class="flex-1 w-full px-4 py-2 bg-gray-900 text-gray-100 font-mono text-sm border-none resize-none outline-none overflow-y-auto" style="min-height: 0"></textarea>
+                    <div v-if="hasCodeMirror" ref="scriptEditorRef" id="scriptEditorRef" class="relative flex-1 w-full overflow-hidden" style="min-height: 0"></div>
+                    <textarea v-else v-model="scriptContent" spellcheck="false" class="flex-1 w-full px-4 py-2 bg-gray-900 text-gray-100 font-mono text-sm border-none resize-none outline-none overflow-y-auto" style="min-height: 0"></textarea>
+                    <!-- AI Prompt Bar -->
+                    <div class="flex items-center gap-2 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+                        <svg class="w-4 h-4 text-purple-500 flex-shrink-0" viewBox="0 0 24 24"><path fill="currentColor" d="M21.928 11.607c-.202-.488-.635-.605-.928-.633V8c0-1.103-.897-2-2-2h-6V4.61c.305-.274.5-.668.5-1.11a1.5 1.5 0 0 0-3 0c0 .442.195.836.5 1.11V6H5c-1.103 0-2 .897-2 2v2.997l-.082.006A1 1 0 0 0 1.99 12v2a1 1 0 0 0 1 1H3v5c0 1.103.897 2 2 2h14c1.103 0 2-.897 2-2v-5a1 1 0 0 0 1-1v-1.938a1.006 1.006 0 0 0-.072-.455M5 20V8h14l.001 3.996L19 12v2l.001.005.001 5.995z"/><ellipse cx="8.5" cy="13.5" rx="1.5" ry="2" fill="currentColor"/><ellipse cx="15.5" cy="13.5" rx="1.5" ry="2" fill="currentColor"/><path fill="currentColor" d="M11.998 17c-1.105 0-2.752-.624-2.752-.624a.246.246 0 0 0-.253.377C9.862 18.155 10.85 18.5 12 18.5s2.138-.345 3.007-1.747a.246.246 0 0 0-.253-.377s-1.647.624-2.756.624"/></svg>
+                        <input type="text" v-model="aiPrompt" @keyup.enter="generateInline" :disabled="generating" :placeholder="hasExistingScript ? 'Describe changes to make...' : 'Describe what to automate...'"
+                            class="flex-1 px-2 py-1 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded outline-none focus:border-purple-500 dark:focus:border-purple-500 placeholder-gray-400 text-gray-900 dark:text-gray-100" />
+                        <button type="button" @click="generateInline" :disabled="!aiPrompt || generating" class="px-2.5 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50 transition-colors whitespace-nowrap">
+                            {{ generating ? 'Generating...' : 'AI' }}
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Status Bar -->
@@ -102,8 +112,8 @@ const BrowserPage = {
 
             <!-- Sidebar -->
             <div class="flex flex-col bg-gray-50 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 transition-all" :class="sidebarCollapsed ? 'w-8' : 'w-72'">
-                <button @click="sidebarCollapsed = !sidebarCollapsed" class="w-full p-2 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
-                    {{ sidebarCollapsed ? '◀' : '▶' }}
+                <button type="button" @click="sidebarCollapsed = !sidebarCollapsed" class="w-full p-2 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 flex">
+                    <span>{{ sidebarCollapsed ? '◀' : '▶' }}</span>
                 </button>
                 
                 <div v-if="!sidebarCollapsed" class="flex-1 overflow-y-auto">
@@ -136,8 +146,7 @@ const BrowserPage = {
                         </div>
                         <div v-if="scriptsExpanded" class="px-3 pb-3">
                             <div class="flex gap-2 mb-2">
-                                <button type="button" @click="showScriptEditor = true; editingScript = null; scriptName = ''; scriptContent = '#!/bin/bash\\nset -euo pipefail\\n\\n'" class="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors">+ New</button>
-                                <button type="button" @click="showAIGenerator = true" class="px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded transition-colors">🤖 AI</button>
+                                <button type="button" @click="newScript" class="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors">+ New</button>
                             </div>
                             <div class="flex flex-col gap-1 max-h-48 overflow-y-auto">
                                 <div v-for="script in scripts" :key="script.name" class="flex gap-1 items-center text-sm">
@@ -190,36 +199,6 @@ const BrowserPage = {
             </div>
         </div>
 
-        <!-- AI Generator Modal -->
-        <div v-if="showAIGenerator" class="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50" @click.self="showAIGenerator = false">
-            <div class="w-full max-w-2xl max-h-[80vh] flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700">
-                <div class="flex justify-between items-center px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 class="font-semibold text-gray-900 dark:text-gray-100">Generate Script with AI</h3>
-                    <button @click="showAIGenerator = false" class="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl">&times;</button>
-                </div>
-                <div class="flex-1 p-5 overflow-y-auto space-y-4">
-                    <div>
-                        <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Script Name:</label>
-                        <input type="text" v-model="aiScriptName" placeholder="my-script.sh" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm outline-none focus:border-blue-500" />
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Describe what you want to automate:</label>
-                        <textarea v-model="aiPrompt" placeholder="e.g., Log into GitHub and navigate to my repositories page" class="w-full h-24 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm resize-y outline-none focus:border-blue-500"></textarea>
-                    </div>
-                    <div v-if="generatedScript">
-                        <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Generated Script:</label>
-                        <textarea v-model="generatedScript" readonly class="w-full h-48 px-3 py-2 bg-green-50 dark:bg-green-900/20 text-gray-900 dark:text-gray-100 font-mono text-sm border border-green-200 dark:border-green-800 rounded-lg resize-y"></textarea>
-                    </div>
-                </div>
-                <div class="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
-                    <button type="button" @click="showAIGenerator = false" class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Cancel</button>
-                    <button type="button" v-if="!generatedScript" @click="generateScript" :disabled="!aiPrompt || generating" class="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 transition-colors">
-                        {{ generating ? 'Generating...' : 'Generate' }}
-                    </button>
-                    <button type="button" v-else @click="saveGeneratedScript" class="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">Save Script</button>
-                </div>
-            </div>
-        </div>
     </div>
     `,
     setup() {
@@ -270,13 +249,20 @@ const BrowserPage = {
         const editingScript = ref(null)
         const scriptName = ref('')
         const scriptContent = ref('#!/bin/bash\nset -euo pipefail\n\n')
+        const savedScriptContent = ref('')
+        const scriptEditorRef = ref(null)
+        const hasCodeMirror = typeof CodeMirror !== 'undefined'
+        let cmEditor = null
 
-        // AI generator
-        const showAIGenerator = ref(false)
-        const aiScriptName = ref('')
+        // AI inline prompt
         const aiPrompt = ref('')
-        const generatedScript = ref('')
         const generating = ref(false)
+        const hasUnsavedChanges = computed(() => scriptName.value && scriptContent.value !== savedScriptContent.value)
+        const defaultScript = '#!/bin/bash\nset -euo pipefail\n\n'
+        const hasExistingScript = computed(() => {
+            const s = scriptContent.value.trim()
+            return s && s !== defaultScript.trim()
+        })
 
         // Debug log
         const debugLogCount = ref(0)
@@ -301,7 +287,7 @@ const BrowserPage = {
                 scrollback: 1000,
             })
             term.open(debugLogContainer.value)
-            const fit = () => { try { term.resize(Math.floor(debugLogContainer.value.clientWidth / 7.2), Math.floor(debugLogContainer.value.clientHeight / 17)) } catch(e) {} }
+            const fit = () => { try { term.resize(Math.floor(debugLogContainer.value.clientWidth / 7.2), Math.floor(debugLogContainer.value.clientHeight / 17)) } catch (e) { } }
             fit()
             new ResizeObserver(fit).observe(debugLogContainer.value)
         }
@@ -324,6 +310,58 @@ const BrowserPage = {
             }
         }
 
+        // CodeMirror editor initialization
+        function initCodeMirror() {
+            if (!hasCodeMirror || !scriptEditorRef.value || cmEditor) return
+            cmEditor = CodeMirror(scriptEditorRef.value, {
+                lineNumbers: true,
+                styleActiveLine: true,
+                matchBrackets: true,
+                mode: 'shell',
+                theme: 'ctp-mocha',
+                value: scriptContent.value,
+                tabSize: 4,
+                indentUnit: 4,
+                lineWrapping: false,
+            })
+            //cmEditor.setSize('100%', '500px')
+            cmEditor.on('change', () => {
+                scriptContent.value = cmEditor.getValue()
+            })
+            nextTick(() => {
+                if (scriptEditorRef.value?.clientHeight) {
+                    console.log('setting size', scriptEditorRef.value.clientHeight)
+                    cmEditor.setSize('100%', scriptEditorRef.value.clientHeight)
+                }
+            })
+        }
+
+        function destroyCodeMirror() {
+            if (cmEditor) {
+                cmEditor.toTextArea?.()
+                cmEditor = null
+            }
+            if (scriptEditorRef.value) {
+                scriptEditorRef.value.innerHTML = ''
+            }
+        }
+
+        watch(showScriptEditor, async (show) => {
+            if (show && hasCodeMirror) {
+                await nextTick()
+                initCodeMirror()
+            } else {
+                destroyCodeMirror()
+            }
+        })
+
+        // Sync scriptContent changes (e.g. from editScript) into CodeMirror
+        watch(scriptContent, (val) => {
+            if (cmEditor && cmEditor.getValue() !== val) {
+                cmEditor.setValue(val)
+            }
+        })
+
         watch(debugLogExpanded, async (expanded) => {
             if (expanded) {
                 await nextTick()
@@ -333,7 +371,7 @@ const BrowserPage = {
 
         watch(debugLogHeight, () => {
             if (term && debugLogContainer.value) {
-                try { term.resize(Math.floor(debugLogContainer.value.clientWidth / 7.2), Math.floor(debugLogContainer.value.clientHeight / 17)) } catch(e) {}
+                try { term.resize(Math.floor(debugLogContainer.value.clientWidth / 7.2), Math.floor(debugLogContainer.value.clientHeight / 17)) } catch (e) { }
             }
         })
 
@@ -528,12 +566,41 @@ const BrowserPage = {
             setTimeout(fetchScreenshot, 300)
         }
 
+        async function newScript() {
+            const name = prompt('Enter script filename:', '')
+            if (!name) return
+            const filename = name.endsWith('.sh') ? name : name + '.sh'
+            const content = '#!/bin/bash\nset -euo pipefail\n\n'
+            try {
+                await postBrowser('/scripts', { name: filename, content })
+                await fetchScripts()
+                editingScript.value = null
+                scriptName.value = filename
+                scriptContent.value = content
+                savedScriptContent.value = content
+                showScriptEditor.value = true
+            } catch (e) {
+                console.error('Failed to create script:', e)
+            }
+        }
+
+        function closeScriptEditor() {
+            if (scriptContent.value !== savedScriptContent.value) {
+                const action = confirm('You have unsaved changes. Save before closing?')
+                if (action) {
+                    saveScript()
+                }
+            }
+            showScriptEditor.value = false
+        }
+
         async function editScript(script) {
             try {
                 const res = await getBrowser(`/scripts/${script.name}`)
                 editingScript.value = script
                 scriptName.value = script.name
                 scriptContent.value = res.content
+                savedScriptContent.value = res.content
                 showScriptEditor.value = true
             } catch (e) {
                 console.error('Failed to load script:', e)
@@ -546,7 +613,7 @@ const BrowserPage = {
                     name: scriptName.value,
                     content: scriptContent.value
                 })
-                showScriptEditor.value = false
+                savedScriptContent.value = scriptContent.value
                 await fetchScripts()
             } catch (e) {
                 console.error('Failed to save script:', e)
@@ -557,6 +624,9 @@ const BrowserPage = {
             if (!confirm(`Delete script "${name}"?`)) return
             try {
                 await deleteBrowser(`/scripts/${name}`)
+                if (showScriptEditor.value && scriptName.value === name) {
+                    showScriptEditor.value = false
+                }
                 await fetchScripts()
             } catch (e) {
                 console.error('Failed to delete script:', e)
@@ -566,6 +636,15 @@ const BrowserPage = {
         async function runScript(name) {
             loading.value = true
             try {
+                // Auto-save when running from the editor
+                if (showScriptEditor.value && scriptName.value && scriptContent.value) {
+                    await postBrowser('/scripts', {
+                        name: scriptName.value,
+                        content: scriptContent.value
+                    })
+                    savedScriptContent.value = scriptContent.value
+                    await fetchScripts()
+                }
                 const res = await postBrowser(`/scripts/${name}/run`, {})
                 console.log('Script output:', res)
                 await fetchScreenshot()
@@ -575,33 +654,24 @@ const BrowserPage = {
             loading.value = false
         }
 
-        async function generateScript() {
+        async function generateInline() {
+            if (!aiPrompt.value || generating.value) return
             generating.value = true
             try {
+                const existing = scriptContent.value
                 const res = await postBrowser('/scripts/generate', {
                     prompt: aiPrompt.value,
-                    name: aiScriptName.value || 'generated-script.sh'
+                    name: scriptName.value || 'generated-script.sh',
+                    existing_script: existing,
                 })
-                generatedScript.value = res.content
+                if (res.content) {
+                    scriptContent.value = res.content
+                }
+                aiPrompt.value = ''
             } catch (e) {
                 console.error('Failed to generate script:', e)
             }
             generating.value = false
-        }
-
-        async function saveGeneratedScript() {
-            try {
-                await postBrowser('/scripts', {
-                    name: aiScriptName.value || 'generated-script.sh',
-                    content: generatedScript.value
-                })
-                showAIGenerator.value = false
-                aiPrompt.value = ''
-                generatedScript.value = ''
-                await fetchScripts()
-            } catch (e) {
-                console.error('Failed to save generated script:', e)
-            }
         }
 
         function onScreenshotLoad() {
@@ -623,6 +693,21 @@ const BrowserPage = {
 
         watch([autoRefresh, refreshInterval], startAutoRefresh)
 
+        function handleKeydown(e) {
+            if (!showScriptEditor.value) return
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault()
+                if (hasUnsavedChanges.value) {
+                    saveScript()
+                }
+            } else if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault()
+                if (scriptName.value) {
+                    runScript(scriptName.value)
+                }
+            }
+        }
+
         onMounted(() => {
             fetchStatus()
             fetchScripts()
@@ -632,27 +717,30 @@ const BrowserPage = {
             // Poll debug log alongside status
             setInterval(fetchDebugLog, 2000)
             fetchDebugLog()
+            window.addEventListener('keydown', handleKeydown)
         })
 
         onUnmounted(() => {
             if (refreshTimer) clearInterval(refreshTimer)
             if (statusTimer) clearInterval(statusTimer)
             if (tickTimer) clearInterval(tickTimer)
+            destroyCodeMirror()
             if (term) { term.dispose(); term = null }
+            window.removeEventListener('keydown', handleKeydown)
         })
 
         return {
             urlInput, urlFocused, screenshotUrl, screenshotContainer, screenshotImg, loading,
             isRunning, pageTitle, lastUpdate, autoRefresh, refreshInterval,
             typeText, sidebarCollapsed, elementsExpanded, scriptsExpanded, elements,
-            scripts, showScriptEditor, editingScript, scriptName, scriptContent,
-            showAIGenerator, aiScriptName, aiPrompt, generatedScript, generating,
+            scripts, showScriptEditor, editingScript, scriptName, scriptContent, scriptEditorRef, hasCodeMirror, hasUnsavedChanges,
+            aiPrompt, generating, hasExistingScript,
             debugLogCount, debugLogExpanded, debugLogContainer, debugLogHeight, startDebugLogResize,
             timeSinceUpdate,
             fetchStatus, fetchScreenshot, refreshSnapshot, navigate, goBack, goForward,
             reload, closeBrowser, saveState, handleScreenshotClick, clickElement,
-            pressKey, scroll, sendType, editScript, saveScript, deleteScript, runScript,
-            generateScript, saveGeneratedScript, onScreenshotLoad, onScreenshotError,
+            pressKey, scroll, sendType, newScript, closeScriptEditor, editScript, saveScript, deleteScript, runScript,
+            generateInline, onScreenshotLoad, onScreenshotError,
             clearDebugLog,
         }
     }
