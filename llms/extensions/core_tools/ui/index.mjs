@@ -116,8 +116,6 @@ const CodePage = {
         // Initial load
         code.value = loadCode(language.value)
 
-
-
         watch(language, (newLang, oldLang) => {
             // Save old language code
             if (oldLang && cm) {
@@ -645,6 +643,5 @@ export default {
 
         ctx.routes.push({ path: '/code', component: CodePage, meta: { title: 'Run Code' } })
         ctx.routes.push({ path: '/calc', component: CalcPage, meta: { title: 'Calculator' } })
-
     }
 }
