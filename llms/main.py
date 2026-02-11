@@ -4564,7 +4564,7 @@ def cli_exec(cli_args, extra_args):
                     return ExitCode.FAILED
                 chat = g_config["defaults"][template]
             if cli_args.chat is not None:
-                chat_path = os.path.join(os.path.dirname(__file__), cli_args.chat)
+                chat_path = os.path.abspath(cli_args.chat)
                 if not os.path.exists(chat_path):
                     print(f"Chat request template not found: {chat_path}")
                     return ExitCode.FAILED
