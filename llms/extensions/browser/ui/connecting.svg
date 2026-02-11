@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="shimmer" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2a2a4a" />
+      <stop offset="40%" stop-color="#3a3a5c" />
+      <stop offset="60%" stop-color="#3a3a5c" />
+      <stop offset="100%" stop-color="#2a2a4a" />
+      <animateTransform attributeName="gradientTransform" type="translate" from="-1 0" to="1 0" dur="2s" repeatCount="indefinite"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="url(#bg)" rx="12"/>
+
+  <!-- Browser chrome -->
+  <rect x="0" y="0" width="1280" height="52" fill="#0f0f23" rx="12"/>
+  <rect x="0" y="12" width="1280" height="40" fill="#0f0f23"/>
+
+  <!-- Traffic lights -->
+  <circle cx="24" cy="26" r="7" fill="#ff5f57"/>
+  <circle cx="48" cy="26" r="7" fill="#febc2e"/>
+  <circle cx="72" cy="26" r="7" fill="#28c840"/>
+
+  <!-- URL bar -->
+  <rect x="200" y="12" width="880" height="28" rx="6" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+  <text x="220" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#555">Waiting to connect…</text>
+
+  <!-- Tab -->
+  <rect x="96" y="6" width="180" height="40" rx="8" fill="#1a1a2e"/>
+  <text x="116" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#667">New Tab</text>
+
+  <!-- Content area skeleton -->
+  <!-- Nav bar placeholder -->
+  <rect x="40" y="80" width="200" height="16" rx="4" fill="url(#shimmer)" opacity="0.5"/>
+  <rect x="280" y="80" width="120" height="16" rx="4" fill="url(#shimmer)" opacity="0.3"/>
+  <rect x="440" y="80" width="120" height="16" rx="4" fill="url(#shimmer)" opacity="0.3"/>
+  <rect x="600" y="80" width="120" height="16" rx="4" fill="url(#shimmer)" opacity="0.3"/>
+
+  <!-- Hero placeholder -->
+  <rect x="40" y="130" width="1200" height="240" rx="8" fill="#1e1e38" opacity="0.5"/>
+
+  <!-- Center loading indicator -->
+  <g transform="translate(640, 420)">
+    <!-- Pulsing circle -->
+    <circle r="32" fill="none" stroke="#4a5aef" stroke-width="2.5" opacity="0.3">
+      <animate attributeName="r" values="28;36;28" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Spinning arc -->
+    <circle r="20" fill="none" stroke="#6c72cb" stroke-width="2.5" stroke-dasharray="40 86" stroke-linecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.2s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Globe icon -->
+    <circle r="10" fill="none" stroke="#8888aa" stroke-width="1.2"/>
+    <ellipse rx="5" ry="10" fill="none" stroke="#8888aa" stroke-width="1"/>
+    <line x1="-10" y1="0" x2="10" y2="0" stroke="#8888aa" stroke-width="1"/>
+
+    <!-- Text -->
+    <text y="56" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" fill="#6c72cb" font-weight="500">Connecting to browser…</text>
+    <text y="78" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#777">Establishing session</text>
+  </g>
+
+  <!-- Content skeleton lines -->
+  <rect x="40" y="520" width="700" height="14" rx="4" fill="url(#shimmer)" opacity="0.25"/>
+  <rect x="40" y="550" width="560" height="14" rx="4" fill="url(#shimmer)" opacity="0.2"/>
+  <rect x="40" y="580" width="640" height="14" rx="4" fill="url(#shimmer)" opacity="0.15"/>
+
+  <!-- Sidebar skeleton -->
+  <rect x="920" y="520" width="320" height="180" rx="8" fill="#1e1e38" opacity="0.3"/>
+  <rect x="940" y="540" width="180" height="12" rx="3" fill="url(#shimmer)" opacity="0.2"/>
+  <rect x="940" y="564" width="260" height="10" rx="3" fill="url(#shimmer)" opacity="0.15"/>
+  <rect x="940" y="586" width="220" height="10" rx="3" fill="url(#shimmer)" opacity="0.15"/>
+</svg>

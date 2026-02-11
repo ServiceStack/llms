@@ -1,11 +1,11 @@
 import asyncio
 import json
 import os
-from pathlib import Path
-import subprocess
 import shutil
+import subprocess
 import time
 from collections import deque
+from pathlib import Path
 
 from aiohttp import web
 
@@ -18,7 +18,6 @@ DEBUG_LOG_COUNTER = 0
 
 
 def install(ctx):
-
     # Check for agent-browser binary
     if not shutil.which("agent-browser"):
         ctx.log("agent-browser not found. See https://agent-browser.dev/installation to use the browser extension.")
@@ -28,6 +27,10 @@ def install(ctx):
     def ensure_dir(path):
         os.makedirs(path, exist_ok=True)
         return path
+
+    def get_browser_dir(req=None):
+        user = ctx.get_username(req) if req else None
+        return ensure_dir(os.path.join(ctx.get_user_path(user=user), "browser"))
 
     def get_script_dir(req):
         return ensure_dir(os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser", "scripts"))
@@ -54,7 +57,7 @@ def install(ctx):
             }
         )
 
-    async def run_browser_cmd_async(*args, timeout=30, env=None):
+    async def run_browser_cmd_async(*args, timeout=30, env=None, record=True):
         """Run agent-browser command asynchronously."""
         cmd = ["agent-browser"] + list(args)
         cmd_str = " ".join(cmd)
@@ -79,28 +82,33 @@ def install(ctx):
             ret = {"success": False, "error": "Command timed out"}
         except Exception as e:
             ret = {"success": False, "error": str(e)}
-        _add_debug_log(cmd_str, ret, time.monotonic() - t0)
+        if record:
+            _add_debug_log(cmd_str, ret, time.monotonic() - t0)
         return ret
-    
+
     # =========================================================================
     # Status & Screenshot Endpoints
     # =========================================================================
 
+    async def get_status_object():
+        result = await run_browser_cmd_async("eval", "({title:document.title,url:location.href})", record=False)
+        running = result["success"]
+        if not running:
+            return None
+
+        status = json.loads(result["stdout"]) if result["success"] and result["stdout"].strip() else {}
+        url = status.get("url", "")
+        if not url or url == "about:blank":
+            return None
+        status["running"] = True
+        return status
+
     async def get_status(req):
         """Get current browser status including URL and title."""
-        url_result = await run_browser_cmd_async("get", "url")
-        title_result = await run_browser_cmd_async("get", "title")
-
-        if not url_result["success"] and "no active" in url_result.get("stderr", "").lower():
+        result = await get_status_object()
+        if not result:
             return web.json_response({"running": False, "url": None, "title": None})
-
-        return web.json_response(
-            {
-                "running": url_result["success"],
-                "url": url_result["stdout"].strip() if url_result["success"] else None,
-                "title": title_result["stdout"].strip() if title_result["success"] else None,
-            }
-        )
+        return web.json_response(result)
 
     ctx.add_get("/browser/status", get_status)
 
@@ -123,47 +131,67 @@ def install(ctx):
 
     async def get_screenshot(req):
         """Capture and return current screenshot."""
-        screenshot_path = os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser", "screenshot.png")
+        browser_dir = os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser")
+        screenshot_path = os.path.join(browser_dir, "screenshot.png")
+        snapshot_path = os.path.join(browser_dir, "snapshot.json")
 
-        result = await run_browser_cmd_async("screenshot", screenshot_path)
-        if not result["success"]:
-            return web.json_response({"error": result.get("stderr", "Screenshot failed")}, status=500)
+        screenshot_result, snapshot_result = await asyncio.gather(
+            run_browser_cmd_async("screenshot", screenshot_path, record=False),
+            run_browser_cmd_async("snapshot", "-i", "--json", snapshot_path, record=False),
+        )
 
-        if os.path.exists(screenshot_path):
+        success = snapshot_result["success"]
+        if success and snapshot_result.get("stdout", "").strip():
+            # write output to snapshot_path for next time
+            try:
+                snapshot = json.loads(snapshot_result["stdout"])
+                status = await get_status_object()
+                if status:
+                    snapshot.update(status)
+                Path(snapshot_path).write_text(json.dumps(snapshot))
+            except Exception as e:
+                ctx.err("Failed to parse snapshot JSON\n" + snapshot_result["stdout"], e)
+                success = False
+
+        if success and os.path.exists(screenshot_path):
             return web.FileResponse(screenshot_path, headers={"Content-Type": "image/png", "Cache-Control": "no-cache"})
-        return web.json_response({"error": "Screenshot file not found"}, status=500)
+        
+        return web.FileResponse(os.path.join(os.path.dirname(__file__), "ui", "connecting.svg"), headers={"Content-Type": "image/svg", "Cache-Control": "no-cache"})
 
     ctx.add_get("/browser/screenshot", get_screenshot)
 
     async def get_snapshot(req):
         """Get interactive elements snapshot with refs."""
+        browser_dir = os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser")
+        snapshot_path = os.path.join(browser_dir, "snapshot.json")
+        force = req.query.get("force", "false") == "true"
         include_cursor = req.query.get("cursor", "false") == "true"
         args = ["snapshot", "-i", "--json"]
         if include_cursor:
             args.append("-C")
 
-        result = await run_browser_cmd_async(*args)
-        if not result["success"]:
-            return web.json_response({"error": result.get("stderr", "Snapshot failed")}, status=500)
+        parsed = None
+        if force or not os.path.exists(snapshot_path):
+            result = await run_browser_cmd_async(*args)
+            if not result["success"]:
+                raise Exception(result.get("stderr", "Snapshot failed"))
+            # write output to snapshot_path for next time
+            if result.get("stdout", "").strip():
+                try:
+                    parsed = json.loads(result["stdout"])
+                    parsed.update(await get_status_object())
+                    Path(snapshot_path).write_text(json.dumps(parsed))
+                except Exception as e:
+                    ctx.err("Failed to parse snapshot JSON\n" + result["stdout"], e)
 
         try:
-            parsed = json.loads(result["stdout"]) if result["stdout"].strip() else {}
-            # agent-browser --json returns {"success":true,"data":{"refs":{...},"snapshot":"..."}}
-            if isinstance(parsed, dict) and "data" in parsed and "refs" in parsed["data"]:
-                refs = parsed["data"]["refs"]
-                elements = [
-                    {"ref": f"@{key}", "desc": f'{val.get("role", "")} "{val.get("name", "")}"'.strip()}
-                    for key, val in sorted(refs.items(), key=lambda x: int(x[0][1:]) if x[0][1:].isdigit() else 0)
-                ]
-            elif isinstance(parsed, list):
-                elements = parsed
-            else:
-                elements = []
+            if not parsed:
+                snapshot_json = Path(snapshot_path).read_text()
+                parsed = json.loads(snapshot_json) if snapshot_json.strip() else {}
         except json.JSONDecodeError:
-            # Return raw text if not JSON
-            elements = result["stdout"].strip().split("\n")
+            parsed = {}
 
-        return web.json_response({"elements": elements})
+        return web.json_response(parsed)
 
     ctx.add_get("/browser/snapshot", get_snapshot)
 
@@ -179,7 +207,10 @@ def install(ctx):
         if not url:
             return web.json_response({"error": "URL required"}, status=400)
 
-        _browser_env = {"AGENT_BROWSER_PROFILE": get_profile_dir(req), "AGENT_BROWSER_USER_AGENT": AGENT_BROWSER_USER_AGENT}
+        _browser_env = {
+            "AGENT_BROWSER_PROFILE": get_profile_dir(req),
+            "AGENT_BROWSER_USER_AGENT": AGENT_BROWSER_USER_AGENT,
+        }
         result = await run_browser_cmd_async("open", url, timeout=60, env=_browser_env)
         ctx.log(
             f"browser_open: Open result: success={result['success']}, stdout={result.get('stdout', '')[:100]}, stderr={result.get('stderr', '')[:100]}"
@@ -432,7 +463,13 @@ def install(ctx):
             return web.json_response(result)
         except asyncio.TimeoutError:
             proc.kill()
-            result = {"success": False, "error": "Script execution timed out", "returncode": -1, "stdout": "", "stderr": "Script execution timed out"}
+            result = {
+                "success": False,
+                "error": "Script execution timed out",
+                "returncode": -1,
+                "stdout": "",
+                "stderr": "Script execution timed out",
+            }
             _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
             return web.json_response({"error": "Script execution timed out"}, status=500)
         except Exception as e:
@@ -456,36 +493,31 @@ def install(ctx):
         if not prompt:
             return web.json_response({"error": "Prompt required"}, status=400)
 
-        system_prompt = """You are an expert at browser automation using the agent-browser CLI tool.
-Generate a bash script that accomplishes the user's task.
+        system_prompt = None
+        candidate_paths = [
+            Path(os.path.join(get_browser_dir(req), name)),
+            Path(os.path.join(get_browser_dir(), name)),
+            Path(__file__).parent / "ui" / "generate-script.txt",
+        ]
 
-Key commands:
-- agent-browser open <url> - Navigate to URL
-- agent-browser snapshot -i - Get interactive elements with refs (@e1, @e2, etc.)
-- agent-browser click @e1 - Click element by ref
-- agent-browser fill @e1 "text" - Fill input field
-- agent-browser type @e1 "text" - Type without clearing
-- agent-browser press Enter - Press key
-- agent-browser wait --load networkidle - Wait for page load
-- agent-browser wait @e1 - Wait for element
-- agent-browser get text @e1 - Get element text
-- agent-browser screenshot output.png - Take screenshot
+        for path in candidate_paths:
+            if path.exists():
+                system_prompt = path.read_text()
+                break
 
-Always:
-1. Start with #!/bin/bash and set -euo pipefail
-2. Use snapshot -i after navigation to get element refs
-3. Wait for page loads with --load networkidle
-4. Add comments explaining each step
-
-Output ONLY the bash script, no explanations."""
+        if not system_prompt:
+            raise Exception("generate-script.txt system prompt template not found.")
 
         if existing_script.strip():
             user_message = f"Here is an existing browser automation script:\n\n```bash\n{existing_script}\n```\n\nModify this script to: {prompt}\n\nOutput the complete updated script."
         else:
             user_message = f"Create a browser automation script that: {prompt}"
 
+        BROWSER_MODEL = os.getenv("BROWSER_MODEL", ctx.config.get("defaults", {}).get("text", {}).get("model"))
+        if not BROWSER_MODEL:
+            raise Exception("No model specified for browser script generation. Set BROWSER_MODEL environment variable or configure a default text model in llms.json.")
         chat_request = {
-            "model": ctx.config.get("defaults", {}).get("text", {}).get("model", "MiniMax-M2.1"),
+            "model": BROWSER_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},

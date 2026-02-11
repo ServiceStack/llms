@@ -5919,6 +5919,18 @@
       }
     }
   }
+  .dark\:hover\:bg-blue-900\/20 {
+    &:where(.dark, .dark *) {
+      &:hover {
+        @media (hover: hover) {
+          background-color: color-mix(in srgb, oklch(37.9% 0.146 265.522) 20%, transparent);
+          @supports (color: color-mix(in lab, red, red)) {
+            background-color: color-mix(in oklab, var(--color-blue-900) 20%, transparent);
+          }
+        }
+      }
+    }
+  }
   .dark\:hover\:bg-blue-900\/30 {
     &:where(.dark, .dark *) {
       &:hover {

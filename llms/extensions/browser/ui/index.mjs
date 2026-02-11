@@ -57,7 +57,7 @@ const BrowserPage = {
                             <input type="text" v-model="scriptName" placeholder="script-name.sh" class="bg-gray-50 dark:bg-gray-900 px-1 py-0 border border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 rounded text-sm outline-none focus:border-blue-500 w-60" />
                         </div>
                         <div class="flex items-center gap-2">
-                            <button type="button" @click="runScript(scriptName)" :disabled="!scriptName" class="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-colors" title="Run">▶ Run</button>
+                            <button type="button" @click="runScript(scriptName)" :disabled="!scriptName" class="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-colors" title="Run (CTRL+Enter)">▶ Run</button>
                             <button type="button" @click="saveScript" :disabled="!hasUnsavedChanges" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 transition-colors">Save</button>
                             <button type="button" @click="closeScriptEditor" class="px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">&times;</button>
                         </div>
@@ -153,15 +153,23 @@ const BrowserPage = {
                             <span>{{ elementsExpanded ? '▼' : '▶' }}</span>
                         </div>
                         <div v-if="elementsExpanded" class="px-3 pb-3">
-                            <div class="flex gap-2 mb-2">
+                            <div class="flex justify-between gap-2 mb-2">
                                 <button type="button" @click="refreshSnapshot" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded disabled:opacity-40 transition-colors">Refresh</button>
+                                <button v-if="snapshot" type="button" class="p-1 text-gray-400 hover:text-gray-600" :title="snapshot.substring(0,500) + (snapshot.length > 500 ? '...' : '')" @click="copySnapshot">
+                                    <svg v-if="copyingSnapshot" class="size-3.5 text-green-600 dark:text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 18l-5.7-5.7l1.425-1.425L9.55 15.15l9.175-9.175L20.15 7.4z"/></svg>
+                                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z"></path></svg>
+                                </button>
                             </div>
                             <div class="flex flex-col gap-1 overflow-y-auto">
-                                <div v-for="el in elements" :key="el.ref || el" @click="clickElement(el.ref || el)"
+                                <div v-for="el in visibleElements" :key="el.ref || el" @click="clickElement(el.ref || el)"
                                     class="flex gap-2 px-2 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
                                     <span class="text-blue-600 dark:text-blue-400 font-mono flex-shrink-0">{{ el.ref || el }}</span>
                                     <span class="text-gray-500 dark:text-gray-400 truncate">{{ el.desc || '' }}</span>
                                 </div>
+                                <button v-if="elements.length > elementsLimit" type="button" @click="elementsLimit += 50"
+                                    class="mt-1 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors">
+                                    Load more ({{ elements.length - elementsLimit }} remaining)
+                                </button>
                                 <div v-if="elements.length === 0" class="py-2 text-center text-xs text-gray-400">No elements. Click Refresh.</div>
                             </div>
                         </div>
@@ -243,6 +251,10 @@ const BrowserPage = {
         const elementsExpanded = ref(true)
         const scriptsExpanded = ref(true)
         const elements = ref([])
+        const snapshot = ref('')
+        const copyingSnapshot = ref(false)
+        const elementsLimit = ref(25)
+        const visibleElements = computed(() => elements.value.slice(0, elementsLimit.value))
         const scripts = ref([])
 
         // Script editor
@@ -332,7 +344,6 @@ const BrowserPage = {
                 indentUnit: 4,
                 lineWrapping: false,
             })
-            //cmEditor.setSize('100%', '500px')
             cmEditor.on('change', () => {
                 scriptContent.value = cmEditor.getValue()
             })
@@ -399,6 +410,7 @@ const BrowserPage = {
         let refreshTimer = null
         let statusTimer = null
         let tickTimer = null
+        let debugTimer = null
         const tick = ref(0)  // Force re-evaluation of computed properties
 
         const timeSinceUpdate = computed(() => {
@@ -411,14 +423,35 @@ const BrowserPage = {
 
         async function fetchStatus() {
             try {
-                const res = await getBrowser('/status')
-                isRunning.value = res.running
+                const res = await getBrowser('/snapshot')
+                isRunning.value = !!res.running
                 // Only update URL if input is not focused to prevent overwriting user input
                 if (res.url && !urlFocused.value) urlInput.value = res.url
                 if (res.title) pageTitle.value = res.title
+                if (res.data?.snapshot) snapshot.value = res.data.snapshot
+                // Update elements from snapshot refs
+                const refs = res.data?.refs
+                if (refs) {
+                    elements.value = Object.entries(refs)
+                        .sort(([a], [b]) => {
+                            const na = parseInt(a.slice(1)) || 0
+                            const nb = parseInt(b.slice(1)) || 0
+                            return na - nb
+                        })
+                        .map(([key, val]) => ({
+                            ref: `@${key}`,
+                            desc: `${val.role || ''} "${val.name || ''}"`.trim()
+                        }))
+                }
             } catch (e) {
                 isRunning.value = false
             }
+        }
+
+        function copySnapshot() {
+            navigator.clipboard.writeText(snapshot.value)
+            copyingSnapshot.value = true
+            setTimeout(() => copyingSnapshot.value = false, 3000)
         }
 
         async function fetchScreenshot() {
@@ -436,18 +469,27 @@ const BrowserPage = {
 
         async function refreshSnapshot() {
             try {
-                const res = await getBrowser('/snapshot')
-                if (res.elements && Array.isArray(res.elements)) {
-                    elements.value = res.elements.map(el => {
-                        if (typeof el === 'string') {
-                            const match = el.match(/^(@e\d+)\s+(.*)/)
-                            return match ? { ref: match[1], desc: match[2] } : { ref: el, desc: '' }
-                        }
-                        return el
-                    })
+                const res = await getBrowser('/snapshot?force=true')
+                const refs = res.data?.refs
+                if (refs) {
+                    elements.value = Object.entries(refs)
+                        .sort(([a], [b]) => {
+                            const na = parseInt(a.slice(1)) || 0
+                            const nb = parseInt(b.slice(1)) || 0
+                            return na - nb
+                        })
+                        .map(([key, val]) => ({
+                            ref: `@${key}`,
+                            desc: `${val.role || ''} "${val.name || ''}"`.trim()
+                        }))
                 } else {
                     elements.value = []
                 }
+                elementsLimit.value = 50
+                // Also update status fields from snapshot
+                if (res.url && !urlFocused.value) urlInput.value = res.url
+                if (res.title) pageTitle.value = res.title
+                if (res.running !== undefined) isRunning.value = !!res.running
             } catch (e) {
                 console.error('Snapshot failed:', e)
             }
@@ -682,16 +724,19 @@ const BrowserPage = {
             loading.value = false
         }
 
-        function onScreenshotError() {
+        function onScreenshotError(e) {
             loading.value = false
+            e.src = '/ext/browser/connecting.svg'
         }
 
         function startAutoRefresh() {
-            if (refreshTimer) clearInterval(refreshTimer)
+            if (refreshTimer) clearTimeout(refreshTimer)
             if (autoRefresh.value) {
-                refreshTimer = setInterval(() => {
-                    if (isRunning.value) fetchScreenshot()
-                }, refreshInterval.value)
+                async function refreshLoop() {
+                    if (isRunning.value) await fetchScreenshot()
+                    if (autoRefresh.value) refreshTimer = setTimeout(refreshLoop, refreshInterval.value)
+                }
+                refreshTimer = setTimeout(refreshLoop, refreshInterval.value)
             }
         }
 
@@ -715,19 +760,32 @@ const BrowserPage = {
         onMounted(() => {
             fetchStatus()
             fetchScripts()
-            statusTimer = setInterval(fetchStatus, 5000)
-            tickTimer = setInterval(() => tick.value++, 1000)  // Update time display every second
+            async function statusLoop() {
+                await fetchStatus()
+                statusTimer = setTimeout(statusLoop, 10000)
+            }
+            statusTimer = setTimeout(statusLoop, 1)
+            function tickLoop() {
+                tick.value++
+                tickTimer = setTimeout(tickLoop, 1000)
+            }
+            tickTimer = setTimeout(tickLoop, 1)
             startAutoRefresh()
             // Poll debug log alongside status
-            setInterval(fetchDebugLog, 2000)
+            async function debugLoop() {
+                await fetchDebugLog()
+                debugTimer = setTimeout(debugLoop, 2000)
+            }
             fetchDebugLog()
+            debugTimer = setTimeout(debugLoop, 1)
             window.addEventListener('keydown', handleKeydown)
         })
 
         onUnmounted(() => {
-            if (refreshTimer) clearInterval(refreshTimer)
-            if (statusTimer) clearInterval(statusTimer)
-            if (tickTimer) clearInterval(tickTimer)
+            if (refreshTimer) clearTimeout(refreshTimer)
+            if (statusTimer) clearTimeout(statusTimer)
+            if (tickTimer) clearTimeout(tickTimer)
+            if (debugTimer) clearTimeout(debugTimer)
             destroyCodeMirror()
             if (term) { term.dispose(); term = null }
             window.removeEventListener('keydown', handleKeydown)
@@ -736,12 +794,12 @@ const BrowserPage = {
         return {
             urlInput, urlFocused, screenshotUrl, screenshotContainer, screenshotImg, loading,
             isRunning, pageTitle, lastUpdate, autoRefresh, refreshInterval,
-            typeText, sidebarCollapsed, elementsExpanded, scriptsExpanded, elements,
+            typeText, sidebarCollapsed, elementsExpanded, scriptsExpanded, snapshot, elements, elementsLimit, visibleElements,
             scripts, showScriptEditor, editingScript, scriptName, scriptContent, scriptEditorRef, hasCodeMirror, hasUnsavedChanges,
             aiPrompt, generating, hasExistingScript,
             debugLogCount, debugLogExpanded, debugLogContainer, debugLogHeight, startDebugLogResize,
             timeSinceUpdate,
-            fetchStatus, fetchScreenshot, refreshSnapshot, navigate, goBack, goForward,
+            fetchStatus, fetchScreenshot, refreshSnapshot, navigate, goBack, goForward, copyingSnapshot, copySnapshot,
             reload, closeBrowser, saveState, handleScreenshotClick, clickElement,
             pressKey, scroll, sendType, newScript, closeScriptEditor, editScript, saveScript, deleteScript, runScript,
             generateInline, onScreenshotLoad, onScreenshotError,
