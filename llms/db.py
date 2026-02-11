@@ -3,8 +3,12 @@ import os
 import re
 import sqlite3
 import threading
+from datetime import datetime
 from queue import Empty, Queue
 from threading import Event, Thread
+
+sqlite3.register_adapter(datetime, lambda val: val.isoformat(" "))
+sqlite3.register_converter("timestamp", lambda val: datetime.fromisoformat(val.decode()))
 
 POOL = os.getenv("LLMS_POOL", "0") == "1"
 
