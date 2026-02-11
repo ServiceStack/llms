@@ -5,7 +5,7 @@ let ext
 
 const BrowserPage = {
     template: `
-    <div class="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="flex flex-col h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
         <!-- Header Bar -->
         <div class="flex items-center gap-3 px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <div class="flex gap-1">
@@ -25,11 +25,11 @@ const BrowserPage = {
                     <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
                 </button>
             </div>
-            <div class="flex-1 flex items-center gap-2 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-                <div class="ml-1 w-2 h-2 rounded-full flex-shrink-0" :class="isRunning ? 'bg-green-500' : 'bg-gray-400'" :title="isRunning ? 'Browser running' : 'Browser stopped'"></div>
+            <div class="flex-1 flex items-center gap-2 px-1 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                <div class="ml-2 w-2 h-2 rounded-full flex-shrink-0" :class="isRunning ? 'bg-green-500' : 'bg-gray-400'" :title="isRunning ? 'Browser running' : 'Browser stopped'"></div>
                 <input type="text" v-model="urlInput" @keyup.enter="navigate" @focus="urlFocused = true" @blur="urlFocused = false" placeholder="Enter URL..."
                     class="flex-1 bg-transparent border-none text-sm outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400" spellcheck="false" />
-                <button @click="navigate" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">Go</button>
+                <button type="button" @click="navigate" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">Go</button>
             </div>
             <div class="flex gap-1">
                 <button type="button" @click="saveState" :disabled="!isRunning"
@@ -62,7 +62,7 @@ const BrowserPage = {
                             <button type="button" @click="closeScriptEditor" class="px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">&times;</button>
                         </div>
                     </div>
-                    <div v-if="hasCodeMirror" ref="scriptEditorRef" id="scriptEditorRef" class="relative flex-1 w-full overflow-hidden" style="min-height: 0"></div>
+                    <div v-if="hasCodeMirror" ref="scriptEditorRef" id="scriptEditorRef" class="relative flex-1 w-full overflow-hidden" style="min-height: 0; max-width: calc(100vw - 323px)"></div>
                     <textarea v-else v-model="scriptContent" spellcheck="false" class="flex-1 w-full px-4 py-2 bg-gray-900 text-gray-100 font-mono text-sm border-none resize-none outline-none overflow-y-auto" style="min-height: 0"></textarea>
                     <!-- AI Prompt Bar -->
                     <div class="flex items-center gap-2 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -76,7 +76,7 @@ const BrowserPage = {
                 </div>
 
                 <!-- Status Bar -->
-                <div class="flex justify-between px-4 py-1.5 text-xs text-gray-500 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex justify-between px-2 py-1.5 text-xs text-gray-500 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
                     <span class="truncate">{{ pageTitle || 'No page loaded' }}</span>
                     <span v-if="lastUpdate">Last update: {{ timeSinceUpdate }}</span>
                 </div>
@@ -111,33 +111,12 @@ const BrowserPage = {
             </div>
 
             <!-- Sidebar -->
-            <div class="flex flex-col bg-gray-50 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 transition-all" :class="sidebarCollapsed ? 'w-8' : 'w-72'">
+            <div class="flex flex-col bg-gray-50 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 transition-all overflow-hidden" :class="sidebarCollapsed ? 'w-8' : 'w-72'">
                 <button type="button" @click="sidebarCollapsed = !sidebarCollapsed" class="w-full p-2 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 flex">
                     <span>{{ sidebarCollapsed ? '◀' : '▶' }}</span>
                 </button>
                 
-                <div v-if="!sidebarCollapsed" class="flex-1 overflow-y-auto">
-                    <!-- Elements Panel -->
-                    <div class="border-b border-gray-200 dark:border-gray-700">
-                        <div @click="elementsExpanded = !elementsExpanded" class="flex justify-between px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none">
-                            <span>Elements</span>
-                            <span>{{ elementsExpanded ? '▼' : '▶' }}</span>
-                        </div>
-                        <div v-if="elementsExpanded" class="px-3 pb-3">
-                            <div class="flex gap-2 mb-2">
-                                <button type="button" @click="refreshSnapshot" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded disabled:opacity-40 transition-colors">Refresh</button>
-                            </div>
-                            <div class="flex flex-col gap-1 max-h-48 overflow-y-auto">
-                                <div v-for="el in elements" :key="el.ref || el" @click="clickElement(el.ref || el)"
-                                    class="flex gap-2 px-2 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-                                    <span class="text-blue-600 dark:text-blue-400 font-mono flex-shrink-0">{{ el.ref || el }}</span>
-                                    <span class="text-gray-500 dark:text-gray-400 truncate">{{ el.desc || '' }}</span>
-                                </div>
-                                <div v-if="elements.length === 0" class="py-2 text-center text-xs text-gray-400">No elements. Click Refresh.</div>
-                            </div>
-                        </div>
-                    </div>
-
+                <div v-if="!sidebarCollapsed" class="flex-1 overflow-y-auto min-h-0">
                     <!-- Scripts Panel -->
                     <div class="border-b border-gray-200 dark:border-gray-700">
                         <div @click="scriptsExpanded = !scriptsExpanded" class="flex justify-between px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none">
@@ -148,7 +127,7 @@ const BrowserPage = {
                             <div class="flex gap-2 mb-2">
                                 <button type="button" @click="newScript" class="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors">+ New</button>
                             </div>
-                            <div class="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                            <div class="flex flex-col gap-1 overflow-y-auto">
                                 <div v-for="script in scripts" :key="script.name" class="flex gap-1 items-center text-sm">
                                     <button type="button" @click.stop="runScript(script.name)" class="opacity-60 hover:opacity-100 text-green-700 dark:text-green-600" :title="'Run ' + script.name">▶</button>
                                     <div @click.stop="editScript(script)" class="flex justify-between items-center w-full text-xs w-full">
@@ -166,12 +145,39 @@ const BrowserPage = {
                             </div>
                         </div>
                     </div>
+
+                    <!-- Elements Panel -->
+                    <div class="border-b border-gray-200 dark:border-gray-700">
+                        <div @click="elementsExpanded = !elementsExpanded" class="flex justify-between px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none">
+                            <span>Elements</span>
+                            <span>{{ elementsExpanded ? '▼' : '▶' }}</span>
+                        </div>
+                        <div v-if="elementsExpanded" class="px-3 pb-3">
+                            <div class="flex gap-2 mb-2">
+                                <button type="button" @click="refreshSnapshot" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded disabled:opacity-40 transition-colors">Refresh</button>
+                            </div>
+                            <div class="flex flex-col gap-1 overflow-y-auto">
+                                <div v-for="el in elements" :key="el.ref || el" @click="clickElement(el.ref || el)"
+                                    class="flex gap-2 px-2 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                                    <span class="text-blue-600 dark:text-blue-400 font-mono flex-shrink-0">{{ el.ref || el }}</span>
+                                    <span class="text-gray-500 dark:text-gray-400 truncate">{{ el.desc || '' }}</span>
+                                </div>
+                                <div v-if="elements.length === 0" class="py-2 text-center text-xs text-gray-400">No elements. Click Refresh.</div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
 
         <!-- Quick Actions Bar -->
-        <div class="flex flex-wrap items-center gap-4 px-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex flex-wrap items-center gap-4 pl-1 pr-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex-1 flex gap-2">
+                <input type="text" v-model="typeText" @keyup.enter="sendType" placeholder="Type text..." :disabled="!isRunning"
+                    class="flex-1 px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none focus:border-blue-500 disabled:opacity-40" />
+                <button @click="sendType" :disabled="!isRunning || !typeText" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 disabled:opacity-40 transition-colors">Send</button>
+            </div>
             <div class="flex gap-1">
                 <button v-for="key in ['Enter', 'Tab', 'Escape', '↑', '↓']" :key="key" @click="pressKey(key === '↑' ? 'ArrowUp' : key === '↓' ? 'ArrowDown' : key)" :disabled="!isRunning"
                     class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">{{ key === 'Escape' ? 'Esc' : key }}</button>
@@ -179,11 +185,6 @@ const BrowserPage = {
             <div class="flex gap-1">
                 <button @click="scroll('up', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▲ Scroll</button>
                 <button @click="scroll('down', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▼ Scroll</button>
-            </div>
-            <div class="flex-1 flex gap-2">
-                <input type="text" v-model="typeText" @keyup.enter="sendType" placeholder="Type text..." :disabled="!isRunning"
-                    class="flex-1 px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none focus:border-blue-500 disabled:opacity-40" />
-                <button @click="sendType" :disabled="!isRunning || !typeText" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 disabled:opacity-40 transition-colors">Send</button>
             </div>
             <div class="flex items-center gap-2 text-xs text-gray-500">
                 <label class="flex items-center gap-1 cursor-pointer">
@@ -310,6 +311,13 @@ const BrowserPage = {
             }
         }
 
+        function resizeEditor() {
+            if (scriptEditorRef.value?.clientHeight) {
+                console.log('setting size', scriptEditorRef.value.clientHeight)
+                cmEditor.setSize('100%', scriptEditorRef.value.clientHeight)
+            }
+        }
+
         // CodeMirror editor initialization
         function initCodeMirror() {
             if (!hasCodeMirror || !scriptEditorRef.value || cmEditor) return
@@ -328,12 +336,7 @@ const BrowserPage = {
             cmEditor.on('change', () => {
                 scriptContent.value = cmEditor.getValue()
             })
-            nextTick(() => {
-                if (scriptEditorRef.value?.clientHeight) {
-                    console.log('setting size', scriptEditorRef.value.clientHeight)
-                    cmEditor.setSize('100%', scriptEditorRef.value.clientHeight)
-                }
-            })
+            nextTick(resizeEditor)
         }
 
         function destroyCodeMirror() {
@@ -387,6 +390,7 @@ const BrowserPage = {
                 debugLogResizing = false
                 document.removeEventListener('mousemove', onMove)
                 document.removeEventListener('mouseup', onUp)
+                nextTick(resizeEditor)
             }
             document.addEventListener('mousemove', onMove)
             document.addEventListener('mouseup', onUp)
