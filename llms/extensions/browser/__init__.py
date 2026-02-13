@@ -155,8 +155,11 @@ def install(ctx):
 
         if success and os.path.exists(screenshot_path):
             return web.FileResponse(screenshot_path, headers={"Content-Type": "image/png", "Cache-Control": "no-cache"})
-        
-        return web.FileResponse(os.path.join(os.path.dirname(__file__), "ui", "connecting.svg"), headers={"Content-Type": "image/svg", "Cache-Control": "no-cache"})
+
+        return web.FileResponse(
+            os.path.join(os.path.dirname(__file__), "ui", "connecting.svg"),
+            headers={"Content-Type": "image/svg+xml", "Cache-Control": "no-cache"},
+        )
 
     ctx.add_get("/browser/screenshot", get_screenshot)
 
@@ -515,7 +518,9 @@ def install(ctx):
 
         BROWSER_MODEL = os.getenv("BROWSER_MODEL", ctx.config.get("defaults", {}).get("text", {}).get("model"))
         if not BROWSER_MODEL:
-            raise Exception("No model specified for browser script generation. Set BROWSER_MODEL environment variable or configure a default text model in llms.json.")
+            raise Exception(
+                "No model specified for browser script generation. Set BROWSER_MODEL environment variable or configure a default text model in llms.json."
+            )
         chat_request = {
             "model": BROWSER_MODEL,
             "messages": [
