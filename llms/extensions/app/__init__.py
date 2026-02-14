@@ -771,7 +771,8 @@ def install(ctx):
             "completedAt": completed_at,
             "ref": o.get("id", None),
         }
-        tasks.append(g_db.create_request_async(request, user=user))
+        if not context.get("nostore"):
+            tasks.append(g_db.create_request_async(request, user=user))
 
         if thread_id and not nohistory:
             messages = chat.get("messages", [])
@@ -881,7 +882,8 @@ def install(ctx):
             "error": error,
             "stackTrace": context.get("stackTrace", None),
         }
-        tasks.append(g_db.create_request_async(request, user=user))
+        if not context.get("nostore"):
+            tasks.append(g_db.create_request_async(request, user=user))
 
         if len(tasks) > 0:
             await asyncio.gather(*tasks)
