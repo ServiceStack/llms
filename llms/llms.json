@@ -7,7 +7,7 @@
             "User-Agent": "llmspy.org/3.0"
         },
         "text": {
-            "model": "Kimi K2 Instruct",
+            "model": "MiniMax-M2.5",
             "messages": [
                 {
                     "role": "user",
