@@ -615,6 +615,7 @@ def install(ctx):
     ctx.add_post("/agents/avatar", upload_agent_avatar)
 
     async def chat_request(openai_request, context):
+        nohistory = context.get("nohistory")
         chat = openai_request
         user = context.get("user", None)
         provider = context.get("provider", None)
@@ -629,6 +630,8 @@ def install(ctx):
         started_at = context.get("startedAt")
         if not started_at:
             context["startedAt"] = started_at = datetime.now()
+        if nohistory:
+            return
         if thread_id is None:
             thread = {
                 "user": user,
@@ -666,6 +669,8 @@ def install(ctx):
     ctx.register_chat_request_filter(chat_request)
 
     async def tool_request(chat_request, context):
+        if context.get("nohistory"):
+            return
         messages = chat_request.get("messages", [])
         ctx.dbg(f"tool_request: messages {len(messages)}")
         thread_id = context.get("threadId", None)
@@ -712,6 +717,7 @@ def install(ctx):
 
     async def chat_response(openai_response, context):
         ctx.dbg("create_response")
+        nohistory = context.get("nohistory")
         o = openai_response
         chat = context.get("chat")
         usage = o.get("usage", None)
@@ -767,7 +773,7 @@ def install(ctx):
         }
         tasks.append(g_db.create_request_async(request, user=user))
 
-        if thread_id:
+        if thread_id and not nohistory:
             messages = chat.get("messages", [])
             last_role = messages[-1].get("role", None) if len(messages) > 0 else None
             if last_role == "user" or last_role == "tool":
@@ -810,37 +816,38 @@ def install(ctx):
             if provider_response:
                 update_thread["providerResponse"] = truncate_long_strings(provider_response)
             tasks.append(g_db.update_thread_async(thread_id, update_thread, user=user))
-        else:
+        elif not thread_id:
             ctx.dbg("Missing thread_id")
 
         await asyncio.gather(*tasks)
 
-        # Update thread costs from all thread requests
-        thread_requests = g_db.query_requests({"threadId": thread_id}, user=user)
-        total_costs = 0
-        total_input = 0
-        total_output = 0
-        for request in thread_requests:
-            total_costs += request.get("cost", 0) or 0
-            total_input += request.get("inputTokens", 0) or 0
-            total_output += request.get("outputTokens", 0) or 0
-        stats = {
-            "inputTokens": total_input,
-            "outputTokens": total_output,
-            "cost": total_costs,
-            "duration": duration,
-            "requests": len(thread_requests),
-        }
-        g_db.update_thread(
-            thread_id,
-            {
+        if thread_id and not nohistory:
+            # Update thread costs from all thread requests
+            thread_requests = g_db.query_requests({"threadId": thread_id}, user=user)
+            total_costs = 0
+            total_input = 0
+            total_output = 0
+            for request in thread_requests:
+                total_costs += request.get("cost", 0) or 0
+                total_input += request.get("inputTokens", 0) or 0
+                total_output += request.get("outputTokens", 0) or 0
+            stats = {
                 "inputTokens": total_input,
                 "outputTokens": total_output,
                 "cost": total_costs,
-                "stats": stats,
-            },
-            user=user,
-        )
+                "duration": duration,
+                "requests": len(thread_requests),
+            }
+            g_db.update_thread(
+                thread_id,
+                {
+                    "inputTokens": total_input,
+                    "outputTokens": total_output,
+                    "cost": total_costs,
+                    "stats": stats,
+                },
+                user=user,
+            )
 
     ctx.register_chat_response_filter(chat_response)
 
@@ -852,15 +859,16 @@ def install(ctx):
             ctx.dbg("Missing chat")
             return
 
+        nohistory = context.get("nohistory")
         title = context.get("title") or prompt_to_title(ctx.last_user_prompt(chat) if chat else None)
         completed_at = datetime.now()
         user = context.get("user", None)
 
         thread_id = context.get("threadId", None)
         tasks = []
-        if thread_id:
+        if thread_id and not nohistory:
             tasks.append(g_db.update_thread_async(thread_id, {"completedAt": completed_at, "error": error}, user=user))
-        else:
+        elif not thread_id:
             ctx.dbg("Missing threadId")
 
         request = {

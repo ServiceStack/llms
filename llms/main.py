@@ -1984,7 +1984,7 @@ async def g_chat_completion(chat, context=None):
     raise e
 
 
-async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=None, raw=False):
+async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=None, raw=False, nohistory=False):
     if g_default_model:
         chat["model"] = g_default_model
 
@@ -2061,6 +2061,7 @@ async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=Non
     try:
         context = {
             "tools": tools or "all",
+            "nohistory": nohistory,
         }
         response = await g_app.chat_completion(chat, context=context)
 
@@ -3732,6 +3733,7 @@ def create_arg_parser():
         metavar="PARAMS",
     )
     parser.add_argument("--raw", action="store_true", help="Return raw AI JSON response")
+    parser.add_argument("--nohistory", action="store_true", help="Skip saving response to database")
 
     parser.add_argument(
         "--list", action="store_true", help="Show list of enabled providers and their models (alias ls provider?)"
@@ -4131,6 +4133,7 @@ def cli_exec(cli_args, extra_args):
                 metadata = chat.get("metadata", {})
                 context["threadId"] = metadata.get("threadId", None)
                 context["tools"] = metadata.get("tools", "all")
+                context["nohistory"] = metadata.get("nohistory", False)
                 response = await g_app.chat_completion(chat, context)
                 return web.json_response(response)
             except Exception as e:
@@ -4606,6 +4609,7 @@ def cli_exec(cli_args, extra_args):
                     file=cli_args.file,
                     args=args,
                     raw=cli_args.raw,
+                    nohistory=cli_args.nohistory,
                 )
             )
             return ExitCode.SUCCESS
