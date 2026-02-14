@@ -4548,8 +4548,20 @@ def cli_exec(cli_args, extra_args):
         print(f"\nDefault model set to: {default_model}")
         return ExitCode.SUCCESS
 
+    # Read chat template from stdin if data is piped (e.g. cat template.json | llms)
+    stdin_chat = None
+    if not sys.stdin.isatty():
+        stdin_data = sys.stdin.read().strip()
+        if stdin_data:
+            try:
+                stdin_chat = json.loads(stdin_data)
+            except json.JSONDecodeError:
+                print(f"Invalid JSON from stdin")
+                return ExitCode.FAILED
+
     if (
         cli_args.chat is not None
+        or stdin_chat is not None
         or cli_args.image is not None
         or cli_args.audio is not None
         or cli_args.file is not None
@@ -4580,6 +4592,9 @@ def cli_exec(cli_args, extra_args):
                 with open(chat_path) as f:
                     chat_json = f.read()
                     chat = json.loads(chat_json)
+            elif stdin_chat is not None:
+                _log(f"Using chat from stdin")
+                chat = stdin_chat
 
             if cli_args.system is not None:
                 chat["messages"].insert(0, {"role": "system", "content": cli_args.system})
