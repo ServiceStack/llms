@@ -57,7 +57,7 @@ const BrowserPage = {
                             <input type="text" v-model="scriptName" placeholder="script-name.sh" class="bg-gray-50 dark:bg-gray-900 px-1 py-0 border border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 rounded text-sm outline-none focus:border-blue-500 w-60" />
                         </div>
                         <div class="flex items-center gap-2">
-                            <button type="button" @click="runScript(scriptName)" :disabled="!scriptName" class="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-colors" title="Run (CTRL+Enter)">▶ Run</button>
+                            <button type="button" @click="runScript(scriptName)" :disabled="!scriptName" class="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-colors" :title="hasSelection ? 'Run selected text (CTRL+Enter)' : 'Run (CTRL+Enter)'">▶ {{ hasSelection ? 'Run selected text' : 'Run' }}</button>
                             <button type="button" @click="saveScript" :disabled="!hasUnsavedChanges" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 transition-colors">Save</button>
                             <button type="button" @click="closeScriptEditor" class="px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">&times;</button>
                         </div>
@@ -265,6 +265,7 @@ const BrowserPage = {
         const savedScriptContent = ref('')
         const scriptEditorRef = ref(null)
         const hasCodeMirror = typeof CodeMirror !== 'undefined'
+        const hasSelection = ref(false)
         let cmEditor = null
 
         // AI inline prompt
@@ -279,7 +280,7 @@ const BrowserPage = {
 
         // Debug log
         const debugLogCount = ref(0)
-        const debugLogExpanded = ref(false)
+        const debugLogExpanded = ref(true)
         const debugLogContainer = ref(null)
         const debugLogHeight = ref(200)
         let debugLogSinceId = 0
@@ -347,6 +348,9 @@ const BrowserPage = {
             cmEditor.on('change', () => {
                 scriptContent.value = cmEditor.getValue()
             })
+            cmEditor.on('cursorActivity', () => {
+                hasSelection.value = cmEditor.somethingSelected()
+            })
             nextTick(resizeEditor)
         }
 
@@ -378,8 +382,12 @@ const BrowserPage = {
 
         watch(debugLogExpanded, async (expanded) => {
             if (expanded) {
+                debugLogSinceId = 0
                 await nextTick()
                 initTerminal()
+                fetchDebugLog()
+            } else {
+                if (term) { term.dispose(); term = null }
             }
         })
 
@@ -682,8 +690,9 @@ const BrowserPage = {
         async function runScript(name) {
             loading.value = true
             try {
-                // Auto-save when running from the editor
-                if (showScriptEditor.value && scriptName.value && scriptContent.value) {
+                const selectedText = cmEditor ? cmEditor.getSelection() : ''
+                // Auto-save when running the same script that's open in the editor
+                if (showScriptEditor.value && scriptName.value === name && scriptContent.value) {
                     await postBrowser('/scripts', {
                         name: scriptName.value,
                         content: scriptContent.value
@@ -691,7 +700,8 @@ const BrowserPage = {
                     savedScriptContent.value = scriptContent.value
                     await fetchScripts()
                 }
-                const res = await postBrowser(`/scripts/${name}/run`, {})
+                const body = selectedText ? { content: selectedText } : {}
+                const res = await postBrowser(`/scripts/${name}/run`, body)
                 console.log('Script output:', res)
                 await fetchScreenshot()
             } catch (e) {
@@ -771,13 +781,16 @@ const BrowserPage = {
             }
             tickTimer = setTimeout(tickLoop, 1)
             startAutoRefresh()
-            // Poll debug log alongside status
-            async function debugLoop() {
-                await fetchDebugLog()
-                debugTimer = setTimeout(debugLoop, 2000)
-            }
-            fetchDebugLog()
-            debugTimer = setTimeout(debugLoop, 1)
+            // Initialize terminal and poll debug log alongside status
+            nextTick(() => {
+                initTerminal()
+                async function debugLoop() {
+                    await fetchDebugLog()
+                    debugTimer = setTimeout(debugLoop, 2000)
+                }
+                fetchDebugLog()
+                debugTimer = setTimeout(debugLoop, 1)
+            })
             window.addEventListener('keydown', handleKeydown)
         })
 
@@ -795,7 +808,7 @@ const BrowserPage = {
             urlInput, urlFocused, screenshotUrl, screenshotContainer, screenshotImg, loading,
             isRunning, pageTitle, lastUpdate, autoRefresh, refreshInterval,
             typeText, sidebarCollapsed, elementsExpanded, scriptsExpanded, snapshot, elements, elementsLimit, visibleElements,
-            scripts, showScriptEditor, editingScript, scriptName, scriptContent, scriptEditorRef, hasCodeMirror, hasUnsavedChanges,
+            scripts, showScriptEditor, editingScript, scriptName, scriptContent, scriptEditorRef, hasCodeMirror, hasUnsavedChanges, hasSelection,
             aiPrompt, generating, hasExistingScript,
             debugLogCount, debugLogExpanded, debugLogContainer, debugLogHeight, startDebugLogResize,
             timeSinceUpdate,
