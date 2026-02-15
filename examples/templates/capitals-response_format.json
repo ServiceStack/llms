@@ -6,7 +6,7 @@
             "content": [
                 {
                     "type": "text",
-                    "text": "Return the list of capital cities for the following countries: France, Germany, Italy, Spain, Portugal, Japan, Australia."
+                    "text": "Return capital cities for: France, Germany, Italy, Spain, Japan, Australia."
                 }
             ]
         }
