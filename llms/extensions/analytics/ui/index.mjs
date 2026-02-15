@@ -374,7 +374,7 @@ export const Analytics = {
                                                 </div>
                                                 <div>
                                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-medium">Speed</div>
-                                                    <div v-if="request.duration && request.outputTokens" class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ (request.outputTokens / (request.duration / 1000)).toFixed(1) + ' tok/s' }}</div>
+                                                    <div v-if="request.duration && request.outputTokens" class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ (request.outputTokens / request.duration).toFixed(1) + ' tok/s' }}</div>
                                                 </div>
                                             </div>
                                         </div>
