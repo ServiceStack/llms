@@ -550,7 +550,7 @@ def install(ctx):
         }
 
         try:
-            response = await ctx.chat_completion(chat_request, context={"tools": "none"})
+            response = await ctx.chat_completion(chat_request, context={"tools": "none", "nohistory":True })
             content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
 
             # Clean up the response - extract just the script
