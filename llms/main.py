@@ -1984,7 +1984,9 @@ async def g_chat_completion(chat, context=None):
     raise e
 
 
-async def cli_chat(chat, tools=None, image=None, audio=None, file=None, args=None, raw=False, nohistory=False, nostore=False):
+async def cli_chat(
+    chat, tools=None, image=None, audio=None, file=None, args=None, raw=False, nohistory=False, nostore=False
+):
     if g_default_model:
         chat["model"] = g_default_model
 
@@ -3075,6 +3077,9 @@ class AppExtensions:
     def create_chat_with_tools(self, chat: Dict[str, Any], use_tools: str = "all") -> Dict[str, Any]:
         # Inject global tools if present
         current_chat = chat.copy()
+        # Don't inject tools when response_format is set (structured output)
+        if "response_format" in current_chat:
+            return current_chat
         tools = current_chat.get("tools")
         if tools is None:
             tools = current_chat["tools"] = []

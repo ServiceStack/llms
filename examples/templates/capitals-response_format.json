@@ -1,0 +1,49 @@
+{
+    "model": "moonshotai/kimi-k2-instruct",
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Return the list of capital cities for the following countries: France, Germany, Italy, Spain, Portugal, Japan, Australia."
+                }
+            ]
+        }
+    ],
+    "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "country_capitals",
+            "strict": true,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "capitals": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "country": {
+                                    "type": "string"
+                                },
+                                "capital": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "country",
+                                "capital"
+                            ],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": [
+                    "capitals"
+                ],
+                "additionalProperties": false
+            }
+        }
+    }
+}
