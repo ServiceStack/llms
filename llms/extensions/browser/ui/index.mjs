@@ -111,7 +111,7 @@ const BrowserPage = {
                             <span class="text-xs text-gray-500">{{ debugLogExpanded ? '▼' : '▲' }}</span>
                         </div>
                     </div>
-                    <div v-if="debugLogExpanded" ref="debugLogContainer" class="flex-1" style="min-height: 0"></div>
+                    <div v-if="debugLogExpanded" id="debuglog" ref="debugLogContainer" class="flex-1" style="min-height: 0"></div>
                 </div>
             </div>
 
@@ -404,7 +404,11 @@ const BrowserPage = {
 
         watch(debugLogHeight, () => {
             if (term && debugLogContainer.value) {
-                try { term.resize(Math.floor(debugLogContainer.value.clientWidth / 7.2), Math.floor(debugLogContainer.value.clientHeight / 17)) } catch (e) { }
+                try {
+                    term.resize(
+                        Math.floor(debugLogContainer.value.clientWidth / 7.2),
+                        Math.floor(debugLogContainer.value.clientHeight / 17))
+                } catch (e) { }
             }
         })
 

@@ -705,6 +705,9 @@
         left: 0;
     }
 
+    #debuglog .terminal {
+        height: 100%
+    }
 
     @media (min-width: 640px) {
         .message pre {
