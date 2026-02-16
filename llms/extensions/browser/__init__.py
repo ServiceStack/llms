@@ -24,6 +24,11 @@ def install(ctx):
         ctx.disabled = True
         return
 
+    if not ctx.is_local:
+        ctx.log("Browser extension is only supported in local mode.")
+        ctx.disabled = True
+        return
+
     def ensure_dir(path):
         os.makedirs(path, exist_ok=True)
         return path

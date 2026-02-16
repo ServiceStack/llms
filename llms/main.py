@@ -61,6 +61,7 @@ VERSION = "3.0.33"
 DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
 MOCK_DIR = os.getenv("MOCK_DIR")
+LLMS_MODE = os.getenv("LLMS_MODE", "local")
 DISABLE_EXTENSIONS = (os.getenv("LLMS_DISABLE") or "").split(",")
 DEFAULT_LIMITS = {
     "client_timeout": 120,
@@ -2874,6 +2875,8 @@ class AppExtensions:
         self.extra_args = extra_args
         self.config = None
         self.limits = DEFAULT_LIMITS
+        self.mode = LLMS_MODE
+        self.is_local = self.mode == "local"
         self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
         self.chat_request_filters = []
@@ -3121,6 +3124,8 @@ class ExtensionContext:
         self.app = app
         self.config = app.config
         self.limits = app.limits
+        self.mode = app.mode
+        self.is_local = app.is_local
         self.cli_args = app.cli_args
         self.extra_args = app.extra_args
         self.error_auth_required = app.error_auth_required
