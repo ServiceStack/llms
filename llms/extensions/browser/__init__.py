@@ -2,10 +2,10 @@ import asyncio
 import json
 import os
 import shutil
-import subprocess
 import time
 from collections import deque
 from pathlib import Path
+from typing import Any
 
 from aiohttp import web
 
@@ -47,11 +47,45 @@ def install(ctx):
         stdout = result.get("stdout", "")
         stderr = result.get("stderr", result.get("error", ""))
         rc = result.get("returncode", -1)
-        DEBUG_LOG.append(
+        new_log = {
+            "id": DEBUG_LOG_COUNTER,
+            "ts": time.time(),
+            "cmd": cmd_str,
+            "rc": rc,
+            "stdout": stdout,
+            "stderr": stderr,
+            "ok": result.get("success", False),
+            "ms": round(duration * 1000),
+        }
+        DEBUG_LOG.append(new_log)
+        ctx.dbg(f"{cmd_str}\n{stdout}")
+        if stderr.strip() if stderr else False:
+            ctx.dbg(f"{rc}: {stderr}")
+        return new_log
+
+    def _begin_debug_log(cmd_str):
+        global DEBUG_LOG_COUNTER
+        DEBUG_LOG_COUNTER += 1
+        log = {
+            "id": DEBUG_LOG_COUNTER,
+            "ts": time.time(),
+            "_start": time.monotonic(),
+            "cmd": cmd_str,
+            "rc": None,
+            "ms": None,
+        }
+        DEBUG_LOG.append(log)
+        ctx.dbg(f"Starting: {cmd_str}")
+        return log
+
+    def _complete_debug_log(log: dict[str, Any], result: dict):
+        stdout = result.get("stdout", "")
+        stderr = result.get("stderr", result.get("error", ""))
+        rc = result.get("returncode", -1)
+        started_at = log.get("_start", time.monotonic())
+        duration = time.monotonic() - started_at
+        log.update(
             {
-                "id": DEBUG_LOG_COUNTER,
-                "ts": time.time(),
-                "cmd": cmd_str,
                 "rc": rc,
                 "stdout": stdout,
                 "stderr": stderr,
@@ -59,17 +93,19 @@ def install(ctx):
                 "ms": round(duration * 1000),
             }
         )
-        ctx.dbg(f"{cmd_str}\n{stdout}")
+        ctx.dbg(f"{log['cmd']}\n{stdout}")
         if stderr.strip() if stderr else False:
             ctx.dbg(f"{rc}: {stderr}")
+        return log
 
     async def run_browser_cmd_async(*args, timeout=30, env=None, record=True):
         """Run agent-browser command asynchronously."""
         cmd = ["agent-browser"] + list(args)
         cmd_str = " ".join(cmd)
-        t0 = time.monotonic()
         try:
             ctx.dbg(f"Running: {cmd_str}")
+            if record:
+                log = _begin_debug_log(cmd_str)
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -89,7 +125,7 @@ def install(ctx):
         except Exception as e:
             ret = {"success": False, "error": str(e)}
         if record:
-            _add_debug_log(cmd_str, ret, time.monotonic() - t0)
+            _complete_debug_log(log, ret)
         return ret
 
     # =========================================================================
@@ -408,7 +444,7 @@ def install(ctx):
         content = data.get("content", "")
 
         if not name:
-            return web.json_response({"error": "Script name required"}, status=400)
+            raise Exception("Script name is required")
 
         if not name.endswith(".sh"):
             name += ".sh"
@@ -434,7 +470,7 @@ def install(ctx):
         path = os.path.join(get_script_dir(req), os.path.basename(name))
 
         if not os.path.exists(path):
-            return web.json_response({"error": "Script not found"}, status=404)
+            raise Exception("Script not found")
 
         os.remove(path)
         return web.json_response({"success": True})
@@ -442,38 +478,25 @@ def install(ctx):
     ctx.add_delete("/browser/scripts/{name}", delete_script)
 
     async def run_script(req):
-        """Execute a script."""
+        """Execute a saved .sh script file."""
         name = req.match_info["name"]
         if not name.endswith(".sh"):
             name += ".sh"
         path = os.path.join(get_script_dir(req), os.path.basename(name))
 
-        # Check for inline content (e.g. selected text)
-        body = await req.json() if req.content_length else {}
-        inline_content = body.get("content") if body else None
-
-        if not inline_content and not os.path.exists(path):
-            return web.json_response({"error": "Script not found"}, status=404)
+        if not os.path.exists(path):
+            raise Exception("Script not found")
 
         t0 = time.monotonic()
         try:
-            if inline_content:
-                proc = await asyncio.create_subprocess_exec(
-                    "bash",
-                    "-c",
-                    inline_content,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
-                )
-            else:
-                proc = await asyncio.create_subprocess_exec(
-                    "bash",
-                    path,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
-                )
+            log = _begin_debug_log(f"bash {path}")
+            proc = await asyncio.create_subprocess_exec(
+                "bash",
+                path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
+            )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
 
             result = {
@@ -482,7 +505,7 @@ def install(ctx):
                 "stderr": stderr.decode() if stderr else "",
                 "returncode": proc.returncode,
             }
-            _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
+            _complete_debug_log(log, result)
             return web.json_response(result)
         except asyncio.TimeoutError:
             proc.kill()
@@ -493,14 +516,59 @@ def install(ctx):
                 "stdout": "",
                 "stderr": "Script execution timed out",
             }
-            _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
+            _complete_debug_log(log, result)
             return web.json_response({"error": "Script execution timed out"}, status=500)
         except Exception as e:
             result = {"success": False, "error": str(e), "returncode": -1, "stdout": "", "stderr": str(e)}
-            _add_debug_log(f"bash {name}", result, time.monotonic() - t0)
+            _complete_debug_log(log, result)
             return web.json_response({"error": str(e)}, status=500)
 
     ctx.add_post("/browser/scripts/{name}/run", run_script)
+
+    async def exec_bash(req):
+        """Execute an ad-hoc bash command."""
+        data = await req.json()
+        content = data.get("content", "")
+        if not content:
+            raise Exception("content required")
+
+        try:
+            log = _begin_debug_log(f"bash -c {content[:100]}")
+            proc = await asyncio.create_subprocess_exec(
+                "bash",
+                "-c",
+                content,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+
+            result = {
+                "success": proc.returncode == 0,
+                "stdout": stdout.decode() if stdout else "",
+                "stderr": stderr.decode() if stderr else "",
+                "returncode": proc.returncode,
+            }
+            _complete_debug_log(log, result)
+            return web.json_response(result)
+        except asyncio.TimeoutError:
+            proc.kill()
+            result = {
+                "success": False,
+                "error": "Command execution timed out",
+                "returncode": -1,
+                "stdout": "",
+                "stderr": "Command execution timed out",
+            }
+            _complete_debug_log(log, result)
+            raise Exception("Command execution timed out")
+        except Exception as e:
+            result = {"success": False, "error": str(e), "returncode": -1, "stdout": "", "stderr": str(e)}
+            _complete_debug_log(log, result)
+            raise Exception(str(e))
+
+    ctx.add_post("/browser/exec", exec_bash)
 
     # =========================================================================
     # AI Script Generation
@@ -514,7 +582,7 @@ def install(ctx):
         existing_script = data.get("existing_script", "")
 
         if not prompt:
-            return web.json_response({"error": "Prompt required"}, status=400)
+            raise Exception("Prompt required")
 
         system_prompt = None
         candidate_paths = [
@@ -550,7 +618,7 @@ def install(ctx):
         }
 
         try:
-            response = await ctx.chat_completion(chat_request, context={"tools": "none", "nohistory":True })
+            response = await ctx.chat_completion(chat_request, context={"tools": "none", "nohistory": True})
             content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
 
             # Clean up the response - extract just the script

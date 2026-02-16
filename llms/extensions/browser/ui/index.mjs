@@ -42,6 +42,11 @@ const BrowserPage = {
                     title="Close Browser">
                     <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                 </button>
+                <button type="button" @click="killAllBrowsers"
+                    class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    title="Kill all agent-browser processes">
+                    <svg class="w-4 h-4" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"><path d="M9.306 3.22C7.8 3.278 6.516 4.228 6.29 5.717C6.13 6.765 6 8.18 6 10s.13 3.235.29 4.284c.226 1.49 1.51 2.44 3.016 2.495C11.912 16.876 16.68 17 24 17s12.088-.124 14.694-.22c1.505-.057 2.79-1.007 3.016-2.496c.16-1.049.29-2.463.29-4.284s-.13-3.235-.29-4.284c-.226-1.49-1.51-2.44-3.016-2.495C36.088 3.124 31.32 3 24 3s-12.088.124-14.694.22M34.5 36.899c1.761-.038 3.15-.081 4.194-.12c1.505-.056 2.79-1.006 3.016-2.495c.16-1.049.29-2.463.29-4.284s-.13-3.235-.29-4.284c-.226-1.49-1.51-2.44-3.016-2.495C36.088 23.124 31.32 23 24 23s-12.088.124-14.694.22c-1.506.057-2.79 1.007-3.016 2.496C6.13 26.765 6 28.18 6 30s.13 3.235.29 4.284c.226 1.49 1.51 2.44 3.016 2.495c1.043.039 2.433.082 4.194.12"/><path d="M31.473 40.794a2.054 2.054 0 0 1-.084 2.836l-.759.76a2.054 2.054 0 0 1-2.835.083A161 161 0 0 1 24 40.923a161 161 0 0 1-3.794 3.55a2.055 2.055 0 0 1-2.836-.084l-.76-.759a2.055 2.055 0 0 1-.083-2.836A161 161 0 0 1 20.077 37a161 161 0 0 1-3.55-3.794a2.055 2.055 0 0 1 .084-2.836l.759-.76a2.054 2.054 0 0 1 2.835-.083c.935.846 2.26 2.068 3.795 3.55a161 161 0 0 1 3.794-3.55a2.055 2.055 0 0 1 2.836.084l.76.759c.776.777.82 2.02.083 2.835A161 161 0 0 1 27.923 37a161 161 0 0 1 3.55 3.794"/></g></svg>
+                </button>
             </div>
         </div>
 
@@ -306,20 +311,26 @@ const BrowserPage = {
             new ResizeObserver(fit).observe(debugLogContainer.value)
         }
 
-        function writeEntryToTerm(entry) {
+        function writeEntryToTerm(entry, isStart) {
             if (!term) return
-            const ok = entry.ok ? '\x1b[32m' : '\x1b[31m'
+            const ok = isStart ? '\x1b[90m' : entry.ok ? '\x1b[32m' : '\x1b[31m'
             const reset = '\x1b[0m'
             const dim = '\x1b[90m'
-            term.writeln(`${ok}$ ${reset}${entry.cmd} ${dim}${entry.ms}ms rc=${entry.rc}${reset}`)
-            if (entry.stdout && entry.stdout.trim()) {
-                for (const line of entry.stdout.trim().split('\n')) {
-                    term.writeln(`  ${dim}${line}${reset}`)
+            if (isStart) {
+                term.writeln(`${ok}$ ${reset}${entry.cmd}${dim} ...${reset}`)
+            } else {
+                // Move up and overwrite the initial "..." line with completed result
+                term.write(`\x1b[A\x1b[2K`)
+                term.writeln(`${ok}$ ${reset}${entry.cmd} ${dim}${entry.ms}ms rc=${entry.rc}${reset}`)
+                if (entry.stdout && entry.stdout.trim()) {
+                    for (const line of entry.stdout.trim().split('\n')) {
+                        term.writeln(`  ${dim}${line}${reset}`)
+                    }
                 }
-            }
-            if (entry.stderr && entry.stderr.trim()) {
-                for (const line of entry.stderr.trim().split('\n')) {
-                    term.writeln(`  \x1b[31m${line}${reset}`)
+                if (entry.stderr && entry.stderr.trim()) {
+                    for (const line of entry.stderr.trim().split('\n')) {
+                        term.writeln(`  \x1b[31m${line}${reset}`)
+                    }
                 }
             }
         }
@@ -512,14 +523,25 @@ const BrowserPage = {
             }
         }
 
+        let lastId = -1
         async function fetchDebugLog() {
             try {
                 const res = await getBrowser(`/debug-log?since=${debugLogSinceId}`)
                 if (res.entries && res.entries.length > 0) {
-                    debugLogSinceId = res.entries[res.entries.length - 1].id
+                    const lastEntry = res.entries[res.entries.length - 1]
+                    const isStart = lastEntry.ms === null || lastEntry.rc === null
+                    if (isStart && lastEntry.id === lastId) {
+                        // if the last entry is a start entry and has the same ID as the previous last entry, 
+                        // it means the command is still running and we have already logged the start
+                        return
+                    }
+                    lastId = lastEntry.id
+                    if (!isStart) {
+                        debugLogSinceId = lastEntry.id
+                    }
                     debugLogCount.value += res.entries.length
                     for (const entry of res.entries) {
-                        writeEntryToTerm(entry)
+                        writeEntryToTerm(entry, isStart)
                     }
                 }
             } catch (e) {
@@ -577,6 +599,18 @@ const BrowserPage = {
             isRunning.value = false
             screenshotUrl.value = null
             elements.value = []
+        }
+
+        async function killAllBrowsers() {
+            if (!confirm('Kill all agent-browser processes?')) return
+            try {
+                await postBrowser('/exec', { content: 'pkill agent-browser' })
+                isRunning.value = false
+                screenshotUrl.value = null
+                elements.value = []
+            } catch (e) {
+                console.error('Failed to kill agent-browser processes:', e)
+            }
         }
 
         async function saveState() {
@@ -700,8 +734,9 @@ const BrowserPage = {
                     savedScriptContent.value = scriptContent.value
                     await fetchScripts()
                 }
-                const body = selectedText ? { content: selectedText } : {}
-                const res = await postBrowser(`/scripts/${name}/run`, body)
+                const res = selectedText
+                    ? await postBrowser('/exec', { content: selectedText })
+                    : await postBrowser(`/scripts/${name}/run`)
                 console.log('Script output:', res)
                 await fetchScreenshot()
             } catch (e) {
@@ -813,7 +848,7 @@ const BrowserPage = {
             debugLogCount, debugLogExpanded, debugLogContainer, debugLogHeight, startDebugLogResize,
             timeSinceUpdate,
             fetchStatus, fetchScreenshot, refreshSnapshot, navigate, goBack, goForward, copyingSnapshot, copySnapshot,
-            reload, closeBrowser, saveState, handleScreenshotClick, clickElement,
+            reload, closeBrowser, killAllBrowsers, saveState, handleScreenshotClick, clickElement,
             pressKey, scroll, sendType, newScript, closeScriptEditor, editScript, saveScript, deleteScript, runScript,
             generateInline, onScreenshotLoad, onScreenshotError,
             clearDebugLog,
