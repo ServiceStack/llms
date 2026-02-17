@@ -189,15 +189,15 @@ const BrowserPage = {
             <div class="flex-1 flex gap-2">
                 <input type="text" v-model="typeText" @keyup.enter="sendType" placeholder="Type text..." :disabled="!isRunning"
                     class="flex-1 px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none focus:border-blue-500 disabled:opacity-40" />
-                <button @click="sendType" :disabled="!isRunning || !typeText" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 disabled:opacity-40 transition-colors">Send</button>
+                <button type="button" @click="sendType" :disabled="!isRunning || !typeText" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 disabled:opacity-40 transition-colors">Send</button>
             </div>
             <div class="flex gap-1">
-                <button v-for="key in ['Enter', 'Tab', 'Escape', '↑', '↓']" :key="key" @click="pressKey(key === '↑' ? 'ArrowUp' : key === '↓' ? 'ArrowDown' : key)" :disabled="!isRunning"
+                <button type="button" v-for="key in ['Enter', 'Tab', 'Escape', '↑', '↓']" :key="key" @click="pressKey(key === '↑' ? 'ArrowUp' : key === '↓' ? 'ArrowDown' : key)" :disabled="!isRunning"
                     class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">{{ key === 'Escape' ? 'Esc' : key }}</button>
             </div>
             <div class="flex gap-1">
-                <button @click="scroll('up', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▲ Scroll</button>
-                <button @click="scroll('down', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▼ Scroll</button>
+                <button type="button" @click="scroll('up', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▲ Scroll</button>
+                <button type="button" @click="scroll('down', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▼ Scroll</button>
             </div>
             <div class="flex items-center gap-2 text-xs text-gray-500">
                 <label class="flex items-center gap-1 cursor-pointer">
