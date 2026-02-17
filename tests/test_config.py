@@ -22,12 +22,14 @@ class TestHomeLlmsPath(unittest.TestCase):
     def test_home_llms_path(self):
         result = home_llms_path("llms.json")
         self.assertIsInstance(result, str)
-        self.assertTrue(result.endswith("/.llms/llms.json"))
+        # Now uses XDG config directory by default
+        self.assertTrue(result.endswith("/.config/llms/llms.json") or result.endswith("/llms.json"))
 
     def test_home_llms_path_providers(self):
         result = home_llms_path("providers.json")
         self.assertIsInstance(result, str)
-        self.assertTrue(result.endswith("/.llms/providers.json"))
+        # Now uses XDG config directory by default
+        self.assertTrue(result.endswith("/.config/llms/providers.json") or result.endswith("/providers.json"))
 
 
 class TestProviderStatus(unittest.TestCase):

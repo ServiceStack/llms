@@ -49,6 +49,16 @@ from urllib.parse import parse_qs, urljoin
 import aiohttp
 from aiohttp import web
 
+from .xdg_migration import migrate_to_xdg
+from .xdg_paths import (
+    get_cache_path,
+    get_data_path,
+    get_xdg_cache_home,
+    get_xdg_config_home,
+    get_xdg_data_home,
+    home_llms_path,
+)
+
 try:
     from PIL import Image
 
@@ -2316,15 +2326,6 @@ def print_status():
         print("Disabled: None")
 
 
-def home_llms_path(filename):
-    home_dir = os.getenv("LLMS_HOME", os.path.join(os.getenv("HOME"), ".llms"))
-    relative_path = os.path.join(home_dir, filename)
-    # return resolved full absolute path
-    return os.path.abspath(os.path.normpath(relative_path))
-
-
-def get_cache_path(path=""):
-    return home_llms_path(f"cache/{path}") if path else home_llms_path("cache")
 
 
 def get_config_path():
@@ -3017,9 +3018,10 @@ class AppExtensions:
         return False, None
 
     def get_user_path(self, user: Optional[str] = None) -> str:
+        """Get user-specific data path using XDG data directory."""
         if user:
-            return home_llms_path(os.path.join("user", user))
-        return home_llms_path(os.path.join("user", "default"))
+            return get_data_path(os.path.join("user", user))
+        return get_data_path(os.path.join("user", "default"))
 
     def get_providers(self) -> Dict[str, Any]:
         return g_handlers
@@ -3493,7 +3495,10 @@ class ExtensionContext:
 
 
 def get_extensions_path():
-    return os.getenv("LLMS_EXTENSIONS_DIR", home_llms_path("extensions"))
+    """Get path for custom extensions using XDG config directory."""
+    if os.getenv("LLMS_EXTENSIONS_DIR"):
+        return os.getenv("LLMS_EXTENSIONS_DIR")
+    return home_llms_path("extensions")
 
 
 def get_disabled_extensions():
@@ -4036,6 +4041,9 @@ def cli_exec(cli_args, extra_args):
     # established in load_extensions() remain active during cli_chat()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+
+    # Migrate old ~/.llms/ to XDG-compliant directories
+    migrate_to_xdg()
 
     loop.run_until_complete(reload_providers())
     loop.run_until_complete(load_extensions())
