@@ -134,7 +134,7 @@ const BrowserPage = {
                             </div>
                             <div class="flex flex-col gap-1 overflow-y-auto">
                                 <div v-for="script in scripts" :key="script.name" class="flex gap-1 items-center text-sm">
-                                    <button type="button" @click.stop="runScript(script.name)" class="opacity-60 hover:opacity-100 text-green-700 dark:text-green-600" :title="'Run ' + script.name">▶</button>
+                                    <button type="button" @click.stop="runScript(script.name, { forceScript: true })" class="opacity-60 hover:opacity-100 text-green-700 dark:text-green-600" :title="'Run ' + script.name">▶</button>
                                     <div @click.stop="editScript(script)" class="flex justify-between items-center w-full text-xs w-full">
                                         <div class="flex items-center gap-1 text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
                                             {{ script.name }}
@@ -725,7 +725,7 @@ const BrowserPage = {
             }
         }
 
-        async function runScript(name) {
+        async function runScript(name, { forceScript } = {}) {
             loading.value = true
             try {
                 const selectedText = cmEditor ? cmEditor.getSelection() : ''
@@ -738,7 +738,7 @@ const BrowserPage = {
                     savedScriptContent.value = scriptContent.value
                     await fetchScripts()
                 }
-                const res = selectedText
+                const res = selectedText && !forceScript
                     ? await postBrowser('/exec', { content: selectedText })
                     : await postBrowser(`/scripts/${name}/run`)
                 console.log('Script output:', res)
