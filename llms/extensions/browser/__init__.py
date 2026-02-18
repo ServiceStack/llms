@@ -1,7 +1,9 @@
 import asyncio
+import contextlib
 import json
 import os
 import shutil
+import tempfile
 import time
 from collections import deque
 from pathlib import Path
@@ -13,6 +15,7 @@ AGENT_BROWSER_USER_AGENT = os.getenv(
     "AGENT_BROWSER_USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1500.52 Safari/537.36",
 )
+AGENT_BROWSER_TIMEOUT = int(os.getenv("AGENT_BROWSER_TIMEOUT", 30))
 DEBUG_LOG = deque(maxlen=200)
 DEBUG_LOG_COUNTER = 0
 
@@ -103,7 +106,7 @@ def install(ctx):
             ctx.dbg(f"{rc}: {stderr}")
         return log
 
-    async def run_browser_cmd_async(*args, timeout=30, env=None, record=True):
+    async def run_browser_cmd_async(*args, timeout=AGENT_BROWSER_TIMEOUT, env=None, record=True):
         """Run agent-browser command asynchronously."""
         cmd = ["agent-browser"] + list(args)
         cmd_str = " ".join(cmd)
@@ -176,16 +179,21 @@ def install(ctx):
 
     ctx.add_delete("/browser/debug-log", clear_debug_log)
 
-    async def get_screenshot(req):
-        """Capture and return current screenshot."""
-        browser_dir = os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser")
-        screenshot_path = os.path.join(browser_dir, "screenshot.png")
-        snapshot_path = os.path.join(browser_dir, "snapshot.json")
+    async def run_snapshot(req):
+        """Run snapshot command."""
+        ctx.dbg("Running screenshot + snapshot")
+        try:
+            browser_dir = os.path.join(ctx.get_user_path(user=ctx.get_username(req)), "browser")
+            screenshot_path = os.path.join(browser_dir, "screenshot.png")
+            snapshot_path = os.path.join(browser_dir, "snapshot.json")
 
-        screenshot_result, snapshot_result = await asyncio.gather(
-            run_browser_cmd_async("screenshot", screenshot_path, record=False),
-            run_browser_cmd_async("snapshot", "-i", "--json", snapshot_path, record=False),
-        )
+            screenshot_result, snapshot_result = await asyncio.gather(
+                run_browser_cmd_async("screenshot", screenshot_path, record=False),
+                run_browser_cmd_async("snapshot", "-i", "--json", snapshot_path, record=False),
+            )
+        except Exception as e:
+            ctx.err("Failed to run snapshot", e)
+            return False, None, None
 
         success = snapshot_result["success"]
         if success and snapshot_result.get("stdout", "").strip():
@@ -199,6 +207,12 @@ def install(ctx):
             except Exception as e:
                 ctx.err("Failed to parse snapshot JSON\n" + snapshot_result["stdout"], e)
                 success = False
+
+        return success, screenshot_path, snapshot_path
+
+    async def get_screenshot(req):
+        """Capture and return current screenshot."""
+        success, screenshot_path, snapshot_path = await run_snapshot(req)
 
         if success and os.path.exists(screenshot_path):
             return web.FileResponse(screenshot_path, headers={"Content-Type": "image/png", "Cache-Control": "no-cache"})
@@ -229,7 +243,9 @@ def install(ctx):
             if result.get("stdout", "").strip():
                 try:
                     parsed = json.loads(result["stdout"])
-                    parsed.update(await get_status_object())
+                    ret = await get_status_object()
+                    if ret:
+                        parsed.update(ret)
                     Path(snapshot_path).write_text(json.dumps(parsed))
                 except Exception as e:
                     ctx.err("Failed to parse snapshot JSON\n" + result["stdout"], e)
@@ -261,7 +277,7 @@ def install(ctx):
             "AGENT_BROWSER_PROFILE": get_profile_dir(req),
             "AGENT_BROWSER_USER_AGENT": AGENT_BROWSER_USER_AGENT,
         }
-        result = await run_browser_cmd_async("open", url, timeout=60, env=_browser_env)
+        result = await run_browser_cmd_async("open", url, timeout=AGENT_BROWSER_TIMEOUT, env=_browser_env)
         ctx.log(
             f"browser_open: Open result: success={result['success']}, stdout={result.get('stdout', '')[:100]}, stderr={result.get('stderr', '')[:100]}"
         )
@@ -269,7 +285,7 @@ def install(ctx):
             return web.json_response({"success": False, "error": result.get("stderr", "Failed to open URL")})
 
         # Wait for page to fully load
-        wait_result = await run_browser_cmd_async("wait", "--load", "networkidle", timeout=60)
+        wait_result = await run_browser_cmd_async("wait", "--load", "networkidle", timeout=AGENT_BROWSER_TIMEOUT)
         ctx.log(f"browser_open: Wait result: success={wait_result['success']}")
 
         return web.json_response(
@@ -492,28 +508,31 @@ def install(ctx):
         if not os.path.exists(path):
             raise Exception("Script not found")
 
-        t0 = time.monotonic()
+        out_fd, out_path = tempfile.mkstemp(suffix=".out")
+        err_fd, err_path = tempfile.mkstemp(suffix=".err")
         try:
             log = _begin_debug_log(f"bash {path}")
-            proc = await asyncio.create_subprocess_exec(
-                "bash",
-                path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            with os.fdopen(out_fd, "w") as out_f, os.fdopen(err_fd, "w") as err_f:
+                proc = await asyncio.create_subprocess_exec(
+                    "bash",
+                    path,
+                    stdout=out_f,
+                    stderr=err_f,
+                    env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
+                    start_new_session=True,
+                )
+                await asyncio.wait_for(proc.wait(), timeout=AGENT_BROWSER_TIMEOUT)
 
             result = {
                 "success": proc.returncode == 0,
-                "stdout": stdout.decode() if stdout else "",
-                "stderr": stderr.decode() if stderr else "",
+                "stdout": Path(out_path).read_text(),
+                "stderr": Path(err_path).read_text(),
                 "returncode": proc.returncode,
             }
             _complete_debug_log(log, result)
+            success, screenshot_path, snapshot_path = await run_snapshot(req)
             return web.json_response(result)
         except asyncio.TimeoutError:
-            proc.kill()
             result = {
                 "success": False,
                 "error": "Script execution timed out",
@@ -522,11 +541,21 @@ def install(ctx):
                 "stderr": "Script execution timed out",
             }
             _complete_debug_log(log, result)
+            try:
+                os.killpg(os.getpgid(proc.pid), 9)
+            except (ProcessLookupError, OSError):
+                proc.kill()
+            success, screenshot_path, snapshot_path = await run_snapshot(req)
             return web.json_response({"error": "Script execution timed out"}, status=500)
         except Exception as e:
             result = {"success": False, "error": str(e), "returncode": -1, "stdout": "", "stderr": str(e)}
             _complete_debug_log(log, result)
+            success, screenshot_path, snapshot_path = await run_snapshot(req)
             return web.json_response({"error": str(e)}, status=500)
+        finally:
+            for p in (out_path, err_path):
+                with contextlib.suppress(OSError):
+                    os.unlink(p)
 
     ctx.add_post("/browser/scripts/{name}/run", run_script)
 
@@ -537,25 +566,29 @@ def install(ctx):
         if not content:
             raise Exception("content required")
 
+        out_fd, out_path = tempfile.mkstemp(suffix=".out")
+        err_fd, err_path = tempfile.mkstemp(suffix=".err")
         try:
             log = _begin_debug_log(f"bash -c {content[:100]}")
-            proc = await asyncio.create_subprocess_exec(
-                "bash",
-                "-c",
-                content,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            with os.fdopen(out_fd, "w") as out_f, os.fdopen(err_fd, "w") as err_f:
+                proc = await asyncio.create_subprocess_exec(
+                    "bash",
+                    "-c",
+                    content,
+                    stdout=out_f,
+                    stderr=err_f,
+                    env={**os.environ, "AGENT_BROWSER_SESSION": "default"},
+                )
+                await asyncio.wait_for(proc.wait(), timeout=AGENT_BROWSER_TIMEOUT)
 
             result = {
                 "success": proc.returncode == 0,
-                "stdout": stdout.decode() if stdout else "",
-                "stderr": stderr.decode() if stderr else "",
+                "stdout": Path(out_path).read_text(),
+                "stderr": Path(err_path).read_text(),
                 "returncode": proc.returncode,
             }
             _complete_debug_log(log, result)
+            success, screenshot_path, snapshot_path = await run_snapshot(req)
             return web.json_response(result)
         except asyncio.TimeoutError:
             proc.kill()
@@ -567,11 +600,17 @@ def install(ctx):
                 "stderr": "Command execution timed out",
             }
             _complete_debug_log(log, result)
-            raise Exception("Command execution timed out")
+            success, screenshot_path, snapshot_path = await run_snapshot(req)
+            raise Exception("Command execution timed out") from None
         except Exception as e:
             result = {"success": False, "error": str(e), "returncode": -1, "stdout": "", "stderr": str(e)}
             _complete_debug_log(log, result)
-            raise Exception(str(e))
+            success, screenshot_path, snapshot_path = await run_snapshot(req)
+            raise
+        finally:
+            for p in (out_path, err_path):
+                with contextlib.suppress(OSError):
+                    os.unlink(p)
 
     ctx.add_post("/browser/exec", exec_bash)
 
