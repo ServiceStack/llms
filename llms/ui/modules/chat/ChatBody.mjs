@@ -920,7 +920,11 @@ export const ChatBody = {
                             <div
                                 v-for="message in currentThreadMessages"
                                 :key="message.timestamp"
-                                v-show="!(message.role === 'tool' && isToolLinked(message))"
+                                v-show="message.role !== 'tool' && !!(message.content || message.tool_calls?.length)"
+                                :data-role="message.role"
+                                :data-has-content="!!(typeof message.content === 'string' ? message.content?.trim() : message.content?.length)"
+                                :data-has-tools="!!message.tool_calls?.length"
+                                :data-tool-call-id="message.tool_call_id || undefined"
                                 class="flex items-start space-x-3 group"
                                 :class="message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''"
                             >
