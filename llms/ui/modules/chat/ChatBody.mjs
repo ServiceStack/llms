@@ -920,7 +920,7 @@ export const ChatBody = {
                             <div
                                 v-for="message in currentThreadMessages"
                                 :key="message.timestamp"
-                                v-show="message.role !== 'tool' && !!(message.content || message.tool_calls?.length)"
+                                v-show="message.role !== 'tool' && !!(message.content || message.tool_calls?.length || message.images?.length || message.audios?.length)"
                                 :data-role="message.role"
                                 :data-has-content="!!(typeof message.content === 'string' ? message.content?.trim() : message.content?.length)"
                                 :data-has-tools="!!message.tool_calls?.length"
@@ -944,7 +944,8 @@ export const ChatBody = {
                                 </div>
 
                                 <!-- Message bubble -->
-                                <div v-if="message.role === 'assistant' && !message.content?.trim() && message.tool_calls && message.tool_calls.length > 0">
+                                <div v-if="message.role === 'assistant' && !message.content?.trim() && message.tool_calls && message.tool_calls.length > 0 && !message.images?.length && !message.audios?.length">
+
                                     <div v-if="message.tool_calls && message.tool_calls.length > 0" class="mb-3 space-y-4">
                                         <ToolCall v-for="(tool, i) in message.tool_calls" :key="i" :thread="currentThread" :tool="tool" />
                                     </div>
