@@ -301,6 +301,15 @@ def install_google(ctx):
                     "contents": contents,
                 }
 
+                # Gemini doesn't support tools and modalities together
+                modalities = chat.get("modalities")
+                if modalities and ("image" in modalities or "audio" in modalities):
+                    supports_tool_calls = False
+                    tools = None
+                    system_prompt = None
+                    # if "audio" in modalities and "tts" in chat["model"]:
+                    #     system_prompt = "You are a text-to-speech engine. Your only job is to generate audio of the exact text the user provides. Do not converse, do not answer questions, and do not generate any extra text"
+
                 if tools:
                     gemini_chat["tools"] = tools
 
