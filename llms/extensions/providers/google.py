@@ -207,14 +207,33 @@ def install_google(ctx):
                         if message.get("role") == "assistant" and "tool_calls" in message:
                             for tool_call in message["tool_calls"]:
                                 tool_id_map[tool_call["id"]] = tool_call["function"]["name"]
-                                parts.append(
-                                    {
-                                        "functionCall": {
-                                            "name": tool_call["function"]["name"],
-                                            "args": json.loads(tool_call["function"]["arguments"]),
-                                        }
+                                part = {
+                                    "functionCall": {
+                                        "name": tool_call["function"]["name"],
+                                        "args": json.loads(tool_call["function"]["arguments"]),
                                     }
-                                )
+                                }
+
+                                signature = tool_call.get("thoughtSignature") or tool_call.get("thought_signature")
+                                if (
+                                    not signature
+                                    and "extra_content" in tool_call
+                                    and isinstance(tool_call["extra_content"], dict)
+                                ):
+                                    google_extra = tool_call["extra_content"].get("google", {})
+                                    if isinstance(google_extra, dict):
+                                        signature = google_extra.get("thought_signature") or google_extra.get(
+                                            "thoughtSignature"
+                                        )
+                                if not signature and "function" in tool_call:
+                                    signature = tool_call["function"].get("thoughtSignature") or tool_call[
+                                        "function"
+                                    ].get("thought_signature")
+
+                                if signature:
+                                    part["thoughtSignature"] = signature
+
+                                parts.append(part)
 
                         # Handle tool responses from user
                         if message.get("role") == "tool":
@@ -479,13 +498,16 @@ def install_google(ctx):
                                     text_parts.append(part["text"])
                             if "functionCall" in part:
                                 fc = part["functionCall"]
-                                tool_calls.append(
-                                    {
-                                        "id": f"call_{len(tool_calls)}_{int(time.time())}",  # Gemini doesn't return ID, generate one
-                                        "type": "function",
-                                        "function": {"name": fc["name"], "arguments": json.dumps(fc["args"])},
-                                    }
-                                )
+                                tc = {
+                                    "id": f"call_{len(tool_calls)}_{int(time.time())}",  # Gemini doesn't return ID, generate one
+                                    "type": "function",
+                                    "function": {"name": fc["name"], "arguments": json.dumps(fc["args"])},
+                                }
+                                signature = part.get("thoughtSignature") or part.get("thought_signature")
+                                if signature:
+                                    tc["thoughtSignature"] = signature
+                                    tc["extra_content"] = {"google": {"thought_signature": signature}}
+                                tool_calls.append(tc)
 
                             if "inlineData" in part:
                                 inline_data = part["inlineData"]
