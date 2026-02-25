@@ -148,3 +148,8 @@ Themes can also define the typography used in markdown by overriding these [Typo
     }
 }
 ```
+
+## Background images
+
+- https://www.freepik.com
+- https://unsplash.com
