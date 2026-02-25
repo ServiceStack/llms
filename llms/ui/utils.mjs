@@ -312,6 +312,12 @@ export const hashString = fnv1a
 
 export const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
+export function idToName(id) {
+    return id.split(/[-_]/).map(word =>
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ')
+}
+
 export function utilsFunctions() {
     return {
         nextId,
@@ -331,5 +337,6 @@ export function utilsFunctions() {
         sanitizeHtml,
         hashString,
         sleep,
+        idToName,
     }
 }

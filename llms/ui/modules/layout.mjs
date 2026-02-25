@@ -3,12 +3,12 @@ import { toJsonObject } from "../utils.mjs"
 
 const Brand = {
     template: `
-    <div class="flex-shrink-0 p-2 border-b border-gray-200 dark:border-gray-700 select-none">
+    <div class="select-none flex-shrink-0 p-2 border-b" :class="$styles.chromeBorder">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <button type="button"
                     @click="$ctx.to('/')"
-                    class="text-lg font-semibold text-gray-900 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
+                    class="text-lg font-semibold focus:outline-none transition-colors" :class="[$styles.heading, $styles.linkHover]"
                     title="Go back home">
                     {{ $state.title }}
                 </button>
@@ -21,9 +21,9 @@ const Brand = {
 const Welcome = {
     template: `
         <div class="mb-2 flex justify-center">
-            <svg class="size-20 text-gray-700 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2.19c3.13 0 5.68 2.25 5.68 5s-2.55 5-5.68 5a5.7 5.7 0 0 1-1.89-.29l-.75-.26l-.56.56a14 14 0 0 1-2 1.55a.13.13 0 0 1-.07 0v-.06a6.58 6.58 0 0 0 .15-4.29a5.25 5.25 0 0 1-.55-2.16c0-2.77 2.55-5 5.68-5M8 .94c-3.83 0-6.93 2.81-6.93 6.27a6.4 6.4 0 0 0 .64 2.64a5.53 5.53 0 0 1-.18 3.48a1.32 1.32 0 0 0 2 1.5a15 15 0 0 0 2.16-1.71a6.8 6.8 0 0 0 2.31.36c3.83 0 6.93-2.81 6.93-6.27S11.83.94 8 .94"/><ellipse cx="5.2" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="10.8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/></svg>
+            <svg class="size-20" :class="[$styles.icon]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2.19c3.13 0 5.68 2.25 5.68 5s-2.55 5-5.68 5a5.7 5.7 0 0 1-1.89-.29l-.75-.26l-.56.56a14 14 0 0 1-2 1.55a.13.13 0 0 1-.07 0v-.06a6.58 6.58 0 0 0 .15-4.29a5.25 5.25 0 0 1-.55-2.16c0-2.77 2.55-5 5.68-5M8 .94c-3.83 0-6.93 2.81-6.93 6.27a6.4 6.4 0 0 0 .64 2.64a5.53 5.53 0 0 1-.18 3.48a1.32 1.32 0 0 0 2 1.5a15 15 0 0 0 2.16-1.71a6.8 6.8 0 0 0 2.31.36c3.83 0 6.93-2.81 6.93-6.27S11.83.94 8 .94"/><ellipse cx="5.2" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="10.8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/></svg>
         </div>
-        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">{{ $ai.welcome }}</h2>
+        <h2 class="text-2xl font-semibold" :class="[$styles.heading]">{{ $ai.welcome }}</h2>
     `
 }
 
@@ -201,14 +201,15 @@ const ErrorViewer = {
     }
 }
 
+
 const SettingsPage = {
     template: `
     <div class="max-w-2xl mx-auto p-6">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-8">Settings</h1>
-        
+        <h1 class="text-2xl font-bold mb-8" :class="[$styles.heading]">Settings</h1>
+
         <!-- User Avatar Section -->
-        <div class="mb-8 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">User Avatar</h2>
+        <div class="mb-8 p-6 rounded-xl shadow-sm" :class="[$styles.card]">
+            <h2 class="text-lg font-semibold mb-4" :class="[$styles.heading]">User Avatar</h2>
             <div class="flex items-center gap-6">
                 <label for="userAvatarInput" class="relative group cursor-pointer">
                     <img 
@@ -252,8 +253,8 @@ const SettingsPage = {
         </div>
         
         <!-- Agent Avatar Section -->
-        <div class="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Agent Avatar</h2>
+        <div class="mb-8 p-6 rounded-xl shadow-sm" :class="[$styles.card]">
+            <h2 class="text-lg font-semibold mb-4" :class="[$styles.heading]">Agent Avatar</h2>
             <div class="flex items-center gap-6">
                 <label for="agentAvatarInput" class="relative group cursor-pointer">
                     <img 
@@ -295,6 +296,13 @@ const SettingsPage = {
                 </div>
             </div>
         </div>
+
+        <!-- Appearance Section (backdrop-blur-sm in card styles renders always on top of ThemeSelector Popup) -->
+        <div class="mb-8 p-6 rounded-xl shadow-sm flex items-center" :class="[$styles.card]">
+            <h2 class="text-lg font-semibold mr-12" :class="[$styles.heading]">Theme</h2>
+            <ThemeSelector />
+        </div>
+
     </div>
     `,
     setup() {

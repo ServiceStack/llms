@@ -10,18 +10,22 @@ const GalleryPage = {
             <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 
                 <!-- Left: Tabs -->
-                <div class="flex bg-gray-100 dark:bg-gray-800/50 p-1.5 rounded-xl border border-gray-200 dark:border-white/5 backdrop-blur-sm self-start md:self-auto">
+                <div class="flex gap-x-2 p-1.5 self-start md:self-auto" :class="[$styles.tagButtonGroup]">
                     <button type="button"
                         @click="setFilter('image')"
-                        class="px-6 py-2 rounded-lg font-medium transition-all duration-200 text-sm"
-                        :class="ext.prefs.type === 'image' ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm dark:shadow-blue-500/20 shadow-gray-200/50' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/5'"
+                        class="px-6 py-2 font-medium text-sm"
+                        :class="[ext.prefs.type === 'image' 
+                            ? $styles.tagButtonActive 
+                            : $styles.tagButton,$styles.tagButtonLarge]"
                     >
                         Images
                     </button>
                     <button type="button"
                         @click="setFilter('audio')"
-                        class="px-6 py-2 rounded-lg font-medium transition-all duration-200 text-sm"
-                        :class="ext.prefs.type === 'audio' ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm dark:shadow-blue-500/20 shadow-gray-200/50' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/50 dark:hover:bg-white/5'"
+                        class="px-6 py-2 font-medium text-sm"
+                        :class="[ext.prefs.type === 'audio' 
+                            ? $styles.tagButtonActive 
+                            : $styles.tagButton,$styles.tagButtonLarge]"
                     >
                         Audio
                     </button>
@@ -33,8 +37,10 @@ const GalleryPage = {
                         v-for="fmt in formats" 
                         :key="fmt.id"
                         @click="setFormat(fmt.id)"
-                        class="p-2 rounded-xl transition-all duration-200 flex flex-col items-center gap-1 min-w-[4.5rem]"
-                        :class="ext.prefs.format === fmt.id ? 'bg-blue-100 dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'"
+                        class="p-2 flex flex-col items-center gap-1 min-w-[4.5rem]"
+                        :class="[ext.prefs.format === fmt.id 
+                            ? $styles.tagButtonActive 
+                            : $styles.tagButton,$styles.tagButtonLarge]"
                     >
                         <span v-html="fmt.icon" class="w-5 h-5"></span>
                         <span class="text-[10px] font-medium uppercase tracking-wider">{{ fmt.label }}</span>
@@ -44,13 +50,14 @@ const GalleryPage = {
                 <!-- Right: Search -->
                 <div class="relative group w-full md:w-72">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-4 w-4 text-gray-400 dark:text-gray-500 group-focus-within:text-blue-500 dark:group-focus-within:text-blue-400 transition-colors" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg class="h-4 w-4 group-focus-within:text-blue-500 dark:group-focus-within:text-blue-400 transition-colors" :class="[$styles.muted]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
                     <input 
                         type="text" 
-                        class="block w-full pl-10 pr-3 py-2.5 bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-full leading-5 text-gray-900 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 sm:text-sm transition-all shadow-sm"
+                        class="block w-full pl-10 pr-3 py-2.5 rounded-full"
+                        :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"
                         placeholder="Search prompts, models..." 
                         v-model="ext.prefs.q"
                         @input="onSearch"
@@ -91,13 +98,13 @@ const GalleryPage = {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-2v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-2" />
                             </svg>
                         </div>
-                        <button type="button" @click="remixAudio(item)" class="mb-1 px-2 py-0.5 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200 shrink-0">
+                        <button type="button" @click="remixAudio(item)" class="mb-1 px-2 py-0.5 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 shrink-0">
                             Remix
                         </button>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex justify-between items-center mb-1">
-                            <h3 class="text-gray-900 dark:text-white font-medium truncate pr-4" :title="item.caption || item.prompt || ''">
+                            <h3 class="font-medium truncate pr-4" :class="[$styles.heading]" :title="item.caption || item.prompt || ''">
                                 {{ item.caption || item.prompt || 'Untitled' }}
                             </h3>
                             <span class="text-xs text-gray-500 shrink-0">{{ $fmt.formatDate(item.created) }}</span>
@@ -177,7 +184,7 @@ const GalleryPage = {
                             <div>
                                 <div class="flex justify-between">
                                     <h3 class="text-xs uppercase tracking-widest text-gray-500 font-semibold mb-3">Prompt</h3>
-                                    <button type="button" @click="remixImage" class="mb-2 px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40 transition-all duration-200">
+                                    <button type="button" @click="remixImage" class="mb-2 px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40">
                                         Remix
                                     </button>
                                 </div>                            

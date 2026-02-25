@@ -18,7 +18,7 @@ export class ExtensionScope {
         return this.prefs
     }
     setPrefs(o) {
-        storageObject(this.storageKey, Object.assign(this.prefs, o))
+        return storageObject(this.storageKey, Object.assign(this.prefs, o))
     }
     savePrefs() {
         storageObject(this.storageKey, this.prefs)
@@ -136,8 +136,11 @@ export class AppContext {
         this.marked = marked
         this.markedFallback = markedFallback
 
-        this.state = reactive({
-            cacheBreaker: 1
+        const theme = ai.createTheme()
+        const state = this.state = reactive({
+            cacheBreaker: 1,
+            theme,
+            styles: theme.styles,
         })
         this.events = new EventBus()
         this.modalComponents = {}
@@ -169,6 +172,7 @@ export class AppContext {
             $ai: ai,
             $fmt: fmt,
             $utils: utils,
+            get $styles() { return state.styles },
         })
         Object.keys(app.config.globalProperties).forEach(key => {
             globalThis[key] = app.config.globalProperties[key]
@@ -191,6 +195,17 @@ export class AppContext {
     }
     getColorScheme() {
         return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+    }
+    getDarkMode() {
+        return document.documentElement.classList.contains('dark')
+    }
+    setColorScheme(darkMode) {
+        let html = document.documentElement
+        html.classList.toggle('dark', darkMode)
+        html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
+        if (localStorage.getItem('color-scheme') === null) {
+            localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
+        }
     }
     getUserAvatar() {
         return this.resolveUrl(`/avatar/user?mode=${this.getColorScheme()}&t=${this.state.cacheBreaker}`)
@@ -509,5 +524,58 @@ export class AppContext {
         }
 
         console.debug(`completeChatContext()`, request)
+    }
+
+    resolveThemes(themes) {
+        const ret = {}
+        for (const [id, theme] of Object.entries(themes)) {
+            ret[id] = this.createTheme(theme)
+        }
+        return ret
+    }
+
+    createTheme(theme) {
+        return this.ai.createTheme(theme)
+    }
+
+    changeTheme(theme) {
+
+        const fullTheme = this.createTheme(theme)
+        Object.assign(this.state.theme, fullTheme)
+        Object.assign(this.state.styles, fullTheme.styles)
+
+        console.log('changeTheme', this.state.theme.vars, this.state.styles.bgBody)
+
+        Object.entries(fullTheme.vars).forEach(([key, value]) => {
+            if (key === 'colorScheme') {
+                this.setColorScheme(value === 'dark')
+            } else if (key.startsWith("--")) {
+                document.documentElement.style.setProperty(key, value)
+            }
+        })
+
+        document.body.className = this.state.styles.bgBody || ''
+    }
+
+    get selectedTheme() {
+        return this.getPrefs().theme || (this.getDarkMode() ? 'dark' : 'light')
+    }
+
+    getTheme(theme) {
+        return this.state.themes[theme]
+            || this.state.themes[this.getColorScheme()]
+            || this.ai.light
+    }
+
+    selectTheme(theme) {
+        this.setPrefs({
+            theme
+        })
+        this.setTheme(this.getTheme(theme))
+    }
+
+    setTheme(theme) {
+        if (!theme) return
+        this.changeTheme(theme)
     }
 }

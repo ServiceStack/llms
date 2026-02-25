@@ -3,25 +3,93 @@
 @source "./lib/servicestack-vue.mjs";
 @source "../../extensions";
 @source "../../llms-home/extensions/";
+@source "../../llms-home/user/default/workspaces/**/theme.json";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
     :root {
-        --background: 0 0% 100%;
-        --foreground: 222.2 84% 4.9%;
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 91.4%;
-        --ring: 221.2 83.2% 53.3%;
-        --radius: 0.5rem;
+        --background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect width='1' height='1' fill='%2300000000'/%3E%3C/svg%3E%0A");
+        /*white*/
+        --background: #ffffff;
+        /*gray-200*/
+        --border: #e5e7eb;
+        /*gray-200*/
+        --input: #e5e7eb;
+        /*blue-600*/
+        --ring: #2563eb;
+        /*gray-50*/
+        --scrollbar-track-bg: #f9fafb;
+        /*gray-300*/
+        --scrollbar-thumb-bg: #d1d5db;
+        /*gray-50*/
+        --primary-bg: #030712;
+        /*gray-50*/
+        --secondary-bg: #f9fafb;
+        /*gray-200*/
+        --secondary-border: #e5e7eb;
     }
 
     :root.dark {
-        --background: 222.2 84% 4.9%;
-        --foreground: 210 40% 98%;
-        --border: 217.2 32.6% 17.5%;
-        --input: 217.2 32.6% 17.5%;
-        --ring: 212.7 26.8% 83.9%;
+        --background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect width='1' height='1' fill='%2300000000'/%3E%3C/svg%3E%0A");
+        /*gray-950*/
+        --background: #030712;
+        /*gray-800*/
+        --border: #1f2937;
+        /*gray-800*/
+        --input: #1f2937;
+        /*gray-300*/
+        --ring: #d1d5db;
+        /*gray-800*/
+        --scrollbar-track-bg: #1f2937;
+        /*gray-600*/
+        --scrollbar-thumb-bg: #4b5563;
+        /*gray-800*/
+        --primary-bg: #1f2937;
+        /*gray-800*/
+        --secondary-bg: #1f2937;
+        /*gray-700*/
+        --secondary-border: #374151;
+    }
+
+    .root {
+        --tw-prose-body: #374151;
+        --tw-prose-headings: #111827;
+        --tw-prose-lead: #4b5563;
+        --tw-prose-links: #111827;
+        --tw-prose-bold: #111827;
+        --tw-prose-counters: #6b7280;
+        --tw-prose-bullets: #d1d5db;
+        --tw-prose-hr: #e5e7eb;
+        --tw-prose-quotes: #111827;
+        --tw-prose-quote-borders: #e5e7eb;
+        --tw-prose-captions: #6b7280;
+        --tw-prose-code: #111827;
+        --tw-prose-pre-code: #e5e7eb;
+        --tw-prose-pre-bg: #282c34;
+        --tw-prose-th-borders: #d1d5db;
+        --tw-prose-td-borders: #e5e7eb;
+        --tw-prose-invert-body: #d1d5db;
+        --tw-prose-invert-headings: #fff;
+        --tw-prose-invert-lead: #9ca3af;
+        --tw-prose-invert-links: #fff;
+        --tw-prose-invert-bold: #fff;
+        --tw-prose-invert-counters: #9ca3af;
+        --tw-prose-invert-bullets: #4b5563;
+        --tw-prose-invert-hr: #374151;
+        --tw-prose-invert-quotes: #f3f4f6;
+        --tw-prose-invert-quote-borders: #374151;
+        --tw-prose-invert-captions: #9ca3af;
+        --tw-prose-invert-code: #fff;
+        --tw-prose-invert-pre-code: #d1d5db;
+        --tw-prose-invert-pre-bg: rgb(0 0 0 / 50%);
+        --tw-prose-invert-th-borders: #4b5563;
+        --tw-prose-invert-td-borders: #374151;
+    }
+
+    .prose {
+        font-size: 1rem;
+        line-height: 1.75;
     }
 
     *,
@@ -40,6 +108,26 @@
 
 @theme {
     --default-ring-color: hsl(var(--ring));
+
+    --color-nord-100: #eceff4;
+    --color-nord-200: #e5e9f0;
+    --color-nord-300: #d8dee9;
+
+    --color-nord-600: #4c566a;
+    --color-nord-700: #434c5e;
+    --color-nord-800: #3b4252;
+    --color-nord-900: #2e3440;
+
+    --color-frost-400: #8fbcbb;
+    --color-frost-500: #88c0d0;
+    --color-frost-600: #81a1c1;
+    --color-frost-700: #5e81ac;
+
+    --color-nord-red: #bf616a;
+    --color-nord-orange: #d08770;
+    --color-nord-yellow: #ebcb8b;
+    --color-nord-green: #a3be8c;
+    --color-nord-purple: #b48ead;
 }
 
 @layer base {
@@ -60,16 +148,12 @@
         height: 8px
     }
 
+    ::-webkit-scrollbar {
+        background-color: var(--scrollbar-track-bg)
+    }
+
     ::-webkit-scrollbar-thumb {
-        background-color: #ccc
-    }
-
-    .dark ::-webkit-scrollbar {
-        background: #1f2937
-    }
-
-    .dark ::-webkit-scrollbar-thumb {
-        background-color: #4b5563
+        background-color: var(--scrollbar-thumb-bg)
     }
 
     [role=dialog].z-10 {
@@ -140,14 +224,28 @@
 
     .prose th,
     .prose td {
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--secondary-border);
+        /*border-gray-200*/
         padding: 0.5rem;
         text-align: left;
     }
 
     .prose th {
-        background-color: #f9fafb;
+        background-color: var(--secondary-bg);
+        /*bg-gray-50*/
         font-weight: 600;
+    }
+
+    .hljs-comment,
+    .hljs-quote {
+        color: rgb(148 163 184);
+        /*text-slate-400*/
+    }
+
+    .dark .prose>pre,
+    .dark .prose pre code.hljs {
+        background-color: #111827 !important;
+        color: #f3f4f6;
     }
 
     /* Tool specific styles to override global prose */
@@ -745,11 +843,23 @@
 
         .message pre,
         .message .prose pre {
-            max-width: 800px !important;
+            max-width: 1000px !important;
         }
 
         .has-iframes {
             min-width: 840px;
+        }
+    }
+
+    @media (min-width: 1500px) {
+
+        .message pre,
+        .message .prose pre {
+            max-width: 1200px !important;
+        }
+
+        .has-iframes {
+            min-width: 1240px;
         }
     }
 }

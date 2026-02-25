@@ -138,28 +138,32 @@ export const LightboxImage = {
       </div>
 
       <!-- Lightbox Modal -->
-      <div v-if="isOpen"
-        class="fixed inset-0 z-100 flex items-center justify-center bg-black/90 p-4"
-        @click="isOpen = false"
-      >
-        <button type="button"
-          class="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+      <Teleport to="body">
+        <div v-if="isOpen"
+          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
           @click="isOpen = false"
-          aria-label="Close lightbox"
+          style="z-index: 9999;"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
-        <div class="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
-          <img
-            :src="src"
-            :alt="alt"
-            :width="width"
-            :height="height"
-            class="max-w-full max-h-full w-auto h-auto object-contain rounded"
-            @click.stop
-          />
+          <button type="button"
+            class="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+            @click="isOpen = false"
+            aria-label="Close lightbox"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+
+          <div class="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+            <img
+              :src="src"
+              :alt="alt"
+              :width="width"
+              :height="height"
+              class="max-w-full max-h-full w-auto h-auto object-contain rounded"
+              @click.stop
+            />
+          </div>
         </div>
-      </div>
+      </Teleport>
     </div>
     `,
     props: {
@@ -350,11 +354,11 @@ export const MessageUsage = {
 export const MessageReasoning = {
     template: `
     <div class="mt-2 mb-2">
-        <button type="button" @click="toggleReasoning(message.timestamp)" class="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1">
+        <button type="button" @click="toggleReasoning(message.timestamp)" class="text-xs flex items-center space-x-1" :class="[$styles.highlighted, $styles.linkHover]">
             <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.timestamp) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
             <span>{{ isReasoningExpanded(message.timestamp) ? 'Hide reasoning' : 'Show reasoning' }}</span>
         </button>
-        <div v-if="isReasoningExpanded(message.timestamp)" class="reasoning mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
+        <div v-if="isReasoningExpanded(message.timestamp)" class="reasoning mt-2 p-2 rounded-lg border" :class="[$styles.card]">
             <div v-if="typeof reasoning === 'string'" v-html="$fmt.markdown(reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
             <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto">{{ formatReasoning(reasoning) }}</pre>
         </div>
@@ -625,11 +629,11 @@ export const ToolArguments = {
 
 export const ToolOutput = {
     template: `
-        <div v-if="output" class="border-t border-gray-200 dark:border-gray-700">
-            <div class="px-3 py-1.5 flex justify-between items-center border-b border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800">
-                <div class="flex items-center gap-2 ">
+        <div v-if="output" class="border-t" :class="[$styles.chromeBorder]">
+            <div class="px-3 py-1.5 flex justify-between items-center border-b" :class="[$styles.chromeBorder]">
+                <div class="flex items-center gap-2">
                     <svg class="size-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                    <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Output</span>
+                    <span class="text-[10px] uppercase tracking-wider font-medium" :class="[$styles.muted]">Output</span>
                 </div>    
                 <div v-if="hasJsonStructure(output.content)" class="flex items-center gap-2 text-[10px] uppercase tracking-wider font-medium select-none">
                     <span @click="$ctx.setPrefs({ toolFormat: 'text' })" 
@@ -673,9 +677,8 @@ export const ToolOutput = {
 export const CompactThreadButton = {
     template: `
         <button v-if="currentThread.messages.length > 10 || percentUsed > 40" type="button" @click.stop="compactThread()"
-            class="ml-3 px-2 pt-1 pb-0.5 rounded-lg text-xs font-semibold border transition-all select-none disabled:opacity-60 disabled:cursor-not-allowed"
+            class="ml-3 px-2 pt-1 pb-0.5 rounded-lg text-xs font-semibold border transition-colors select-none disabled:opacity-60 disabled:cursor-not-allowed"
             :class="buttonClass"
-            :style="buttonStyle"
             :title="tooltipText"
             :disabled="compacting">
             <span v-if="compacting" class="inline-flex items-center gap-1 font-mono tabular-nums">
@@ -687,7 +690,7 @@ export const CompactThreadButton = {
             </span>
             <span v-else class="inline-flex items-center gap-1 font-mono tabular-nums">
                 <span v-if="percentUsed !== null">{{ percentUsed }}% used</span>
-                <span>·</span>
+                <span v-if="percentUsed !== null">·</span>
                 <span>compact</span>
             </span>
         </button>
@@ -707,40 +710,15 @@ export const CompactThreadButton = {
             return Math.round((contextTokens.value / contextLimit.value) * 100)
         })
 
-        // Calculate color intensity (0-1), maxing out at 70%
-        const colorIntensity = computed(() => {
-            if (percentUsed.value === null) return 0
-            // Scale so that 0% = 0 intensity, 70% = 1.0 intensity
-            return Math.min(1, percentUsed.value / 70)
-        })
-
-        // Dynamic button styling based on context usage
-        const buttonStyle = computed(() => {
-            const intensity = colorIntensity.value
-            // Only apply inline styles above the first threshold so class-based border is visible
-            if (intensity < 0.3) return {}
-
-            // Interpolate from neutral to warning colors
-            // Light mode: white -> orange-50/100
-            // Dark mode: gray-800 -> orange-900/800
-            const adjustedIntensity = (intensity - 0.3) / 0.7 // Scale 0.3-1.0 to 0-1
-
-            return {
-                backgroundColor: `rgba(255, 237, 213, ${adjustedIntensity * 0.8})`, // orange-100 with variable opacity
-                borderColor: `rgba(251, 146, 60, ${0.4 + adjustedIntensity * 0.6})`, // orange-400, starting at 40% opacity
-                color: `rgb(${Math.round(55 + (139 - 55) * adjustedIntensity)}, ${Math.round(65 - 40 * adjustedIntensity)}, ${Math.round(81 - 60 * adjustedIntensity)})` // gray-700 -> orange-900
-            }
-        })
-
         // Class for dark mode and base styles
         const buttonClass = computed(() => {
-            const intensity = colorIntensity.value
-            if (intensity < 0.3) {
+            const pct = percentUsed.value || 0
+            if (pct < 40) {
                 return 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-            } else if (intensity < 0.7) {
-                return 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/50'
+            } else if (pct < 70) {
+                return 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50'
             } else {
-                return 'border-orange-400 dark:border-orange-600 bg-orange-100 dark:bg-orange-900/50 text-orange-900 dark:text-orange-200 hover:bg-orange-200 dark:hover:bg-orange-900/70'
+                return 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50'
             }
         })
 
@@ -766,8 +744,6 @@ export const CompactThreadButton = {
             contextTokens,
             contextLimit,
             percentUsed,
-            colorIntensity,
-            buttonStyle,
             buttonClass,
             tooltipText,
             compactThread,
@@ -777,25 +753,25 @@ export const CompactThreadButton = {
 
 export const ToolCall = {
     template: `
-        <div v-if="collapsed" @click="collapsed = !collapsed" class="cursor-pointer rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+        <div v-if="collapsed" @click="collapsed = !collapsed" class="cursor-pointer rounded-lg overflow-hidden" :class="[$styles.card]">
             <!-- Tool Call Header -->
-            <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800 space-x-4">
+            <div class="px-3 py-2 flex items-center justify-between space-x-4">
                 <div class="flex items-center gap-2">
                     <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                    <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{{ tool.function.name }}</span>
-                    <span v-if="toolSummary" :title="toolSummary" class="font-mono text-xs text-gray-700 dark:text-gray-300 truncate overflow-hidden xl:max-w-2xl lg:max-w-xl md:max-w-lg sm:max-w-sm max-w-xs">{{ toolSummary }}</span>
+                    <span class="font-mono text-xs font-bold">{{ tool.function.name }}</span>
+                    <span v-if="toolSummary" :title="toolSummary" class="font-mono text-xs truncate overflow-hidden xl:max-w-2xl lg:max-w-xl md:max-w-lg sm:max-w-sm max-w-xs">{{ toolSummary }}</span>
                 </div>
-                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium whitespace-nowrap">Tool Call</span>
+                <span class="text-[10px] uppercase tracking-wider font-medium whitespace-nowrap" :class="[$styles.muted]">Tool Call</span>
             </div>
         </div>
-        <div v-else class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+        <div v-else class="rounded-lg border overflow-hidden" :class="[$styles.card]">
             <!-- Tool Call Header -->
-            <div @click="collapsed = !collapsed" class="cursor-pointer px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/30 dark:bg-gray-800 space-x-4">
+            <div @click="collapsed = !collapsed" class="cursor-pointer px-3 py-2 flex items-center space-x-4 justify-between border-b" :class="[$styles.chromeBorder]">
                 <div class="flex items-center gap-2">
                     <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                    <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{{ tool.function.name }}</span>
+                    <span class="font-mono text-xs font-bold">{{ tool.function.name }}</span>
                 </div>
-                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-medium whitespace-nowrap">Tool Call</span>
+                <span class="text-[10px] uppercase tracking-wider font-medium whitespace-nowrap">Tool Call</span>
             </div>
             
             <ToolArguments :value="tool.function.arguments" />
@@ -909,7 +885,7 @@ export const ChatBody = {
                     <div v-else-if="currentThread">
                         <button v-if="currentThread.parentId" type="button" @click.stop="$ctx.to('/c/' + currentThread.parentId)"
                             title="Return to previous thread"
-                            class="float-left mb-2 p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            class="float-left mb-2 p-1.5 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                             <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M9 14 4 9l5-5"/>
                                 <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>
@@ -935,7 +911,8 @@ export const ChatBody = {
 
                                     <!-- Delete button (shown on hover) -->
                                     <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.timestamp)"
-                                        class="mx-auto opacity-0 group-hover:opacity-100 mt-2 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+                                        class="p-1 mx-auto opacity-0 group-hover:opacity-100 mt-2 rounded hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+                                        :class="$styles.mutedIcon"
                                         title="Delete message">
                                         <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -953,15 +930,15 @@ export const ChatBody = {
                                 <div v-else
                                     class="message rounded-lg px-4 py-3 relative group"
                                     :class="message.role === 'user'
-                                        ? 'bg-blue-100 dark:bg-blue-900 text-gray-900 dark:text-gray-100 border border-blue-200 dark:border-blue-700'
-                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'"
+                                        ? $styles.messageUser
+                                        : $styles.messageAssistant"
                                 >
                                     <!-- Copy button in top right corner -->
                                     <button v-if="message.content"
                                         type="button"
                                         @click="copyMessageContent(message)"
                                         class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 focus:outline-none focus:ring-0"
-                                        :class="message.role === 'user' ? 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+                                        :class="[$styles.mutedIcon, $styles.mutedIconHover]"
                                         title="Copy message content"
                                     >
                                         <svg v-if="copying === message" class="size-4 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -1034,7 +1011,8 @@ export const ChatBody = {
                                 <!-- Edit and Redo buttons (shown on hover for user messages, outside bubble) -->
                                 <div v-if="message.role === 'user'" class="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity mt-1">
                                     <button type="button" @click.stop="editMessage(message)"
-                                        class="whitespace-nowrap text-xs px-2 py-1 rounded text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 transition-all"
+                                        class="whitespace-nowrap text-xs px-2 py-1 rounded hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 transition-all"
+                                        :class="$styles.mutedIcon"
                                         title="Edit message">
                                         <svg class="size-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
@@ -1042,7 +1020,8 @@ export const ChatBody = {
                                         Edit
                                     </button>
                                     <button type="button" @click.stop="redoMessage(message)"
-                                        class="whitespace-nowrap text-xs px-2 py-1 rounded text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all"
+                                        class="whitespace-nowrap text-xs px-2 py-1 rounded hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all"
+                                        :class="$styles.mutedIcon"
                                         title="Redo message (clears all responses after this message and re-runs it)">
                                         <svg class="size-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -1052,7 +1031,7 @@ export const ChatBody = {
                                 </div>
                             </div>
 
-                            <div v-if="currentThread.stats && currentThread.stats.outputTokens" class="text-center text-gray-500 dark:text-gray-400 text-sm">
+                            <div v-if="currentThread.stats && currentThread.stats.outputTokens" class="text-center text-sm" :class="[$styles.muted]">
                                 <span :title="$fmt.statsTitle(currentThread.stats)">
                                     {{ currentThread.stats.cost ? $fmt.costLong(currentThread.stats.cost) + '  for ' : '' }} {{ $fmt.humanifyNumber(currentThread.stats.inputTokens) }} → {{ $fmt.humanifyNumber(currentThread.stats.outputTokens) }} tokens over {{ currentThread.stats.requests }} request{{currentThread.stats.requests===1?'':'s'}} in {{ $fmt.humanifyMs(currentThread.stats.duration * 1000) }} <span v-if="currentThread.stats.outputTokens > 0 && currentThread.stats.duration > 0">({{ Math.round(currentThread.stats.outputTokens / currentThread.stats.duration) }} tk/s)</span>
                                 </span>
@@ -1064,23 +1043,24 @@ export const ChatBody = {
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0">
                                     <svg class="size-8" viewBox="0 0 32 32" fill="none">
-                                        <circle cx="16" cy="16" r="15" class="fill-gray-600 dark:fill-gray-500" stroke="none"/>
+                                        <circle cx="16" cy="16" r="15" :class="[$styles.icon]" stroke="none"/>
                                         <path fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 20v-8a2.667 2.667 0 1 1 5.333 0v8m-5.333-4h5.333m5.334-6.667v10.667" transform="translate(2.667, 1.5)"/>
                                     </svg>
                                 </div>
 
                                 <!-- Loading bubble -->
-                                <div class="rounded-lg px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                <div class="rounded-lg px-4 py-3 border" :class="[$styles.muted]">
                                     <div class="flex space-x-1">
-                                        <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce"></div>
-                                        <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                                        <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]"></div>
+                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]" style="animation-delay: 0.1s"></div>
+                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]" style="animation-delay: 0.2s"></div>
                                     </div>
                                 </div>
 
                                 <!-- Cancel button -->
                                 <button type="button" @click="$threads.cancelThread()"
-                                    class="px-3 py-1 rounded text-sm text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 border border-transparent hover:border-red-300 dark:hover:border-red-600 transition-all"
+                                    class="px-3 py-1 rounded text-sm hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 border border-transparent hover:border-red-300 dark:hover:border-red-600 transition-all"
+                                    :class="$styles.muted"
                                     title="Cancel request">
                                     cancel
                                 </button>
@@ -1119,7 +1099,7 @@ export const ChatBody = {
             </div>
 
             <!-- Input Area -->
-            <div v-if="$ai.hasAccess" :class="$ctx.cls('chat-input', 'flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4')">
+            <div v-if="$ai.hasAccess" :class="$ctx.cls('chat-input', 'flex-shrink-0 px-6 py-4 border-t ' + $styles.chromeBorder + ' ' + $styles.bgChat)">
                 <ChatPrompt :model="$chat.getSelectedModel()" />
             </div>
         </div>

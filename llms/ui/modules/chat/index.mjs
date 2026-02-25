@@ -487,10 +487,10 @@ const VoiceInput = {
             @click="toggleRecording"
             :class="['absolute bottom-12 right-2 size-8 flex items-center justify-center rounded-full hover:shadow transition-colors',
                 isRecording 
-                    ? 'border bg-red-100 border-red-400 text-red-600 dark:bg-red-900/30 dark:border-red-600 dark:text-red-400 animate-pulse' 
+                    ? $styles.voiceButtonRecording
                     : isProcessing
-                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 animate-spin'
-                        : 'bg-white text-gray-400 hover:text-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                        ? $styles.voiceButtonProcessing
+                        : $styles.voiceButtonDefault
             ]"
             :title="isProcessing ? 'Processing...' : 'Record voice (Alt+D)'"
         >
@@ -658,7 +658,8 @@ const ChatPrompt = {
                     <button type="button"
                             @click="triggerFilePicker"
                             :disabled="$threads.isWatchingThread.value || !model"
-                            class="size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            class="size-8 flex items-center justify-center rounded-md disabled:cursor-not-allowed"
+                            :class="$styles.chatButton"
                             title="Attach image or audio">
                         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256">
                             <path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"></path>
@@ -672,8 +673,9 @@ const ChatPrompt = {
                 <div>
                     <button type="button" title="Settings" @click="showSettings = true"
                         :disabled="$threads.watchingThread || !model"
-                        class="size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed">
-                        <svg class="size-4 text-gray-600 dark:text-gray-400 disabled:text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"></path></svg>
+                        class="size-8 flex items-center justify-center rounded-md disabled:cursor-not-allowed"
+                        :class="$styles.chatButton">
+                        <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"></path></svg>
                     </button>
                 </div>
             </div>
@@ -692,10 +694,10 @@ const ChatPrompt = {
                         @drop="onDrop"
                         placeholder="Type message... (Enter to send, Shift+Enter for new line, drag & drop or paste files)"
                         :class="[
-                            'h-22 block w-full rounded-md border px-3 py-2 pr-12 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1',
+                            'h-22 block w-full rounded-md border px-3 py-2 pr-12 text-sm focus:outline-none focus:ring-1 ' + $styles.textInput + ' ' + $styles.bgInput,
                             isDragging
-                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-500'
-                                : 'border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500'
+                                ? $styles.draggingInput
+                                : $styles.borderInput
                         ]"
                         :disabled="$threads.watchingThread || !model"
                     ></textarea>
@@ -703,7 +705,8 @@ const ChatPrompt = {
                     <button v-if="!$threads.watchingThread" title="Send (Enter)" type="button"
                         @click="sendMessage"
                         :disabled="!messageText.trim() || $threads.watchingThread || !model"
-                        class="absolute bottom-2 right-2 size-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:border-gray-200 dark:disabled:border-gray-700 transition-colors">
+                        class="absolute bottom-2 right-2 size-8 flex items-center justify-center rounded-md"
+                        :class="$styles.chatButton">
                         <svg class="size-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="20" stroke-dashoffset="20" d="M12 21l0 -17.5"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.2s" values="20;0"/></path><path stroke-dasharray="12" stroke-dashoffset="12" d="M12 3l7 7M12 3l-7 7"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.2s" dur="0.2s" values="12;0"/></path></g></svg>
                     </button>
                     <button v-else title="Cancel request" type="button"
@@ -718,9 +721,9 @@ const ChatPrompt = {
                 <!-- Attachments & Image Options -->
                 <div class="mt-2 flex justify-between items-start gap-2">
                     <div class="flex flex-wrap gap-2">
-                        <div v-for="(f,i) in $chat.attachedFiles.value" :key="i" class="flex items-center gap-2 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800">
+                        <div v-for="(f,i) in $chat.attachedFiles.value" :key="i" class="flex items-center gap-2 px-2 py-1 text-xs rounded-md border" :class="[$styles.tagLabel]">
                             <span class="truncate max-w-48" :title="f.name">{{ f.name }}</span>
-                            <button type="button" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" @click="removeAttachment(i)" title="Remove Attachment">
+                            <button type="button" :class="[$styles.icon, $styles.iconHover]" @click="removeAttachment(i)" title="Remove Attachment">
                                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
                         </div>
@@ -729,7 +732,7 @@ const ChatPrompt = {
                     <!-- Image Aspect Ratio Selector -->
                     <div v-if="$chat.canGenerateImage(model)">
                         <select name="aspect_ratio" v-model="$state.selectedAspectRatio" 
-                                class="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300 pl-2 pr-6 py-1 focus:ring-blue-500 focus:border-blue-500">
+                                class="block w-full rounded-md pl-2 pr-6 py-1 text-xs" :class="[$styles.textInput, $styles.bgInput, $styles.borderInput]">
                             <option v-for="(ratio, size) in imageAspectRatios" :key="size" :value="size">
                                 {{ ratio }}
                             </option>
@@ -1010,10 +1013,167 @@ const ChatPrompt = {
     }
 }
 
+const ThemeButton = {
+    template: `
+        <div :class="['rounded-xl overflow-hidden border-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg', preview.bgBody, preview.chromeBorder]" :title="JSON.stringify(preview, undefined, 2)">
+            <button type="button" :key="id" @click="$emit('select', id)"
+                class="flex w-full text-left">
+                
+                <div class="w-14 flex items-center justify-center border-r"
+                    :class="[preview.bgSidebar, preview.icon, preview.chromeBorder]">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M17.5 12a1.5 1.5 0 0 1-1.5-1.5A1.5 1.5 0 0 1 17.5 9a1.5 1.5 0 0 1 1.5 1.5a1.5 1.5 0 0 1-1.5 1.5m-3-4A1.5 1.5 0 0 1 13 6.5A1.5 1.5 0 0 1 14.5 5A1.5 1.5 0 0 1 16 6.5A1.5 1.5 0 0 1 14.5 8m-5 0A1.5 1.5 0 0 1 8 6.5A1.5 1.5 0 0 1 9.5 5A1.5 1.5 0 0 1 11 6.5A1.5 1.5 0 0 1 9.5 8m-3 4A1.5 1.5 0 0 1 5 10.5A1.5 1.5 0 0 1 6.5 9A1.5 1.5 0 0 1 8 10.5A1.5 1.5 0 0 1 6.5 12M12 3a9 9 0 0 0-9 9a9 9 0 0 0 9 9a1.5 1.5 0 0 0 1.5-1.5c0-.39-.15-.74-.39-1c-.23-.27-.38-.62-.38-1a1.5 1.5 0 0 1 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8"/></svg>
+                </div>
+                
+                <div class="flex-1 flex items-center px-4 py-3 text-sm font-medium"
+                    :class="[preview.bgBody, preview.heading]">
+                    {{ name }}
+                </div>
+            </button>
+        </div>
+    `,
+    props: {
+        id: String,
+        theme: Object
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+        const name = computed(() => ctx.utils.idToName(props.id))
+        const preview = computed(() => props.theme.preview)
+
+        return {
+            name,
+            preview,
+        }
+    }
+}
+
+const ThemeSelector = {
+    template: `
+    <div v-if="$state.themes" class="relative w-64 text-left select-none" ref="menuContainer">
+        <button type="button" @click.stop="toggleMenu"
+            class="flex w-full items-center justify-between rounded-lg px-4 py-2 border shadow-sm transition-colors"
+            :class="[$styles.dropdownButton, $styles.chromeBorder]">
+            <span class="flex items-center">
+                <svg class="mr-2 h-5 w-5" :class="$styles.icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M17.5 12a1.5 1.5 0 0 1-1.5-1.5A1.5 1.5 0 0 1 17.5 9a1.5 1.5 0 0 1 1.5 1.5a1.5 1.5 0 0 1-1.5 1.5m-3-4A1.5 1.5 0 0 1 13 6.5A1.5 1.5 0 0 1 14.5 5A1.5 1.5 0 0 1 16 6.5A1.5 1.5 0 0 1 14.5 8m-5 0A1.5 1.5 0 0 1 8 6.5A1.5 1.5 0 0 1 9.5 5A1.5 1.5 0 0 1 11 6.5A1.5 1.5 0 0 1 9.5 8m-3 4A1.5 1.5 0 0 1 5 10.5A1.5 1.5 0 0 1 6.5 9A1.5 1.5 0 0 1 8 10.5A1.5 1.5 0 0 1 6.5 12M12 3a9 9 0 0 0-9 9a9 9 0 0 0 9 9a1.5 1.5 0 0 0 1.5-1.5c0-.39-.15-.74-.39-1c-.23-.27-.38-.62-.38-1a1.5 1.5 0 0 1 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8"/></svg>
+                <span class="font-medium" :class="$styles.heading">{{ $utils.idToName($ctx.selectedTheme) || 'Select Theme' }}</span>
+            </span>
+            <svg class="h-5 w-5 opacity-70" :class="$styles.icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+        </button>
+
+        <div v-if="showMenu"
+            @click.stop
+            class="absolute right-[-9rem] z-50 mt-2 w-[34rem] origin-top-right rounded-lg focus:outline-none"
+            role="menu" aria-orientation="vertical" tabindex="-1">
+            
+            <div class="max-h-96 overflow-y-auto w-full p-4 bg-gray-100/90 dark:bg-gray-800/90 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700">
+                <div class="grid grid-cols-2 gap-6 w-full">
+                    <!-- Light Themes Column -->
+                    <div class="flex flex-col space-y-3">
+                        <div class="text-xs font-bold tracking-wider uppercase px-1" :class="$styles.muted">Light Themes</div>
+                        <template v-for="(theme, id) in lightThemes" :key="id">
+                            <ThemeButton :id="id" :theme="theme" @select="selectTheme" />
+                        </template>
+                    </div>
+
+                    <!-- Dark Themes Column -->
+                    <div class="flex flex-col space-y-3">
+                        <div class="text-xs font-bold tracking-wider uppercase px-1" :class="$styles.muted">Dark Themes</div>
+                        <template v-for="(theme, id) in darkThemes" :key="id">
+                            <ThemeButton :id="id" :theme="theme" @select="selectTheme" />
+                        </template>
+                    </div>
+                </div>
+            </div>    
+            
+        </div>
+    </div>
+    `,
+    setup() {
+        const ctx = inject('ctx')
+        const showMenu = ref(false)
+        const menuContainer = ref(null)
+        const fullThemes = computed(() => ctx.resolveThemes(ctx.state.themes) || {})
+
+        const lightThemes = computed(() => {
+            const themes = {}
+            const sortedEntries = Object.entries(fullThemes.value).sort((a, b) => {
+                const idA = a[0]
+                const idB = b[0]
+                if (idA === 'light') return -1
+                if (idB === 'light') return 1
+
+                const nameA = (ctx.utils.idToName(idA) || '').toLowerCase()
+                const nameB = (ctx.utils.idToName(idB) || '').toLowerCase()
+                return nameA.localeCompare(nameB)
+            })
+            for (const [id, theme] of sortedEntries) {
+                if (theme.vars.colorScheme !== 'dark') {
+                    themes[id] = theme
+                }
+            }
+            return themes
+        })
+
+        const darkThemes = computed(() => {
+            const themes = {}
+            const sortedEntries = Object.entries(fullThemes.value).sort((a, b) => {
+                const idA = a[0]
+                const idB = b[0]
+                if (idA === 'dark') return -1
+                if (idB === 'dark') return 1
+
+                const nameA = (ctx.utils.idToName(idA) || '').toLowerCase()
+                const nameB = (ctx.utils.idToName(idB) || '').toLowerCase()
+                return nameA.localeCompare(nameB)
+            })
+            for (const [id, theme] of sortedEntries) {
+                if (theme.vars.colorScheme === 'dark') {
+                    themes[id] = theme
+                }
+            }
+            return themes
+        })
+
+        function toggleMenu() {
+            showMenu.value = !showMenu.value
+        }
+
+        function selectTheme(id) {
+            ctx.selectTheme(id)
+            showMenu.value = false
+        }
+
+        const handleClickOutside = (event) => {
+            if (showMenu.value && menuContainer.value && !menuContainer.value.contains(event.target)) {
+                showMenu.value = false
+            }
+        }
+
+        onMounted(() => {
+            document.addEventListener('click', handleClickOutside)
+        })
+
+        onUnmounted(() => {
+            document.removeEventListener('click', handleClickOutside)
+        })
+
+        return {
+            showMenu,
+            menuContainer,
+            lightThemes,
+            darkThemes,
+            toggleMenu,
+            selectTheme
+        }
+    }
+}
+
 const HomeTools = {
     template: `
         <div class="mt-4 flex space-x-3 justify-center items-center">
-            <DarkModeToggle />
+            <ThemeSelector />
         </div>
     `,
 }
@@ -1063,7 +1223,7 @@ const ThreadFooter = {
 const ThreadModel = {
     template: `
     <span @click="$chat.setSelectedModel({ name: thread.model})" 
-        class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors border hover:border-gray-300 dark:hover:border-gray-700">
+        class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded transition-colors" :class="[$styles.tagLabel, $styles.tagLabelHover]">
         <ProviderIcon class="size-4 mr-1" :provider="$chat.getProviderForModel(thread.model)" />
         {{thread.model}}
     </span>
@@ -1073,8 +1233,8 @@ const ThreadModel = {
 
 const ThreadTools = {
     template: `
-    <div class="text-sm flex items-center gap-1 flex items-center px-1.5 py-0.5 text-xs rounded text-gray-600 dark:text-gray-300 border cursor-help" :title="title">
-        <svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 10h3V7L6.5 3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1-3 3l-6-6a6 6 0 0 1-8-8z"/></svg>
+    <div class="text-sm flex items-center gap-1 flex items-center px-1.5 py-0.5 text-xs rounded cursor-help" :class="[$styles.tagLabel]" :title="title">
+        <svg class="size-4" :class="[$styles.icon]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 10h3V7L6.5 3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1-3 3l-6-6a6 6 0 0 1-8-8z"/></svg>
         <span v-if="toolFns.length==1">{{toolFns[0].function.name}}</span>
         <span v-else-if="toolFns.length>1">{{toolFns.length}} Tools</span>
     </div>
@@ -1123,6 +1283,8 @@ export default {
 
             HomeTools,
             Home,
+            ThemeSelector,
+            ThemeButton,
             ThreadHeader,
             ThreadFooter,
             UserAvatar,

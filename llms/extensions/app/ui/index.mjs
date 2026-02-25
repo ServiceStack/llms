@@ -10,23 +10,23 @@ let ext
 const ThreadItem = {
     template: `
         <div
-            class="group relative mx-2 mb-1 rounded-md cursor-pointer transition-colors  border border-transparent"
-            :class="isActive ? 'bg-blue-100 dark:bg-blue-900 border-blue-200 dark:border-blue-700' : 'hover:bg-gray-100 dark:hover:bg-gray-800'"
+            class="group relative mx-2 mb-1 rounded-md cursor-pointer transition-colors border"
+            :class="isActive ? $styles.threadItemActive : $styles.threadItem"
             @click="$emit('select', thread.id)"
         >
             <div class="flex items-center px-3 py-2">
                 <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" :title="thread.title">
+                    <div class="text-sm font-medium truncate" :class="$styles.heading" :title="thread.title">
                         {{ thread.title }}
                     </div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <div class="text-xs truncate" :class="[isActive ? $styles.mutedActive : $styles.muted]">
                         <span>{{ $fmt.relativeTime(thread.updatedAt) }} • {{ thread.messages.length }} msgs</span>
                         <span v-if="thread.stats?.inputTokens" :title="$fmt.statsTitle(thread.stats)">
                             &#8226; {{ $fmt.humanifyNumber(thread.stats.inputTokens + thread.stats.outputTokens) }} toks
                             {{ thread.stats.cost ? ' ' + $fmt.cost(thread.stats.cost) : '' }}
                         </span>
                     </div>
-                    <div v-if="thread.model" class="text-xs text-blue-600 dark:text-blue-400 truncate">
+                    <div v-if="thread.model" class="text-xs truncate" :class="$styles.highlighted">
                         {{ thread.model }}
                     </div>
                 </div>
@@ -34,7 +34,8 @@ const ThreadItem = {
                 <!-- Delete button (shown on hover) -->
                 <button type="button"
                     @click.stop="$emit('delete', thread.id)"
-                    class="opacity-0 group-hover:opacity-100 ml-2 p-1 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+                    class="opacity-0 group-hover:opacity-100 ml-2 p-1 transition-all rounded hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                    :class="[$styles.icon, $styles.iconHover]"
                     title="Delete conversation"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +69,7 @@ const GroupedThreads = {
     template: `
     <!-- Today -->
     <div v-if="groupedThreads.today.length > 0" class="mb-4">
-        <h3 class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none">Today</h3>
+        <h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wider select-none" :class="$styles.muted">Today</h3>
         <ThreadItem
             v-for="thread in groupedThreads.today"
             :key="thread.id"
@@ -81,7 +82,7 @@ const GroupedThreads = {
 
     <!-- Yesterday -->
     <div v-if="groupedThreads.yesterday.length > 0" class="mb-4">
-        <h3 class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none">Yesterday</h3>
+        <h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wider select-none" :class="$styles.muted">Yesterday</h3>
         <ThreadItem
             v-for="thread in groupedThreads.yesterday"
             :key="thread.id"
@@ -94,7 +95,7 @@ const GroupedThreads = {
 
     <!-- Last 7 Days -->
     <div v-if="groupedThreads.lastWeek.length > 0" class="mb-4">
-        <h3 class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none">Last 7 Days</h3>
+        <h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wider select-none" :class="$styles.muted">Last 7 Days</h3>
         <ThreadItem
             v-for="thread in groupedThreads.lastWeek"
             :key="thread.id"
@@ -107,7 +108,7 @@ const GroupedThreads = {
 
     <!-- Last 30 Days -->
     <div v-if="groupedThreads.lastMonth.length > 0" class="mb-4">
-        <h3 class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none">Last 30 Days</h3>
+        <h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wider select-none" :class="$styles.muted">Last 30 Days</h3>
         <ThreadItem
             v-for="thread in groupedThreads.lastMonth"
             :key="thread.id"
@@ -120,7 +121,7 @@ const GroupedThreads = {
 
     <!-- Older (grouped by month/year) -->
     <div v-for="(monthThreads, monthKey) in groupedThreads.older" :key="monthKey" class="mb-4">
-        <h3 class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none">{{ monthKey }}</h3>
+        <h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wider select-none" :class="$styles.muted">{{ monthKey }}</h3>
         <ThreadItem
             v-for="thread in monthThreads"
             :key="thread.id"
@@ -154,17 +155,17 @@ const ThreadsSidebar = {
             <Brand />
             <!-- Thread List -->
             <div class="flex-1 overflow-y-auto">
-                <div v-if="isLoading" class="p-4 text-center text-gray-500 dark:text-gray-400">
+                <div v-if="isLoading" class="p-4 text-center" :class="$styles.muted">
                     <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 dark:border-blue-400 mx-auto"></div>
                     <p class="mt-2 text-sm">Loading threads...</p>
                 </div>
 
-                <div v-else-if="threads.length === 0" class="p-4 text-center text-gray-500 dark:text-gray-400">
+                <div v-else-if="threads.length === 0" class="p-4 text-center" :class="$styles.muted">
                     <div class="mb-2 flex justify-center">
                         <svg class="size-8" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2.19c3.13 0 5.68 2.25 5.68 5s-2.55 5-5.68 5a5.7 5.7 0 0 1-1.89-.29l-.75-.26l-.56.56a14 14 0 0 1-2 1.55a.13.13 0 0 1-.07 0v-.06a6.58 6.58 0 0 0 .15-4.29a5.25 5.25 0 0 1-.55-2.16c0-2.77 2.55-5 5.68-5M8 .94c-3.83 0-6.93 2.81-6.93 6.27a6.4 6.4 0 0 0 .64 2.64a5.53 5.53 0 0 1-.18 3.48a1.32 1.32 0 0 0 2 1.5a15 15 0 0 0 2.16-1.71a6.8 6.8 0 0 0 2.31.36c3.83 0 6.93-2.81 6.93-6.27S11.83.94 8 .94"/><ellipse cx="5.2" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/><ellipse cx="10.8" cy="7.7" fill="currentColor" rx=".8" ry=".75"/></svg>
                     </div>
                     <p class="text-sm">No conversations yet</p>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Start a new chat to begin</p>
+                    <p class="text-xs mt-1" :class="$styles.muted">Start a new chat to begin</p>
                 </div>
 
                 <div v-else class="relative py-2">
@@ -172,7 +173,8 @@ const ThreadsSidebar = {
                     <div class="flex items-center space-x-2 absolute top-2 right-2">
                         <button type="button"
                             @click="createNewThread"
-                            class="text-gray-900 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none transition-colors"
+                            class="focus:outline-none transition-colors"
+                            :class="[$styles.icon, $styles.iconHover]"
                             title="New Chat"
                         >
                             <svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></g></svg>
@@ -319,5 +321,34 @@ export default {
         ctx.setLayout({
             left: 'ThreadsSidebar',
         })
+
+        ctx.setState({
+            themes: ctx.utils.storageObject('llms.themes') || {
+                "light": {
+                    "vars": {
+                        "colorScheme": "light"
+                    }
+                },
+                "dark": {
+                    "vars": {
+                        "colorScheme": "dark"
+                    }
+                }
+            }
+        })
+        const selectedTheme = ctx.getTheme(ctx.selectedTheme)
+        console.log('selectedTheme', ctx.selectedTheme, selectedTheme)
+        ctx.setTheme(selectedTheme)
+    },
+
+    async load(ctx) {
+        const api = await ctx.getJson("/themes")
+        if (api.response) {
+            ctx.setState({
+                themes: api.response
+            })
+            localStorage.setItem('llms.themes', JSON.stringify(api.response))
+            ctx.setTheme(ctx.getTheme(ctx.selectedTheme))
+        }
     }
 }

@@ -91,7 +91,7 @@ const ToolResult = {
                 :class="ext.prefs.toolFormat !== 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
                 text
             </span>
-            <span class="text-gray-300 dark:text-gray-700">|</span>
+            <span :class="[$styles.muted]">|</span>
             <span @click="ext.setPrefs({ toolFormat: 'preview' })" 
                 class="cursor-pointer transition-colors"
                 :class="ext.prefs.toolFormat == 'preview' ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
@@ -165,9 +165,9 @@ const JsonInput = {
                 @input="validate"
                 rows="5"
                 class="w-full p-2 font-mono text-xs border rounded-md resize-y focus:outline-none focus:ring-2 transition-colors"
-                :class="error 
+                :class="[$styles.bgInput, $styles.textInput, error 
                     ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10 focus:ring-red-500' 
-                    : 'border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:ring-blue-500'"
+                    : 'focus:ring-blue-500']"
                 spellcheck="false"
             ></textarea>
             <div v-if="isValid" class="absolute bottom-2 right-2 text-green-500 bg-white dark:bg-gray-800 rounded-full p-1 shadow-sm">
@@ -251,41 +251,41 @@ const Tools = {
         </div>
         <div ref="refTop" class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Tools</h1>
-                <p class="text-gray-600 dark:text-gray-400 mt-1">
+                <h1 class="text-2xl font-bold" :class="[$styles.heading]">Tools</h1>
+                <p class="mt-1" :class="[$styles.muted]">
                     {{ filteredTools.length }} tools available
                 </p>
             </div>
 
             <div v-if="groups.length > 0" class="flex flex-wrap items-center gap-2">
-                 <button @click="ext.setPrefs({ selectedGroup: 'All' })"
-                    class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors select-none"
-                    :class="ext.prefs.selectedGroup === 'All'
-                        ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-300 dark:border-green-800' 
-                        : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
+                 <button type="button" @click="ext.setPrefs({ selectedGroup: 'All' })"
+                    class="px-2.5 py-1 text-xs font-medium border transition-colors select-none"
+                    :class="[ext.prefs.selectedGroup === 'All'
+                        ? $styles.tagButtonStrongActive
+                        : $styles.tagButton,$styles.tagButtonSmall]">
                     All
                 </button>
 
                 <div class="border-l h-4 mx-1 border-gray-300 dark:border-gray-600"></div>
 
-                <button v-for="group in groups" :key="group"
+                <button v-for="group in groups" :key="group" type="button"
                     @click="ext.setPrefs({ selectedGroup: group})"
-                    class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors select-none"
-                    :class="ext.prefs.selectedGroup === group
-                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800' 
-                        : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
+                    class="px-2.5 py-1 text-xs font-medium border transition-colors select-none"
+                    :class="[ext.prefs.selectedGroup === group
+                        ? $styles.tagButtonActive
+                        : $styles.tagButton,$styles.tagButtonSmall]">
                     {{ group }}
                 </button>
             </div>
         </div>
 
         <!-- Execution Form Panel -->
-        <div v-if="executingTool" class="mb-8 bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
-            <div class="bg-blue-50 dark:bg-blue-900/30 px-4 py-3 border-b border-blue-100 dark:border-blue-800 flex justify-between items-center">
+        <div v-if="executingTool" class="mb-8 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200" :class="$styles.cardActive">
+            <div class="px-4 py-3 flex justify-between items-center" :class="[$styles.cardActiveTitleBar]">
                 <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-gray-900 dark:text-gray-100">Execute: <span class="font-mono text-blue-600 dark:text-blue-400">{{ executingTool.function.name }}</span></h3>
+                    <h3 class="font-bold" :class="[$styles.heading]">Execute: <span class="ml-1 font-mono text-blue-600 dark:text-blue-400">{{ executingTool.function.name }}</span></h3>
                 </div>
-                <button @click="closeExec" type="button" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <button @click="closeExec" type="button" :class="[$styles.icon,$styles.iconHover]">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                     </svg>
@@ -296,20 +296,20 @@ const Tools = {
                 <form ref="refForm" @submit.prevent="execTool" class="space-y-4">
                     <div v-if="Object.keys(executingTool.function.parameters?.properties || {}).length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div v-for="(prop, name) in executingTool.function.parameters.properties" :key="name">
-                            <label :for="'input-' + name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label :for="'input-' + name" class="mb-1 block text-sm font-medium" :class="$styles.labelInput">
                                 {{ name }}
                                 <span v-if="executingTool.function.parameters.required?.includes(name)" class="text-red-500">*</span>
                             </label>
                             
                             <div v-if="prop.enum">
-                                <select v-model="execForm[name]" :id="'input-' + name" class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                <select v-model="execForm[name]" :id="'input-' + name" class="block w-full rounded-md sm:text-sm" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                                     <option :value="undefined" disabled>Select...</option>
                                     <option v-for="opt in prop.enum" :key="opt" :value="opt">{{ opt }}</option>
                                 </select>
                             </div>
                             
                             <div v-else-if="prop.type === 'boolean'">
-                                <select v-model="execForm[name]" :id="'input-' + name" class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                <select v-model="execForm[name]" :id="'input-' + name" class="block w-full rounded-md sm:text-sm" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                                      <option :value="false">False</option>
                                      <option :value="true">True</option>
                                 </select>
@@ -325,18 +325,19 @@ const Tools = {
                                        :id="'input-' + name"
                                        :placeholder="prop.description"
                                        :step="prop.type === 'integer' ? 1 : 0.01"
-                                       class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                       class="block w-full rounded-md sm:text-sm shadow-sm"
+                                       :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                             </div>
-                            <p v-if="prop.description" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ prop.description }}</p>
+                            <p v-if="prop.description" class="mt-1 text-xs" :class="$styles.helpInput">{{ prop.description }}</p>
                         </div>
                     </div>
                     <div v-else class="text-gray-500 dark:text-gray-400 italic">
                         No parameters required.
                     </div>
 
-                    <div class="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center gap-3 pt-4">
                         <button type="submit" :disabled="loading"
-                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                            class="inline-flex items-center px-4 py-2 text-sm font-medium" :class="$styles.primaryButton">
                             <svg v-if="loading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -358,13 +359,13 @@ const Tools = {
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <div v-for="tool in filteredTools" :key="tool.function.name" :id="'tool-' + tool.function.name"
-                class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+                class="overflow-hidden flex flex-col" :class="$styles.card">
                 
-                <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center">
+                <div class="p-4 flex justify-between items-center" :class="$styles.cardTitle">
                     <div class="font-bold text-lg text-gray-900 dark:text-gray-100 font-mono break-all mr-2">
                         {{ tool.function.name }}
                     </div>
-                    <button @click="startExec(tool)" type="button" title="Execute Tool" class="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 border-none">
+                    <button @click="startExec(tool)" type="button" title="Execute Tool" class="transition-colors rounded-full border-none" :class="[$styles.icon, $styles.iconHover]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="size-6" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
                         </svg>
@@ -399,12 +400,12 @@ const Tools = {
                      </p>
 
                      <div v-if="tool.function.parameters?.properties && Object.keys(tool.function.parameters.properties).length > 0">
-                        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Parameters</div>
+                        <div class="text-xs font-semibold uppercase tracking-wider mb-2" :class="[$styles.muted]">Parameters</div>
                         <div class="space-y-3">
                             <div v-for="(prop, name) in tool.function.parameters.properties" :key="name" class="text-sm bg-gray-50 dark:bg-gray-700/30 rounded p-2">
                                 <div class="flex flex-wrap items-baseline gap-2 mb-1">
-                                    <span class="font-mono font-medium text-blue-600 dark:text-blue-400">{{ name }}</span>
-                                    <span class="text-gray-500 text-xs">({{ prop.type }})</span>
+                                    <span class="font-mono font-medium" :class="[$styles.highlighted]">{{ name }}</span>
+                                    <span class="text-xs" :class="[$styles.muted]">({{ prop.type }})</span>
                                     <span v-if="tool.function.parameters.required?.includes(name)" 
                                         class="px-1.5 py-0.5 text-[10px] rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium">
                                         REQUIRED
@@ -559,11 +560,11 @@ const Tools = {
 
 const ToolSelector = {
     template: `
-        <div class="px-4 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
+        <div class="px-4 py-4 max-h-[80vh] overflow-y-auto border-b" :class="$styles.panel">
             
             <!-- Global Controls -->
             <div class="flex items-center justify-between mb-4">
-                <span class="text-xs font-bold uppercase text-gray-500 tracking-wider">Include Tools</span>
+                <span class="text-xs font-bold uppercase tracking-wider" :class="$styles.heading">Include Tools</span>
                 <div class="flex items-center gap-2">
                     <button @click="$ctx.setPrefs({ onlyTools: null })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"

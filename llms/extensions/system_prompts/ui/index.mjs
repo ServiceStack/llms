@@ -5,7 +5,7 @@ let ext
 
 const PromptFinder = {
     template: `
-    <div v-if="modelValue" class="absolute right-0 top-full z-10 mt-1 origin-top-right rounded-md bg-white dark:bg-gray-900 shadow-lg border border-gray-300 dark:border-gray-600 focus:outline-none"
+    <div v-if="modelValue" class="absolute right-0 z-10 mt-1 origin-top-right rounded-md bg-white dark:bg-gray-900 shadow-lg border border-gray-300 dark:border-gray-600 focus:outline-none"
          style="width:400px"
          role="menu" aria-orientation="vertical" aria-labelledby="menu-button" tabindex="-1">
         <div class="p-2" role="none">
@@ -135,16 +135,16 @@ const PromptFinder = {
 
 const SystemPromptEditor = {
     template: `
-    <div class="border-b border-gray-200 dark:border-gray-700 px-6 pb-4">
+    <div class="px-4 py-4 overflow-y-auto border-b" :class="$styles.panel">
         <div class="max-w-6xl mx-auto">
-            <div class="mt-2 h-10 flex justify-between items-center">
-                <label class="select-none block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    System Prompt
-                </label>
+            <div class="mb-2 text-xs font-bold uppercase tracking-wider" :class="$styles.heading">
+                System Prompt
+            </div>
+            <div class="flex justify-end items-center">
                 <div v-if="hasMessages" class="text-sm text-gray-500 dark:text-gray-400">
                     {{ !ext.prefs.systemPrompt ? '' : prompts.find(x => x.value === ext.prefs.systemPrompt)?.name || 'Custom' }}
                 </div>
-                <div v-else class="mb-2 relative" ref="containerRef">
+                <div v-else class="mb-2" ref="containerRef">
                     <div class="flex items-center gap-2">
                         <span v-if="selected" class="text-sm text-gray-500 dark:text-gray-400">
                             {{ selected.name }}

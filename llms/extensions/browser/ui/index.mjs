@@ -29,7 +29,7 @@ const BrowserPage = {
                 <div class="ml-2 w-2 h-2 rounded-full flex-shrink-0" :class="isRunning ? 'bg-green-500' : 'bg-gray-400'" :title="isRunning ? 'Browser running' : 'Browser stopped'"></div>
                 <input type="text" v-model="urlInput" @keyup.enter="navigate" @focus="urlFocused = true" @blur="urlFocused = false" placeholder="Enter URL..."
                     class="flex-1 bg-transparent border-none text-sm outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400" spellcheck="false" />
-                <button type="button" @click="navigate" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">Go</button>
+                <button type="button" @click="navigate" class="px-3 py-1 text-sm font-medium !rounded-md transition-colors" :class="$styles.primaryButton">Go</button>
             </div>
             <div class="flex gap-1">
                 <button type="button" @click="saveState" :disabled="!isRunning"
@@ -185,26 +185,26 @@ const BrowserPage = {
         </div>
 
         <!-- Quick Actions Bar -->
-        <div class="flex flex-wrap items-center gap-4 pl-1 pr-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex flex-wrap items-center gap-4 pl-1 pr-4 py-2" :class="[$styles.bgSidebar, $styles.chromeBorder]">
             <div class="flex-1 flex gap-2">
                 <input type="text" v-model="typeText" @keyup.enter="sendType" placeholder="Type text..." :disabled="!isRunning"
-                    class="flex-1 px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none focus:border-blue-500 disabled:opacity-40" />
-                <button type="button" @click="sendType" :disabled="!isRunning || !typeText" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 disabled:opacity-40 transition-colors">Send</button>
+                    class="flex-1 px-3 py-1 text-sm rounded-md transition-colors" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
+                <button type="button" @click="sendType" :disabled="!isRunning || !typeText" class="px-3 py-1 text-sm transition-colors" :class="[$styles.primaryButton]">Send</button>
             </div>
             <div class="flex gap-1">
                 <button type="button" v-for="key in ['Enter', 'Tab', 'Escape', '↑', '↓']" :key="key" @click="pressKey(key === '↑' ? 'ArrowUp' : key === '↓' ? 'ArrowDown' : key)" :disabled="!isRunning"
-                    class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">{{ key === 'Escape' ? 'Esc' : key }}</button>
+                    class="px-2 py-1 text-xs transition-colors" :class="[$styles.secondaryButton]">{{ key === 'Escape' ? 'Esc' : key }}</button>
             </div>
             <div class="flex gap-1">
-                <button type="button" @click="scroll('up', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▲ Scroll</button>
-                <button type="button" @click="scroll('down', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded disabled:opacity-40 transition-colors">▼ Scroll</button>
+                <button type="button" @click="scroll('up', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs transition-colors" :class="[$styles.secondaryButton]">▲ Scroll</button>
+                <button type="button" @click="scroll('down', 300)" :disabled="!isRunning" class="px-2 py-1 text-xs transition-colors" :class="[$styles.secondaryButton]">▼ Scroll</button>
             </div>
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-                <label class="flex items-center gap-1 cursor-pointer">
+            <div class="flex items-center gap-2 text-xs">
+                <label class="flex items-center gap-1 cursor-pointer" :class="[$styles.muted]">
                     <input type="checkbox" v-model="autoRefresh" class="rounded" />
                     <span>Auto</span>
                 </label>
-                <select v-model="refreshInterval" :disabled="!autoRefresh" class="pl-2 pr-4 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-xs">
+                <select v-model="refreshInterval" :disabled="!autoRefresh" class="pl-2 pr-4 py-1 rounded text-xs" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
                     <option :value="1000">1s</option>
                     <option :value="3000">3s</option>
                     <option :value="5000">5s</option>

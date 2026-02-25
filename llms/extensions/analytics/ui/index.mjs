@@ -19,17 +19,17 @@ export const colors = [
 
 const MonthSelector = {
     template: `
-    <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 items-stretch sm:items-center w-full sm:w-auto">
+    <div class="pb-1 flex flex-col sm:flex-row gap-2 sm:gap-4 items-stretch sm:items-center w-full sm:w-auto">
         <!-- Months Row -->
-        <div class="flex gap-1 sm:gap-2 flex-wrap justify-center overflow-x-auto">
+        <div class="flex gap-1 sm:gap-2 flex-wrap justify-center">
             <template v-for="month in availableMonthsForYear" :key="month">
                 <span v-if="selectedMonth === month"
-                    class="text-xs leading-5 font-semibold bg-indigo-600 text-white rounded-full py-1 px-2 sm:px-3 flex items-center space-x-2 whitespace-nowrap">
+                    class="text-xs leading-5 font-semibold py-1 px-2 sm:px-3 flex items-center space-x-2 whitespace-nowrap" :class="[$styles.tagButtonActive,$styles.tagButtonSmall]">
                     <span class="hidden sm:inline">{{ new Date(selectedYear + '-' + month.toString().padStart(2,'0') + '-01').toLocaleString('default', { month: 'long' }) }}</span>
                     <span class="sm:hidden">{{ new Date(selectedYear + '-' + month.toString().padStart(2,'0') + '-01').toLocaleString('default', { month: 'short' }) }}</span>
                 </span>
                 <button v-else type="button"
-                    class="text-xs leading-5 font-semibold bg-slate-400/10 rounded-full py-1 px-2 sm:px-3 flex items-center space-x-2 hover:bg-slate-400/20 dark:highlight-white/5 whitespace-nowrap"
+                    class="text-xs leading-5 font-semibold py-1 px-2 sm:px-3 flex items-center space-x-2 whitespace-nowrap" :class="[$styles.tagButton,$styles.tagButtonSmall]"
                     @click="updateSelection(selectedYear, month)">
                     {{ new Date(selectedYear + '-' + month.toString().padStart(2,'0') + '-01').toLocaleString('default', { month: 'short' }) }}
                 </button>
@@ -38,7 +38,7 @@ const MonthSelector = {
 
         <!-- Year Dropdown -->
         <select :value="selectedYear" @change="(e) => updateSelection(parseInt(e.target.value), selectedMonth)"
-            class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-shrink-0">
+            class="rounded-md text-sm font-medium flex-shrink-0 transition-colors" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
             <option v-for="year in availableYears" :key="year" :value="year">
                 {{ year }}
             </option>
@@ -108,11 +108,11 @@ export const Analytics = {
     template: `
         <div class="flex flex-col w-full">
             <!-- Header -->
-            <div class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 sm:px-4 py-3">
+            <div class="px-2 sm:px-4 py-3">
                 <div
                 :class="!$ai.isSidebarOpen ? 'pl-3' : ''"
                 class="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 flex-shrink-0">
+                    <h2 class="text-lg font-semibold flex-shrink-0" :class="[$styles.heading]">
                         <RouterLink to="/analytics">Analytics</RouterLink>
                     </h2>
                     <MonthSelector :dailyData="allDailyData" />
@@ -150,7 +150,7 @@ export const Analytics = {
             </div>
 
             <!-- Content -->
-            <div class="flex-1 bg-gray-50 dark:bg-gray-900" :class="activeTab === 'activity' ? 'p-0' : 'p-4'">
+            <div class="flex-1" :class="[activeTab === 'activity' ? 'p-0' : 'p-4', $styles.bgPage]">
 
                 <div :class="activeTab === 'activity' ? '' : 'max-w-6xl mx-auto'">
                     <!-- Stats Summary (hidden for Activity tab) -->
@@ -180,7 +180,7 @@ export const Analytics = {
                             <h3 class="text-sm sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
                                 {{ new Date(selectedDay).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }) }}
                             </h3>
-                            <select v-model="costChartType" class="px-3 pr-6 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 flex-shrink-0">
+                            <select v-model="costChartType" class="px-3 pr-6 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
                                 <option value="bar">Bar Chart</option>
                                 <option value="line">Line Chart</option>
                             </select>
@@ -288,7 +288,7 @@ export const Analytics = {
                         <div class="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 sm:px-6 py-4">
                             <div class="flex flex-wrap gap-2 sm:gap-4 items-end">
                                 <div class="flex flex-col flex-1 min-w-[120px] sm:flex-initial">
-                                    <select v-model="selectedModel" class="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full">
+                                    <select v-model="selectedModel" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
                                         <option value="">All Models</option>
                                         <option v-for="model in filterOptions.models" :key="model" :value="model">
                                             {{ model }}
@@ -297,7 +297,7 @@ export const Analytics = {
                                 </div>
 
                                 <div class="flex flex-col flex-1 min-w-[120px] sm:flex-initial">
-                                    <select v-model="selectedProvider" class="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full">
+                                    <select v-model="selectedProvider" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
                                         <option value="">All Providers</option>
                                         <option v-for="provider in filterOptions.providers" :key="provider" :value="provider">
                                             {{ provider }}
@@ -306,7 +306,7 @@ export const Analytics = {
                                 </div>
 
                                 <div class="flex flex-col flex-1 min-w-[140px] sm:flex-initial">
-                                    <select v-model="sortBy" class="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full">
+                                    <select v-model="sortBy" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
                                         <option value="createdAt">Date (Newest)</option>
                                         <option value="cost">Cost (Highest)</option>
                                         <option value="duration">Duration (Longest)</option>
@@ -393,7 +393,7 @@ export const Analytics = {
                                     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                                 </div>
 
-                                <div v-if="!activityHasMore && activityRequests.length > 0" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400 text-sm">
+                                <div v-if="!activityHasMore && activityRequests.length > 0" class="px-6 py-8 text-sm" :class="[$styles.muted]">
                                     No more requests to load
                                 </div>
                             </div>

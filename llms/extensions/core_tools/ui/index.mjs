@@ -33,23 +33,23 @@ const CodePage = {
                 .CodeMirror { height: 100% !important; }
             </component>
             <!-- Toolbar -->
-            <div class="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0">
+            <div class="flex items-center justify-between p-2 border-b shrink-0" :class="[$styles.bgPage, $styles.chromeBorder]">
                 <div class="flex items-center space-x-1">
                     <button v-for="lang in Object.keys(languages)" :key="lang" type="button" @click="language = lang" 
                         class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors select-none capitalize"
                         :class="language === lang 
-                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800' 
-                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'">
+                            ? $styles.tagButtonActive 
+                            : $styles.tagButton">
                         {{ languages[lang].name }}
                     </button>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <button @click="toggleOutput" class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500" :title="showOutput ? 'Hide Output' : 'Show Output'">
+                    <button type="button" @click="toggleOutput" class="p-1 rounded" :class="[$styles.mutedIcon,$styles.mutedIconHover]" :title="showOutput ? 'Hide Output' : 'Show Output'">
                         <svg v-if="showOutput" xmlns="http://www.w3.org/2000/svg" class="size-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m0 16H3v-3h18zm0-5H3V5h18z"/></svg>
                         <svg v-else xmlns="http://www.w3.org/2000/svg" class="size-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m0 16H3V5h18z"/></svg>
                     </button>
-                    <button @click="runCode" type="button" :disabled="loading" class="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center shadow-sm transition-colors">
-                        <svg v-if="loading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <button @click="runCode" type="button" :disabled="loading" class="px-4 py-1.5 flex items-center shadow-sm transition-colors" :class="$styles.primaryButton">
+                        <svg v-if="loading" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -266,9 +266,9 @@ const CodePage = {
 
 const CalcPage = {
     template: `
-        <div class="flex flex-col h-full w-full bg-white dark:bg-gray-900 text-base">
+        <div class="flex flex-col h-full w-full text-base" :class="[$styles.bgPage]">
             <!-- Header/Input Area -->
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0">
+            <div class="p-4 shrink-0 border-b" :class="[$styles.bgPage, $styles.chromeBorder]">
                 <div class="max-w-3xl mx-auto w-full">
                     <form @submit.prevent="calculate" class="relative">
                         <input
@@ -276,14 +276,16 @@ const CalcPage = {
                             v-model="expression"
                             type="text"
                             placeholder="Type an expression (e.g. 1 + 2 * 3) and press Enter"
-                            class="w-full px-4 py-3 pr-12 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none shadow-sm transition-all"
+                            class="w-full px-4 py-3 pr-12 rounded-lg shadow-sm transition-all"
+                            :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"
                             :disabled="loading"
                             autofocus
                         />
                         <button
                             type="submit"
                             :disabled="loading || !expression.trim()"
-                            class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md transition-colors disabled:cursor-not-allowed"
+                            :class="[$styles.mutedIcon]"
                             title="Calculate"
                         >
                             <svg v-if="loading" class="animate-spin size-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -302,17 +304,18 @@ const CalcPage = {
             <!-- History List -->
             <div class="flex-1 overflow-auto p-4">
                 <div class="max-w-3xl mx-auto w-full space-y-3">
-                    <div v-if="history.length === 0" class="text-center text-gray-400 dark:text-gray-500 py-10 italic">
+                    <div v-if="history.length === 0" class="text-center py-10 italic" :class="$styles.muted">
                         No calculation history.
                     </div>
                     
-                    <div v-for="(item, index) in history" :key="index" class="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-all">
+                    <div v-for="(item, index) in history" :key="index" class="group rounded-lg p-4 shadow-sm hover:shadow-md transition-all" :class="[$styles.card]">
                         <div class="flex items-center justify-between gap-4">
                             <div class="flex-1 space-y-1 min-w-0">
                                 <!-- Expression -->
                                 <div class="flex items-center gap-2 group/expr cursor-pointer" @click="useResult(item.expression, item, 'expr')">
                                     <span 
-                                        class="font-mono text-gray-500 dark:text-gray-400 group-hover/expr:text-blue-600 dark:group-hover/expr:text-blue-400 transition-colors select-none"
+                                        class="font-mono group-hover/expr:text-blue-600 dark:group-hover/expr:text-blue-400 transition-colors select-none"
+                                        :class="[$styles.muted]"
                                         title="Click to copy & use"
                                     >
                                         {{ item.expression }} =
@@ -362,7 +365,8 @@ const CalcPage = {
                         <button 
                             type="button"
                             @click="clearAll"
-                            class="text-sm text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-300"
+                            class="text-sm"
+                            :class="[$styles.highlighted, $styles.linkHover]"
                         >
                             clear all history
                         </button>
@@ -378,18 +382,20 @@ const CalcPage = {
                                     :key="num"
                                     type="button"
                                     @click="insert(num)"
-                                    class="px-3 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 border border-gray-200 dark:border-gray-700 rounded text-sm font-mono transition-colors"
+                                    class="px-3 py-1 rounded text-sm font-mono transition-colors"
+                                    :class="[$styles.secondaryButton]"
                                     :title="'insert number ' + num"
                                 >
                                     {{ num }}
                                 </button>
-                                <span class="px-1 py-1 text-gray-400 dark:text-gray-600">|</span>
+                                <span class="px-1 py-1" :class="[$styles.icon]">|</span>
                                 <button 
                                     v-for="c in features.constants" 
                                     :key="c"
                                     type="button"
                                     @click="insert(c)"
-                                    class="px-3 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 border border-gray-200 dark:border-gray-700 rounded text-sm font-mono transition-colors"
+                                    class="px-3 py-1 rounded text-sm font-mono transition-colors"
+                                    :class="[$styles.secondaryButton]"
                                     :title="'insert constant ' + c"
                                 >
                                     {{ c }}
@@ -405,7 +411,8 @@ const CalcPage = {
                                     :key="op"
                                     type="button"
                                     @click="insert(op)"
-                                    class="px-3 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 border border-gray-200 dark:border-gray-700 rounded text-sm font-mono transition-colors"
+                                    class="px-3 py-1 rounded text-sm font-mono transition-colors"
+                                    :class="[$styles.secondaryButton]"
                                     :title="'insert operator ' + op"
                                 >
                                     {{ op }}
@@ -415,14 +422,15 @@ const CalcPage = {
 
                         <!-- Functions -->
                         <div v-if="features.functions?.length">
-                            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Functions</h3>
+                            <h3 class="text-xs font-semibold uppercase tracking-wider mb-2" :class="[$styles.muted]">Functions</h3>
                             <div class="flex flex-wrap gap-2">
                                 <button 
                                     v-for="func in features.functions" 
                                     :key="func"
                                     type="button"
                                     @click="wrapWithFunction(func)"
-                                    class="px-3 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-gray-700 dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 border border-gray-200 dark:border-gray-700 rounded text-sm font-mono transition-colors"
+                                    class="px-3 py-1 rounded text-sm font-mono transition-colors"
+                                    :class="[$styles.secondaryButton]"
                                     :title="'use function ' + func"
                                 >
                                     {{ func }}

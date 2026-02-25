@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import mimetypes
 import os
 import time
 from datetime import datetime
@@ -613,6 +614,65 @@ def install(ctx):
         return web.json_response({"success": True, "path": avatar_path})
 
     ctx.add_post("/agents/avatar", upload_agent_avatar)
+
+    def get_theme_roots(request):
+        themes_dirs = [os.path.join(os.path.dirname(__file__), "themes"), os.path.join(ctx.get_user_path(), "themes")]
+        user = ctx.get_username(request)
+        if user:
+            themes_dirs.append(os.path.join(ctx.get_user_path(user), "themes"))
+        return themes_dirs
+
+    # THEMES
+    async def get_themes(request):
+        themes = {}
+
+        themes_dirs = get_theme_roots(request)
+        for themes_dir in themes_dirs:
+            if os.path.exists(themes_dir):
+                for theme_name in os.listdir(themes_dir):
+                    theme_path = os.path.join(themes_dir, theme_name)
+                    styles_path = os.path.join(theme_path, "theme.json")
+                    if os.path.isdir(theme_path) and os.path.exists(styles_path):
+                        try:
+                            with open(styles_path, encoding="utf-8") as f:
+                                themes[theme_name] = json.load(f)
+                        except Exception as e:
+                            if hasattr(ctx, "err"):
+                                ctx.err(f"Failed to load theme {theme_name}", e)
+        return web.json_response(themes)
+
+    ctx.add_get("/themes", get_themes)
+
+    async def get_theme_file(request):
+        theme_name = request.match_info.get("theme")
+        file_name = request.match_info.get("file_name")
+
+        def get_file_response(path):
+            if not os.path.exists(path):
+                return None
+
+            content_type, _ = mimetypes.guess_type(path)
+            headers = {}
+            if content_type:
+                headers["Content-Type"] = content_type
+            return web.FileResponse(path, headers=headers)
+
+        themes_dirs = get_theme_roots(request)
+        # Search themes in reverse order to return the last overridden theme
+        for themes_dir in reversed(themes_dirs):
+            theme_path = os.path.join(themes_dir, theme_name)
+            if os.path.isdir(theme_path) and os.path.exists(os.path.join(theme_path, "theme.json")):
+                response = get_file_response(os.path.join(theme_path, "ui", file_name))
+                if response:
+                    return response
+
+        response = get_file_response(os.path.join(os.path.dirname(__file__), "themes", theme_name, "ui", file_name))
+        if response:
+            return response
+
+        return web.HTTPNotFound()
+
+    ctx.add_get("/themes/{theme}/ui/{file_name}", get_theme_file)
 
     async def chat_request(openai_request, context):
         nohistory = context.get("nohistory")

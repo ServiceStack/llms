@@ -5,11 +5,11 @@ let ext
 
 const SkillSelector = {
     template: `
-        <div class="px-4 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
+        <div class="px-4 py-4 max-h-[80vh] overflow-y-auto border-b" :class="$styles.panel">
             
             <!-- Global Controls -->
             <div class="flex items-center justify-between mb-4">
-                <span class="text-xs font-bold uppercase text-gray-500 tracking-wider">Include Skills</span>
+                <span class="text-xs font-bold uppercase tracking-wider" :class="$styles.heading">Include Skills</span>
                 <div class="flex items-center gap-2">
                     <button type="button" v-if="!$ctx.tools?.isToolEnabled('skill')"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
@@ -226,41 +226,47 @@ const SkillSelector = {
 const SkillPage = {
     template: `
         <div class="h-full flex flex-col">
-            <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+            <div class="px-4 py-3 flex items-center justify-between flex-shrink-0 border-b" :class="[$styles.chromeBorder]">
                 <div>
-                    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Manage Skills</h1>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ Object.keys(skills).length }} skills available</p>
+                    <h1 class="text-xl font-bold" :class="[$styles.heading]">Manage Skills</h1>
+                    <p class="text-sm" :class=[$styles.muted]>{{ Object.keys(skills).length }} skills available</p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button @click="showCreateDialog = true" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                    <button @click="showCreateDialog = true" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors" :class="[$styles.primaryButton]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                         Create Skill
                     </button>
-                    <button @click="$ctx.togglePath('/skills/store', { left:false })" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <button @click="$ctx.togglePath('/skills/store', { left:false })" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors" :class="[$styles.secondaryButton]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M18.319 14.433A8.001 8.001 0 0 0 6.343 3.868a8 8 0 0 0 10.564 11.976l.043.045l4.242 4.243a1 1 0 1 0 1.415-1.415l-4.243-4.242zm-2.076-9.15a6 6 0 1 1-8.485 8.485a6 6 0 0 1 8.485-8.485" clip-rule="evenodd"/></svg>
                         Discover Skills
                     </button>
                 </div>
             </div>
             <div class="flex-1 flex min-h-0">
-                <div class="w-72 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
-                    <div class="p-2 border-b border-gray-200 dark:border-gray-700">
-                        <input v-model="searchQuery" type="text" placeholder="Search installed skills..." class="w-full px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" />
+                <div class="w-72 flex flex-col flex-shrink-0 border-r" :class="[$styles.chromeBorder, $styles.bgSidebar]">
+                    <div class="p-2 border-b" :class="[$styles.chromeBorder]">
+                        <input v-model="searchQuery" type="text" placeholder="Search installed skills..." class="w-full px-3 py-1.5 text-sm rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
                     </div>
                     <div class="flex-1 overflow-y-auto">
-                        <div v-for="group in skillGroups" :key="group.name" class="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
-                            <div class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 flex items-center justify-between"><span>{{ group.name || 'Other' }}</span><svg v-if="!isGroupEditable(group.name)" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor" title="Read-only"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg></div>
+                        <div v-for="group in skillGroups" :key="group.name" class="border-b last:border-b-0" :class="[$styles.chromeBorder]">
+                            <div class="flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider" :class="[$styles.bgSidebar]">
+                                <span :class="[$styles.heading]">{{ group.name || 'Other' }}</span>
+                                <svg v-if="!isGroupEditable(group.name)" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-gray-400" viewBox="0 0 20 20" fill="currentColor" title="Read-only">
+                                    <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
                             <div class="py-1">
                                 <div v-for="skill in group.skills" :key="skill.name">
-                                    <div @click="toggleSkillExpand(skill)" class="select-none w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2 cursor-pointer" :class="selectedSkill?.name === skill.name ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'">
+                                    <div @click="toggleSkillExpand(skill)" class="select-none w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2 cursor-pointer" 
+                                        :class="selectedSkill?.name === skill.name ? $styles.threadItemActive : $styles.threadItemHover">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0" :class="{ '-rotate-90': !isSkillExpanded(skill.name) }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
                                         <span class="truncate font-medium flex-1" :class="selectedSkill?.name === skill.name ? 'text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300'">{{ skill.name }}</span>
-                                        <span v-if="skill.files?.length" class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium">{{ skill.files.length }}</span>
+                                        <span v-if="skill.files?.length" class="text-[10px] px-1.5 py-0.5 rounded-full font-medium" :class="[$styles.icon,$styles.bgBody]">{{ skill.files.length }}</span>
                                     </div>
-                                    <div v-show="isSkillExpanded(skill.name)" class="pl-4 bg-white dark:bg-gray-900/50">
-                                        <div v-if="isEditable(skill)" class="px-3 py-1 flex items-center gap-1 border-b border-gray-100 dark:border-gray-800">
-                                            <button @click.stop="selectSkill(skill); showAddFileDialog = true" type="button" title="Add File" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 text-xs">+ file</button>
-                                            <button @click.stop="selectSkill(skill); confirmDeleteSkill()" type="button" title="Delete Skill" class="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 text-xs ml-auto">delete</button>
+                                    <div v-show="isSkillExpanded(skill.name)" class="pl-4" :class="[$styles.chromeBorder, $styles.bgBody]">
+                                        <div v-if="isEditable(skill)" class="px-3 py-1 flex items-center gap-1 border-b" :class="[$styles.chromeBorder]">
+                                            <button @click.stop="selectSkill(skill); showAddFileDialog = true" type="button" title="Add File" class="p-1 rounded text-xs" :class="[$styles.muted, $styles.threadItemHover]">+ file</button>
+                                            <button @click.stop="selectSkill(skill); confirmDeleteSkill()" type="button" title="Delete Skill" class="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-xs ml-auto" :class="[$styles.muted, $styles.threadItemHover]">delete</button>
                                         </div>
                                         <div v-for="node in getFileTree(skill)" :key="node.path">
                                             <SkillFileNode :node="node" :skill="skill" :selected-file="selectedSkill?.name === skill.name ? selectedFile : null" :is-editable="isEditable(skill)" @select="onFileSelect(skill, $event)" @delete="onFileDelete(skill, $event)" />
@@ -273,7 +279,7 @@ const SkillPage = {
                 </div>
                 <div class="flex-1 flex flex-col min-w-0">
                     <template v-if="selectedFile">
-                        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800">
+                        <div class="px-4 py-2 flex items-center justify-between border-b" :class="[$styles.chromeBorder, $styles.cardTitleActive]">
                             <div class="flex items-center gap-2 min-w-0">
                                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ selectedSkill?.name }} /</span>
                                 <span class="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">{{ selectedFile }}</span>
@@ -282,36 +288,36 @@ const SkillPage = {
                             </div>
                             <div class="flex items-center gap-2">
                                 <template v-if="isEditing">
-                                    <button @click="saveFile" :disabled="saving" type="button" class="px-3 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ saving ? 'Saving...' : 'Save' }}</button>
-                                    <button @click="cancelEdit" type="button" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
+                                    <button @click="saveFile" :disabled="saving" type="button" class="px-3 py-1 text-xs font-medium rounded" :class="[$styles.primaryButton]">{{ saving ? 'Saving...' : 'Save' }}</button>
+                                    <button @click="cancelEdit" type="button" class="px-3 py-1 text-xs font-medium rounded" :class="[$styles.secondaryButton]">Cancel</button>
                                 </template>
                                 <template v-else-if="isEditable(selectedSkill)">
-                                    <button @click="startEdit" type="button" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Edit</button>
+                                    <button @click="startEdit" type="button" class="px-3 py-1 text-xs font-medium rounded" :class="[$styles.secondaryButton]">Edit</button>
                                 </template>
                             </div>
                         </div>
                         <div class="flex-1 overflow-auto">
                             <div v-if="loadingFile" class="flex items-center justify-center h-full text-gray-500">Loading...</div>
-                            <textarea v-else-if="isEditing" ref="editorRef" v-model="editContent" class="w-full h-full p-4 font-mono text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 resize-none focus:outline-none" spellcheck="false"></textarea>
-                            <div v-else class="p-4 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">{{ fileContent }}</div>
+                            <textarea v-else-if="isEditing" ref="editorRef" v-model="editContent" class="w-full h-full p-4 font-mono text-sm resize-none focus:outline-none" spellcheck="false"></textarea>
+                            <div v-else class="p-4 font-mono text-sm whitespace-pre-wrap break-words" :class="[$styles.textBlock]">{{ fileContent }}</div>
                         </div>
                     </template>
                     <template v-else-if="selectedSkill">
                         <div class="p-6">
-                            <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{{ selectedSkill.name }}</h2>
-                            <p class="text-gray-600 dark:text-gray-400 mb-4">{{ selectedSkill.description }}</p>
+                            <h2 class="text-2xl font-bold mb-2" :class="[$styles.heading]">{{ selectedSkill.name }}</h2>
+                            <p class="mb-4" :class="[$styles.muted]">{{ selectedSkill.description }}</p>
                             <div class="grid grid-cols-2 gap-4 text-sm">
-                                <div><span class="text-gray-500 dark:text-gray-400">Group:</span><span class="ml-2 text-gray-900 dark:text-gray-100">{{ selectedSkill.group }}</span></div>
-                                <div><span class="text-gray-500 dark:text-gray-400">Files:</span><span class="ml-2 text-gray-900 dark:text-gray-100">{{ selectedSkill.files?.length || 0 }}</span></div>
-                                <div class="col-span-2"><span class="text-gray-500 dark:text-gray-400">Location:</span><span class="ml-2 font-mono text-xs text-gray-900 dark:text-gray-100 break-all">{{ selectedSkill.location }}</span></div>
+                                <div><span :class="[$styles.muted]">Group:</span><span class="ml-2">{{ selectedSkill.group }}</span></div>
+                                <div><span :class="[$styles.muted]">Files:</span><span class="ml-2">{{ selectedSkill.files?.length || 0 }}</span></div>
+                                <div class="col-span-2"><span :class="[$styles.muted]">Location:</span><span class="ml-2 font-mono text-xs break-all">{{ selectedSkill.location }}</span></div>
                             </div>
-                            <div class="mt-6"><p class="text-sm text-gray-500 dark:text-gray-400">Select a file from the tree to view or edit its contents.</p></div>
+                            <div class="mt-6"><p class="text-sm" :class="[$styles.muted]">Select a file from the tree to view or edit its contents.</p></div>
                         </div>
                     </template>
                     <template v-else>
-                        <div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                        <div class="flex items-center justify-center h-full" :class="[$styles.muted]">
                             <div class="text-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4" :class="[$styles.mutedIcon]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" /></svg>
                                 <p>Select a skill to view its files</p>
                             </div>
                         </div>
@@ -319,12 +325,12 @@ const SkillPage = {
                 </div>
             </div>
             <div v-if="showCreateDialog" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="showCreateDialog = false">
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Create New Skill</h3></div>
+                <div class="rounded-lg shadow-xl w-full max-w-md mx-4">
+                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold">Create New Skill</h3></div>
                     <div class="p-4 space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Skill Name</label>
-                            <input :value="newSkillName" @input="onSkillNameInput" type="text" placeholder="my-new-skill" class="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" @keyup.enter="createSkill" maxlength="40" />
+                            <input :value="newSkillName" @input="onSkillNameInput" type="text" placeholder="my-new-skill" class="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500" @keyup.enter="createSkill" maxlength="40" />
                             <p class="mt-1 text-xs text-gray-500">Lowercase letters, numbers, and hyphens only. Max 40 characters.</p>
                         </div>
                         <div v-if="createError" class="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{{ createError }}</div>
@@ -336,12 +342,12 @@ const SkillPage = {
                 </div>
             </div>
             <div v-if="showAddFileDialog" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="showAddFileDialog = false">
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Add New File</h3></div>
+                <div class="rounded-lg shadow-xl w-full max-w-md mx-4">
+                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold">Add New File</h3></div>
                     <div class="p-4 space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">File Path</label>
-                            <input v-model="newFilePath" type="text" placeholder="scripts/my-script.py" class="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500" @keyup.enter="addFile" />
+                            <input v-model="newFilePath" type="text" placeholder="scripts/my-script.py" class="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500" @keyup.enter="addFile" />
                             <p class="mt-1 text-xs text-gray-500">Relative path from skill root (e.g., scripts/helper.py)</p>
                         </div>
                         <div v-if="addFileError" class="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{{ addFileError }}</div>
@@ -353,9 +359,9 @@ const SkillPage = {
                 </div>
             </div>
             <div v-if="deleteConfirm" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="deleteConfirm = null">
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm mx-4">
+                <div class="rounded-lg shadow-xl w-full max-w-sm mx-4">
                     <div class="p-4">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Confirm Delete</h3>
+                        <h3 class="text-lg font-semibold mb-2">Confirm Delete</h3>
                         <p class="text-gray-600 dark:text-gray-400 text-sm">{{ deleteConfirm.type === 'skill' ? 'Delete skill "' + deleteConfirm.name + '"? This cannot be undone.' : 'Delete "' + deleteConfirm.path + '"?' }}</p>
                     </div>
                     <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
@@ -555,15 +561,15 @@ const SkillFileNode = {
     name: 'SkillFileNode',
     template: `
         <div>
-            <div v-if="node.isFile" @click="$emit('select', node.path)" class="group flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer transition-colors" :class="selectedFile === node.path ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <div v-if="node.isFile" @click="$emit('select', node.path)" class="group flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer border-l border-t border-b transition-colors" :class="selectedFile === node.path ? ($styles.threadItemActive + ' ' + $styles.threadItemActiveBorder) : 'border-transparent ' + $styles.threadItemHover">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 flex-shrink-0" :class="[$styles.icon]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 <span class="select-none truncate flex-1">{{ node.name }}</span>
                 <button v-if="isEditable && node.path.toLowerCase() !== 'skill.md'" @click.stop="$emit('delete', node.path)" type="button" class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" :class="[$styles.icon]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                 </button>
             </div>
             <div v-else>
-                <div @click="expanded = !expanded" class="flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                <div @click="expanded = !expanded" class="flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer text-gray-500 dark:text-gray-400" :class="[$styles.threadItemHover]">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 transition-transform" :class="{ '-rotate-90': !expanded }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     <span class="select-none font-medium">{{ node.name }}/</span>
                 </div>
@@ -582,25 +588,25 @@ const SkillFileNode = {
 const SkillStore = {
     template: `
         <div class="h-full flex flex-col">
-            <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+            <div class="px-4 py-3 flex items-center justify-between flex-shrink-0 border-b" :class="[$styles.chromeBorder]">
                 <div>
-                    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Discover Skills</h1>
+                    <h1 class="text-xl font-bold">Discover Skills</h1>
                     <p class="text-sm text-gray-500 dark:text-gray-400">{{ total.toLocaleString() }} skills available</p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button @click="$ctx.togglePath('/skills', { left:false })" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <button @click="$ctx.togglePath('/skills', { left:false })" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors" :class="[$styles.secondaryButton]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
                         Installed Skills
                     </button>
                 </div>
             </div>
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <div class="p-4 border-b" :class="[$styles.chromeBorder]">
                 <div class="relative">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                     <input v-model="searchQuery" @input="onSearchInput" type="text" placeholder="Search available skills..." 
-                        class="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                        class="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
                     <div v-if="searching" class="absolute right-3 top-1/2 -translate-y-1/2">
                         <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -622,7 +628,7 @@ const SkillStore = {
                     <div v-for="skill in results" :key="skill.id" class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0 flex-1">
-                                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ skill.name }}</h3>
+                                <h3 class="text-sm font-semibold truncate">{{ skill.name }}</h3>
                                 <div class="mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                                     <span class="inline-flex items-center gap-1">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -844,7 +850,7 @@ export default {
                 component: {
                     template: svg([
                         `@click="$ctx.toggleTop('SkillSelector')"`,
-                        `:class="!$tools?.isToolEnabled('skill') ? '' : $prefs.onlySkills == null ? 'text-green-600 dark:text-green-300' : $prefs.onlySkills.length ? 'text-blue-600! dark:text-blue-300!' : ''"`
+                        `:class="!$tools?.isToolEnabled('skill') ? '' : $prefs.onlySkills == null ? $styles.iconFull : $prefs.onlySkills.length ? $styles.iconPartial : ''"`
                     ].join(' ')),
                 },
                 isActive({ top }) {
@@ -913,7 +919,7 @@ export default {
                     template: `
                         <div class="mt-2 w-full flex justify-center">
                             <button type="button" @click="$ctx.chat.sendUserMessage('proceed')"
-                                class="px-3 py-1 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors select-none">
+                                class="px-3 py-1 rounded-md text-xs font-medium transition-colors select-none" :class="[$styles.secondaryButton]">
                                 proceed
                             </button>
                         </div>
