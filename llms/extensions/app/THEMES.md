@@ -104,7 +104,8 @@ You can then reference these assets in your `theme.json` file. For instance, to 
     }
 }
 ```
-*(Note: Assets placed in the `ui` folder are served dynamically by the application.)*
+
+> Assets placed in the `/ui` folder are served dynamically by at `/themes/<theme-name>/ui`
 
 ### 5. Typography in Markdown 
 
@@ -149,7 +150,7 @@ Themes can also define the typography used in markdown by overriding these [Typo
 }
 ```
 
-## Background images
+## Background imagesg
 
 - https://www.freepik.com
 - https://unsplash.com
