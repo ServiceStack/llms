@@ -249,7 +249,6 @@ export const o = {
             "appInner": "",
             "tagButtonLarge": "rounded-xl shadow-sm",
             "tagButtonSmall": "rounded-full shadow-sm",
-            "checkbox": "rounded",
         }
     },
 
@@ -301,6 +300,7 @@ export const o = {
             "dialog": "rounded-lg shadow-xl bg-white border border-gray-200",
             "textInput": "text-gray-900 placeholder-gray-500",
             "borderInput": "border-gray-300 focus:border-blue-500 focus:ring-blue-500 focus:ring-offset-white focus-within:ring-indigo-500 focus-within:border-indigo-500",
+            "checkbox": "rounded bg-gray-500",
             "labelInput": "text-gray-700",
             "helpInput": "text-gray-500",
             "draggingInput": "border-blue-500 bg-blue-50 ring-1 ring-blue-500",
@@ -394,6 +394,7 @@ export const o = {
             "dialog": "rounded-lg shadow-xl bg-gray-900 border border-gray-700",
             "textInput": "text-gray-100 placeholder-gray-500",
             "borderInput": "border-gray-600 focus:border-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900 focus-within:ring-indigo-500 focus-within:border-indigo-500",
+            "checkbox": "rounded bg-gray-600",
             "labelInput": "text-gray-300",
             "helpInput": "text-gray-400",
             "draggingInput": "border-blue-500 bg-blue-900/30 ring-1 ring-blue-500",

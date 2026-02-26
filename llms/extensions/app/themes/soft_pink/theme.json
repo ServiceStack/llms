@@ -32,6 +32,7 @@
         "bgInput": "bg-white shadow-sm",
         "textInput": "text-pink-950 placeholder-pink-800/50",
         "borderInput": "border-pink-300 focus:border-pink-400 focus:ring-pink-400 focus:ring-offset-white focus-within:ring-pink-500 focus-within:border-pink-500",
+        "checkbox": "rounded bg-pink-500",
         "labelInput": "text-pink-800 font-medium",
         "helpInput": "text-pink-600/80",
         "draggingInput": "border-pink-400 bg-pink-50 ring-1 ring-pink-400",

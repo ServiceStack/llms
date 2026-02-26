@@ -21,7 +21,7 @@
         "bgPage": "",
         "bgInput": "bg-blue-950/80 focus:bg-black/70",
         "textInput": "text-blue-50 placeholder-blue-300/50",
-        "borderInput": "border-blue-500/60 focus:border-blue-500/60 focus:ring-blue-500/60 shadow-inner",
+        "borderInput": "border-blue-500/60 focus:border-blue-500/60 focus:ring-blue-500/60 shadow-inner focus:ring-offset-blue-900 focus-within:ring-blue-600 focus-within:border-blue-600",
         "labelInput": "text-blue-300",
         "helpInput": "text-blue-400/80",
         "draggingInput": "border-blue-400 bg-blue-900/40 ring-1 ring-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.2)]",

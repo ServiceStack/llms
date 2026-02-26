@@ -2240,6 +2240,9 @@
       background-color: color-mix(in oklab, var(--color-gray-500) 75%, transparent);
     }
   }
+  .bg-gray-600 {
+    background-color: var(--color-gray-600);
+  }
   .bg-gray-700 {
     background-color: var(--color-gray-700);
   }
@@ -4730,6 +4733,11 @@
       border-bottom-width: 0px;
     }
   }
+  .focus-within\:border-blue-600 {
+    &:focus-within {
+      border-color: var(--color-blue-600);
+    }
+  }
   .focus-within\:border-frost-600 {
     &:focus-within {
       border-color: var(--color-frost-600);
@@ -4781,6 +4789,11 @@
     &:focus-within {
       --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, hsl(var(--ring)));
       box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+    }
+  }
+  .focus-within\:ring-blue-600 {
+    &:focus-within {
+      --tw-ring-color: var(--color-blue-600);
     }
   }
   .focus-within\:ring-frost-600 {
@@ -6194,6 +6207,11 @@
   .focus\:ring-offset-black {
     &:focus {
       --tw-ring-offset-color: var(--color-black);
+    }
+  }
+  .focus\:ring-offset-blue-900 {
+    &:focus {
+      --tw-ring-offset-color: var(--color-blue-900);
     }
   }
   .focus\:ring-offset-gray-700 {

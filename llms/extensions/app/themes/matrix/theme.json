@@ -33,7 +33,7 @@
         "bgInput": "bg-black border border-green-800 placeholder-green-800",
         "textInput": "text-green-400 placeholder-green-800",
         "borderInput": "border-green-800 focus:border-green-500 focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:ring-offset-green-950 focus-within:ring-green-500 focus-within:border-green-500",
-        "checkbox": "",
+        "checkbox": "bg-black",
         "labelInput": "text-green-500 font-mono",
         "helpInput": "text-green-700",
         "draggingInput": "border-green-400 bg-green-900/20 ring-1 ring-green-400",
