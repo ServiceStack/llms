@@ -759,7 +759,7 @@ export default {
                 component: {
                     template: svg([
                         `@click="$ctx.toggleTop('ToolSelector')"`,
-                        `:class="$prefs.onlyTools == null ? 'text-green-600 dark:text-green-300' : $prefs.onlyTools.length ? 'text-blue-600! dark:text-blue-300!' : ''"`
+                        `:class="$prefs.onlyTools == null ? $styles.iconFull : $prefs.onlyTools.length ? $styles.iconPartial : ''"`
                     ].join(' ')),
                     // , "{{$prefs.onlyTools == null ? 'Include All Tools' : $prefs.onlyTools.length ? 'Include Selected Tools' : 'All Tools Excluded'}}"
                 },

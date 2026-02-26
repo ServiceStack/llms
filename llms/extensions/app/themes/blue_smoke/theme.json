@@ -48,6 +48,8 @@
         "icon": "text-blue-400/80",
         "iconHover": "hover:text-blue-100 hover:bg-blue-800/50 transition-colors rounded-lg",
         "iconActive": "text-blue-200 bg-blue-800/60 shadow-[0_0_10px_rgba(59,130,246,0.15)] rounded-lg",
+        "mutedIcon": "text-blue-500",
+        "mutedIconHover": "hover:text-blue-700",
         "chatButton": "border border-blue-500/50 text-blue-100 bg-blue-900/60 hover:bg-blue-800/70 hover:border-blue-400/60 disabled:text-blue-400 disabled:cursor-not-allowed disabled:border-blue-700/30 disabled:bg-black/30 transition-all shadow-sm rounded-lg",
         "voiceButtonDefault": "text-blue-400 hover:text-white hover:bg-blue-800/70 hover:border-blue-400/60 transition-all",
         "voiceButtonRecording": "border bg-red-900/30 border-red-600 text-red-400 animate-pulse",
