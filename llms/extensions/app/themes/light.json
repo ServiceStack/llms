@@ -34,7 +34,6 @@
         "bgSuccess": "bg-green-100 text-green-800",
         "bgWarning": "bg-orange-100 text-orange-800",
         "bgInput": "bg-white",
-        "bgSelect": "bg-white",
         "textInput": "text-gray-900 placeholder-gray-500",
         "borderInput": "border-gray-300 focus:border-blue-500 focus:ring-blue-500",
         "labelInput": "text-gray-700",

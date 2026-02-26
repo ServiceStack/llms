@@ -204,7 +204,7 @@ const BrowserPage = {
                     <input type="checkbox" v-model="autoRefresh" class="rounded" />
                     <span>Auto</span>
                 </label>
-                <select v-model="refreshInterval" :disabled="!autoRefresh" class="pl-2 pr-4 py-1 rounded text-xs" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
+                <select v-model="refreshInterval" :disabled="!autoRefresh" class="pl-2 pr-4 py-1 rounded text-xs" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                     <option :value="1000">1s</option>
                     <option :value="3000">3s</option>
                     <option :value="5000">5s</option>

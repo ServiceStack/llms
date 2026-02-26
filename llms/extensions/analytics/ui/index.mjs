@@ -38,7 +38,7 @@ const MonthSelector = {
 
         <!-- Year Dropdown -->
         <select :value="selectedYear" @change="(e) => updateSelection(parseInt(e.target.value), selectedMonth)"
-            class="rounded-md text-sm font-medium flex-shrink-0 transition-colors" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
+            class="rounded-md text-sm font-medium flex-shrink-0 transition-colors" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
             <option v-for="year in availableYears" :key="year" :value="year">
                 {{ year }}
             </option>
@@ -180,7 +180,7 @@ export const Analytics = {
                             <h3 class="text-sm sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
                                 {{ new Date(selectedDay).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }) }}
                             </h3>
-                            <select v-model="costChartType" class="px-3 pr-6 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
+                            <select v-model="costChartType" class="px-3 pr-6 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                                 <option value="bar">Bar Chart</option>
                                 <option value="line">Line Chart</option>
                             </select>
@@ -288,7 +288,7 @@ export const Analytics = {
                         <div class="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 sm:px-6 py-4">
                             <div class="flex flex-wrap gap-2 sm:gap-4 items-end">
                                 <div class="flex flex-col flex-1 min-w-[120px] sm:flex-initial">
-                                    <select v-model="selectedModel" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
+                                    <select v-model="selectedModel" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                                         <option value="">All Models</option>
                                         <option v-for="model in filterOptions.models" :key="model" :value="model">
                                             {{ model }}
@@ -297,7 +297,7 @@ export const Analytics = {
                                 </div>
 
                                 <div class="flex flex-col flex-1 min-w-[120px] sm:flex-initial">
-                                    <select v-model="selectedProvider" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
+                                    <select v-model="selectedProvider" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                                         <option value="">All Providers</option>
                                         <option v-for="provider in filterOptions.providers" :key="provider" :value="provider">
                                             {{ provider }}
@@ -306,7 +306,7 @@ export const Analytics = {
                                 </div>
 
                                 <div class="flex flex-col flex-1 min-w-[140px] sm:flex-initial">
-                                    <select v-model="sortBy" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgSelect, $styles.textInput, $styles.borderInput]">
+                                    <select v-model="sortBy" class="px-3 py-2 border rounded-md text-sm font-medium flex-shrink-0" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
                                         <option value="createdAt">Date (Newest)</option>
                                         <option value="cost">Cost (Highest)</option>
                                         <option value="duration">Duration (Longest)</option>
