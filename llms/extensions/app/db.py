@@ -353,6 +353,9 @@ class AppDB:
                 self.ctx.cache_message_inline_data(m)
                 if "timestamp" not in m:
                     m["timestamp"] = initial_timestamp + idx
+                # remove reasoning_details from all messages (can get huge)
+                if "reasoning_details" in m:
+                    del m["reasoning_details"]
             thread["contextTokens"] = count_tokens_approx(thread["messages"])
         return with_user(thread, user=user)
 
