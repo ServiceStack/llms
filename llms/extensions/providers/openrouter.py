@@ -39,6 +39,14 @@ def install_openrouter(ctx):
 
             return response
 
+        async def process_chat(self, chat, provider_id=None):
+            clone = json.loads(json.dumps(chat))
+            # remove tools from chat
+            clone.pop("tools", None)
+            # OpenRouter doesn't support multiple messages for image generation
+            clone["messages"] = [clone["messages"][-1]]
+            return await super().process_chat(clone, provider_id)
+
         async def chat(self, chat, provider=None, context=None):
             headers = self.get_headers(provider, chat)
             if provider is not None:
@@ -51,8 +59,6 @@ def install_openrouter(ctx):
                 return ctx.log_json(self.to_response(json.loads(text), chat, started_at))
             else:
                 chat_url = provider.chat_url
-                # remove tools
-                chat.pop("tools", None)
                 # most image models fail if specifying text modality, e.g: ["image","text"]
                 chat["modalities"] = ["image"]
                 chat = await self.process_chat(chat, provider_id=self.id)
