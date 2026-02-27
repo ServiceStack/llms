@@ -75,7 +75,7 @@ const GalleryPage = {
                     @click="openLightbox(index)"
                 >
                     <img 
-                        :src="item.url" 
+                        :src="item.url + '?variant=width=256'" 
                         loading="lazy" 
                         :alt="item.prompt"
                         class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"

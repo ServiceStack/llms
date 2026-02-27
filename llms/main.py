@@ -4340,8 +4340,51 @@ def cli_exec(cli_args, extra_args):
                         "Content-Type": mimetype,
                     },
                 )
-            else:
-                return web.FileResponse(full_path, headers={"Content-Type": mimetype})
+            elif "variant" in request.query:
+                if mimetype.startswith("image/"):
+                    variant = request.query.get("variant", "")
+                    w, h = None, None
+                    for part in variant.split(","):
+                        if part.startswith("width="):
+                            with contextlib.suppress(ValueError):
+                                w = int(part.split("=")[1])
+                        elif part.startswith("height="):
+                            with contextlib.suppress(ValueError):
+                                h = int(part.split("=")[1])
+
+                    if w is None and h is None:
+                        return web.FileResponse(full_path, headers={"Content-Type": mimetype})
+
+                    base_path, _ = os.path.splitext(full_path)
+
+                    if w is not None and h is not None:
+                        preview_path = f"{base_path}_{w}w_{h}h.webp"
+                    elif w is not None:
+                        preview_path = f"{base_path}_{w}w.webp"
+                    else:
+                        preview_path = f"{base_path}_{h}h.webp"
+
+                    if os.path.exists(preview_path):
+                        return web.FileResponse(preview_path, headers={"Content-Type": "image/webp"})
+
+                    try:
+                        with Image.open(full_path) as img:
+                            orig_w, orig_h = img.size
+                            if w is not None and h is not None:
+                                target_size = (w, h)
+                            elif w is not None:
+                                target_size = (w, max(1, int(orig_h * (w / orig_w))))
+                            else:
+                                target_size = (max(1, int(orig_w * (h / orig_h))), h)
+
+                            img.thumbnail(target_size)
+                            img.save(preview_path, format="WEBP")
+                            return web.FileResponse(preview_path, headers={"Content-Type": "image/webp"})
+                    except Exception as e:
+                        _err(f"Failed to generate image preview for {full_path}", e)
+                        return web.FileResponse(full_path, headers={"Content-Type": mimetype})
+
+            return web.FileResponse(full_path, headers={"Content-Type": mimetype})
 
         app.router.add_get("/~cache/{tail:.*}", cache_handler)
 
