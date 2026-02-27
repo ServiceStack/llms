@@ -16,7 +16,13 @@
         "--scrollbar-thumb-bg": "#4b5563",
         "--primary-bg": "#1f2937",
         "--secondary-bg": "#1f2937",
-        "--secondary-border": "#374151"
+        "--secondary-border": "#374151",
+        "--user-bg": "#1e3a8a",
+        "--user-text": "#f3f4f6",
+        "--user-border": "#374151",
+        "--assistant-bg": "#1e293b",
+        "--assistant-text": "#f1f5f9",
+        "--assistant-border": "#334155"
     },
     "styles": {
         "chromeBorder": "border-gray-700",
@@ -76,8 +82,6 @@
         "threadItemActiveBorder": "border-blue-600",
         "threadItemActive": "bg-blue-900 border-blue-700",
         "threadItem": "border-transparent hover:bg-gray-800",
-        "tabButton": "text-gray-400 hover:text-white hover:bg-white",
-        "messageUser": "bg-blue-900 text-gray-100 border border-blue-700",
-        "messageAssistant": "bg-gray-800 text-gray-100 border border-gray-700"
+        "tabButton": "text-gray-400 hover:text-white hover:bg-white"
     }
 }

@@ -208,10 +208,12 @@ export class AppContext {
         }
     }
     getUserAvatar() {
-        return this.resolveUrl(`/avatar/user?mode=${this.getColorScheme()}&t=${this.state.cacheBreaker}`)
+        const theme = this.getPrefs().theme || this.getColorScheme()
+        return this.resolveUrl(`/avatar/user?theme=${theme}&t=${this.state.cacheBreaker}`)
     }
     getAgentAvatar() {
-        return this.resolveUrl(`/agents/avatar?mode=${this.getColorScheme()}&t=${this.state.cacheBreaker}`)
+        const theme = this.getPrefs().theme || this.getColorScheme()
+        return this.resolveUrl(`/agents/avatar?theme=${theme}&t=${this.state.cacheBreaker}`)
     }
     incCacheBreaker() {
         this.state.cacheBreaker++

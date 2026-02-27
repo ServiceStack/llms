@@ -9,7 +9,13 @@
         "--scrollbar-thumb-bg": "#cbd5e1cc",
         "--primary-bg": "#ffffff",
         "--secondary-bg": "#f8fafc",
-        "--secondary-border": "#e2e8f0"
+        "--secondary-border": "#e2e8f0",
+        "--user-bg": "#dbeafe",
+        "--user-text": "#111827",
+        "--user-border": "#bfdbfe",
+        "--assistant-bg": "#f3f4f6",
+        "--assistant-text": "#111827",
+        "--assistant-border": "#e5e7eb"
     },
     "styles": {
         "chromeBorder": "border-slate-300",

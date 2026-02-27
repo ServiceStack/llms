@@ -855,13 +855,13 @@ export const ToolCall = {
 
 export const UserAvatar = {
     template: `
-        <img class="size-8 rounded-full" :src="$ctx.getUserAvatar()" />
+        <img class="size-8 rounded-full shadow" :class="[$styles.messageUser.replace('rounded-none', '')]" :src="$ctx.getUserAvatar()" />
     `
 }
 
 export const AgentAvatar = {
     template: `
-        <img class="size-8 rounded-full bg-gray-200 dark:bg-gray-600" :src="$ctx.getAgentAvatar()" />
+        <img class="size-8 rounded-full shadow" :class="[$styles.messageAssistant.replace('rounded-none', '')]" :src="$ctx.getAgentAvatar()" />
     `
 }
 

@@ -214,7 +214,7 @@ const SettingsPage = {
                 <label for="userAvatarInput" class="relative group cursor-pointer">
                     <img 
                         :src="userAvatarUrl" 
-                        class="w-20 h-20 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shadow-md"
+                        class="w-20 h-20 rounded-full object-cover border-2 shadow-md" :class="[$styles.messageUser]"
                         alt="User Avatar"
                     />
                     <div class="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -230,7 +230,7 @@ const SettingsPage = {
                         Upload a new image for your avatar
                     </p>
                     <div class="flex items-center gap-3">
-                        <label for="userAvatarInput" class="cursor-pointer px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+                        <label for="userAvatarInput" class="cursor-pointer px-4 py-2 text-sm font-medium transition-colors" :class="[$styles.primaryButton]">
                             <span>Choose File</span>
                         </label>
                         <span v-if="userUploading" class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
@@ -259,7 +259,7 @@ const SettingsPage = {
                 <label for="agentAvatarInput" class="relative group cursor-pointer">
                     <img 
                         :src="agentAvatarUrl" 
-                        class="w-20 h-20 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shadow-md"
+                        class="w-20 h-20 rounded-full object-cover border-2 shadow-md" :class="[$styles.messageUser]"
                         alt="Agent Avatar"
                     />
                     <div class="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -275,7 +275,7 @@ const SettingsPage = {
                         Upload a new image for your Agent's avatar
                     </p>
                     <div class="flex items-center gap-3">
-                        <label for="agentAvatarInput" class="cursor-pointer px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+                        <label for="agentAvatarInput" class="cursor-pointer px-4 py-2 text-sm font-medium transition-colors" :class="[$styles.primaryButton]">
                             <span>Choose File</span>
                         </label>
                         <span v-if="agentUploading" class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">

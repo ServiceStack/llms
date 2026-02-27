@@ -211,44 +211,18 @@ export const o = {
 
     shared: {
         "vars": {
-            "--tw-prose-body": "#374151",
-            "--tw-prose-headings": "#111827",
-            "--tw-prose-lead": "#4b5563",
-            "--tw-prose-links": "#111827",
-            "--tw-prose-bold": "#111827",
-            "--tw-prose-counters": "#6b7280",
-            "--tw-prose-bullets": "#d1d5db",
-            "--tw-prose-hr": "#e5e7eb",
-            "--tw-prose-quotes": "#111827",
-            "--tw-prose-quote-borders": "#e5e7eb",
-            "--tw-prose-captions": "#6b7280",
-            "--tw-prose-code": "#111827",
-            "--tw-prose-pre-code": "#e5e7eb",
-            "--tw-prose-pre-bg": "#282c34",
-            "--tw-prose-th-borders": "#d1d5db",
-            "--tw-prose-td-borders": "#e5e7eb",
-            "--tw-prose-invert-body": "#d1d5db",
-            "--tw-prose-invert-headings": "#fff",
-            "--tw-prose-invert-lead": "#9ca3af",
-            "--tw-prose-invert-links": "#fff",
-            "--tw-prose-invert-bold": "#fff",
-            "--tw-prose-invert-counters": "#9ca3af",
-            "--tw-prose-invert-bullets": "#4b5563",
-            "--tw-prose-invert-hr": "#374151",
-            "--tw-prose-invert-quotes": "#f3f4f6",
-            "--tw-prose-invert-quote-borders": "#374151",
-            "--tw-prose-invert-captions": "#9ca3af",
-            "--tw-prose-invert-code": "#fff",
-            "--tw-prose-invert-pre-code": "#d1d5db",
-            "--tw-prose-invert-pre-bg": "rgb(0 0 0 / 50%)",
-            "--tw-prose-invert-th-borders": "#4b5563",
-            "--tw-prose-invert-td-borders": "#374151",
         },
         "styles": {
             "app": "bg-[image:var(--background-image)] bg-cover",
             "appInner": "",
             "tagButtonLarge": "rounded-xl shadow-sm",
             "tagButtonSmall": "rounded-full shadow-sm",
+
+            "tagLabel": "bg-[var(--tw-prose-code-bg)] text-[var(--tw-prose-code)] border border-[var(--tw-prose-code-border)]",
+            "tagLabelHover": "hover:bg-[var(--tw-prose-code-bg)/50] hover:text-[var(--tw-prose-code)/50] hover:border-[var(--tw-prose-code-border)/50]",
+
+            "messageUser": "bg-[var(--user-bg)] text-[var(--user-text)] border-[var(--user-border)]",
+            "messageAssistant": "bg-[var(--assistant-bg)] text-[var(--assistant-text)] border-[var(--assistant-border)]"
         }
     },
 
@@ -262,6 +236,8 @@ export const o = {
         },
         "vars": {
             "colorScheme": "light",
+            // gray-900
+            "--heading": "#111827",
             // white
             "--background": "#ffffff",
             // gray-200
@@ -280,6 +256,39 @@ export const o = {
             "--secondary-bg": "#f9fafb",
             // gray-200
             "--secondary-border": "#e5e7eb",
+            // blue-100
+            "--user-bg": "#dbeafe",
+            // gray-900
+            "--user-text": "#111827",
+            // blue-200
+            "--user-border": "#bfdbfe",
+            // gray-100
+            "--assistant-bg": "#f3f4f6",
+            // gray-900
+            "--assistant-text": "#111827",
+            // gray-200
+            "--assistant-border": "#e5e7eb",
+
+            "--tw-prose-body": "#374151",
+            "--tw-prose-headings": "#111827",
+            "--tw-prose-lead": "#4b5563",
+            "--tw-prose-links": "#111827",
+            "--tw-prose-bold": "#111827",
+            "--tw-prose-counters": "#6b7280",
+            "--tw-prose-bullets": "#d1d5db",
+            "--tw-prose-hr": "#e5e7eb",
+            "--tw-prose-quotes": "#111827",
+            "--tw-prose-quote-borders": "#e5e7eb",
+            "--tw-prose-captions": "#6b7280",
+            "--tw-prose-pre-code": "#e5e7eb",
+            "--tw-prose-pre-bg": "#282c34",
+            "--tw-prose-code": "#334155",
+            "--tw-prose-code-bg": "#eff6ff",
+            "--tw-prose-code-border": "#bfdbfe",
+            "--tw-prose-table-bg": "#f9fafb",
+            "--tw-prose-th-bg": "#eff6ff",
+            "--tw-prose-th-borders": "#bfdbfe",
+            "--tw-prose-td-borders": "#d1d5db",
         },
         "styles": {
             "chromeBorder": "border-gray-200",
@@ -314,8 +323,6 @@ export const o = {
             "tagButton": "cursor-pointer border border-gray-300 text-gray-700",
             "tagButtonActive": "border border-blue-200 text-blue-700 bg-blue-100",
             "tagButtonStrongActive": "bg-green-100 text-green-800 border-green-300",
-            "tagLabel": "text-gray-600 border border-gray-300",
-            "tagLabelHover": "hover:bg-gray-100 hover:text-gray-900 hover:border-gray-400",
             "panel": "border-gray-200 bg-gray-50",
             "card": "rounded-lg bg-white border border-gray-200",
             "infoCard": "rounded-lg bg-white border border-gray-200",
@@ -342,8 +349,6 @@ export const o = {
             "threadItemActive": "bg-blue-100 border-blue-200",
             "threadItem": "border-transparent hover:bg-gray-100",
             "tabButton": "text-gray-500 hover:text-gray-900 hover:bg-gray-200",
-            "messageUser": "bg-blue-100 text-gray-900 border border-blue-200",
-            "messageAssistant": "bg-gray-100 text-gray-900 border border-gray-200"
         },
     },
     dark: {
@@ -356,7 +361,9 @@ export const o = {
         },
         "vars": {
             "colorScheme": "dark",
-            //gray-900
+            // gray-200
+            "--heading": "#e2e8f0",
+            // gray-900
             "--background": "#111827",
             // gray-800
             "--border": "#1f2937",
@@ -374,6 +381,39 @@ export const o = {
             "--secondary-bg": "#1f2937",
             // gray-700
             "--secondary-border": "#374151",
+            // blue-900
+            "--user-bg": "#1e3a8a",
+            // gray-100
+            "--user-text": "#f3f4f6",
+            // gray-700
+            "--user-border": "#374151",
+            // gray-800
+            "--assistant-bg": "#1e293b",
+            // gray-100
+            "--assistant-text": "#f1f5f9",
+            // gray-700
+            "--assistant-border": "#334155",
+
+            "--tw-prose-body": "#d1d5db",
+            "--tw-prose-headings": "#fff",
+            "--tw-prose-lead": "#9ca3af",
+            "--tw-prose-links": "#fff",
+            "--tw-prose-bold": "#fff",
+            "--tw-prose-counters": "#9ca3af",
+            "--tw-prose-bullets": "#4b5563",
+            "--tw-prose-hr": "#374151",
+            "--tw-prose-quotes": "#f3f4f6",
+            "--tw-prose-quote-borders": "#374151",
+            "--tw-prose-captions": "#9ca3af",
+            "--tw-prose-pre-code": "#d1d5db",
+            "--tw-prose-pre-bg": "rgb(0 0 0 / 50%)",
+            "--tw-prose-code": "#93c5fd",
+            "--tw-prose-code-bg": "#1e40af99",
+            "--tw-prose-code-border": "#2563eb99",
+            "--tw-prose-table-bg": "#11182780",
+            "--tw-prose-th-bg": "#1e40af99",
+            "--tw-prose-th-borders": "#2563eb99",
+            "--tw-prose-td-borders": "#374151",
         },
         "styles": {
             "chromeBorder": "border-gray-700",
@@ -436,8 +476,6 @@ export const o = {
             "threadItemActive": "bg-blue-900 border-blue-700",
             "threadItem": "border-transparent hover:bg-gray-800",
             "tabButton": "text-gray-400 hover:text-white hover:bg-white",
-            "messageUser": "bg-blue-900 text-gray-100 border border-blue-700",
-            "messageAssistant": "bg-gray-800 text-gray-100 border border-gray-700",
         },
     },
 

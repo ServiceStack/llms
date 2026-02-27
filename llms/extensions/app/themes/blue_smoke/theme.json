@@ -10,7 +10,20 @@
         "colorScheme": "dark",
         "--background-image": "url(/themes/blue_smoke/ui/bg.webp)",
         "--scrollbar-track-bg": "#0a0a1a",
-        "--scrollbar-thumb-bg": "#1e3a5f"
+        "--scrollbar-thumb-bg": "#1e3a5f",
+        "--user-bg": "#1e40af66",
+        "--user-text": "#eff6ff",
+        "--user-border": "#60a5fa33",
+        "--assistant-bg": "#0000004D",
+        "--assistant-text": "#eff6ff",
+        "--assistant-border": "#60a5fa33",
+        "--tw-prose-code": "#93c5fd",
+        "--tw-prose-code-bg": "#1e3a8a66",
+        "--tw-prose-code-border": "#1e40af",
+        "--tw-prose-table-bg": "#00000066",
+        "--tw-prose-th-bg": "#1e3a8a66",
+        "--tw-prose-th-borders": "#1e40af",
+        "--tw-prose-td-borders": "#1e40af"
     },
     "styles": {
         "chromeBorder": "border-blue-500/60",

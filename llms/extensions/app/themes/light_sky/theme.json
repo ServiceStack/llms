@@ -10,6 +10,12 @@
         "--primary-bg": "#ffffff",
         "--secondary-bg": "#f0f9ff",
         "--secondary-border": "#bae6fd",
+        "--user-bg": "#dbeafe",
+        "--user-text": "#111827",
+        "--user-border": "#bfdbfe",
+        "--assistant-bg": "#f3f4f6",
+        "--assistant-text": "#111827",
+        "--assistant-border": "#e5e7eb",
         "--tw-prose-counters": "#7dd3fc",
         "--tw-prose-bullets": "#7dd3fc"
     },

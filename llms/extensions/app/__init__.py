@@ -435,9 +435,20 @@ def install(ctx):
 
     async def get_user_avatar(req):
         user = ctx.get_username(req)
-        mode = req.query.get("mode", "light")
+        theme = req.query.get("theme")
 
-        # Cache for 1 hour # "Cache-Control": "public, max-age=3600",
+        # Fall back to default 'user' avatar
+        mode = "dark" if theme == "dark" else "light"
+        bg_color = "#1e3a8a" if mode == "dark" else "#dbeafe"
+        text_color = "#f3f4f6" if mode == "dark" else "#111827"
+
+        if theme:
+            config = get_theme_config(theme, req)
+            vars = config.get("vars", {})
+            mode = vars.get("colorScheme", mode)
+            bg_color = vars.get("--user-bg", bg_color)
+            text_color = vars.get("--user-text", text_color)
+
         headers = {"Content-Type": "image/svg+xml"}
 
         candidate_paths = [
@@ -456,10 +467,6 @@ def install(ctx):
                 headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
                 return web.FileResponse(path, headers=headers)
 
-        # Fall back to default 'user' avatar
-        bg_color = "#1e3a8a" if mode == "dark" else "#bfdbfe"
-        text_color = "#f3f4f6" if mode == "dark" else "#111827"
-
         default_avatar = f"""
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="color:{text_color}">
             <circle cx="16" cy="16" r="16" fill="{bg_color}"/>
@@ -473,9 +480,21 @@ def install(ctx):
     ctx.add_get("/avatar/user", get_user_avatar)
 
     async def get_agent_avatar(req):
-        mode = req.query.get("mode", "light")
+        theme = req.query.get("theme")
 
-        # Cache for 1 hour # "Cache-Control": "public, max-age=3600",
+        # Fall back to default 'user' avatar
+        mode = "dark" if theme == "dark" else "light"
+        # Fall back to default 'agent' avatar
+        bg_color = "#1e293b" if mode == "dark" else "#f3f4f6"
+        text_color = "#f1f5f9" if mode == "dark" else "#111827"
+
+        if theme:
+            config = get_theme_config(theme, req)
+            vars = config.get("vars", {})
+            mode = vars.get("colorScheme", mode)
+            bg_color = vars.get("--assistant-bg", bg_color)
+            text_color = vars.get("--assistant-text", text_color)
+
         headers = {"Content-Type": "image/svg+xml"}
 
         candidate_paths = [
@@ -489,10 +508,6 @@ def install(ctx):
             if os.path.exists(path):
                 headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
                 return web.FileResponse(path, headers=headers)
-
-        # Fall back to default 'agent' avatar
-        bg_color = "#1f2937" if mode == "dark" else "#eceef1"
-        text_color = "#f3f4f6" if mode == "dark" else "#111827"
 
         default_avatar = f"""
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="color:{text_color}">
@@ -622,6 +637,20 @@ def install(ctx):
             themes_dirs.append(os.path.join(ctx.get_user_path(user), "themes"))
         return themes_dirs
 
+    def get_theme_config(theme, request=None):
+        themes_dirs = get_theme_roots(request)
+        for themes_dir in themes_dirs:
+            if os.path.exists(themes_dir):
+                theme_path = os.path.join(themes_dir, theme)
+                config_path = os.path.join(theme_path, "theme.json")
+                if os.path.isdir(theme_path) and os.path.exists(config_path):
+                    try:
+                        with open(config_path) as f:
+                            return json.load(f)
+                    except Exception as e:
+                        ctx.dbg(f"Error loading theme {theme}: {e}")
+        return None
+
     # THEMES
     async def get_themes(request):
         themes = {}
@@ -631,10 +660,10 @@ def install(ctx):
             if os.path.exists(themes_dir):
                 for theme_name in os.listdir(themes_dir):
                     theme_path = os.path.join(themes_dir, theme_name)
-                    styles_path = os.path.join(theme_path, "theme.json")
-                    if os.path.isdir(theme_path) and os.path.exists(styles_path):
+                    config_path = os.path.join(theme_path, "theme.json")
+                    if os.path.isdir(theme_path) and os.path.exists(config_path):
                         try:
-                            with open(styles_path, encoding="utf-8") as f:
+                            with open(config_path, encoding="utf-8") as f:
                                 themes[theme_name] = json.load(f)
                         except Exception as e:
                             if hasattr(ctx, "err"):

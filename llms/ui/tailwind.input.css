@@ -10,6 +10,8 @@
 @layer base {
     :root {
         --background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect width='1' height='1' fill='%2300000000'/%3E%3C/svg%3E%0A");
+        /*gray-900*/
+        --heading: #111827;
         /*white*/
         --background: #ffffff;
         /*gray-200*/
@@ -28,10 +30,47 @@
         --secondary-bg: #f9fafb;
         /*gray-200*/
         --secondary-border: #e5e7eb;
+        /*blue-100*/
+        --user-bg: #dbeafe;
+        /*gray-900*/
+        --user-text: #111827;
+        /*blue-200*/
+        --user-border: #bfdbfe;
+        /*gray-100*/
+        --assistant-bg: #f3f4f6;
+        /*gray-900*/
+        --assistant-text: #111827;
+        /*gray-200*/
+        --assistant-border: #e5e7eb;
+
+        --tw-prose-body: #374151;
+        --tw-prose-headings: #111827;
+        --tw-prose-lead: #4b5563;
+        --tw-prose-links: #111827;
+        --tw-prose-bold: #111827;
+        --tw-prose-counters: #6b7280;
+        --tw-prose-bullets: #d1d5db;
+        --tw-prose-hr: #e5e7eb;
+        --tw-prose-quotes: #111827;
+        --tw-prose-quote-borders: #e5e7eb;
+        --tw-prose-captions: #6b7280;
+        --tw-prose-pre-code: #e5e7eb;
+        --tw-prose-pre-bg: #282c34;
+
+        /*gray-700*/
+        --tw-prose-code: #334155;
+        /*blue-50*/
+        --tw-prose-code-bg: #eff6ff;
+        /*blue-200*/
+        --tw-prose-code-border: #bfdbfe;
+        --tw-prose-th-borders: #bfdbfe;
+        --tw-prose-td-borders: #d1d5db;
     }
 
     :root.dark {
         --background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect width='1' height='1' fill='%2300000000'/%3E%3C/svg%3E%0A");
+        /*gray-200*/
+        --heading: #e2e8f0;
         /*gray-950*/
         --background: #030712;
         /*gray-800*/
@@ -50,42 +89,43 @@
         --secondary-bg: #1f2937;
         /*gray-700*/
         --secondary-border: #374151;
+        /*blue-900*/
+        --user-bg: #1e3a8a;
+        /*gray-100*/
+        --user-text: #f3f4f6;
+        /*gray-700*/
+        --user-border: #374151;
+        /*gray-800*/
+        --assistant-bg: #1e293b;
+        /*gray-100*/
+        --assistant-text: #f1f5f9;
+        /*gray-700*/
+        --assistant-border: #334155;
+
+        --tw-prose-body: #d1d5db;
+        --tw-prose-headings: #fff;
+        --tw-prose-lead: #9ca3af;
+        --tw-prose-links: #fff;
+        --tw-prose-bold: #fff;
+        --tw-prose-counters: #9ca3af;
+        --tw-prose-bullets: #4b5563;
+        --tw-prose-hr: #374151;
+        --tw-prose-quotes: #f3f4f6;
+        --tw-prose-quote-borders: #374151;
+        --tw-prose-captions: #9ca3af;
+        --tw-prose-pre-code: #d1d5db;
+        --tw-prose-pre-bg: rgb(0 0 0 / 50%);
+
+        /*blue-300*/
+        --tw-prose-code: #93c5fd;
+        /*blue-800/60*/
+        --tw-prose-code-bg: #1e40af99;
+        /*blue-600/60*/
+        --tw-prose-code-border: #2563eb99;
+        --tw-prose-th-borders: #4b5563;
+        --tw-prose-td-borders: #374151;
     }
 
-    .root {
-        --tw-prose-body: #374151;
-        --tw-prose-headings: #111827;
-        --tw-prose-lead: #4b5563;
-        --tw-prose-links: #111827;
-        --tw-prose-bold: #111827;
-        --tw-prose-counters: #6b7280;
-        --tw-prose-bullets: #d1d5db;
-        --tw-prose-hr: #e5e7eb;
-        --tw-prose-quotes: #111827;
-        --tw-prose-quote-borders: #e5e7eb;
-        --tw-prose-captions: #6b7280;
-        --tw-prose-code: #111827;
-        --tw-prose-pre-code: #e5e7eb;
-        --tw-prose-pre-bg: #282c34;
-        --tw-prose-th-borders: #d1d5db;
-        --tw-prose-td-borders: #e5e7eb;
-        --tw-prose-invert-body: #d1d5db;
-        --tw-prose-invert-headings: #fff;
-        --tw-prose-invert-lead: #9ca3af;
-        --tw-prose-invert-links: #fff;
-        --tw-prose-invert-bold: #fff;
-        --tw-prose-invert-counters: #9ca3af;
-        --tw-prose-invert-bullets: #4b5563;
-        --tw-prose-invert-hr: #374151;
-        --tw-prose-invert-quotes: #f3f4f6;
-        --tw-prose-invert-quote-borders: #374151;
-        --tw-prose-invert-captions: #9ca3af;
-        --tw-prose-invert-code: #fff;
-        --tw-prose-invert-pre-code: #d1d5db;
-        --tw-prose-invert-pre-bg: rgb(0 0 0 / 50%);
-        --tw-prose-invert-th-borders: #4b5563;
-        --tw-prose-invert-td-borders: #374151;
-    }
 
     .prose {
         font-size: 1rem;
@@ -161,9 +201,9 @@
     }
 
     em {
-        color: #3b82f6;
+        color: var(--tw-prose-code);
         font-weight: 400;
-        background-color: #eff6ff;
+        background-color: var(--tw-prose-code-bg);
         border-radius: 0.25rem;
         padding: 0.125em 0.5rem;
         margin-left: 0.125em;
@@ -172,8 +212,8 @@
     }
 
     .message em {
-        background-color: #eff6ff;
-        border: 1px solid #3b83f680;
+        background-color: var(--tw-prose-code-bg);
+        border: 1px solid var(--tw-prose-code-border);
         border-radius: .25rem;
         padding: .2rem .25rem .1rem .25rem
     }
@@ -224,16 +264,40 @@
 
     .prose th,
     .prose td {
-        border: 1px solid var(--secondary-border);
+        border: 1px solid var(--tw-prose-td-borders);
         /*border-gray-200*/
         padding: 0.5rem;
         text-align: left;
     }
 
     .prose th {
-        background-color: var(--secondary-bg);
-        /*bg-gray-50*/
         font-weight: 600;
+        background-color: var(--tw-prose-th-bg);
+        border: 1px solid var(--tw-prose-th-borders);
+    }
+
+    .prose table {
+        background-color: var(--tw-prose-table-bg);
+    }
+
+    .dark .prose :where(td):not(:where([class~="not-prose"] *)) {
+        color: var(--heading);
+    }
+
+    .dark .prose :where(h1, h2, h3, h4, h5, h6, th):not(:where([class~="not-prose"] *)) {
+        color: var(--heading);
+    }
+
+    .dark .prose :where(code):not(:where([class~="not-prose"] *)),
+    .dark .message em {
+        background-color: var(--assistant-bg);
+        color: var(--assistant-text);
+    }
+
+    .prose :where(code):not(:where([class~="not-prose"] *)) {
+        color: var(--assistant-text);
+        background-color: var(--assistant-bg);
+        border: 1px solid var(--assistant-text);
     }
 
     .hljs-comment,

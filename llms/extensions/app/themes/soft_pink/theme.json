@@ -13,9 +13,21 @@
         "--scrollbar-thumb-bg": "#fbcfe899",
         "--secondary-bg": "#fdf2f8",
         "--secondary-border": "#fbcfe8",
+        "--user-bg": "#dbeafe",
+        "--user-text": "#111827",
+        "--user-border": "#bfdbfe",
+        "--assistant-bg": "#f3f4f6",
+        "--assistant-text": "#111827",
+        "--assistant-border": "#e5e7eb",
         "--tw-prose-counters": "#f472b6",
         "--tw-prose-bullets": "#f472b6",
-        "--tw-prose-links": "#ec4899"
+        "--tw-prose-links": "#ec4899",
+        "--tw-prose-code": "#831843",
+        "--tw-prose-code-bg": "#fbcfe866",
+        "--tw-prose-code-border": "#fbcfe8",
+        "--tw-prose-th-bg": "#fbcfe866",
+        "--tw-prose-th-borders": "#fbcfe8",
+        "--tw-prose-td-borders": "#fbcfe8"
     },
     "styles": {
         "chromeBorder": "border-pink-200",

@@ -13,9 +13,22 @@
         "--scrollbar-thumb-bg": "#064e3b",
         "--secondary-bg": "#052e16",
         "--secondary-border": "#166534",
+        "--user-bg": "#052e1666",
+        "--user-text": "#4ade80",
+        "--user-border": "#166534",
+        "--assistant-bg": "#00000066",
+        "--assistant-text": "#86efac",
+        "--assistant-border": "#22c55e4D",
         "--tw-prose-counters": "#22c55e",
         "--tw-prose-bullets": "#22c55e",
-        "--tw-prose-links": "#4ade80"
+        "--tw-prose-links": "#4ade80",
+        "--tw-prose-code": "#4ade80",
+        "--tw-prose-code-bg": "#052e1666",
+        "--tw-prose-code-border": "#166534",
+        "--tw-prose-table-bg": "#00000066",
+        "--tw-prose-th-bg": "#052e1666",
+        "--tw-prose-th-borders": "#166534",
+        "--tw-prose-td-borders": "#166534"
     },
     "styles": {
         "chromeBorder": "border-green-500/50",

@@ -17,7 +17,20 @@
         "--scrollbar-thumb-bg": "#2e3440",
         "--primary-bg": "#1f2937",
         "--secondary-bg": "#5e81ac",
-        "--secondary-border": "#5e81ac"
+        "--secondary-border": "#5e81ac",
+        "--user-bg": "#3b4252",
+        "--user-text": "#eceff4",
+        "--user-border": "#5e81ac80",
+        "--assistant-bg": "#0000001A",
+        "--assistant-text": "#eceff4",
+        "--assistant-border": "#d8dee977",
+        "--tw-prose-code": "#eceff4",
+        "--tw-prose-code-bg": "#3b4252",
+        "--tw-prose-code-border": "#5e81ac",
+        "--tw-prose-table-bg": "#2e344066",
+        "--tw-prose-th-bg": "#5e81ac",
+        "--tw-prose-th-borders": "#5e81ac",
+        "--tw-prose-td-borders": "#5e81ac"
     },
     "nord": {
         "--color-nord-100": "#eceff4",
@@ -64,13 +77,10 @@
         "popoverButton": "hover:bg-nord-700",
         "popoverButtonActive": "bg-nord-900/30",
         "codeTag": "text-nord-300 bg-nord-700",
-        "codeTagStrong": "border border-blue-800 text-nord-300 bg-blue-900/30",
+        "codeTagStrong": "border border-frost-700 text-nord-300 bg-nord-900/30",
         "tagButtonGroup": "rounded-xl bg-frost-700/30 border border-frost-700/80",
         "tagButton": "cursor-pointer border border-transparent bg-nord-800 text-nord-300 hover:bg-nord-700 hover:text-nord-100 transition-all duration-200",
         "tagButtonActive": "border border-transparent bg-frost-700 text-white shadow-sm transition-all duration-200",
-        "tagButtonStrongActive": "border border-transparent bg-nord-green text-nord-900 font-medium shadow-md hover:opacity-90 transition-all duration-200",
-        "tagLabel": "border border-transparent text-nord-300 bg-nord-800 shadow-sm transition-all duration-200",
-        "tagLabelHover": "hover:bg-nord-700 hover:text-nord-100 transition-all duration-200",
         "panel": "border-gray-700 bg-gray-800/50",
         "infoCard": "rounded-lg bg-nord-900/80 border border-nord-700 backdrop-blur-sm",
         "card": "rounded-lg bg-nord-800 border border-nord-300/40",
@@ -95,7 +105,6 @@
         "threadItemActiveBorder": "border-nord-100",
         "threadItemActive": "bg-nord-700/80 border-nord-300/50",
         "threadItem": "border-transparent hover:bg-nord-700/40",
-        "messageUser": "bg-nord-800 text-nord-100 border border-frost-700/50",
-        "messageAssistant": "text-nord-100 border border-nord-300/30 bg-black/10 backdrop-blur-md"
+        "messageAssistant": "bg-[var(--assistant-bg)] text-[var(--assistant-text)] border-[var(--assistant-border)] backdrop-blur-md"
     }
 }
