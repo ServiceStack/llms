@@ -1,8 +1,9 @@
 {
-    "openrouter": {
+    "google": {
         "models": {
-            "google/gemini-2.5-flash-image": {
-                "name": "Gemini 2.5 Flash Image (Nano Banana)",
+            "gemini-3.1-flash-image-preview": {
+                "name": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+                "release_date": "2026-02-26",
                 "modalities": {
                     "input": [
                         "text"
@@ -12,12 +13,33 @@
                     ]
                 },
                 "cost": {
-                    "input": 0.30,
-                    "output": 2.50
+                    "input": 0.25,
+                    "output": 1.50
+                }
+            }
+        }
+    },
+    "openrouter": {
+        "models": {
+            "google/gemini-3.1-flash-image-preview": {
+                "name": "Gemini 3.1 Flash Image (Nano Banana 2)",
+                "release_date": "2026-02-26",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0.25,
+                    "output": 1.50
                 }
             },
-            "google/gemini-2.5-flash-image-preview": {
-                "name": "Gemini 2.5 Flash Image Preview (Nano Banana)",
+            "google/gemini-2.5-flash-image": {
+                "name": "Gemini 2.5 Flash Image (Nano Banana)",
+                "release_date": "2025-10-07",
                 "modalities": {
                     "input": [
                         "text"
@@ -33,6 +55,7 @@
             },
             "google/gemini-3-pro-image-preview": {
                 "name": "Google: Nano Banana Pro Preview (Gemini 3 Pro)",
+                "release_date": "2025-11-20",
                 "modalities": {
                     "input": [
                         "text"
