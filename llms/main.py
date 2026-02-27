@@ -3941,18 +3941,19 @@ def cli_exec(cli_args, extra_args):
 
                 # Check for requirements.txt
                 requirements_path = os.path.join(target_path, "requirements.txt")
+
+                # Check if uv is installed
+                has_uv = False
+                try:
+                    subprocess.run(
+                        ["uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+                    )
+                    has_uv = True
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+
                 if os.path.exists(requirements_path):
                     print(f"Installing dependencies from {requirements_path}...")
-
-                    # Check if uv is installed
-                    has_uv = False
-                    try:
-                        subprocess.run(
-                            ["uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
-                        )
-                        has_uv = True
-                    except (subprocess.CalledProcessError, FileNotFoundError):
-                        pass
 
                     if has_uv:
                         subprocess.run(
@@ -4040,6 +4041,36 @@ def cli_exec(cli_args, extra_args):
                         continue
                     print(f"Updated extension {extension}")
                     _log(result.stdout.decode("utf-8"))
+
+                    requirements_path = os.path.join(extension_path, "requirements.txt")
+
+                    has_uv = False
+                    try:
+                        subprocess.run(
+                            ["uv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+                        )
+                        has_uv = True
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        pass
+
+                    if os.path.exists(requirements_path):
+                        print(f"Upgrading dependencies from {requirements_path}...")
+                        try:
+                            if has_uv:
+                                subprocess.run(
+                                    ["uv", "pip", "install", "-U", "-p", sys.executable, "-r", "requirements.txt"],
+                                    cwd=extension_path,
+                                    check=True,
+                                )
+                            else:
+                                subprocess.run(
+                                    [sys.executable, "-m", "pip", "install", "-U", "-r", "requirements.txt"],
+                                    cwd=extension_path,
+                                    check=True,
+                                )
+                            print("Dependencies upgraded successfully.")
+                        except subprocess.CalledProcessError as e:
+                            print(f"Failed to upgrade dependencies: {e}")
 
         asyncio.run(update_extensions(cli_args.update))
         return ExitCode.SUCCESS
