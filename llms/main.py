@@ -1052,8 +1052,11 @@ class GeneratorBase:
     def chat_summary(self, chat):
         return chat_summary(chat)
 
-    def process_chat(self, chat, provider_id=None):
-        return process_chat(chat, provider_id)
+    async def process_chat(self, chat, provider_id=None):
+        # remove tools from chat
+        clone = json.loads(json.dumps(chat))
+        clone.pop("tools", None)
+        return await process_chat(clone, provider_id)
 
     async def response_json(self, response):
         return await response_json(response)
