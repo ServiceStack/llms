@@ -1042,10 +1042,7 @@ export const ChatBody = {
                             <div v-if="$threads.watchingThread" class="flex items-start space-x-3 group">
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0">
-                                    <svg class="size-8" viewBox="0 0 32 32" fill="none">
-                                        <circle cx="16" cy="16" r="15" :class="[$styles.icon]" stroke="none"/>
-                                        <path fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 20v-8a2.667 2.667 0 1 1 5.333 0v8m-5.333-4h5.333m5.334-6.667v10.667" transform="translate(2.667, 1.5)"/>
-                                    </svg>
+                                    <AgentAvatar />
                                 </div>
 
                                 <!-- Loading bubble -->
