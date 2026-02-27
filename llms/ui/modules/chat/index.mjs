@@ -423,6 +423,18 @@ export function useChatPrompt(ctx) {
             }
         }
 
+        if (text === 'retry') {
+            let lastMessage = messages[messages.length - 1]
+            if (lastMessage.role === 'user' && lastMessage.content[0].text === 'retry') {
+                messages.pop()
+                // Also remove assistant message before it
+                lastMessage = messages[messages.length - 1]
+                if (lastMessage.role === 'assistant') {
+                    messages.pop()
+                }
+            }
+        }
+
         const request = createRequest({ model })
 
         // Add Thread History
