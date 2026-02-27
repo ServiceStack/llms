@@ -16,8 +16,8 @@
         "--scrollbar-track-bg": "#3b4252",
         "--scrollbar-thumb-bg": "#2e3440",
         "--primary-bg": "#1f2937",
-        "--secondary-bg": "#4c566a",
-        "--secondary-border": "#4c566a"
+        "--secondary-bg": "#5e81ac",
+        "--secondary-border": "#5e81ac"
     },
     "nord": {
         "--color-nord-100": "#eceff4",

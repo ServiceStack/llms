@@ -1080,7 +1080,7 @@ export const ChatBody = {
                                     </div>
                                 </div>
                                 <button type="button" @click="$chat.sendUserMessage('retry')" title="Retry request"
-                                    class="ml-1 px-3 py-1 rounded text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900/30 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-all">
+                                    class="ml-1 px-3 py-1 rounded transition-all" :class="[$styles.muted,$styles.mutedHover]">
                                     retry
                                 </button>
                             </div>
