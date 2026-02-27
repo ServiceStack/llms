@@ -3775,7 +3775,14 @@ def create_arg_parser():
 
     parser.add_argument("--init", action="store_true", help="Create a default llms.json")
     parser.add_argument("--update-providers", action="store_true", help="Update local models.dev providers.json")
-    parser.add_argument("--reset-config", action="store_true", help="Reset ~/.llms/llms.json to default")
+    parser.add_argument(
+        "--reset",
+        nargs="?",
+        const="ls",
+        default=None,
+        help="Reset configuration (config|providers|all)",
+        metavar="TYPE",
+    )
 
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -3881,6 +3888,37 @@ def cli_exec(cli_args, extra_args):
     if cli_args.update_providers:
         asyncio.run(update_providers(home_providers_path))
         print(f"Updated {home_providers_path}")
+        return ExitCode.SUCCESS
+
+    if cli_args.reset:
+        if cli_args.reset not in ["config", "providers", "all"]:
+            print("Available resets:")
+            print("  config - Reset ~/.llms/llms.json to default")
+            print("  providers - Reset ~/.llms/providers.json and ~/.llms/providers-extra.json to default")
+            print("  all - Reset all configuration")
+            return ExitCode.SUCCESS if cli_args.reset == "ls" else ExitCode.FAILED
+
+        if cli_args.reset == "config" or cli_args.reset == "all":
+            asyncio.run(save_default_config(home_config_path))
+            print(f"Reset config at {home_config_path}")
+
+        if cli_args.reset == "providers" or cli_args.reset == "all":
+            if os.path.exists(home_providers_path):
+                os.unlink(home_providers_path)
+            asyncio.run(save_text_url(github_url("providers.json"), home_providers_path))
+            print(f"Reset providers at {home_providers_path}")
+
+            if os.path.exists(home_providers_extra_path):
+                os.unlink(home_providers_extra_path)
+            asyncio.run(save_text_url(github_url("providers-extra.json"), home_providers_extra_path))
+            print(f"Reset extra providers at {home_providers_extra_path}")
+
+            try:
+                asyncio.run(update_providers(home_providers_path))
+                print(f"Updated {home_providers_path}")
+            except Exception as e:
+                _err("Failed to update providers", e)
+
         return ExitCode.SUCCESS
 
     # if home_providers_path is older than 1 day, update providers list
