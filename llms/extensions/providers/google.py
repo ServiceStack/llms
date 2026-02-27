@@ -440,7 +440,7 @@ def install_google(ctx):
                         raise Exception(obj["error"]["message"])
 
                     if ctx.debug:
-                        ctx.dbg(json.dumps(gemini_response_summary(obj), indent=2))
+                        ctx.log_json(obj)
 
                     # Check for empty response "anomaly"
                     has_candidates = obj.get("candidates") and len(obj["candidates"]) > 0

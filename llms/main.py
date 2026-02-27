@@ -108,6 +108,16 @@ def print_chat(chat):
     _log(f"Chat: {chat_summary(chat)}")
 
 
+def truncate_strings(o: Any) -> Any:
+    if isinstance(o, dict):
+        return {k: truncate_strings(v) for k, v in o.items()}
+    elif isinstance(o, list):
+        return [truncate_strings(v) for v in o]
+    elif isinstance(o, str) and len(o) > 10000:
+        return f"({len(o)})"
+    return o
+
+
 def chat_summary(chat):
     """Summarize chat completion request for logging."""
     # replace image_url.url with <image>
@@ -128,7 +138,7 @@ def chat_summary(chat):
                     data = item["file"]["file_data"]
                     prefix = data.split(",", 1)[0]
                     item["file"]["file_data"] = prefix + f",({len(data) - len(prefix)})"
-    return json.dumps(clone, indent=2)
+    return json.dumps(truncate_strings(clone), indent=2)
 
 
 image_exts = ["png", "webp", "jpg", "jpeg", "gif", "bmp", "svg", "tiff", "ico"]
@@ -2059,7 +2069,7 @@ async def cli_chat(
                 first_message["content"] = [file_content, {"type": "text", "text": first_message["content"]}]
 
     if g_verbose:
-        printdump(chat)
+        printdump(truncate_strings(chat))
 
     try:
         context = {
@@ -3230,7 +3240,7 @@ class ExtensionContext:
 
     def log_json(self, obj: Any):
         if self.verbose:
-            print(f"[{self.name}] {json.dumps(obj, indent=2)}", flush=True)
+            print(f"[{self.name}] {json.dumps(truncate_strings(obj), indent=2)}", flush=True)
         return obj
 
     def dbg(self, message: Any):
