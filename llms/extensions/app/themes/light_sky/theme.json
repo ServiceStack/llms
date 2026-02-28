@@ -10,12 +10,12 @@
         "--primary-bg": "#ffffff",
         "--secondary-bg": "#f0f9ff",
         "--secondary-border": "#bae6fd",
-        "--user-bg": "#dbeafe",
+        "--user-bg": "#f3f4f6",
         "--user-text": "#111827",
-        "--user-border": "#bfdbfe",
-        "--assistant-bg": "#f3f4f6",
-        "--assistant-text": "#111827",
-        "--assistant-border": "#e5e7eb",
+        "--user-border": "#d1d5db",
+        "--assistant-bg": "#e0f2fe",
+        "--assistant-text": "#082f49",
+        "--assistant-border": "#38bdf8",
         "--tw-prose-counters": "#7dd3fc",
         "--tw-prose-bullets": "#7dd3fc"
     },
@@ -47,14 +47,12 @@
         "threadItemActive": "bg-sky-100/80 border-sky-400 shadow-sm",
         "threadItem": "border-transparent hover:bg-sky-50 transition-colors",
         "tagButtonGroup": "rounded-xl bg-sky-700/10",
-        "tagButton": "cursor-pointer border border-transparent bg-white/90 backdrop-blur text-slate-600 border-sky-200 hover:border-sky-300 hover:bg-white transition-all",
+        "tagButton": "cursor-pointer border border-transparent bg-white/90 text-slate-600 border-sky-200 hover:border-sky-300 hover:bg-white transition-all",
         "tagButtonActive": "cursor-default border border-sky-400 text-sky-800 bg-sky-100",
         "tagButtonStrongActive": "bg-sky-500 text-white border-sky-600 shadow-md",
         "tagLabel": "text-sky-900 border border-sky-300 bg-sky-50/50",
         "tagLabelHover": "hover:border-sky-400 hover:bg-sky-100 transition-colors",
         "panel": "border-sky-300/50 bg-white/90 backdrop-blur-md shadow-sm",
-        "card": "rounded-lg bg-white/95 backdrop-blur-sm border border-sky-300/80 shadow-sm hover:shadow transition-shadow",
-        "messageUser": "bg-white/95 backdrop-blur-sm text-slate-800 border border-sky-300 shadow-sm",
-        "messageAssistant": "bg-sky-50/90 text-sky-950 border border-sky-300 shadow-sm"
+        "card": "rounded-lg bg-white/95 backdrop-blur-sm border border-sky-300/80 shadow-sm hover:shadow transition-shadow"
     }
 }

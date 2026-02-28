@@ -218,11 +218,11 @@ export const o = {
             "tagButtonLarge": "rounded-xl shadow-sm",
             "tagButtonSmall": "rounded-full shadow-sm",
 
-            "tagLabel": "bg-[var(--tw-prose-code-bg)] text-[var(--tw-prose-code)] border border-[var(--tw-prose-code-border)]",
-            "tagLabelHover": "hover:bg-[var(--tw-prose-code-bg)/50] hover:text-[var(--tw-prose-code)/50] hover:border-[var(--tw-prose-code-border)/50]",
+            "tagLabel": "bg-[var(--tw-prose-code-bg)]/50 text-[var(--tw-prose-code)]/90 border border-[var(--tw-prose-code-border)]/70",
+            "tagLabelHover": "hover:bg-[var(--tw-prose-code-bg)] hover:text-[var(--tw-prose-code)] hover:border-[var(--tw-prose-code-border)]",
 
-            "messageUser": "bg-[var(--user-bg)] text-[var(--user-text)] border-[var(--user-border)]",
-            "messageAssistant": "bg-[var(--assistant-bg)] text-[var(--assistant-text)] border-[var(--assistant-border)]"
+            "messageUser": "bg-[var(--user-bg)] text-[var(--user-text)] border border-[var(--user-border)]",
+            "messageAssistant": "bg-[var(--assistant-bg)] text-[var(--assistant-text)] border border-[var(--assistant-border)]"
         }
     },
 
@@ -282,9 +282,9 @@ export const o = {
             "--tw-prose-captions": "#6b7280",
             "--tw-prose-pre-code": "#e5e7eb",
             "--tw-prose-pre-bg": "#282c34",
-            "--tw-prose-code": "#334155",
-            "--tw-prose-code-bg": "#eff6ff",
-            "--tw-prose-code-border": "#bfdbfe",
+            "--tw-prose-code": "#1e293b",
+            "--tw-prose-code-bg": "#dbeafe",
+            "--tw-prose-code-border": "#93c5fd",
             "--tw-prose-table-bg": "#f9fafb",
             "--tw-prose-th-bg": "#eff6ff",
             "--tw-prose-th-borders": "#bfdbfe",
@@ -448,8 +448,6 @@ export const o = {
             "tagButton": "cursor-pointer border border-transparent text-gray-300",
             "tagButtonActive": "border border-blue-800 text-blue-300 bg-blue-900/50",
             "tagButtonStrongActive": "bg-green-900/40 text-green-300 border-green-800",
-            "tagLabel": "text-gray-300 border border-gray-600",
-            "tagLabelHover": "hover:bg-gray-800 hover:text-gray-100 hover:border-gray-500",
             "panel": "border-gray-700 bg-gray-800",
             "card": "rounded-lg bg-gray-800 border border-gray-700",
             "infoCard": "rounded-lg bg-gray-800 border border-gray-700",

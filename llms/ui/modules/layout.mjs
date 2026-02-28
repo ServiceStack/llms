@@ -34,20 +34,20 @@ const Avatar = {
                 @click.stop="toggleMenu"
                 :src="$ai.auth.profileUrl"
                 :title="authTitle"
-                class="mr-1 size-6 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-300"
+                class="mr-1 size-6 rounded-full cursor-pointer hover:ring-2 hover:ring-[var(--assistant-border)]"
             />
             <div
                 v-if="showMenu"
                 @click.stop
-                class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
+                class="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 z-50 border" :class="[$styles.messageAssistant]"
             >
-                <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                <div class="px-4 py-2 text-sm border-b border-[var(--user-border)]">
                     <div class="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{{ $ai.auth.displayName || $ai.auth.userName }}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{{ $ai.auth.email }}</div>
+                    <div class="text-xs whitespace-nowrap overflow-hidden text-ellipsis">{{ $ai.auth.email }}</div>
                 </div>
                 <button type="button"
                     @click="handleLogout"
-                    class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center whitespace-nowrap"
+                    class="w-full text-left px-4 py-2 text-sm flex items-center whitespace-nowrap hover:bg-[var(--background)]/50"
                 >
                     <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
@@ -70,8 +70,7 @@ const Avatar = {
             const prefix = roles && roles.includes('Admin') ? 'Admin' : 'Name'
             const sb = [
                 name ? `${prefix}: ${name}` : '',
-                `API Key: ${bearerToken}`,
-                `${userId}`,
+                name && name != userId ? `${userId}` : '',
             ]
             return sb.filter(x => x).join('\n')
         })
