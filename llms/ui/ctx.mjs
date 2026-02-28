@@ -153,6 +153,7 @@ export class AppContext {
         this.updateThreadFilters = []
         this.threadHeaderComponents = {}
         this.threadFooterComponents = {}
+        this.userMenuItemComponents = {}
         this.top = {}
         this.left = {}
         this.leftTop = {}
@@ -369,6 +370,9 @@ export class AppContext {
     }
     setThreadFooters(components) {
         Object.assign(this.threadFooterComponents, components)
+    }
+    setUserMenuItems(components) {
+        Object.assign(this.userMenuItemComponents, components)
     }
 
     async createJsonResult(res) {

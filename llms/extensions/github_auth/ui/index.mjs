@@ -1,4 +1,6 @@
-import { ref } from "vue"
+import { ref, computed, inject } from "vue"
+
+let ext
 
 const SignIn = {
     template: `
@@ -55,10 +57,56 @@ const SignIn = {
     }
 }
 
+const AuthMenuItems = {
+    template: `
+        <div class="px-4 py-2 text-sm border-b border-[var(--user-border)]">
+            <div class="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{{ auth.displayName || auth.userName }}</div>
+            <div class="text-xs whitespace-nowrap overflow-hidden text-ellipsis">{{ auth.email }}</div>
+        </div>
+
+        <button type="button"
+            @click="handleLogout"
+            class="w-full text-left px-4 py-2 text-sm flex items-center whitespace-nowrap hover:bg-[var(--background)]/50">
+            <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+            </svg>
+            Sign Out
+        </button>
+    `,
+    emits: ['done'],
+    props: { auth: Object },
+    setup(props, { emit }) {
+        const ctx = inject('ctx')
+        const showComponents = computed(() => {
+            const args = { auth: props.auth }
+            return Object.values(ctx.userMenuItemComponents).filter(def => def.show(args)).map(def => def.component)
+        })
+
+        async function handleLogout() {
+            emit('done')
+            await ctx.ai.signOut()
+            // Reload the page to show sign-in screen
+            window.location.reload()
+        }
+
+        return {
+            showComponents,
+            handleLogout,
+        }
+    }
+}
 
 export default {
     install(ctx) {
-        // Override SignIn component
+        ext = ctx.scope("credentials")
+
+        ctx.setUserMenuItems({
+            auth: {
+                component: AuthMenuItems,
+                show: ({ auth }) => !!auth?.userId
+            }
+        })
+
         ctx.components({
             SignIn,
         })
