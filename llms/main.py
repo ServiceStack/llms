@@ -2911,7 +2911,7 @@ class AppExtensions:
         self.index_headers = []
         self.index_footers = []
         self.allowed_directories = []
-        self.auth_providers = []
+        self.auth_provider = None
         self.sessions = {}  # OAuth session storage: {session_token: {userId, userName, displayName, profileUrl, email, created}}
         self.oauth_states = {}  # CSRF protection: {state: {created, redirect_uri}}
         self.request_args = {
@@ -2991,26 +2991,28 @@ class AppExtensions:
         """Get the list of allowed directories."""
         return self.allowed_directories
 
-    def add_auth_provider(self, auth_provider: AuthProvider) -> None:
+    def set_auth_provider(self, auth_provider: AuthProvider) -> None:
         """Add an authentication provider."""
-        self.auth_providers.append(auth_provider)
+        self.auth_provider = auth_provider
 
     def is_auth_enabled(self) -> bool:
-        return len(self.auth_providers) > 0
+        return self.auth_provider is not None
 
     def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
-        for auth_provider in self.auth_providers:
-            session = auth_provider.get_session(request)
-            if session:
-                return session
+        if self.auth_provider is None:
             return None
+        session = self.auth_provider.get_session(request)
+        if session:
+            return session
+        return None
 
     def get_username(self, request: web.Request) -> Optional[str]:
-        for auth_provider in self.auth_providers:
-            username = auth_provider.get_username(request)
-            if username:
-                return username
+        if self.auth_provider is None:
             return None
+        username = self.auth_provider.get_username(request)
+        if username:
+            return username
+        return None
 
     def assert_username(self, request: web.Request) -> str:
         if not self.is_auth_enabled():
@@ -3022,13 +3024,12 @@ class AppExtensions:
 
     def check_auth(self, request: web.Request) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Check if request is authenticated. Returns (is_authenticated, user_data)"""
-        if len(self.auth_providers) == 0:
+        if self.auth_provider is None:
             return True, None
 
-        for auth_provider in self.auth_providers:
-            is_authenticated, user_data = auth_provider.check_auth(request)
-            if is_authenticated:
-                return True, user_data
+        is_authenticated, user_data = self.auth_provider.check_auth(request)
+        if is_authenticated:
+            return True, user_data
 
         return False, None
 
@@ -3160,9 +3161,9 @@ class ExtensionContext:
     def get_client_timeout(self):
         return self.app.get_client_timeout()
 
-    def add_auth_provider(self, auth_provider: AuthProvider) -> None:
+    def set_auth_provider(self, auth_provider: AuthProvider) -> None:
         """Add an authentication provider."""
-        self.app.add_auth_provider(auth_provider)
+        self.app.set_auth_provider(auth_provider)
         self.log(f"Added Auth Provider: {auth_provider.__class__.__name__}, Authentication is now enabled")
 
     def is_auth_enabled(self) -> bool:
@@ -4510,7 +4511,6 @@ def cli_exec(cli_args, extra_args):
             ret["extensions"] = [ext.get("name") for ext in g_app.extensions]
             # Add auth configuration
             ret["requiresAuth"] = g_app.is_auth_enabled()
-            ret["authTypes"] = [provider.__class__.__name__ for provider in g_app.auth_providers]
             return web.json_response(ret)
 
         app.router.add_get("/config", config_handler)
