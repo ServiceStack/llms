@@ -206,6 +206,18 @@ llms --auth github_auth
 llms --auth none
 ```
 
+## Password Storage
+
+Passwords are never stored in plain text. Each password is hashed using **SHA-256**
+with a unique random salt:
+
+1. A 16-byte random salt is generated via `secrets.token_hex(16)`
+2. The salt is prepended to the password and the combination is SHA-256 hashed
+3. The result is stored as `salt:hex_digest` in the `password_hash` field of `users.json`
+
+Verification re-hashes the provided password with the stored salt and compares the
+result against the stored digest.
+
 ## Session Details
 
 - Sessions are stored in memory and persisted to `~/.llms/credentials/sessions/`
