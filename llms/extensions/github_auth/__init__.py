@@ -12,6 +12,12 @@ from aiohttp import web
 def install(ctx):
     g_app = ctx.app
 
+    enabled_auth = ctx.enabled_auth()
+    if enabled_auth != "github_auth":
+        ctx.log(f"{enabled_auth} is enabled, skipping github_auth auth provider.")
+        ctx.disabled = True
+        return
+
     auth_config_file = os.path.join(ctx.get_user_path(), "github_auth", "config.json")
 
     auth_config = None

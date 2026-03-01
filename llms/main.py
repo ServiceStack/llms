@@ -62,6 +62,7 @@ DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
 MOCK_DIR = os.getenv("MOCK_DIR")
 LLMS_MODE = os.getenv("LLMS_MODE", "local")
+LLMS_AUTH = os.getenv("LLMS_AUTH", "credentials")
 DISABLE_EXTENSIONS = (os.getenv("LLMS_DISABLE") or "").split(",")
 DEFAULT_LIMITS = {
     "client_timeout": 120,
@@ -2889,6 +2890,7 @@ class AppExtensions:
         self.config = None
         self.limits = DEFAULT_LIMITS
         self.mode = LLMS_MODE
+        self.auth_extension = LLMS_AUTH
         self.is_local = self.mode == "local"
         self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
@@ -2990,6 +2992,10 @@ class AppExtensions:
     def get_allowed_directories(self) -> List[str]:
         """Get the list of allowed directories."""
         return self.allowed_directories
+
+    def enabled_auth(self) -> str:
+        """Get the enabled auth extension."""
+        return self.auth_extension
 
     def set_auth_provider(self, auth_provider: AuthProvider) -> None:
         """Add an authentication provider."""
@@ -3160,6 +3166,9 @@ class ExtensionContext:
 
     def get_client_timeout(self):
         return self.app.get_client_timeout()
+
+    def enabled_auth(self) -> bool:
+        return self.app.enabled_auth()
 
     def set_auth_provider(self, auth_provider: AuthProvider) -> None:
         """Add an authentication provider."""
@@ -3785,6 +3794,7 @@ def create_arg_parser():
         metavar="TYPE",
     )
 
+    parser.add_argument("--auth", default=None, help="Which Auth Provider to use", metavar="EXTENSION")
     parser.add_argument("--logprefix", default="", help="Prefix used in log messages", metavar="PREFIX")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
 
@@ -3817,7 +3827,7 @@ def create_arg_parser():
 
 
 def cli_exec(cli_args, extra_args):
-    global _ROOT, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_app
+    global _ROOT, LLMS_AUTH, g_verbose, g_default_model, g_logprefix, g_providers, g_config, g_config_path, g_app
 
     verify_root_path()
 
@@ -3856,6 +3866,9 @@ def cli_exec(cli_args, extra_args):
             asyncio.run(save_text_url(github_url("providers-extra.json"), home_providers_extra_path))
             print(f"Created default extra providers config at {home_providers_extra_path}")
         return ExitCode.SUCCESS
+
+    if cli_args.auth:
+        LLMS_AUTH = cli_args.auth
 
     if cli_args.providers:
         if not os.path.exists(cli_args.providers):
@@ -4691,7 +4704,7 @@ def cli_exec(cli_args, extra_args):
             try:
                 stdin_chat = json.loads(stdin_data)
             except json.JSONDecodeError:
-                print(f"Invalid JSON from stdin")
+                print("Invalid JSON from stdin")
                 return ExitCode.FAILED
 
     if (
@@ -4728,7 +4741,7 @@ def cli_exec(cli_args, extra_args):
                     chat_json = f.read()
                     chat = json.loads(chat_json)
             elif stdin_chat is not None:
-                _log(f"Using chat from stdin")
+                _log("Using chat from stdin")
                 chat = stdin_chat
 
             if cli_args.system is not None:
