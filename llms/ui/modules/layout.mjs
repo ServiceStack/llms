@@ -29,10 +29,10 @@ const Welcome = {
 
 const Avatar = {
     template: `
-        <div v-if="$ai.auth?.profileUrl && showComponents.length" class="relative" ref="avatarContainer">
+        <div v-if="$ai.auth && showComponents.length" class="relative" ref="avatarContainer">
             <img
                 @click.stop="toggleMenu"
-                :src="$ai.auth.profileUrl"
+                :src="$ctx.getUserAvatar()"
                 :title="authTitle"
                 class="mr-1 size-6 rounded-full cursor-pointer hover:ring-2 hover:ring-[var(--assistant-border)]"
             />
@@ -200,8 +200,7 @@ const SettingsPage = {
             <h2 class="text-lg font-semibold mb-4" :class="[$styles.heading]">User Avatar</h2>
             <div class="flex items-center gap-6">
                 <label for="userAvatarInput" class="relative group cursor-pointer">
-                    <img 
-                        :src="userAvatarUrl" 
+                    <img :src="$ctx.getUserAvatar()" 
                         class="w-20 h-20 rounded-full object-cover border-2 shadow-md" :class="[$styles.messageUser]"
                         alt="User Avatar"
                     />
@@ -246,7 +245,7 @@ const SettingsPage = {
             <div class="flex items-center gap-6">
                 <label for="agentAvatarInput" class="relative group cursor-pointer">
                     <img 
-                        :src="agentAvatarUrl" 
+                        :src="$ctx.getAgentAvatar()" 
                         class="w-20 h-20 rounded-full object-cover border-2 shadow-md" :class="[$styles.messageUser]"
                         alt="Agent Avatar"
                     />
@@ -295,9 +294,6 @@ const SettingsPage = {
     `,
     setup() {
         const ctx = inject('ctx')
-
-        const userAvatarUrl = computed(() => ctx.getUserAvatar())
-        const agentAvatarUrl = computed(() => ctx.getAgentAvatar())
 
         const userUploading = ref(false)
         const userSuccess = ref(false)
@@ -367,8 +363,6 @@ const SettingsPage = {
         }
 
         return {
-            userAvatarUrl,
-            agentAvatarUrl,
             userUploading,
             userSuccess,
             userError,
