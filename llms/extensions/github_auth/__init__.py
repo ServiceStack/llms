@@ -164,13 +164,22 @@ def install(ctx):
             if error_response:
                 return error_response
 
+        user = user_data.get("login", "")
+        profile_url = user_data.get("avatar_url", "")
+        user_avatar_path = os.path.join(ctx.get_user_path(user), "avatar.png")
+        if not os.path.exists(user_avatar_path):
+            # download and save avatar
+            async with aiohttp.ClientSession() as session, session.get(profile_url) as resp:
+                with open(user_avatar_path, "wb") as f:
+                    f.write(await resp.read())
+
         # Create session
         session_token = secrets.token_urlsafe(32)
         ctx.sessions[session_token] = {
             "userId": str(user_data.get("id", "")),
-            "userName": user_data.get("login", ""),
+            "userName": user,
             "displayName": user_data.get("name", ""),
-            "profileUrl": user_data.get("avatar_url", ""),
+            "profileUrl": profile_url,
             "email": user_data.get("email", ""),
             "created": time.time(),
         }
@@ -215,12 +224,13 @@ def install(ctx):
 
         if session_token and session_token in g_app.sessions:
             session_data = g_app.sessions[session_token]
+
             return web.json_response(
                 {
                     "userId": session_data.get("userId", ""),
                     "userName": session_data.get("userName", ""),
                     "displayName": session_data.get("displayName", ""),
-                    "profileUrl": session_data.get("profileUrl", ""),
+                    "profileUrl": "/avatar/user",
                     "authProvider": "github",
                 }
             )
