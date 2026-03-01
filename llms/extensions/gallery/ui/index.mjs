@@ -123,11 +123,11 @@ const GalleryPage = {
             </div>
 
             <!-- Loading State -->
-            <div class="h-20 flex items-center justify-center mt-8 text-gray-500" ref="loadingTrigger">
+            <div class="h-20 flex items-center justify-center mt-8" :class="[$styles.muted]" ref="loadingTrigger">
                 <div v-if="loading" class="flex items-center gap-3">
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-[var(--assistant-bg)] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div class="w-2 h-2 bg-[var(--assistant-bg)] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div class="w-2 h-2 bg-[var(--assistant-bg)] rounded-full animate-bounce"></div>
                 </div>
                 <div v-else-if="allLoaded && items.length > 0" class="text-sm font-medium opacity-50">
                     All caught up
