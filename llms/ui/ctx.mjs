@@ -138,7 +138,7 @@ export class AppContext {
 
         const theme = ai.createTheme()
         const state = this.state = reactive({
-            cacheBreaker: 1,
+            cacheBreaker: new Date().getTime(),
             theme,
             styles: theme.styles,
         })

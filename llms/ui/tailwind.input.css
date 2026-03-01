@@ -61,8 +61,11 @@
         --tw-prose-code: #334155;
         /*blue-50*/
         --tw-prose-code-bg: #eff6ff;
+        /*gray-50*/
+        --tw-prose-table-bg: #f9fafb;
         /*blue-200*/
         --tw-prose-code-border: #bfdbfe;
+        --tw-prose-th-bg: #eff6ff;
         --tw-prose-th-borders: #bfdbfe;
         --tw-prose-td-borders: #d1d5db;
     }
@@ -120,12 +123,27 @@
         --tw-prose-code: #93c5fd;
         /*blue-800/60*/
         --tw-prose-code-bg: #1e40af99;
+        --tw-prose-table-bg: #11182780;
+
         /*blue-600/60*/
         --tw-prose-code-border: #2563eb99;
+        --tw-prose-th-bg: #1e40af99;
         --tw-prose-th-borders: #4b5563;
         --tw-prose-td-borders: #374151;
     }
 
+    .bg-table {
+        background-color: var(--tw-prose-table-bg);
+    }
+    .bg-th {
+        background-color: var(--tw-prose-th-bg);
+    }
+    .border-th {
+        border-color: var(--tw-prose-th-borders);
+    }
+    .border-td {
+        border-color: var(--tw-prose-td-borders);
+    }
 
     .prose {
         font-size: 1rem;
