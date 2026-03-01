@@ -33,6 +33,7 @@ def install_nvidia(ctx):
                         base64,
                         filename,
                         ctx.to_file_info(chat, {"seed": seed}),
+                        context=context,
                     )
                     return {
                         "choices": [

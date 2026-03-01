@@ -349,8 +349,11 @@ class AppDB:
         thread["updatedAt"] = now
         initial_timestamp = int(time.time() * 1000) + 1
         if "messages" in thread:
+            context = {}
+            if user:
+                context["user"] = user
             for idx, m in enumerate(thread["messages"]):
-                self.ctx.cache_message_inline_data(m)
+                self.ctx.cache_message_inline_data(m, context=context)
                 if "timestamp" not in m:
                     m["timestamp"] = initial_timestamp + idx
                 # remove reasoning_details from all messages (can get huge)

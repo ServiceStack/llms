@@ -155,7 +155,7 @@ def install_zai(ctx):
                         }
                         info.update(usage)
                         cache_url, info = ctx.save_image_to_cache(
-                            image_bytes, filename, image_info=info, ignore_info=True
+                            image_bytes, filename, image_info=info, ignore_info=True, context=context
                         )
 
                     images.append(

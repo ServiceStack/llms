@@ -693,7 +693,7 @@ def file_ext_from_mimetype(mimetype, default="pdf"):
     return default
 
 
-def cache_message_inline_data(m):
+def cache_message_inline_data(m, context=None):
     """
     Replaces and caches any inline data URIs in the message content.
     """
@@ -714,7 +714,7 @@ def cache_message_inline_data(m):
                         ext = image_ext_from_mimetype(header.split(":")[1])
                         filename = f"image.{ext}"  # Hash will handle uniqueness
 
-                        cache_url, _ = save_image_to_cache(base64_data, filename, {}, ignore_info=True)
+                        cache_url, _ = save_image_to_cache(base64_data, filename, {}, ignore_info=True, context=context)
                         image_url["url"] = cache_url
                     except Exception as e:
                         _log(f"Error caching inline image: {e}")
@@ -733,7 +733,7 @@ def cache_message_inline_data(m):
                     filename = f"audio.{fmt}"
 
                     try:
-                        cache_url, _ = save_bytes_to_cache(base64_data, filename, {}, ignore_info=True)
+                        cache_url, _ = save_audio_to_cache(base64_data, filename, {}, ignore_info=True, context=context)
                         input_audio["data"] = cache_url
                     except Exception as e:
                         _log(f"Error caching inline audio: {e}")
@@ -751,7 +751,7 @@ def cache_message_inline_data(m):
                             ext = file_ext_from_mimetype(mimetype)
                             filename = f"{filename}.{ext}"
 
-                        cache_url, info = save_bytes_to_cache(base64_data, filename)
+                        cache_url, info = save_bytes_to_cache(base64_data, filename, context=context)
                         file_info["file_data"] = cache_url
                         file_info["filename"] = info["name"]
                     except Exception as e:
@@ -767,7 +767,7 @@ class HTTPError(Exception):
         super().__init__(f"HTTP {status} {reason}")
 
 
-def save_bytes_to_cache(base64_data, filename, file_info=None, ignore_info=False):
+def save_bytes_to_cache(base64_data, filename, file_info=None, ignore_info=False, context=None):
     ext = filename.split(".")[-1]
     mimetype = get_file_mime_type(filename)
     content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
@@ -790,6 +790,7 @@ def save_bytes_to_cache(base64_data, filename, file_info=None, ignore_info=False
         return url, json_from_file(info_path)
 
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    user = context.get("user") if context else None
 
     with open(full_path, "wb") as f:
         f.write(content)
@@ -802,6 +803,8 @@ def save_bytes_to_cache(base64_data, filename, file_info=None, ignore_info=False
     }
     if file_info:
         info.update(file_info)
+    if user:
+        info["user"] = user
 
     # Save metadata
     info_path = os.path.splitext(full_path)[0] + ".info.json"
@@ -810,20 +813,21 @@ def save_bytes_to_cache(base64_data, filename, file_info=None, ignore_info=False
 
     _dbg(f"Saved cached bytes and info: {relative_path}")
 
-    g_app.on_cache_saved_filters({"url": url, "info": info})
+    user = context.get("user") if context else None
+    g_app.on_cache_saved_filters({"url": url, "info": info, "user": user})
 
     return url, info
 
 
-def save_audio_to_cache(base64_data, filename, audio_info, ignore_info=False):
-    return save_bytes_to_cache(base64_data, filename, audio_info, ignore_info)
+def save_audio_to_cache(base64_data, filename, audio_info, ignore_info=False, context=None):
+    return save_bytes_to_cache(base64_data, filename, audio_info, ignore_info, context)
 
 
-def save_video_to_cache(base64_data, filename, file_info, ignore_info=False):
-    return save_bytes_to_cache(base64_data, filename, file_info, ignore_info)
+def save_video_to_cache(base64_data, filename, file_info, ignore_info=False, context=None):
+    return save_bytes_to_cache(base64_data, filename, file_info, ignore_info, context)
 
 
-def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
+def save_image_to_cache(base64_data, filename, image_info, ignore_info=False, context=None):
     ext = filename.split(".")[-1]
     mimetype = get_file_mime_type(filename)
     content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
@@ -846,6 +850,7 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
         return url, json_from_file(info_path)
 
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    user = context.get("user") if context else None
 
     with open(full_path, "wb") as f:
         f.write(content)
@@ -857,6 +862,8 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
         "name": filename,
     }
     info.update(image_info)
+    if user:
+        info["user"] = user
 
     # If image, get dimensions
     if HAS_PIL and mimetype.startswith("image/"):
@@ -879,7 +886,7 @@ def save_image_to_cache(base64_data, filename, image_info, ignore_info=False):
 
     _dbg(f"Saved image and info: {relative_path}")
 
-    g_app.on_cache_saved_filters({"url": url, "info": info})
+    g_app.on_cache_saved_filters({"url": url, "info": info, "user": user})
 
     return url, info
 
@@ -1550,7 +1557,9 @@ def g_chat_request(template=None, text=None, model=None, system_prompt=None):
     return chat
 
 
-def tool_result_part(result: dict, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+def tool_result_part(
+    result: dict, function_name: Optional[str] = None, function_args: Optional[dict] = None, context=None
+):
     args = function_args or {}
     type = result.get("type")
     prompt = args.get("prompt") or args.get("text") or args.get("message")
@@ -1571,7 +1580,7 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
         if not base64_data:
             _dbg(f"Image data not found for {function_name}")
             return None, None
-        url, _ = save_image_to_cache(base64_data, filename, image_info=image_info, ignore_info=True)
+        url, _ = save_image_to_cache(base64_data, filename, image_info=image_info, ignore_info=True, context=context)
         resource = {
             "type": "image_url",
             "image_url": {
@@ -1593,7 +1602,7 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
         if not base64_data:
             _dbg(f"Audio data not found for {function_name}")
             return None, None
-        url, _ = save_audio_to_cache(base64_data, filename, audio_info=audio_info, ignore_info=True)
+        url, _ = save_audio_to_cache(base64_data, filename, audio_info=audio_info, ignore_info=True, context=context)
         resource = {
             "type": "audio_url",
             "audio_url": {
@@ -1618,7 +1627,7 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
         if not base64_data:
             _dbg(f"File data not found for {function_name}")
             return None, None
-        url, info = save_bytes_to_cache(base64_data, filename, file_info=file_info)
+        url, info = save_bytes_to_cache(base64_data, filename, file_info=file_info, context=context)
         resource = {
             "type": "file",
             "file": {
@@ -1640,20 +1649,20 @@ def tool_result_part(result: dict, function_name: Optional[str] = None, function
                 return None, None
 
 
-def g_tool_result(result, function_name: Optional[str] = None, function_args: Optional[dict] = None):
+def g_tool_result(result, function_name: Optional[str] = None, function_args: Optional[dict] = None, context=None):
     content = []
     resources = []
     args = function_args or {}
     _dbg(f"{function_name} tool result type: {type(result)}")
     if isinstance(result, dict):
-        text, res = tool_result_part(result, function_name, args)
+        text, res = tool_result_part(result, function_name, args, context)
         if text:
             content.append(text)
         if res:
             resources.append(res)
     elif isinstance(result, list):
         for item in result:
-            text, res = tool_result_part(item, function_name, args)
+            text, res = tool_result_part(item, function_name, args, context)
             if text:
                 content.append(text)
             if res:
@@ -1781,7 +1790,7 @@ def get_tool_property(function_name, prop_name):
     return None
 
 
-async def g_exec_tool(function_name, function_args):
+async def g_exec_tool(function_name, function_args, context=None):
     _log(f"g_exec_tool: {function_name}")
     if function_name in g_app.tools:
         try:
@@ -1792,9 +1801,9 @@ async def g_exec_tool(function_name, function_args):
             is_async = inspect.iscoroutinefunction(func)
             _dbg(f"Executing {'async' if is_async else 'sync'} tool '{function_name}' with args: {function_args}")
             if is_async:
-                return g_tool_result(await func(**function_args), function_name, function_args)
+                return g_tool_result(await func(**function_args), function_name, function_args, context)
             else:
-                return g_tool_result(func(**function_args), function_name, function_args)
+                return g_tool_result(func(**function_args), function_name, function_args, context)
         except Exception as e:
             return f"Error executing tool '{function_name}':\n{to_error_message(e)}", None
     return f"Error: Tool '{function_name}' not found", None
@@ -3222,14 +3231,23 @@ class ExtensionContext:
         return to_file_info(chat, info=info, response=response)
 
     def save_image_to_cache(
-        self, base64_data: Union[str, bytes], filename: str, image_info: Dict[str, Any], ignore_info: bool = False
+        self,
+        base64_data: Union[str, bytes],
+        filename: str,
+        image_info: Dict[str, Any],
+        ignore_info: bool = False,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
-        return save_image_to_cache(base64_data, filename, image_info, ignore_info=ignore_info)
+        return save_image_to_cache(base64_data, filename, image_info, ignore_info=ignore_info, context=context)
 
     def save_bytes_to_cache(
-        self, bytes_data: Union[str, bytes], filename: str, file_info: Optional[Dict[str, Any]]
+        self,
+        bytes_data: Union[str, bytes],
+        filename: str,
+        file_info: Optional[Dict[str, Any]],
+        context: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
-        return save_bytes_to_cache(bytes_data, filename, file_info)
+        return save_bytes_to_cache(bytes_data, filename, file_info, context=context)
 
     def text_from_file(self, path: str) -> str:
         return text_from_file(path)
@@ -3478,8 +3496,8 @@ class ExtensionContext:
     def should_cancel_thread(self, context: Dict[str, Any]) -> bool:
         return should_cancel_thread(context)
 
-    def cache_message_inline_data(self, message: Dict[str, Any]):
-        return cache_message_inline_data(message)
+    def cache_message_inline_data(self, message: Dict[str, Any], context: Optional[Dict[str, Any]] = None):
+        return cache_message_inline_data(message, context=context)
 
     async def exec_tool(self, name: str, args: Dict[str, Any]) -> Tuple[Optional[str], List[Dict[str, Any]]]:
         return await g_exec_tool(name, args)
@@ -4303,6 +4321,7 @@ def cli_exec(cli_args, extra_args):
             if not is_authenticated:
                 return web.json_response(g_app.error_auth_required, status=401)
 
+            user = g_app.get_username(request)
             reader = await request.multipart()
 
             # Read first file field
@@ -4357,6 +4376,8 @@ def cli_exec(cli_args, extra_args):
                 "type": mimetype,
                 "name": filename,
             }
+            if user:
+                response_data["user"] = user
 
             # If image, get dimensions
             if HAS_PIL and mimetype.startswith("image/"):
@@ -4372,7 +4393,7 @@ def cli_exec(cli_args, extra_args):
             with open(info_path, "w") as f:
                 json.dump(response_data, f)
 
-            g_app.on_cache_saved_filters({"url": url, "info": response_data})
+            g_app.on_cache_saved_filters({"url": url, "info": response_data, "user": user})
 
             return web.json_response(response_data)
 

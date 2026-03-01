@@ -119,6 +119,7 @@ def install_chutes(ctx):
                                 "steps": steps,
                             },
                         ),
+                        context=context,
                     )
                     return {
                         "choices": [

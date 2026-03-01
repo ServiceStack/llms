@@ -521,6 +521,7 @@ def install_google(ctx):
                                         base64_data,
                                         filename,
                                         ctx.to_file_info(chat, {"cost": cost}),
+                                        context=context,
                                     )
                                     images.append(
                                         {

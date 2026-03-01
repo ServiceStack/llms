@@ -89,6 +89,7 @@ def install_openai(ctx):
                             image_data,
                             f"{chat['model']}-{i}.{ext}",
                             ctx.to_file_info(chat),
+                            context=context,
                         )
                         images.append(
                             {

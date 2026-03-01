@@ -33,7 +33,7 @@ def install_openrouter(ctx):
                                 model = chat["model"].split("/")[-1]
                                 filename = f"{model}-{choice['index']}.{ext}"
                                 relative_url, info = ctx.save_image_to_cache(
-                                    base64_data, filename, ctx.to_file_info(chat, {"cost": cost})
+                                    base64_data, filename, ctx.to_file_info(chat, {"cost": cost}), context=context
                                 )
                                 image["image_url"]["url"] = relative_url
 
