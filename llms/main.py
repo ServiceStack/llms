@@ -3831,6 +3831,9 @@ def cli_exec(cli_args, extra_args):
 
     verify_root_path()
 
+    if cli_args.auth:
+        LLMS_AUTH = cli_args.auth
+
     g_app = AppExtensions(cli_args, extra_args)
 
     # Check for verbose mode from CLI argument or environment variables
@@ -3866,9 +3869,6 @@ def cli_exec(cli_args, extra_args):
             asyncio.run(save_text_url(github_url("providers-extra.json"), home_providers_extra_path))
             print(f"Created default extra providers config at {home_providers_extra_path}")
         return ExitCode.SUCCESS
-
-    if cli_args.auth:
-        LLMS_AUTH = cli_args.auth
 
     if cli_args.providers:
         if not os.path.exists(cli_args.providers):
