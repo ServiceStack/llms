@@ -27,7 +27,7 @@
         "--tw-prose-code": "#eceff4",
         "--tw-prose-code-bg": "#3b4252",
         "--tw-prose-code-border": "#5e81ac",
-        "--tw-prose-table-bg": "#2e344066",
+        "--tw-prose-table-bg": "#2e344099",
         "--tw-prose-th-bg": "#5e81ac",
         "--tw-prose-th-borders": "#5e81ac",
         "--tw-prose-td-borders": "#5e81ac"

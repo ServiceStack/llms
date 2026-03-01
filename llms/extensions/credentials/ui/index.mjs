@@ -108,7 +108,7 @@ const ManageUsersPage = {
                 </div>
                 <div class="flex items-center gap-2">
                     <input type="checkbox" id="newUserAdmin" v-model="newUser.isAdmin"
-                        class="rounded" />
+                        :class="[$styles.borderInput, $styles.textInput, $styles.checkbox]" />
                     <label for="newUserAdmin" class="text-sm" :class="[$styles.labelInput]">Admin</label>
                 </div>
                 <div class="flex gap-3">
