@@ -24,7 +24,7 @@ llms --serve 8000
 
 When you start the server, authentication will now be enabled since at least one user exists and you'll be presented with the Sign In page. 
 
-<Screenshot src="/img/auth/signin.webp" alt="Sign In Page" />
+![Sign In Page](https://llmspy.org/img/auth/signin.webp)
 
 After logging in as `admin`, you can create additional users from the **Manage Users** page which can be accessed from the user menu. Only users with the `Admin` role can access the **Manage Users** page.
 
@@ -45,7 +45,7 @@ After signing in, the user avatar dropdown shows:
 - **My Account** link
 - **Sign Out** button
 
-<Screenshot src="/img/auth/manage-users.webp" alt="Manage Users Page" />
+![Manage Users Page](https://llmspy.org/img/auth/manage-users.webp)
 
 ### Manage Users (Admin only)
 
@@ -68,12 +68,10 @@ users showing:
 - **Unlock** - Restore a locked account
 - **Delete** - Permanently remove the account with confirmation (cannot delete yourself)
 
-<ScreenshotsGallery className="mb-8" gridClass="grid grid-cols-1 md:grid-cols-2 gap-4" images={{
-    'Create User': '/img/auth/create-user.webp',
-    'Change Password': '/img/auth/change-password.webp',
-    'Lock User': '/img/auth/lock-user.webp',
-    'Delete User': '/img/auth/delete-user.webp',
-}} />
+![Create User](https://llmspy.org/img/auth/create-user.webp)
+![Change Password](https://llmspy.org/img/auth/change-password.webp)
+![Lock User](https://llmspy.org/img/auth/lock-user.webp)
+![Delete User](https://llmspy.org/img/auth/delete-user.webp)
 
 **Create User** - Click "New User" to create accounts with a username, password,
 and optional Admin role.
@@ -84,15 +82,15 @@ Accessible at `/account` for all authenticated users. Shows your profile
 information (avatar, username, roles) and provides a **Change Password** button
 that requires your current password for verification.
 
-<Screenshot src="/img/auth/my-account.webp" alt="My Account Page" />
+![My Account Page](https://llmspy.org/img/auth/my-account.webp)
 
 Users can also change their avatar by clicking on their profile picture and uploading a new image:
 
-<Screenshot src="/img/auth/settings-avatar.webp" alt="Settings Page" />
+![Settings Page](https://llmspy.org/img/auth/settings-avatar.webp)
 
 After uploading, the new avatar is displayed across the app, including the user menu and My Account page:
 
-<Screenshot src="/img/auth/my-account-avatar.webp" alt="Custom Avatar" />
+![Custom Avatar](https://llmspy.org/img/auth/my-account-avatar.webp)
 
 ## CLI Commands
 
