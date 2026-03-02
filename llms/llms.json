@@ -427,7 +427,8 @@
             "enabled": true
         },
         "fireworks-ai": {
-            "enabled": true
+            "enabled": true,
+            "npm": "@fireworks/ai-sdk-provider"
         },
         "openrouter": {
             "enabled": true,

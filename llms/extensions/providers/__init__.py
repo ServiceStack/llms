@@ -1,6 +1,7 @@
 from .anthropic import install_anthropic
 from .cerebras import install_cerebras
 from .chutes import install_chutes
+from .fireworks import install_fireworks
 from .google import install_google
 from .mistral import install_mistral
 from .nvidia import install_nvidia
@@ -13,6 +14,7 @@ def install(ctx):
     install_anthropic(ctx)
     install_cerebras(ctx)
     install_chutes(ctx)
+    install_fireworks(ctx)
     install_google(ctx)
     install_mistral(ctx)
     install_nvidia(ctx)
