@@ -1,4 +1,72 @@
 {
+    "fireworks-ai": {
+        "models": {
+            "fireworks/flux-kontext-pro": {
+                "name": "FLUX.1 Kontext Pro",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.04,
+                    "type": "per_image"
+                }
+            },
+            "fireworks/flux-kontext-max": {
+                "name": "FLUX.1 Kontext Max",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.08,
+                    "type": "per_image"
+                }
+            },
+            "fireworks/flux-1-dev-fp8": {
+                "name": "FLUX.1 Dev FP8",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.0005,
+                    "type": "per_step"
+                }
+            },
+            "fireworks/flux-1-schnell-fp8": {
+                "name": "FLUX.1 [schnell] FP8",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.00035,
+                    "type": "per_step"
+                }
+            }
+        }
+    },
     "google": {
         "models": {
             "gemini-3.1-flash-image-preview": {
