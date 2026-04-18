@@ -21,7 +21,7 @@
         "chromeBorder": "border-slate-300",
         "appInner": "bg-white/50",
         "bgBody": "bg-white",
-        "bgSidebar": "bg-slate-50/10",
+        "bgSidebar": "bg-slate-50 lg:bg-slate-50/10",
         "bgChat": "bg-slate-50/50",
         "bgPage": "",
         "heading": "text-slate-900",

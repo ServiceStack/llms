@@ -29,7 +29,7 @@
         "chromeBorder": "border-blue-500/60",
         "appInner": "bg-black/50",
         "bgBody": "bg-black/20",
-        "bgSidebar": "bg-black/50 border-r border-blue-500/30",
+        "bgSidebar": "bg-black lg:bg-black/50 border-r border-blue-500/30",
         "bgChat": "bg-transparent",
         "bgPage": "",
         "bgInput": "bg-blue-950/80 focus:bg-black/70",

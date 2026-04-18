@@ -54,7 +54,7 @@
         "chromeBorder": "border-frost-700/80",
         "appInner": "bg-black/30",
         "bgBody": "bg-nord-900/30",
-        "bgSidebar": "bg-nord-900/50",
+        "bgSidebar": "bg-nord-900 lg:bg-nord-900/50",
         "bgChat": "bg-nord-900/50",
         "bgPage": "",
         "bgSuccess": "bg-nord-green text-nord-900",

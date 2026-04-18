@@ -425,7 +425,7 @@ export const o = {
             "link": "text-blue-600 hover:text-blue-400",
             "linkHover": "hover:text-blue-400 group-hover:text-blue-400",
             "bgBody": "bg-gray-900",
-            "bgSidebar": "bg-gray-800/50",
+            "bgSidebar": "bg-gray-800 lg:bg-gray-800/50",
             "bgChat": "bg-gray-800",
             "bgPage": "bg-gray-900",
             "bgSuccess": "bg-green-900 text-green-200",

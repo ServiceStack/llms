@@ -38,7 +38,7 @@
         "highlighted": "text-pink-900 font-medium",
         "linkHover": "hover:text-pink-600 group-hover:text-pink-600",
         "bgBody": "bg-pink-50/30 backdrop-blur-md",
-        "bgSidebar": "bg-pink-100/60 backdrop-blur-md",
+        "bgSidebar": "bg-pink-100 lg:bg-pink-100/60 backdrop-blur-md",
         "bgChat": "bg-white/50",
         "bgPage": "bg-pink-50/40",
         "bgInput": "bg-white shadow-sm",

@@ -27,7 +27,7 @@
         "link": "text-sky-500 hover:text-sky-600",
         "linkHover": "hover:text-sky-600 group-hover:text-sky-600",
         "bgBody": "bg-white",
-        "bgSidebar": "bg-sky-50/40",
+        "bgSidebar": "bg-sky-50 lg:bg-sky-50/40",
         "bgChat": "bg-white/40",
         "bgPage": "bg-white/40",
         "heading": "text-sky-900",

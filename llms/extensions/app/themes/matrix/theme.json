@@ -39,7 +39,7 @@
         "linkHover": "hover:text-green-300 hover:underline",
         "appInner": "bg-black/80 font-mono",
         "bgBody": "bg-black/40",
-        "bgSidebar": "bg-black/60",
+        "bgSidebar": "bg-black lg:bg-black/60",
         "bgChat": "bg-transparent",
         "bgPage": "",
         "dialog": "shadow-xl bg-black/60 border border-green-500/50",
