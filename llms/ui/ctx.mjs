@@ -1,6 +1,6 @@
 
 import { reactive, markRaw } from 'vue'
-import { EventBus, humanize, combinePaths } from "@servicestack/client"
+import { EventBus, humanize, combinePaths, pick } from "@servicestack/client"
 import { storageObject, isHtml, sanitizeHtml } from './utils.mjs'
 
 export class ExtensionScope {
@@ -141,6 +141,7 @@ export class AppContext {
             cacheBreaker: new Date().getTime(),
             theme,
             styles: theme.styles,
+            profile: localStorage.getItem('llms.profile') || 'default',
         })
         this.events = new EventBus()
         this.modalComponents = {}
@@ -158,7 +159,18 @@ export class AppContext {
         this.left = {}
         this.leftTop = {}
         this.layout = reactive(storageObject(`llms.layout`))
-        this.prefs = reactive(storageObject(ai.prefsKey))
+
+        const oldPrefsKey = ai.prefsKey
+        const prefsKey = ai.prefsKey + '.' + this.state.profile
+        if (localStorage.getItem(oldPrefsKey)) {
+            if (!localStorage.getItem(prefsKey)) {
+                const oldPrefs = storageObject(oldPrefsKey)
+                storageObject(prefsKey, oldPrefs)
+            }
+            localStorage.removeItem(oldPrefsKey)
+        }
+        this.prefs = reactive(storageObject(prefsKey))
+
         this._onRouterBeforeEach = []
         this._onClass = []
 
@@ -204,9 +216,7 @@ export class AppContext {
         let html = document.documentElement
         html.classList.toggle('dark', darkMode)
         html.style.setProperty('color-scheme', darkMode ? 'dark' : null)
-        if (localStorage.getItem('color-scheme') === null) {
-            localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
-        }
+        localStorage.setItem('color-scheme', darkMode ? 'dark' : 'light')
     }
     getUserAvatar() {
         const theme = this.getPrefs().theme || this.getColorScheme()
@@ -219,11 +229,30 @@ export class AppContext {
     incCacheBreaker() {
         this.state.cacheBreaker++
     }
+    getPrefsKey() {
+        return this.ai.prefsKey + '.' + this.state.profile
+    }
+    changeProfile(profile) {
+        console.log('changeProfile', JSON.stringify(profile, null, 2))
+        this.selectTheme(profile?.theme)
+
+        const profileId = profile?.id || 'default'
+        if (this.state.profile == profileId) return
+        this.state.profile = profileId
+        if (profile) {
+            const profilePrefs = pick(profile, ['model', 'tools', 'skills'])
+            this.setPrefs(profilePrefs)
+            if (profile.model) {
+                this.state.selectedModel = model
+            }
+        }
+        this.prefs = reactive(storageObject(this.getPrefsKey()))
+    }
     getPrefs() {
         return this.prefs
     }
     setPrefs(o) {
-        storageObject(this.ai.prefsKey, Object.assign(this.prefs, o))
+        storageObject(this.getPrefsKey(), Object.assign(this.prefs, o))
     }
     _validateComponents(componentMap) {
         Object.entries(componentMap).forEach(([id, def]) => {
@@ -546,6 +575,7 @@ export class AppContext {
     }
 
     changeTheme(theme) {
+        console.log('changeTheme', theme)
 
         const fullTheme = this.createTheme(theme)
         Object.assign(this.state.theme, fullTheme)
