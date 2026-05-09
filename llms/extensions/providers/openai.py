@@ -151,7 +151,16 @@ def install_openai(ctx):
                     if response.status < 300:
                         return ctx.log_json(await self.to_response(json.loads(text), chat, started_at, context=context))
                     else:
-                        raise Exception(f"Failed to generate image {response.status}")
+                        error_message = None
+                        try:
+                            error_response = json.loads(text)
+                            error_message = error_response.get("error", {}).get("message", "")
+                        except Exception:
+                            pass
+                        if error_message:
+                            raise Exception(error_message)
+                        else:
+                            raise Exception(f"Failed to generate image {response.status}: {text}")
 
     ctx.add_provider(OpenAiProvider)
     ctx.add_provider(OpenAiGenerator)
