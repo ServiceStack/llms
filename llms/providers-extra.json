@@ -89,6 +89,54 @@
     },
     "openrouter": {
         "models": {
+            "recraft/recraft-v4-pro": {
+                "name": "Recraft V4 Pro",
+                "release_date": "2026-05-08",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.25
+                }
+            },
+            "recraft/recraft-v4": {
+                "name": "Recraft V4",
+                "release_date": "2026-05-07",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.04
+                }
+            },
+            "recraft/recraft-v3": {
+                "name": "Recraft V3",
+                "release_date": "2026-05-06",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.04
+                }
+            },
             "google/gemini-3.1-flash-image-preview": {
                 "name": "Gemini 3.1 Flash Image (Nano Banana 2)",
                 "release_date": "2026-02-26",
@@ -139,6 +187,7 @@
             },
             "sourceful/riverflow-v2-fast-preview": {
                 "name": "Sourceful: Riverflow V2 Fast Preview",
+                "release_date": "2026-02-03",
                 "modalities": {
                     "input": [
                         "text"
@@ -154,6 +203,7 @@
             },
             "sourceful/riverflow-v2-standard-preview": {
                 "name": "Sourceful: Riverflow V2 Standard Preview",
+                "release_date": "2025-12-09",
                 "modalities": {
                     "input": [
                         "text"
@@ -169,6 +219,7 @@
             },
             "sourceful/riverflow-v2-max-preview": {
                 "name": "Sourceful: Riverflow V2 Max Preview",
+                "release_date": "2025-12-09",
                 "modalities": {
                     "input": [
                         "text"
@@ -182,8 +233,9 @@
                     "output": 17.96
                 }
             },
-            "openai/gpt-5-image-mini": {
-                "name": "OpenAI: GPT-5 Image Mini",
+            "openai/gpt-5.4-image-2": {
+                "name": "OpenAI: GPT-5.4 Image 2",
+                "release_date": "2026-04-22",
                 "modalities": {
                     "input": [
                         "text"
@@ -193,12 +245,13 @@
                     ]
                 },
                 "cost": {
-                    "input": 2.50,
-                    "output": 2
+                    "input": 8.0,
+                    "output": 15.0
                 }
             },
             "openai/gpt-5-image": {
                 "name": "OpenAI: GPT-5 Image",
+                "release_date": "2025-10-14",
                 "modalities": {
                     "input": [
                         "text"
@@ -212,8 +265,9 @@
                     "output": 10.0
                 }
             },
-            "black-forest-labs/flux.2-pro": {
-                "name": "Black Forest Labs: FLUX.2 Pro",
+            "openai/gpt-5-image-mini": {
+                "name": "OpenAI: GPT-5 Image Mini",
+                "release_date": "2025-10-16",
                 "modalities": {
                     "input": [
                         "text"
@@ -223,12 +277,13 @@
                     ]
                 },
                 "cost": {
-                    "input": 3.66,
-                    "output": 3.66
+                    "input": 2.50,
+                    "output": 2
                 }
             },
             "black-forest-labs/flux.2-max": {
                 "name": "Black Forest Labs: FLUX.2 Max",
+                "release_date": "2025-12-16",
                 "modalities": {
                     "input": [
                         "text"
@@ -242,8 +297,25 @@
                     "output": 7.32
                 }
             },
+            "black-forest-labs/flux.2-pro": {
+                "name": "Black Forest Labs: FLUX.2 Pro",
+                "release_date": "2025-11-25",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 3.66,
+                    "output": 3.66
+                }
+            },
             "black-forest-labs/flux.2-flex": {
                 "name": "Black Forest Labs: FLUX.2 Flex",
+                "release_date": "2025-11-25",
                 "modalities": {
                     "input": [
                         "text"
@@ -276,8 +348,41 @@
                     "output": 32.0
                 }
             },
+            "gpt-image-1-mini": {
+                "name": "GPT Image 1 Mini",
+                "release_date": "2025-10-16",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 5.0,
+                    "output": 8.0
+                }
+            },
+            "gpt-image-2": {
+                "name": "GPT Image 2",
+                "release_date": "2026-04-22",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 8.0,
+                    "output": 15.0
+                }
+            },
             "gpt-image-1.5": {
                 "name": "GPT Image 1.5",
+                "release_date": "2025-10-16",
                 "modalities": {
                     "input": [
                         "text"
@@ -293,6 +398,7 @@
             },
             "gpt-image-1": {
                 "name": "GPT Image 1",
+                "release_date": "2025-10-14",
                 "modalities": {
                     "input": [
                         "text"
@@ -304,21 +410,6 @@
                 "cost": {
                     "input": 5.0,
                     "output": 40.0
-                }
-            },
-            "gpt-image-1-mini": {
-                "name": "GPT Image 1 Mini",
-                "modalities": {
-                    "input": [
-                        "text"
-                    ],
-                    "output": [
-                        "image"
-                    ]
-                },
-                "cost": {
-                    "input": 5.0,
-                    "output": 8.0
                 }
             }
         }
