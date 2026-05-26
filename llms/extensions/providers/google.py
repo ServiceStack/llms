@@ -432,7 +432,7 @@ def install_google(ctx):
                                     ctx.err("Failed to parse error response:\n" + text, parseEx)
                                     raise e from None
                             else:
-                                ctx.err(f"Request failed: {str(e)}")
+                                ctx.err(f"Request failed: {str(e)}", e)
                                 raise e from None
 
                     if "error" in obj:
