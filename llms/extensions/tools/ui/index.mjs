@@ -568,14 +568,14 @@ const ToolSelector = {
                 <div class="flex items-center gap-2">
                     <button @click="$ctx.setPrefs({ onlyTools: null })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
-                        :class="prefs.onlyTools == null
+                        :class="$prefs.onlyTools == null
                             ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-300 dark:border-green-800' 
                             : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
                         All Tools
                     </button>
                     <button @click="$ctx.setPrefs({ onlyTools:[] })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
-                        :class="prefs.onlyTools?.length === 0
+                        :class="$prefs.onlyTools?.length === 0
                             ? 'bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800' 
                             : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
                         No Tools
@@ -584,7 +584,7 @@ const ToolSelector = {
             </div>
 
             <!-- Groups -->
-            <div class="space-y-3">
+            <div class="space-y-3" :key="renderKey">
                 <div v-for="group in toolGroups" :key="group.name" 
                      class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                      
@@ -646,7 +646,7 @@ const ToolSelector = {
         const ctx = inject('ctx')
         const collapsedState = ref({})
 
-        const prefs = computed(() => ctx.prefs)
+        const renderKey = ref(0)
 
         const toolGroups = computed(() => {
             const defs = ctx.tools.availableTools.value
@@ -684,7 +684,8 @@ const ToolSelector = {
 
         function setGroupTools(group, enable) {
             const groupToolNames = group.tools.map(t => t.function.name)
-            let onlyTools = prefs.value.onlyTools
+            let onlyTools = ctx.prefs.onlyTools
+            console.log('setGroupTools-1', group.name, enable, JSON.stringify(onlyTools))
 
             if (enable) {
                 if (onlyTools == null) return
@@ -703,18 +704,20 @@ const ToolSelector = {
                     onlyTools = onlyTools.filter(n => !groupToolNames.includes(n))
                 }
             }
+            console.log('setGroupTools+1', group.name, enable, JSON.stringify(onlyTools))
 
             ctx.setPrefs({ onlyTools })
+            renderKey.value++
         }
 
         function getActiveCount(group) {
-            const onlyTools = prefs.value.onlyTools
+            const onlyTools = ctx.prefs.onlyTools
             if (onlyTools == null) return group.tools.length
             return group.tools.filter(t => onlyTools.includes(t.function.name)).length
         }
 
         return {
-            prefs,
+            renderKey,
             toolGroups,
             toggleCollapse,
             isCollapsed,
