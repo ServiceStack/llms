@@ -564,6 +564,49 @@ async def process_chat(chat, provider_id=None):
     if "messages" not in chat:
         return chat
 
+    # Normalize reasoning/thinking fields for assistant messages in history to match provider/model requirements
+    expected_field = None
+    if provider_id and provider_id in g_handlers:
+        provider = g_handlers[provider_id]
+        model = chat.get("model")
+        if model:
+            # Try to get model_info (normalizing quotes just in case)
+            model_info = provider.model_info(model) or provider.model_info(f"'{model}'")
+            if model_info and "interleaved" in model_info:
+                interleaved = model_info["interleaved"]
+                if isinstance(interleaved, dict):
+                    expected_field = interleaved.get("field")
+                elif interleaved is True:
+                    expected_field = "reasoning_content"
+            
+            # Fallback based on model and provider names
+            if not expected_field:
+                model_lower = model.lower()
+                provider_lower = provider_id.lower()
+                if "deepseek" in model_lower or "deepseek" in provider_lower:
+                    expected_field = "reasoning_content"
+                elif "anthropic" in provider_lower or "claude" in model_lower:
+                    expected_field = "thinking"
+                elif "minimax" in provider_lower or "minimax" in model_lower:
+                    expected_field = "thinking"
+
+    for message in chat["messages"]:
+        if message.get("role") == "assistant":
+            # Extract any thinking/reasoning value
+            thinking_val = None
+            for key in ["reasoning_content", "reasoning", "thinking", "reasoning_details"]:
+                if key in message and message[key]:
+                    thinking_val = message[key]
+                    break
+            
+            # Clean up all reasoning/thinking fields to prevent validation issues on standard models
+            for key in ["reasoning_content", "reasoning", "thinking", "reasoning_details"]:
+                message.pop(key, None)
+            
+            # Set the normalized key if the model supports it
+            if thinking_val is not None and expected_field:
+                message[expected_field] = thinking_val
+
     async with aiohttp.ClientSession() as session:
         for message in chat["messages"]:
             if "content" not in message:
