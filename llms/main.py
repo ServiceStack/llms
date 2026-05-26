@@ -828,6 +828,10 @@ def save_video_to_cache(base64_data, filename, file_info, ignore_info=False, con
 
 
 def save_image_to_cache(base64_data, filename, image_info, ignore_info=False, context=None):
+    # replace .svg+xml with .svg
+    if filename.endswith("+xml"):
+        filename = filename[:-4]
+
     ext = filename.split(".")[-1]
     mimetype = get_file_mime_type(filename)
     content = base64.b64decode(base64_data) if isinstance(base64_data, str) else base64_data
