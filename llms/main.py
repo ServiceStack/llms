@@ -4505,7 +4505,9 @@ def cli_exec(cli_args, extra_args):
                     },
                 )
             elif "variant" in request.query:
-                if mimetype.startswith("image/"):
+                if "svg" in mimetype:
+                    return web.FileResponse(full_path, headers={"Content-Type": mimetype})
+                elif mimetype.startswith("image/"):
                     variant = request.query.get("variant", "")
                     w, h = None, None
                     for part in variant.split(","):
