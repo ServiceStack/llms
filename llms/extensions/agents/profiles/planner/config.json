@@ -1,0 +1,36 @@
+{
+    "theme": "dark",
+    "model": "Kimi K2.6",
+    "onlyTools": [
+        "get_current_time",
+        "calc",
+        "run_python",
+        "run_typescript",
+        "run_javascript",
+        "run_csharp",
+        "skill",
+        "run_bash",
+        "open",
+        "edit",
+        "computer",
+        "read_text_file",
+        "read_media_file",
+        "read_multiple_files",
+        "write_file",
+        "edit_file",
+        "create_directory",
+        "list_directory",
+        "list_directory_with_sizes",
+        "directory_tree",
+        "move_file",
+        "search_files",
+        "get_file_info",
+        "list_allowed_directories"
+    ],
+    "onlySkills": [],
+    "actions": {
+        "Execute Plan": {
+            "profile": "coder"
+        }
+    }
+}
