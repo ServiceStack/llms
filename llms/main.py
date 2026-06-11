@@ -25,7 +25,7 @@ import sys
 import tempfile
 import time
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum, IntEnum
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import (
     Annotated,
     Any,
+    Awaitable,
     Callable,
     Dict,
     List,
@@ -75,6 +76,7 @@ g_handlers = {}
 g_verbose = False
 g_logprefix = ""
 g_default_model = ""
+g_user_prefs = {}
 g_app = None  # ExtensionsContext Singleton
 
 
@@ -578,16 +580,19 @@ async def process_chat(chat, provider_id=None):
                     expected_field = interleaved.get("field")
                 elif interleaved is True:
                     expected_field = "reasoning_content"
-            
+
             # Fallback based on model and provider names
             if not expected_field:
                 model_lower = model.lower()
                 provider_lower = provider_id.lower()
                 if "deepseek" in model_lower or "deepseek" in provider_lower:
                     expected_field = "reasoning_content"
-                elif "anthropic" in provider_lower or "claude" in model_lower:
-                    expected_field = "thinking"
-                elif "minimax" in provider_lower or "minimax" in model_lower:
+                elif (
+                    "anthropic" in provider_lower
+                    or "claude" in model_lower
+                    or "minimax" in provider_lower
+                    or "minimax" in model_lower
+                ):
                     expected_field = "thinking"
 
     for message in chat["messages"]:
@@ -598,11 +603,11 @@ async def process_chat(chat, provider_id=None):
                 if key in message and message[key]:
                     thinking_val = message[key]
                     break
-            
+
             # Clean up all reasoning/thinking fields to prevent validation issues on standard models
             for key in ["reasoning_content", "reasoning", "thinking", "reasoning_details"]:
                 message.pop(key, None)
-            
+
             # Set the normalized key if the model supports it
             if thinking_val is not None and expected_field:
                 message[expected_field] = thinking_val
@@ -1149,8 +1154,6 @@ class GeneratorBase:
 
 
 # OpenAI Providers
-
-
 class OpenAiCompatible:
     sdk = "@ai-sdk/openai-compatible"
 
@@ -1303,7 +1306,20 @@ class OpenAiCompatible:
         return chat_summary(chat)
 
     async def process_chat(self, chat, provider_id=None):
-        return await process_chat(chat, provider_id)
+        ret = await process_chat(chat, provider_id)
+        messages = ret.get("messages", [])
+        if messages:
+            cleaned_messages = []
+            for message in messages:
+                msg = message.copy()
+                msg.pop("timestamp", None)
+                msg.pop("model", None)
+                msg.pop("usage", None)
+                cleaned_messages.append(msg)
+            ret["messages"] = cleaned_messages
+        if provider_id == "nvidia" or self.id == "nvidia":
+            ret.pop("modalities", None)
+        return ret
 
     async def chat(self, chat, context=None):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
@@ -2935,6 +2951,35 @@ def get_client_timeout(app=None):
     return aiohttp.ClientTimeout(total=timeout)
 
 
+def get_user_prefs(user: Optional[str] = None):
+    user_dir = user or "default"
+    if user_dir not in g_user_prefs:
+        prefs_path = Path(g_app.get_user_path(user_dir)) / "prefs.json"
+        if prefs_path.is_file():
+            with open(prefs_path, encoding="utf-8") as f:
+                g_user_prefs[user_dir] = json.load(f)
+        else:
+            g_user_prefs[user_dir] = {}
+    return g_user_prefs[user_dir]
+
+
+def set_user_pref(key: str, value, user: Optional[str] = None):
+    user_prefs = get_user_prefs(user=user)
+    user_prefs[key] = value
+    user_dir = user or "default"
+    prefs_path = Path(g_app.get_user_path(user_dir)) / "prefs.json"
+    prefs_path.parent.mkdir(exist_ok=True)
+    with open(prefs_path, "w", encoding="utf-8") as f:
+        json.dump(user_prefs, f, indent=2)
+
+
+def get_project_paths(user: Optional[str] = None):
+    project = get_user_prefs(user=user).get("project", None)
+    if project:
+        return [project]
+    return []
+
+
 class AppExtensions:
     """
     APIs extensions can use to extend the app
@@ -2968,10 +3013,13 @@ class AppExtensions:
         self.tool_groups = {}
         self.index_headers = []
         self.index_footers = []
-        self.allowed_directories = []
+        self.aliased_directories = {}
+        self.allowed_directories = {}
         self.auth_provider = None
         self.sessions = {}  # OAuth session storage: {session_token: {userId, userName, displayName, profileUrl, email, created}}
         self.oauth_states = {}  # CSRF protection: {state: {created, redirect_uri}}
+        self.last_seen = {}  # User last seen {user: timestamp}
+        self.setup_user_handlers = []
         self.request_args = {
             "image_config": dict,  # e.g. { "aspect_ratio": "1:1" }
             "temperature": float,  # e.g: 0.7
@@ -3033,21 +3081,48 @@ class AppExtensions:
     def get_client_timeout(self):
         return get_client_timeout(self)
 
+    def abspath(self, path: str):
+        return path if path.startswith("$") else os.path.abspath(path)
+
     def set_allowed_directories(
-        self, directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]]
+        self,
+        directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]],
+        user: Optional[str] = None,
     ) -> None:
         """Set the list of allowed directories."""
-        self.allowed_directories = [os.path.abspath(d) for d in directories]
+        if not user:
+            user = "default"
+        self.allowed_directories[user] = [self.abspath(d) for d in directories]
 
-    def add_allowed_directory(self, path: str) -> None:
+    def add_allowed_directory(self, path: str, user: Optional[str] = None) -> None:
         """Add an allowed directory."""
-        abs_path = os.path.abspath(path)
-        if abs_path not in self.allowed_directories:
-            self.allowed_directories.append(abs_path)
+        abs_path = self.abspath(path)
+        if not user:
+            user = "default"
+        if user not in self.allowed_directories:
+            self.allowed_directories[user] = []
+        if abs_path not in self.allowed_directories[user]:
+            self.allowed_directories[user].append(abs_path)
 
-    def get_allowed_directories(self) -> List[str]:
+    def get_allowed_directories(self, user: Optional[str] = None) -> List[str]:
         """Get the list of allowed directories."""
-        return self.allowed_directories
+        if not user:
+            user = "default"
+        return self.allowed_directories.get(user, [])
+
+    def resolve_allowed_directories(self, user: Optional[str] = None) -> List[str]:
+        """Resolve aliases in the list of allowed directories."""
+        allowed_dirs = self.get_allowed_directories(user)
+        ret = []
+        for dir in allowed_dirs:
+            if dir.startswith("$"):
+                if dir in self.aliased_directories:
+                    ret.append(self.aliased_directories.get(dir))
+                else:
+                    _log(f"Alias '{dir}' not found")
+            else:
+                ret.append(dir)
+        return ret
 
     def enabled_auth(self) -> str:
         """Get the enabled auth extension."""
@@ -3099,6 +3174,22 @@ class AppExtensions:
         if user:
             return home_llms_path(os.path.join("user", user))
         return home_llms_path(os.path.join("user", "default"))
+
+    def register_setup_user_handler(self, handler: Callable[[web.Request], Awaitable[None]]) -> None:
+        """Register a handler to setup a user for the first time."""
+        self.setup_user_handlers.append(handler)
+
+    async def on_request(self, request: web.Request):
+        user = self.get_username(request)
+        username = user or "default"
+        now = datetime.now(UTC)
+        first_time = username not in self.last_seen
+        if user:
+            self.last_seen[username] = now
+        if first_time:
+            _log(f"First time request from user '{username}' at {now:%F %T}")
+            for handler in self.setup_user_handlers:
+                await handler(request)
 
     def get_providers(self) -> Dict[str, Any]:
         return g_handlers
@@ -3188,6 +3279,15 @@ class AppExtensions:
                 return tool_def
         return None
 
+    def get_user_prefs(self, user: Optional[str] = None):
+        return get_user_prefs(user=user)
+
+    def get_user_pref(self, key: str, user: Optional[str] = None):
+        return get_user_prefs(user=user).get(key, None)
+
+    def set_user_pref(self, key: str, value, user: Optional[str] = None):
+        set_user_pref(key=key, value=value, user=user)
+
 
 def handler_name(handler):
     if hasattr(handler, "__name__"):
@@ -3247,18 +3347,20 @@ class ExtensionContext:
         return self.app.check_auth(request)
 
     def set_allowed_directories(
-        self, directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]]
+        self,
+        directories: List[Annotated[str, "List of absolute paths that are allowed to be accessed."]],
+        user: Optional[str] = None,
     ) -> None:
-        """Set the list of allowed directories."""
-        self.app.set_allowed_directories(directories)
+        self.app.set_allowed_directories(directories, user)
 
-    def add_allowed_directory(self, path: str) -> None:
-        """Add an allowed directory."""
-        self.app.add_allowed_directory(path)
+    def add_allowed_directory(self, path: str, user: Optional[str] = None) -> None:
+        self.app.add_allowed_directory(path, user)
 
-    def get_allowed_directories(self) -> List[str]:
-        """Get the list of allowed directories."""
-        return self.app.get_allowed_directories()
+    def get_allowed_directories(self, user: Optional[str] = None) -> List[str]:
+        return self.app.get_allowed_directories(user)
+
+    def resolve_allowed_directories(self, user: Optional[str] = None) -> List[str]:
+        return self.app.resolve_allowed_directories(user)
 
     def chat_to_prompt(self, chat: Dict[str, Any]) -> str:
         return chat_to_prompt(chat)
@@ -3371,6 +3473,10 @@ class ExtensionContext:
     def register_shutdown_handler(self, handler: Callable):
         self.log(f"Registered shutdown handler: {handler_name(handler)}")
         self.app.shutdown_handlers.append(handler)
+
+    def register_setup_user_handler(self, handler: Callable[[web.Request], Awaitable[None]]) -> None:
+        self.log(f"Registered setup user handler: {handler_name(handler)}")
+        self.app.setup_user_handlers.append(handler)
 
     def add_static_files(self, ext_dir: str):
         self.log(f"Registered static files: {ext_dir}")
@@ -3534,6 +3640,15 @@ class ExtensionContext:
 
     def get_user_path(self, user: Optional[str] = None) -> str:
         return self.app.get_user_path(user)
+
+    def get_user_prefs(self, user: Optional[str] = None):
+        return self.app.get_user_prefs(user=user)
+
+    def get_user_pref(self, key: str, user: Optional[str] = None):
+        return self.app.get_user_pref(key=key, user=user)
+
+    def set_user_pref(self, key: str, value, user: Optional[str] = None):
+        self.app.set_user_pref(key=key, value=value, user=user)
 
     def context_to_username(self, context: Optional[Dict[str, Any]]) -> Optional[str]:
         if context and "request" in context:
@@ -4192,9 +4307,11 @@ def cli_exec(cli_args, extra_args):
         asyncio.run(update_extensions(cli_args.update))
         return ExitCode.SUCCESS
 
-    g_app.add_allowed_directory(os.getcwd())  # add current directory
+    g_app.aliased_directories["$TEMP"] = tempfile.gettempdir()
+    g_app.aliased_directories["$WORKSPACE"] = os.getcwd()
+    g_app.add_allowed_directory("$WORKSPACE")  # add current directory
+    g_app.add_allowed_directory("$TEMP")  # add temp directory
     g_app.add_allowed_directory(home_llms_path(".agent"))  # info for agents, e.g: skills
-    g_app.add_allowed_directory(tempfile.gettempdir())  # add temp directory
 
     g_app.extensions = install_extensions()
 
@@ -4295,6 +4412,7 @@ def cli_exec(cli_args, extra_args):
         app = web.Application(client_max_size=client_max_size)
 
         async def chat_handler(request):
+            await g_app.on_request(request)
             # Check authentication if enabled
             is_authenticated, user_data = g_app.check_auth(request)
             if not is_authenticated:
@@ -4317,16 +4435,19 @@ def cli_exec(cli_args, extra_args):
         app.router.add_post("/v1/chat/completions", chat_handler)
 
         async def active_models_handler(request):
+            await g_app.on_request(request)
             return web.json_response(get_active_models())
 
         app.router.add_get("/models", active_models_handler)
 
         async def active_providers_handler(request):
+            await g_app.on_request(request)
             return web.json_response(api_providers())
 
         app.router.add_get("/providers", active_providers_handler)
 
         async def status_handler(request):
+            await g_app.on_request(request)
             enabled, disabled = provider_status()
             return web.json_response(
                 {
@@ -4339,6 +4460,7 @@ def cli_exec(cli_args, extra_args):
         app.router.add_get("/status", status_handler)
 
         async def provider_handler(request):
+            await g_app.on_request(request)
             provider = request.match_info.get("provider", "")
             data = await request.json()
             msg = None
@@ -4363,6 +4485,7 @@ def cli_exec(cli_args, extra_args):
         app.router.add_post("/providers/{provider}", provider_handler)
 
         async def upload_handler(request):
+            await g_app.on_request(request)
             # Check authentication if enabled
             is_authenticated, user_data = g_app.check_auth(request)
             if not is_authenticated:
@@ -4447,11 +4570,13 @@ def cli_exec(cli_args, extra_args):
         app.router.add_post("/upload", upload_handler)
 
         async def extensions_handler(request):
+            await g_app.on_request(request)
             return web.json_response(g_app.ui_extensions)
 
         app.router.add_get("/ext", extensions_handler)
 
         async def cache_handler(request):
+            await g_app.on_request(request)
             path = request.match_info["tail"]
             full_path = get_cache_path(path)
             info_path = os.path.splitext(full_path)[0] + ".info.json"
@@ -4586,6 +4711,7 @@ def cli_exec(cli_args, extra_args):
         app.router.add_get("/ui/{path:.*}", ui_static, name="ui_static")
 
         async def config_handler(request):
+            await g_app.on_request(request)
             ret = {}
             if "defaults" not in ret:
                 ret["defaults"] = g_config["defaults"]
@@ -4598,6 +4724,14 @@ def cli_exec(cli_args, extra_args):
 
         app.router.add_get("/config", config_handler)
 
+        async def get_user_prefs_handler(request):
+            await g_app.on_request(request)
+            user = g_app.get_username(request)
+            prefs = g_app.get_user_prefs(user)
+            return web.json_response(prefs)
+
+        app.router.add_get("/prefs", get_user_prefs_handler)
+
         async def not_found_handler(request):
             return web.Response(text="404: Not Found", status=404)
 
@@ -4609,6 +4743,7 @@ def cli_exec(cli_args, extra_args):
 
             async def managed_handler(request, handler_fn=handler_fn):
                 try:
+                    await g_app.on_request(request)
                     return await handler_fn(request)
                 except Exception as e:
                     return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
@@ -4619,6 +4754,7 @@ def cli_exec(cli_args, extra_args):
 
             async def managed_handler(request, handler_fn=handler_fn):
                 try:
+                    await g_app.on_request(request)
                     return await handler_fn(request)
                 except Exception as e:
                     return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
@@ -4629,6 +4765,7 @@ def cli_exec(cli_args, extra_args):
 
             async def managed_handler(request, handler_fn=handler_fn):
                 try:
+                    await g_app.on_request(request)
                     return await handler_fn(request)
                 except Exception as e:
                     return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
@@ -4639,6 +4776,7 @@ def cli_exec(cli_args, extra_args):
 
             async def managed_handler(request, handler_fn=handler_fn):
                 try:
+                    await g_app.on_request(request)
                     return await handler_fn(request)
                 except Exception as e:
                     return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
@@ -4649,6 +4787,7 @@ def cli_exec(cli_args, extra_args):
 
             async def managed_handler(request, handler_fn=handler_fn):
                 try:
+                    await g_app.on_request(request)
                     return await handler_fn(request)
                 except Exception as e:
                     return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
@@ -4657,6 +4796,7 @@ def cli_exec(cli_args, extra_args):
 
         # Serve index.html from root
         async def index_handler(request):
+            await g_app.on_request(request)
             index_content = read_resource_file_bytes("index.html")
 
             importmaps = {"imports": g_app.import_maps}

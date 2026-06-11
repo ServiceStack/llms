@@ -257,7 +257,7 @@ export function useChatPrompt(ctx) {
 
             if (!thread) {
                 const title = getTextContent(request) || 'New Chat'
-                thread = await ctx.threads.startNewThread({ title, model, redirect })
+                thread = await ctx.threads.startNewThread({ title, redirect })
             }
 
             const ctxRequest = ctx.createChatContext({ request, thread, model })
@@ -366,7 +366,7 @@ export function useChatPrompt(ctx) {
 
         // Create thread if none exists
         if (!ctx.threads.currentThread.value) {
-            thread = await ctx.threads.startNewThread({ model, redirect })
+            thread = await ctx.threads.startNewThread({ redirect })
         } else {
             thread = ctx.threads.currentThread.value
         }
@@ -455,13 +455,17 @@ export function useChatPrompt(ctx) {
         const api = await ctx.threads.queueChat({ request, thread, model })
         if (api.response) {
             // success
-            editingMessage.value = null
-            attachedFiles.value = []
             thread = api.response
-            ctx.threads.replaceThread(thread)
+            completeChat(thread)
         } else {
             ctx.setError(api.error)
         }
+    }
+
+    function completeChat(thread) {
+        editingMessage.value = null
+        attachedFiles.value = []
+        ctx.threads.replaceThread(thread)
     }
 
     return {
@@ -489,6 +493,7 @@ export function useChatPrompt(ctx) {
         getAnswer,
         selectAspectRatio,
         sendUserMessage,
+        completeChat,
     }
 }
 

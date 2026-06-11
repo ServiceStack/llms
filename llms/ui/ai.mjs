@@ -135,14 +135,16 @@ export const o = {
     },
     async init(ctx) {
         // Load models and prompts
-        const [configRes, modelsRes, extensionsRes] = await Promise.all([
+        const [configRes, modelsRes, extensionsRes, prefsRes] = await Promise.all([
             this.getConfig(),
             this.getModels(),
             this.get('/ext'),
+            this.get('/prefs'),
         ])
         const config = await configRes.json()
         const models = await modelsRes.json()
         const extensions = await extensionsRes.json()
+        const prefs = await prefsRes.json()
 
         // Update auth settings from server config
         if (config.requiresAuth != null) {
@@ -162,7 +164,7 @@ export const o = {
         } else {
             this.signIn(auth)
         }
-        return { config, models, extensions, auth }
+        return { config, models, extensions, auth, prefs }
     },
 
     async uploadFile(file) {

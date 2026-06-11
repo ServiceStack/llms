@@ -41,40 +41,22 @@ def get_app():
     return g_ctx
 
 
-def set_allowed_directories(directories: List[str]) -> None:
-    """Set the list of allowed directories.
-
-    Args:
-        directories: List of absolute paths that are allowed to be accessed.
-    """
-    get_app().set_allowed_directories(directories)
-
-
-def add_allowed_directory(path: str) -> None:
-    """Add a directory to the allowed list.
-
-    Args:
-        path: Absolute path to add.
-    """
-    get_app().add_allowed_directory(path)
-
-
-def get_allowed_directories() -> List[str]:
+def get_allowed_directories(user: Optional[str] = None) -> List[str]:
     """
     Returns the list of directories that this server is allowed to access.
     """
-    return get_app().get_allowed_directories()
+    return get_app().resolve_allowed_directories(user)
 
 
-def list_allowed_directories() -> str:
+def list_allowed_directories(user: Optional[str] = None) -> str:
     """
     Returns the list of directories that this server is allowed to access. Subdirectories within these allowed directories are also accessible.
     Use this to understand which directories and their nested paths are available before trying to access files.
     """
-    return "Allowed directories:\n" + "\n".join(get_app().get_allowed_directories())
+    return "Allowed directories:\n" + "\n".join(get_allowed_directories(user))
 
 
-def _validate_path(path_str: str) -> str:
+def _validate_path(path_str: str, user: Optional[str] = None) -> str:
     """Validate that the path is within one of the allowed directories.
 
     Args:
@@ -100,7 +82,8 @@ def _validate_path(path_str: str) -> str:
 
     # Check if path is within any allowed directory
     is_allowed = False
-    for allowed_dir in get_allowed_directories():
+    allowed_dirs = get_allowed_directories(user)
+    for allowed_dir in allowed_dirs:
         # Check if abs_path starts with allowed_dir
         # We add os.sep to ensure we don't match /app2 when allowed is /app
         allowed_dir_str = str(allowed_dir)
@@ -112,9 +95,7 @@ def _validate_path(path_str: str) -> str:
             break
 
     if not is_allowed:
-        raise ValueError(
-            f"Access denied: {abs_path} is not within allowed directories:\n{', '.join(get_allowed_directories())}"
-        )
+        raise ValueError(f"Access denied: {abs_path} is not within allowed directories:\n{', '.join(allowed_dirs)}")
 
     return abs_path
 
@@ -142,6 +123,7 @@ def read_text_file(
     path: Annotated[str, "Path to the file."],
     head: Annotated[Optional[int], "If provided, returns only the first N lines of the file"] = None,
     tail: Annotated[Optional[int], "If provided, returns only the last N lines of the file"] = None,
+    user: Optional[str] = None,
 ) -> str:
     """
     Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read.
@@ -149,7 +131,7 @@ def read_text_file(
     Operates on the file as text regardless of extension. Only works within allowed directories.
     Returns: The content of the file.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     if head is not None and tail is not None:
         raise ValueError("Cannot specify both head and tail parameters simultaneously")
@@ -181,12 +163,12 @@ def read_text_file(
         raise RuntimeError(f"Error reading file {valid_path}: {e}") from e
 
 
-def read_media_file(path: Annotated[str, "Path to the file"]) -> Dict[str, Any]:
+def read_media_file(path: Annotated[str, "Path to the file"], user: Optional[str] = None) -> Dict[str, Any]:
     """
     Read an image or audio file.
     Returns the base64 encoded data and MIME type. Only works within allowed directories.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     if not os.path.exists(valid_path):
         raise FileNotFoundError(f"File not found: {valid_path}")
@@ -228,12 +210,14 @@ def read_multiple_files(paths: Annotated[List[str], "List of file paths to read"
     return "\n---\n".join(results)
 
 
-def write_file(path: Annotated[str, "Path to the file"], content: Annotated[str, "Content to write"]) -> str:
+def write_file(
+    path: Annotated[str, "Path to the file"], content: Annotated[str, "Content to write"], user: Optional[str] = None
+) -> str:
     """
     Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories.
     Returns: Success message.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     try:
         # Ensure parent directory exists
@@ -251,6 +235,7 @@ def edit_file(
     path: Annotated[str, "Path to the file"],
     edits: Annotated[List[Dict[str, str]], "List of dicts with 'oldText' and 'newText'"],
     dry_run: bool = False,
+    user: Optional[str] = None,
 ) -> str:
     """
     Make line-based edits to a text file. Each edit replaces exact line sequences with new content.
@@ -259,7 +244,7 @@ def edit_file(
 
     # Example edits: [{"oldText":"boy","newText":"girl"}]
 
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     if not os.path.exists(valid_path):
         raise FileNotFoundError(f"File not found: {valid_path}")
@@ -298,13 +283,13 @@ def edit_file(
     return diff_text
 
 
-def create_directory(path: Annotated[str, "Path to the directory"]) -> str:
+def create_directory(path: Annotated[str, "Path to the directory"], user: Optional[str] = None) -> str:
     """
     Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently.
     Perfect for setting up directory structures for projects or ensuring required paths exist. Only works within allowed directories.
     Returns: Success message.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     try:
         os.makedirs(valid_path, exist_ok=True)
@@ -313,12 +298,12 @@ def create_directory(path: Annotated[str, "Path to the directory"]) -> str:
         raise RuntimeError(f"Error creating directory {valid_path}: {e}") from e
 
 
-def list_directory(path: Annotated[str, "Path to the directory"]) -> str:
+def list_directory(path: Annotated[str, "Path to the directory"], user: Optional[str] = None) -> str:
     """
     Get a detailed listing of all files and directories in a specified path. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes.
     This tool is essential for understanding directory structure and finding specific files within a directory. Only works within allowed directories.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     if not os.path.exists(valid_path):
         raise FileNotFoundError(f"Directory not found: {valid_path}")
@@ -343,12 +328,13 @@ def list_directory(path: Annotated[str, "Path to the directory"]) -> str:
 def list_directory_with_sizes(
     path: Annotated[str, "Path to the directory"],
     sort_by: Annotated[Literal["name", "size"], "Sort by name or size"] = "name",
+    user: Optional[str] = None,
 ) -> str:
     """
     Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes.
     This tool is useful for understanding directory structure and finding specific files within a directory. Only works within allowed directories.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     if not os.path.exists(valid_path):
         raise FileNotFoundError(f"Directory not found: {valid_path}")
@@ -403,6 +389,7 @@ def list_directory_with_sizes(
 def directory_tree(
     path: Annotated[str, "Path to the root directory"],
     exclude_patterns: Annotated[List[str], "Glob patterns to exclude"] = None,
+    user: Optional[str] = None,
 ) -> str:
     """
     Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories.
@@ -411,7 +398,7 @@ def directory_tree(
     """
     import json
 
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
     root_path_len = len(valid_path.rstrip(os.sep)) + 1
     if exclude_patterns is None:
         exclude_patterns = []
@@ -480,13 +467,15 @@ def directory_tree(
     return json.dumps(tree_data, indent=2)
 
 
-def move_file(source: Annotated[str, "Source path"], destination: Annotated[str, "Destination path"]) -> str:
+def move_file(
+    source: Annotated[str, "Source path"], destination: Annotated[str, "Destination path"], user: Optional[str] = None
+) -> str:
     """
     Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail.
     Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories.
     """
-    valid_source = _validate_path(source)
-    valid_dest = _validate_path(destination)
+    valid_source = _validate_path(source, user=user)
+    valid_dest = _validate_path(destination, user=user)
 
     try:
         shutil.move(valid_source, valid_dest)
@@ -501,6 +490,7 @@ def search_files(
     exclude_patterns: Annotated[List[str], "Glob patterns to exclude"] = None,
     sort_by: Annotated[Literal["path", "modified", "size"], "Sort by path, modified or size"] = "path",
     max_results: int = 200,
+    user: Optional[str] = None,
 ) -> str:
     """
     Recursively search for files and directories matching a pattern. The patterns should be glob-style patterns that match paths relative to the working directory.
@@ -509,8 +499,8 @@ def search_files(
     If no path is provided, searches in the first allowed directory.
     """
     if not path:
-        path = get_allowed_directories()[0]
-    valid_path = _validate_path(path)
+        path = get_allowed_directories(user)[0]
+    valid_path = _validate_path(path, user=user)
     results = []
     if exclude_patterns is None:
         exclude_patterns = []
@@ -554,12 +544,12 @@ def search_files(
     return "\n".join(results)
 
 
-def get_file_info(path: Annotated[str, "Path to the file"]) -> str:
+def get_file_info(path: Annotated[str, "Path to the file"], user: Optional[str] = None) -> str:
     """
     Retrieve detailed metadata about a file or directory.
     Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading the actual content. Only works within allowed directories.
     """
-    valid_path = _validate_path(path)
+    valid_path = _validate_path(path, user=user)
 
     try:
         stats = os.stat(valid_path)

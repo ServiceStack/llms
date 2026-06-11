@@ -223,7 +223,17 @@ export class AppContext {
         return this.resolveUrl(`/avatar/user?theme=${theme}&t=${this.state.cacheBreaker}`)
     }
     getAgentAvatar() {
-        const theme = this.getPrefs().theme || this.getColorScheme()
+        return this.getProfileAvatar(this.state.profile)
+    }
+    getProfileAvatar(profile) {
+        if (profile && profile != 'default') {
+            return this.resolveUrl(`/ext/agents/${profile}/avatar?t=${this.state.cacheBreaker}`)
+        }
+        return this.getDefaultAgentAvatar()
+    }
+    getDefaultAgentAvatar() {
+        const prefs = this.getPrefs()
+        const theme = prefs.theme || this.getColorScheme()
         return this.resolveUrl(`/agents/avatar?theme=${theme}&t=${this.state.cacheBreaker}`)
     }
     incCacheBreaker() {
@@ -233,25 +243,38 @@ export class AppContext {
         return this.ai.prefsKey + '.' + this.state.profile
     }
     changeProfile(profile) {
-        console.log('changeProfile', JSON.stringify(profile, null, 2))
-        this.selectTheme(profile?.theme)
+        console.log('changeProfile', profile ? JSON.stringify(Object.assign({}, profile, { prompt: profile.prompt?.substring(0, 100) }), null, 2) : 'default')
+        if (!profile) {
+            this.state.profile = 'default'
+            Object.assign(this.prefs, storageObject(this.getPrefsKey()))
+            this.setState({
+                selectedModel: this.prefs.model,
+            })
+            this.selectTheme(this.prefs.theme)
+            return
+        }
 
         const profileId = profile?.id || 'default'
         if (this.state.profile == profileId) return
         this.state.profile = profileId
-        if (profile) {
-            const profilePrefs = pick(profile, ['model', 'tools', 'skills'])
-            this.setPrefs(profilePrefs)
-            if (profile.model) {
-                this.state.selectedModel = model
-            }
+        Object.assign(this.prefs, storageObject(this.getPrefsKey()))
+        this.selectTheme(profile?.theme)
+        const prefs = this.prefs
+        const profilePrefs = {
+            model: profile.model || prefs.model,
+            onlyTools: profile.onlyTools !== undefined ? profile.onlyTools : prefs.onlyTools,
+            onlySkills: profile.onlySkills !== undefined ? profile.onlySkills : prefs.onlySkills,
         }
-        this.prefs = reactive(storageObject(this.getPrefsKey()))
+        this.setPrefs(profilePrefs)
+        this.setState({
+            selectedModel: profile.model || this.state.selectedModel,
+        })
     }
     getPrefs() {
         return this.prefs
     }
     setPrefs(o) {
+        console.log('setPrefs', o)
         storageObject(this.getPrefsKey(), Object.assign(this.prefs, o))
     }
     _validateComponents(componentMap) {
@@ -575,13 +598,13 @@ export class AppContext {
     }
 
     changeTheme(theme) {
-        console.log('changeTheme', theme)
+        console.log('changeTheme.1', theme)
 
         const fullTheme = this.createTheme(theme)
         Object.assign(this.state.theme, fullTheme)
         Object.assign(this.state.styles, fullTheme.styles)
 
-        console.log('changeTheme', this.state.theme.vars, this.state.styles.bgBody)
+        console.log('changeTheme.2', this.state.theme.vars, this.state.styles.bgBody)
 
         Object.entries(fullTheme.vars).forEach(([key, value]) => {
             if (key === 'colorScheme') {

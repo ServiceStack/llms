@@ -861,8 +861,11 @@ export const UserAvatar = {
 
 export const AgentAvatar = {
     template: `
-        <img class="size-8 rounded-full shadow" :class="[$styles.messageAssistant.replace('rounded-none', '')]" :src="$ctx.getAgentAvatar()" />
-    `
+        <img class="size-8 rounded-full shadow" :class="[$styles.messageAssistant.replace('rounded-none', '')]" :src="$ctx.getProfileAvatar(profile)" />
+    `,
+    props: {
+        profile: String
+    },
 }
 
 export const ChatBody = {
@@ -907,7 +910,7 @@ export const ChatBody = {
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0 flex flex-col justify-center">
                                     <UserAvatar v-if="message.role === 'user'" />
-                                    <AgentAvatar v-else />
+                                    <AgentAvatar v-else :profile="currentThread?.metadata?.profile" />
 
                                     <!-- Delete button (shown on hover) -->
                                     <button type="button" @click.stop="$threads.deleteMessageFromThread(currentThread.id, message.timestamp)"
@@ -1042,7 +1045,7 @@ export const ChatBody = {
                             <div v-if="$threads.watchingThread" class="flex items-start space-x-3 group">
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0">
-                                    <AgentAvatar />
+                                    <AgentAvatar :profile="currentThread?.metadata?.profile" />
                                 </div>
 
                                 <!-- Loading bubble -->
