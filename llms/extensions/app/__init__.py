@@ -1,3 +1,4 @@
+import _collections_abc
 import asyncio
 import io
 import json
@@ -837,6 +838,9 @@ def install(ctx):
         cost = usage.get("cost") or o.get(
             "cost", ((input_price * input_tokens) + (output_price * output_tokens)) / 1000000
         )
+        is_per_request = model_cost.get("type") == "request"
+        if is_per_request:
+            cost = usage.get("cost") or output_price or cost
 
         request = {
             "user": user,
@@ -866,13 +870,15 @@ def install(ctx):
         if thread_id and not nohistory:
             messages = chat.get("messages", [])
             last_role = messages[-1].get("role", None) if len(messages) > 0 else None
+            output_cost = (input_price * input_tokens) / 1000000 if not is_per_request else cost
+
             if last_role == "user" or last_role == "tool":
                 user_message = messages[-1]
                 user_message["model"] = model
                 user_message["usage"] = {
                     "tokens": input_tokens,
                     "price": input_price,
-                    "cost": (input_price * input_tokens) / 1000000,
+                    "cost": output_cost,
                 }
             else:
                 ctx.dbg(
@@ -883,9 +889,12 @@ def install(ctx):
             assistant_message["usage"] = {
                 "tokens": output_tokens,
                 "price": output_price,
-                "cost": (output_price * output_tokens) / 1000000,
+                "cost": output_cost,
                 "duration": duration,
             }
+            if is_per_request:
+                assistant_message["usage"]["type"] = "request"
+
             messages.append(assistant_message)
 
             tools = chat.get("tools", [])
@@ -928,6 +937,10 @@ def install(ctx):
                 "duration": duration,
                 "requests": len(thread_requests),
             }
+
+            if is_per_request:
+                stats["type"] = "request"
+
             g_db.update_thread(
                 thread_id,
                 {

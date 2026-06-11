@@ -14,7 +14,7 @@
                 "cost": {
                     "input": 0,
                     "output": 0.04,
-                    "type": "per_image"
+                    "type": "request"
                 }
             },
             "fireworks/flux-kontext-max": {
@@ -30,7 +30,7 @@
                 "cost": {
                     "input": 0,
                     "output": 0.08,
-                    "type": "per_image"
+                    "type": "request"
                 }
             },
             "fireworks/flux-1-dev-fp8": {
@@ -89,9 +89,9 @@
     },
     "openrouter": {
         "models": {
-            "recraft/recraft-v4-pro": {
-                "name": "Recraft V4 Pro",
-                "release_date": "2026-05-08",
+            "recraft/recraft-v4.1-pro-vector": {
+                "name": "Recraft V4.1 Pro Vector",
+                "release_date": "2026-05-14",
                 "modalities": {
                     "input": [
                         "text"
@@ -102,12 +102,13 @@
                 },
                 "cost": {
                     "input": 0,
-                    "output": 0.25
+                    "output": 0.30,
+                    "type": "request"
                 }
             },
-            "recraft/recraft-v4": {
-                "name": "Recraft V4",
-                "release_date": "2026-05-07",
+            "recraft/recraft-v4.1-vector": {
+                "name": "Recraft V4.1 Vector",
+                "release_date": "2026-05-14",
                 "modalities": {
                     "input": [
                         "text"
@@ -118,7 +119,42 @@
                 },
                 "cost": {
                     "input": 0,
-                    "output": 0.04
+                    "output": 0.08,
+                    "type": "request"
+                }
+            },
+            "recraft/recraft-v4.1-pro": {
+                "name": "Recraft V4.1 Pro",
+                "release_date": "2026-05-14",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.25,
+                    "type": "request"
+                }
+            },
+            "recraft/recraft-v4.1": {
+                "name": "Recraft V4.1",
+                "release_date": "2026-05-14",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.04,
+                    "type": "request"
                 }
             },
             "recraft/recraft-v3": {
@@ -134,7 +170,8 @@
                 },
                 "cost": {
                     "input": 0,
-                    "output": 0.04
+                    "output": 0.04,
+                    "type": "request"
                 }
             },
             "google/gemini-3.1-flash-image-preview": {
@@ -185,9 +222,9 @@
                     "output": 12.0
                 }
             },
-            "sourceful/riverflow-v2-fast-preview": {
-                "name": "Sourceful: Riverflow V2 Fast Preview",
-                "release_date": "2026-02-03",
+            "sourceful/riverflow-v2.5-pro": {
+                "name": "Sourceful: Riverflow V2.5 Pro",
+                "release_date": "2026-06-04",
                 "modalities": {
                     "input": [
                         "text"
@@ -198,7 +235,25 @@
                 },
                 "cost": {
                     "input": 0,
-                    "output": 7.19
+                    "output": 0.24,
+                    "type": "request"
+                }
+            },
+            "sourceful/riverflow-v2.5-fast": {
+                "name": "Sourceful: Riverflow V2 Fast",
+                "release_date": "2026-06-04",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 0.02,
+                    "type": "request"
                 }
             },
             "sourceful/riverflow-v2-standard-preview": {
