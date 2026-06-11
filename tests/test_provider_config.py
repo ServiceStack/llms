@@ -14,6 +14,7 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from llms.main import (  # noqa: E402
+    cli,
     create_provider,
     create_provider_kwargs,
     load_config,
@@ -34,6 +35,7 @@ class TestProviderConfiguration(unittest.TestCase):
     """Test Provider."""
 
     def setUp(self):
+        cli("ls minimax")
         load_config(config, providers, verbose=True)
 
     def test_print_api_keys(self):
@@ -212,6 +214,34 @@ class TestProviderConfiguration(unittest.TestCase):
         provider = create_provider(create_provider_kwargs(config["providers"]["nvidia"], providers["nvidia"]))
         self.assertEqual(provider.__class__.__name__, "OpenAiCompatible")
         self.assertEqual(len(provider.models), 21)
+
+    def test_nvidia_process_chat(self):
+        import asyncio
+        provider = create_provider(create_provider_kwargs(config["providers"]["nvidia"], providers["nvidia"]))
+        chat = {
+            "model": "nvidia/nvidia-nemotron-nano-9b-v2",
+            "modalities": ["text"],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "hello",
+                    "timestamp": 123456789
+                },
+                {
+                    "role": "assistant",
+                    "content": "hi",
+                    "timestamp": 123456790,
+                    "model": "nvidia/nvidia-nemotron-nano-9b-v2",
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1}
+                }
+            ]
+        }
+        processed = asyncio.run(provider.process_chat(chat, provider_id=provider.id))
+        self.assertNotIn("modalities", processed)
+        for msg in processed["messages"]:
+            self.assertNotIn("timestamp", msg)
+            self.assertNotIn("model", msg)
+            self.assertNotIn("usage", msg)
 
     def test_huggingface(self):
         provider = create_provider(create_provider_kwargs(config["providers"]["huggingface"], providers["huggingface"]))
