@@ -214,6 +214,11 @@ const ProjectsManagerModal = {
                                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                                 </svg>
                                 <p class="text-sm">Select a project to edit, or create a new one.</p>
+                                <button type="button" @click="closeDialog"
+                                    class="mt-4 px-4 py-1 text-sm font-medium transition-colors"
+                                    :class="[$styles.secondaryButton]">
+                                    close
+                                </button>
                             </div>
                             <div v-else class="flex-1 flex flex-col justify-between h-full">
                                 <div class="space-y-6">
