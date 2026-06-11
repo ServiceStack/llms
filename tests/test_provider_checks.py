@@ -16,6 +16,7 @@ from llms.main import (
     create_provider,
     create_provider_kwargs,
     load_config,
+    cli,
 )
 
 config_path = os.path.join(os.path.dirname(__file__), "..", "llms", "llms.json")
@@ -55,6 +56,7 @@ class TestCheckingProviders(unittest.IsolatedAsyncioTestCase):
     """Test Provider."""
 
     def setUp(self):
+        cli("ls minimax")
         load_config(config, providers, verbose=True)
 
     async def check_provider_model(self, provider_name, model):

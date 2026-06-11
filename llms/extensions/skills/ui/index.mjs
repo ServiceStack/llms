@@ -926,41 +926,6 @@ export default {
             context.requiredSystemPrompts.push(skillsPrompt)
         })
 
-        ctx.setThreadFooters({
-            skills: {
-                component: {
-                    template: `
-                        <div class="mt-2 w-full flex justify-center">
-                            <button type="button" @click="$ctx.chat.sendUserMessage('proceed')"
-                                class="px-3 py-1 rounded-md text-xs font-medium transition-colors select-none" :class="[$styles.secondaryButton]">
-                                proceed
-                            </button>
-                        </div>
-                    `
-                },
-                show({ thread }) {
-                    if (thread.messages.length < 2) return false
-
-                    const lastMessage = thread.messages[thread.messages.length - 1]
-                    // only show if the last message is from the assistant
-                    if (lastMessage.role != "assistant") return false
-
-                    // and it has a skill tool call
-                    const hasSkillToolCall = thread.messages.some(m =>
-                        m.tool_calls?.some(tc => tc.type == "function" && tc.function.name == "skill"))
-                    // or a plan system prompt
-                    const systemPrompt = thread.messages.find(m => m.role == "system")?.content.toLowerCase() || ''
-                    const line1 = leftPart(systemPrompt.trim(), "\n")
-                    const hasPlanSystemPrompt = line1.includes("plan") || systemPrompt.includes("# plan")
-
-                    // or the last message has no content but has reasoning
-                    const hasOnlyThinking = !lastMessage.content?.trim() && lastMessage.reasoning?.trim()
-
-                    return hasSkillToolCall || hasPlanSystemPrompt || hasOnlyThinking
-                }
-            }
-        })
-
         ctx.setState({
             skills: {}
         })

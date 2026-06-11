@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import json
-import os
 import shutil
 import time
 
@@ -487,7 +486,7 @@ def install_anthropic(ctx):
                         continue
 
                 if cli_response is None:
-                    raise Exception(f"No result found in claude CLI stream-json output")
+                    raise Exception("No result found in claude CLI stream-json output")
 
             except json.JSONDecodeError as e:
                 raise Exception(f"Failed to parse claude CLI JSON output: {e}")

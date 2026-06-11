@@ -3,7 +3,6 @@
 Unit tests for utility functions in llms.main module.
 """
 
-import inspect
 import json
 import os
 import sys
