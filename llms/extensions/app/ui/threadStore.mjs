@@ -81,7 +81,6 @@ async function cancelThread() {
 // Create a new thread
 async function createThread(args = {}) {
     const thread = {
-        messages: [],
         ...args
     }
     if (!thread.title) {
@@ -89,6 +88,9 @@ async function createThread(args = {}) {
     }
     if (thread.title.length > 200) {
         thread.title = thread.title.slice(0, 200) + '...'
+    }
+    if (!thread.messages) {
+        thread.messages = []
     }
 
     ctx.createThreadFilters.forEach(f => f(thread))
@@ -315,17 +317,13 @@ function getLatestCachedThread() {
     return threads.value[0]
 }
 
-async function startNewThread({ title, model, tools, redirect }) {
-    if (!model) {
-        console.error('No model selected')
-        return
-    }
+async function startNewThread({ title, messages, redirect }) {
     if (!title) {
         title = 'New Chat'
     }
     const latestThread = getLatestCachedThread()
 
-    console.log('startNewThread', title, model.name, ctx.router.currentRoute.value?.path, latestThread?.messages?.length)
+    console.log('startNewThread', title, ctx.router.currentRoute.value?.path, latestThread?.messages?.length)
     ctx.setLayout({ left: 'ThreadsSidebar' })
 
     if (latestThread && latestThread.title == title && !latestThread.messages?.length) {
@@ -336,9 +334,6 @@ async function startNewThread({ title, model, tools, redirect }) {
     }
     const newThread = await createThread({
         title,
-        model: model.name,
-        info: ctx.utils.toModelInfo(model),
-        tools,
     })
 
     console.log('newThread', newThread, model)
@@ -350,6 +345,17 @@ async function startNewThread({ title, model, tools, redirect }) {
     // Get the thread to check for duplicates
     let thread = await getThread(newThread.id)
     console.log('thread', thread)
+
+    if (messages) {
+        const request = { messages }
+        const api = await queueChat({ request, thread, model: thread.modelInfo })
+        if (api.response) {
+            thread = api.response
+            ctx.chat.completeChat(thread)
+        } else {
+            ctx.setError(api.error)
+        }
+    }
     return thread
 }
 

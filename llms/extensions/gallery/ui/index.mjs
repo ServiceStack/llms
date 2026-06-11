@@ -396,7 +396,6 @@ const GalleryPage = {
             ctx.chat.selectAspectRatio(selected.aspect_ratio)
             ctx.threads.startNewThread({
                 title: selected.prompt,
-                model: ctx.chat.getSelectedModel(),
                 redirect: true,
             })
         }
@@ -409,7 +408,6 @@ const GalleryPage = {
             ctx.chat.messageText.value = selected.prompt
             ctx.threads.startNewThread({
                 title: selected.prompt,
-                model: ctx.chat.getSelectedModel(),
             })
         }
 
