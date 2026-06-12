@@ -114,8 +114,8 @@ export function formatCost(cost) {
 export function tokensTitle(usage) {
     let title = []
     if (usage.tokens && usage.price) {
-        const msg = parseFloat(usage.price) > 0
-            ? `${usage.tokens} tokens @ ${usage.price} = ${tokenCostLong(usage.price, usage.tokens)}`
+        const msg = parseFloat(usage.cost) > 0
+            ? `${usage.tokens} tokens @ ${usage.price} = ${tokenCostLong(usage.cost)}`
             : `${usage.tokens} tokens`
         const duration = usage.duration ? ` in ${usage.duration}ms` : ''
         title.push(msg + duration)
