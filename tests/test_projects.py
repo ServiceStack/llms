@@ -175,3 +175,24 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.mock_ctx.get_user_pref("project", user="testuser"))
         # Verify allowed directories reset
         self.assertEqual(self.allowed_directories.get("testuser"), [])
+
+    async def test_save_projects_creates_non_existent_paths(self):
+        non_existent_dir = os.path.join(self.temp_dir, "new_project_folder")
+        self.assertFalse(os.path.exists(non_existent_dir))
+
+        projects_data = [
+            {"name": "Tic Tac Toe", "paths": [non_existent_dir, "$WORKSPACE"]}
+        ]
+
+        self.mock_ctx.app = MagicMock()
+        self.mock_ctx.app.aliased_directories = {"$WORKSPACE": self.temp_dir}
+
+        request = MagicMock()
+        async def mock_json():
+            return projects_data
+        request.json = mock_json
+
+        response = await self.save_projects_handler(request)
+        self.assertEqual(response.status, 200)
+
+        self.assertTrue(os.path.exists(non_existent_dir))
