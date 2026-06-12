@@ -809,7 +809,7 @@ export const ToolCall = {
             else if (toolName == 'skill' && args.name) {
                 return args.name
             }
-            else if (args.path) {
+            else if (args?.path) {
                 if (toolName == 'read_text_file') {
                     return args.path + ' (' + ctx.fmt.humanifyNumber(output?.content?.length || 0) + ')'
                 } else if (toolName == 'directory_tree') {
