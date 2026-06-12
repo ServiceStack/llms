@@ -46,6 +46,20 @@ def install(ctx):
         else:
             path = os.path.join(ctx.get_user_path(), "projects", "projects.json")
 
+        # Create folders for non-existent paths
+        for project in projects:
+            for p in project.get("paths", []):
+                if not p or not p.strip():
+                    continue
+                resolved_path = ctx.resolve_directory(p)
+                if resolved_path:
+                    try:
+                        if not os.path.exists(resolved_path):
+                            os.makedirs(resolved_path, exist_ok=True)
+                            ctx.log(f"Created directory: {resolved_path}")
+                    except Exception as e:
+                        ctx.err(f"Failed to create directory {resolved_path}", e)
+
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(projects, f, indent=2, ensure_ascii=False)

@@ -3110,18 +3110,26 @@ class AppExtensions:
             user = "default"
         return self.allowed_directories.get(user, [])
 
+    def resolve_directory(self, dir: str):
+        """Resolve alias or return absolute path if not an alias"""
+        if dir.startswith("$"):
+            if dir in self.aliased_directories:
+                return os.path.abspath(self.aliased_directories.get(dir))
+            else:
+                return None
+        else:
+            return os.path.abspath(dir)
+
     def resolve_allowed_directories(self, user: Optional[str] = None) -> List[str]:
         """Resolve aliases in the list of allowed directories."""
         allowed_dirs = self.get_allowed_directories(user)
         ret = []
         for dir in allowed_dirs:
-            if dir.startswith("$"):
-                if dir in self.aliased_directories:
-                    ret.append(self.aliased_directories.get(dir))
-                else:
-                    _log(f"Alias '{dir}' not found")
+            use_dir = self.resolve_directory(dir)
+            if use_dir is None:
+                _log(f"Alias '{dir}' not found")
             else:
-                ret.append(dir)
+                ret.append(use_dir)
         return ret
 
     def enabled_auth(self) -> str:
@@ -3358,6 +3366,9 @@ class ExtensionContext:
 
     def get_allowed_directories(self, user: Optional[str] = None) -> List[str]:
         return self.app.get_allowed_directories(user)
+
+    def resolve_directory(self, dir: str) -> Optional[str]:
+        return self.app.resolve_directory(dir)
 
     def resolve_allowed_directories(self, user: Optional[str] = None) -> List[str]:
         return self.app.resolve_allowed_directories(user)
