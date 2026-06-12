@@ -317,7 +317,7 @@ function getLatestCachedThread() {
     return threads.value[0]
 }
 
-async function startNewThread({ title, messages, redirect }) {
+async function startNewThread({ title, model, messages, redirect }) {
     if (!title) {
         title = 'New Chat'
     }
@@ -336,7 +336,7 @@ async function startNewThread({ title, messages, redirect }) {
         title,
     })
 
-    console.log('newThread', newThread, model)
+    console.log('newThread', newThread)
     if (redirect) {
         // Navigate to the new thread URL
         ctx.to(`/c/${newThread.id}`)
@@ -347,8 +347,11 @@ async function startNewThread({ title, messages, redirect }) {
     console.log('thread', thread)
 
     if (messages) {
-        const request = { messages }
-        const api = await queueChat({ request, thread, model: thread.modelInfo })
+        if (!model) {
+            model = ctx.chat.getSelectedModel()
+        }
+        const request = { model: model.name, messages }
+        const api = await queueChat({ request, thread, model })
         if (api.response) {
             thread = api.response
             ctx.chat.completeChat(thread)
