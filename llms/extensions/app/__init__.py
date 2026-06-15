@@ -622,7 +622,8 @@ def install(ctx):
 
                 avatar_path = os.path.join(user_path, "agent.png")
                 img.save(avatar_path, "PNG")
-            except ImportError:
+            except ImportError as e:
+                ctx.err("Error converting avatar", e)
                 raise Exception(
                     "Only SVG and PNG formats are supported. Install Pillow to convert other image formats."
                 ) from None
