@@ -153,6 +153,10 @@ export function useChatPrompt(ctx) {
     }
 
     function setSelectedModel(model) {
+        if (!model) {
+            console.log('setSelectedModel(null)')
+            return
+        }
         ctx.setState({
             selectedModel: model.name
         })
