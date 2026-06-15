@@ -68,6 +68,7 @@ DISABLE_EXTENSIONS = (os.getenv("LLMS_DISABLE") or "").split(",")
 DEFAULT_LIMITS = {
     "client_timeout": 120,
     "client_max_size": 20971520,
+    "retries": 3,
 }
 g_config_path = None
 g_config = None
@@ -1922,7 +1923,18 @@ async def g_chat_completion(chat, context=None):
     started_at = time.time()
     first_exception = None
     provider_name = "Unknown"
-    for name in candidate_providers:
+    retries = g_app.limits["retries"] or DEFAULT_LIMITS["retries"]
+
+    attempt_round = 0
+    candidate_index = 0
+
+    while attempt_round < retries:
+        if candidate_index >= len(candidate_providers):
+            candidate_index = 0
+            attempt_round += 1
+            continue
+
+        name = candidate_providers[candidate_index]
         try:
             provider_name = name
             provider = g_handlers[name]
@@ -2023,6 +2035,7 @@ async def g_chat_completion(chat, context=None):
                     if should_cancel_thread(context):
                         return
 
+                    attempt_round = 0
                     # Continue loop to send tool results back to LLM
                     continue
 
@@ -2059,6 +2072,7 @@ async def g_chat_completion(chat, context=None):
                 first_exception = e
                 context["stackTrace"] = traceback.format_exc()
             _err(f"Provider {provider_name} failed", first_exception)
+            candidate_index += 1
             continue
 
     # If we get here, all providers failed
@@ -3077,6 +3091,7 @@ class AppExtensions:
         self.limits = self.config.get("limits", DEFAULT_LIMITS)
         self.limits["client_timeout"] = self.limits.get("client_timeout", 120)
         self.limits["client_max_size"] = self.limits.get("client_max_size", 20971520)
+        self.limits["retries"] = self.limits.get("retries", 3)
 
     def get_client_timeout(self):
         return get_client_timeout(self)

@@ -179,7 +179,8 @@
     },
     "limits": {
         "client_timeout": 120,
-        "client_max_size": 20971520
+        "client_max_size": 20971520,
+        "retries": 3
     },
     "convert": {
         "image": {
