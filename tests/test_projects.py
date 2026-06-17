@@ -29,6 +29,12 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         self.mock_ctx.get_allowed_directories = get_allowed_directories
         self.mock_ctx.set_allowed_directories = set_allowed_directories
 
+        def resolve_directory(path_str):
+            if path_str.startswith("$"):
+                return self.mock_ctx.app.aliased_directories.get(path_str) if hasattr(self.mock_ctx, "app") else None
+            return os.path.abspath(path_str)
+        self.mock_ctx.resolve_directory = resolve_directory
+
         self.user_prefs = {}
 
         def get_user_pref(key, user=None):
