@@ -274,6 +274,7 @@ const ProjectsManagerModal = {
                                                     <div v-for="(path, idx) in customPaths" :key="idx" class="flex items-center space-x-2">
                                                         <input type="text" v-model="customPaths[idx]"
                                                             placeholder="/absolute/path/to/directory"
+                                                            spellcheck="false"
                                                             class="flex-1 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono"
                                                             :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
                                                         <button type="button" @click="removeCustomPath(idx)"
@@ -313,9 +314,9 @@ const ProjectsManagerModal = {
                                     </button>
                                     <div v-else></div> <!-- Spacer -->
                                     <div class="flex items-center space-x-3">
-                                        <button type="button" @click="cancelEdit"
+                                        <button type="button" @click="closeDialog"
                                             class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
-                                            Cancel
+                                            Close
                                         </button>
                                         <button type="button" @click="saveForm"
                                             :disabled="!isDirty || !editForm.name.trim()"
