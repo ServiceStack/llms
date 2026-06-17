@@ -176,6 +176,27 @@ const AgentSelector = {
     }
 }
 
+const ThreadProfile = {
+    template: `
+    <span v-if="thread.metadata?.profile" @click="$ctx.agents.selectAgent(thread.metadata?.profile)"
+        class="flex items-center cursor-pointer px-1.5 py-0.5 text-xs rounded transition-colors space-x-2" :class="[$styles.tagLabel, $styles.tagLabelHover]">
+        <img 
+            v-if="thread.metadata.profile"
+            :src="$ctx.agents.getAvatarUrl(thread.metadata.profile)" 
+            :alt="thread.metadata.profile"
+            class="w-4 h-4 min-w-[20px] max-w-[20px] rounded-full object-cover shrink-0"
+        />
+        <img v-else
+            :src="$ctx.getDefaultAgentAvatar()" 
+            alt="Default Agent"
+            class="w-4 h-4 min-w-[24px] max-w-[24px] rounded-full object-cover shrink-0"
+        />
+        <span class="whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">{{thread.metadata?.profile}}</span>
+    </span>
+    `,
+    props: { thread: Object },
+}
+
 export default {
     order: 20 - 100,
 
@@ -193,6 +214,13 @@ export default {
 
         ctx.setGlobals({
             agents: useAgents(ext)
+        })
+
+        ctx.setThreadHeaders({
+            agents: {
+                component: ThreadProfile,
+                show({ thread }) { return thread.metadata?.profile }
+            },
         })
 
         ctx.chatRequestFilters.push(({ request, thread, context, model }) => {
@@ -235,10 +263,10 @@ export default {
             // only show if the last message is from the assistant
             if (lastMessage.role != "assistant") return false
 
-            const profile = thread.metadata.profile
-            const agent = profile && ctx.agents.getAgent(profile)
-            if (agent && Object.keys(agent.actions ?? {}).length > 0) {
-                return agent.actions
+            // Actions are attached to thread when loaded in threads.
+            const actions = ctx.threads.getThreadActions(thread.id)
+            if (actions) {
+                return actions
             }
 
             // it has a skill tool call
@@ -260,13 +288,17 @@ export default {
                 component: {
                     template: `
                         <div class="mt-2 w-full flex justify-center gap-2">
-                            <button type="button" v-for="(props, name) in getActions($ctx.threads?.currentThread?.value)" @click="runAction(name, props)"
+                            <button type="button" v-for="(props, name) in actions" @click="runAction(name, props)"
                                 class="px-3 py-1 rounded-md text-xs font-medium transition-colors select-none" :class="[$styles.secondaryButton]">
                                 {{ name }}
                             </button>
                         </div>
                     `,
                     setup(props) {
+                        const ctx = inject('ctx')
+                        const actions = computed(() =>
+                            getActions(ctx.threads?.currentThread?.value))
+
                         async function runAction(name, action) {
                             console.log('runAction', name, action)
                             if (action.profile) {
@@ -304,12 +336,13 @@ export default {
 
                                 console.log('runAction.profile', newThread)
                             } else if (action.message) {
-                                ctx.chat.sendUserMessage(action.message)
+                                ctx.chat.sendUserMessage(action.message, { target: action.target })
                             }
+                            ctx.threads.loadThreadActions(ctx.threads?.currentThread?.value?.id, { force: true })
                         }
 
                         return {
-                            getActions,
+                            actions,
                             runAction,
                         }
                     }

@@ -16,6 +16,7 @@ export const nextId = (() => {
 
 const threads = ref([])
 const threadDetails = ref({})
+const threadActions = ref({})
 const currentThread = ref(null)
 const isLoading = ref(false)
 
@@ -120,6 +121,7 @@ function replaceThread(thread) {
     }
     if (thread.completedAt || thread.error) {
         threadDetails.value[thread.id] = thread
+        loadThreadActions(thread.id, { force: true })
     }
     startWatchingThread()
     return thread
@@ -231,6 +233,27 @@ async function deleteThread(threadId) {
     }
 }
 
+// Load thread actions from extension
+async function loadThreadActions(threadId, opt) {
+    console.log('-loadThreadActions', threadId, threadActions.value[threadId])
+    if (threadActions.value[threadId] && !opt?.force) {
+        return
+    }
+    const thread = await getThread(threadId)
+    if (!thread) {
+        console.warn('Thread not found', threadId)
+        return
+    }
+    const profile = thread.metadata?.profile ?? 'default'
+    const res = await ctx.getJson(`/ext/agents/${profile}/actions`)
+    threadActions.value[threadId] = res.response || []
+    console.log('+loadThreadActions', threadActions.value[threadId])
+}
+
+function getThreadActions(threadId) {
+    return threadActions.value[threadId] || []
+}
+
 // Set current thread
 async function setCurrentThread(threadId) {
     const thread = await getThread(threadId)
@@ -249,6 +272,7 @@ async function setCurrentThreadFromRoute(threadId, router) {
     }
 
     loadThreadDetails(threadId)
+    loadThreadActions(threadId)
     const thread = setCurrentThread(threadId)
     if (thread) {
         return thread
@@ -427,8 +451,11 @@ export function useThreadStore() {
         replaceThread,
         queueChat,
         threadDetails,
-        loadThreadDetails,
+        threadActions,
         isWatchingThread,
+        loadThreadDetails,
+        loadThreadActions,
+        getThreadActions,
         startWatchingThread,
         stopWatchingThread,
         cancelThread,
@@ -443,6 +470,7 @@ export default {
         ctx = context
         ext = ctx.scope('app')
         ctx.setGlobals({ threads: useThreadStore() })
+        console.log('ctx.setGlobals threads', !!ctx.threads)
     },
 
     async load() {

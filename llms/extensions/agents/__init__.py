@@ -1,3 +1,4 @@
+import glob
 import json
 import os
 
@@ -122,6 +123,61 @@ def install(ctx):
         return web.FileResponse(default_avatar, headers=headers)
 
     ctx.add_get("{profile}/avatar", get_avatar)
+
+    async def get_profile_actions(user, profile_path):
+        config_path = os.path.join(profile_path, "config.json")
+        if not os.path.exists(config_path):
+            return {}  # Return empty actions if no config
+
+        with open(config_path, encoding="utf-8") as fh:
+            config = json.load(fh)
+
+        actions = config.get("actions", {})
+
+        # Filter actions based on conditions in the frontend
+        # The frontend will check:
+        # - File existence: condition.glob + condition.exists
+        def glob_exists(match):
+            allowed_dirs = ctx.resolve_allowed_directories(user=user)
+            for dir in allowed_dirs:
+                pattern = os.path.join(dir, match)
+                if os.path.exists(pattern):
+                    return True
+                else:
+                    # Check if there are any files matching the glob
+                    if match.endswith("/"):
+                        match = match[:-1]
+                    files = glob.glob(pattern)
+                    if files:
+                        return True
+            return False
+
+        valid_actions = {}
+        for name, act in actions.items():
+            condition = act.get("condition", {})
+            type = condition.get("type", "")
+            match = condition.get("glob", "")
+            if not condition or not type or not match:
+                valid_actions[name] = act
+                continue
+
+            exists = condition.get("exists", False)
+
+            if type == "file":
+                file_exists = glob_exists(match)
+                if (exists and file_exists) or (not exists and not file_exists):
+                    valid_actions[name] = act
+            else:
+                ctx.log(f"Unknown condition type: {condition}")
+        return valid_actions
+
+    async def get_actions(req):
+        user = ctx.get_username(req)
+        profile_path = get_profile_path(req) or ""
+        valid_actions = await get_profile_actions(user, profile_path)
+        return web.json_response(valid_actions)
+
+    ctx.add_get("{profile}/actions", get_actions)
 
 
 __install__ = install

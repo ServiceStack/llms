@@ -357,7 +357,7 @@ export function useChatPrompt(ctx) {
         ctx.setState({ selectedAspectRatio })
     }
 
-    async function sendUserMessage(text, { model, redirect = true } = {}) {
+    async function sendUserMessage(text, { model, target, redirect = true } = {}) {
         ctx.clearError()
 
         if (!model) {
@@ -369,7 +369,7 @@ export function useChatPrompt(ctx) {
         let thread
 
         // Create thread if none exists
-        if (!ctx.threads.currentThread.value) {
+        if (target === "new" || !ctx.threads.currentThread.value) {
             thread = await ctx.threads.startNewThread({ redirect })
         } else {
             thread = ctx.threads.currentThread.value

@@ -1,6 +1,6 @@
 {
     "theme": "dark",
-    "model": "Kimi K2.6",
+    "model": "GLM-5.2",
     "onlyTools": [
         "get_current_time",
         "calc",
@@ -27,10 +27,34 @@
         "get_file_info",
         "list_allowed_directories"
     ],
-    "onlySkills": [],
+    "onlySkills": [
+        "create_plan"
+    ],
     "actions": {
         "Execute Plan": {
-            "profile": "coder"
+            "profile": "coder",
+            "condition": {
+                "type": "file",
+                "glob": "PLAN.md",
+                "exists": false
+            }
+        },
+        "Save to PLAN.md": {
+            "message": "Save to PLAN.md",
+            "condition": {
+                "type": "file",
+                "glob": "PLAN.md",
+                "exists": false
+            }
+        },
+        "Execute PLAN.md": {
+            "message": "Execute PLAN.md",
+            "profile": "coder",
+            "condition": {
+                "type": "file",
+                "glob": "PLAN.md",
+                "exists": true
+            }
         }
     }
 }
