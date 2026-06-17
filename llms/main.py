@@ -16,6 +16,7 @@ import inspect
 import json
 import mimetypes
 import os
+import random
 import re
 import shlex
 import shutil
@@ -70,6 +71,7 @@ DEFAULT_LIMITS = {
     "client_max_size": 20971520,
     "retries": 3,
 }
+DEFAULT_LOADING_MESSAGES = ["Computing", "Cooking", "Crafting", "Creating"]
 g_config_path = None
 g_config = None
 g_providers = None
@@ -617,6 +619,17 @@ async def process_chat(chat, provider_id=None):
         for message in chat["messages"]:
             if "content" not in message:
                 continue
+
+            # If the message has images, convert them to the standard format
+            if "images" in message:
+                images = message.pop("images", [])
+                content = []
+                str_content = message.get("content", None)
+                if str_content and isinstance(str_content, str):
+                    content.append({"type": "text", "text": str_content})
+                for img in images:
+                    content.append(img)
+                message["content"] = content
 
             if isinstance(message["content"], list):
                 for item in message["content"]:
@@ -1569,7 +1582,18 @@ def to_error_message(e):
         return e.message
     if hasattr(e, "status"):
         return str(e.status)
-    return str(e)
+    ret = f"{e}"
+    if ret.startswith("{"):
+        try:
+            d = json.loads(ret)
+            if isinstance(d, dict):
+                if "message" in d:
+                    return d["message"]
+                if "error" in d:
+                    return d["error"]
+        except Exception:
+            pass
+    return ret
 
 
 def to_error_response(e, stacktrace=False):
@@ -1923,10 +1947,20 @@ async def g_chat_completion(chat, context=None):
     started_at = time.time()
     first_exception = None
     provider_name = "Unknown"
-    retries = g_app.limits["retries"] or DEFAULT_LIMITS["retries"]
+    tool_history = []
+    final_response = None
 
+    retries = g_app.limits["retries"] or DEFAULT_LIMITS["retries"]
     attempt_round = 0
     candidate_index = 0
+
+    # Inject global tools if present
+    current_chat = g_app.create_chat_with_tools(chat, use_tools=context.get("tools", "all"))
+
+    # Apply pre-chat filters ONCE
+    context["chat"] = current_chat
+    for filter_func in g_app.chat_request_filters:
+        await filter_func(current_chat, context)
 
     while attempt_round < retries:
         if candidate_index >= len(candidate_providers):
@@ -1954,18 +1988,8 @@ async def g_chat_completion(chat, context=None):
             }
             accumulated_cost = 0.0
 
-            # Inject global tools if present
-            current_chat = g_app.create_chat_with_tools(chat, use_tools=context.get("tools", "all"))
-
-            # Apply pre-chat filters ONCE
-            context["chat"] = current_chat
-            for filter_func in g_app.chat_request_filters:
-                await filter_func(current_chat, context)
-
             # Tool execution loop
             max_iterations = 10
-            tool_history = []
-            final_response = None
 
             for request_count in range(max_iterations):
                 if should_cancel_thread(context):
@@ -2002,8 +2026,6 @@ async def g_chat_completion(chat, context=None):
 
                 if tool_calls and supports_tool_calls:
                     # Append the assistant's message with tool calls to history
-                    if "messages" not in current_chat:
-                        current_chat["messages"] = []
                     if "timestamp" not in message:
                         message["timestamp"] = int(time.time() * 1000)
                     current_chat["messages"].append(message)
@@ -2030,7 +2052,7 @@ async def g_chat_completion(chat, context=None):
                         current_chat["messages"].append(tool_msg)
                         tool_history.append(tool_msg)
 
-                    await g_app.on_chat_tool(current_chat, context)
+                        await g_app.on_chat_tool(current_chat, context)
 
                     if should_cancel_thread(context):
                         return
@@ -2072,6 +2094,10 @@ async def g_chat_completion(chat, context=None):
                 first_exception = e
                 context["stackTrace"] = traceback.format_exc()
             _err(f"Provider {provider_name} failed", first_exception)
+            await g_app.on_chat_status(
+                f"Provider {provider_name} failed: {to_error_message(first_exception)} ({candidate_index + 1}/{len(candidate_providers)} x {attempt_round + 1} attempts)",
+                context,
+            )
             candidate_index += 1
             continue
 
@@ -3013,6 +3039,7 @@ class AppExtensions:
         self.extensions = []
         self.loaded = False
         self.chat_tool_filters = []
+        self.chat_status_filters = []
         self.chat_response_filters = []
         self.chat_error_filters = []
         self.server_add_get = []
@@ -3034,6 +3061,8 @@ class AppExtensions:
         self.oauth_states = {}  # CSRF protection: {state: {created, redirect_uri}}
         self.last_seen = {}  # User last seen {user: timestamp}
         self.setup_user_handlers = []
+        self.last_loading_message = "Loading"
+        self.loading_messages = []
         self.request_args = {
             "image_config": dict,  # e.g. { "aspect_ratio": "1:1" }
             "temperature": float,  # e.g: 0.7
@@ -3092,6 +3121,7 @@ class AppExtensions:
         self.limits["client_timeout"] = self.limits.get("client_timeout", 120)
         self.limits["client_max_size"] = self.limits.get("client_max_size", 20971520)
         self.limits["retries"] = self.limits.get("retries", 3)
+        self.loading_messages = self.config.get("loading", DEFAULT_LOADING_MESSAGES)
 
     def get_client_timeout(self):
         return get_client_timeout(self)
@@ -3235,6 +3265,16 @@ class AppExtensions:
         for filter_func in self.cache_saved_filters:
             filter_func(context)
 
+    async def on_chat_status(self, status: str, context: Dict[str, Any]):
+        # Apply chat status filters
+        for filter_func in self.chat_status_filters:
+            try:
+                task = filter_func(status, context)
+                if inspect.iscoroutine(task):
+                    await task
+            except Exception as ex:
+                _err("chat status filter failed", ex)
+
     async def on_chat_error(self, e: Exception, context: Dict[str, Any]):
         # Apply chat error filters
         if "stackTrace" not in context:
@@ -3270,6 +3310,10 @@ class AppExtensions:
     def create_chat_with_tools(self, chat: Dict[str, Any], use_tools: str = "all") -> Dict[str, Any]:
         # Inject global tools if present
         current_chat = chat.copy()
+
+        if "messages" not in current_chat:
+            current_chat["messages"] = []
+
         # Don't inject tools when response_format is set (structured output)
         if "response_format" in current_chat:
             return current_chat
@@ -3310,6 +3354,13 @@ class AppExtensions:
 
     def set_user_pref(self, key: str, value, user: Optional[str] = None):
         set_user_pref(key=key, value=value, user=user)
+
+    def next_loading_message(self):
+        while True:
+            ret = random.choice(self.loading_messages)
+            if ret != self.last_loading_message:
+                self.last_loading_message = ret
+                return ret + "..."
 
 
 def handler_name(handler):
@@ -3483,6 +3534,10 @@ class ExtensionContext:
     def register_chat_tool_filter(self, handler: Callable):
         self.log(f"Registered chat tool filter: {handler_name(handler)}")
         self.app.chat_tool_filters.append(handler)
+
+    def register_chat_status_filter(self, handler: Callable):
+        self.log(f"Registered chat status filter: {handler_name(handler)}")
+        self.app.chat_status_filters.append(handler)
 
     def register_chat_response_filter(self, handler: Callable):
         self.log(f"Registered chat response filter: {handler_name(handler)}")
@@ -3724,6 +3779,9 @@ class ExtensionContext:
             return result
         except subprocess.CalledProcessError as e:
             raise Exception(f"{args[0]} failed: {e.stderr}")  # noqa: B904
+
+    def next_loading_message(self):
+        return self.app.next_loading_message()
 
 
 def get_extensions_path():
