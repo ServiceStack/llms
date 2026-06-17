@@ -7,7 +7,7 @@
             "User-Agent": "llmspy.org/3.0"
         },
         "text": {
-            "model": "MiniMax-M2.5",
+            "model": "DeepSeek V4 Flash",
             "messages": [
                 {
                     "role": "user",
@@ -21,7 +21,7 @@
             ]
         },
         "image": {
-            "model": "gemma-3-27b-it",
+            "model": "MiMo-V2.5",
             "messages": [
                 {
                     "role": "user",
@@ -41,7 +41,7 @@
             ]
         },
         "audio": {
-            "model": "gpt-4o-audio-preview",
+            "model": "MiMo-V2.5",
             "messages": [
                 {
                     "role": "user",
@@ -62,7 +62,7 @@
             ]
         },
         "file": {
-            "model": "qwen2.5vl",
+            "model": "MiMo-V2.5",
             "messages": [
                 {
                     "role": "user",
@@ -123,7 +123,7 @@
             "stream": false
         },
         "compact": {
-            "model": "Gemini 2.5 Flash Lite",
+            "model": "Gemini 3.1 Flash Lite",
             "messages": [
                 {
                     "role": "system",
