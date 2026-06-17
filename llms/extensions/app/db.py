@@ -55,6 +55,7 @@ class AppDB:
                 "startedAt": "TIMESTAMP",
                 "completedAt": "TIMESTAMP",
                 "metadata": "JSON",
+                "status": "TEXT",
                 "error": "TEXT",
                 "ref": "TEXT",
                 "providerResponse": "JSON",

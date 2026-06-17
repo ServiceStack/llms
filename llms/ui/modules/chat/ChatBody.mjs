@@ -1042,19 +1042,10 @@ export const ChatBody = {
                             </div>
 
                             <!-- Loading indicator -->
-                            <div v-if="$threads.watchingThread" class="flex items-start space-x-3 group">
+                            <div v-if="$threads.watchingThread" class="flex items-center space-x-3 group">
                                 <!-- Avatar outside the bubble -->
                                 <div class="flex-shrink-0">
                                     <AgentAvatar :profile="currentThread?.metadata?.profile" />
-                                </div>
-
-                                <!-- Loading bubble -->
-                                <div class="rounded-lg px-4 py-3 border" :class="[$styles.muted]">
-                                    <div class="flex space-x-1">
-                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]"></div>
-                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]" style="animation-delay: 0.1s"></div>
-                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]" style="animation-delay: 0.2s"></div>
-                                    </div>
                                 </div>
 
                                 <!-- Cancel button -->
@@ -1064,6 +1055,17 @@ export const ChatBody = {
                                     title="Cancel request">
                                     cancel
                                 </button>
+
+                                <!-- Loading bubble -->
+                                <div class="" :class="[$styles.muted]">
+                                    <div class="flex space-x-1">
+                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]"></div>
+                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]" style="animation-delay: 0.1s"></div>
+                                        <div class="w-2 h-2 rounded-full animate-bounce" :class="[$styles.bgIcon]" style="animation-delay: 0.2s"></div>
+                                    </div>
+                                </div>
+
+                                <span :class="['text-sm', $styles.muted]">{{currentThread?.status}}</span>
                             </div>
 
                             <!-- Thread error message bubble -->

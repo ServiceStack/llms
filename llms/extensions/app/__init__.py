@@ -736,6 +736,7 @@ def install(ctx):
                 "modalities": chat.get("modalities", ["text"]),
                 "startedAt": started_at,
                 "metadata": metadata,
+                "status": ctx.next_loading_message(),
             }
             thread_id = await g_db.create_thread_async(thread, user=user)
             context["threadId"] = thread_id
@@ -750,6 +751,7 @@ def install(ctx):
                 "completedAt": None,
                 "error": None,
                 "metadata": metadata,
+                "status": ctx.next_loading_message(),
             }
             await g_db.update_thread_async(thread_id, update_thread, user=user)
 
@@ -773,6 +775,7 @@ def install(ctx):
             thread_id,
             {
                 "messages": messages,
+                "status": ctx.next_loading_message(),
             },
             user=user,
         )
@@ -906,6 +909,7 @@ def install(ctx):
                 "messages": messages,
                 "tools": tools,
                 "completedAt": completed_at,
+                "status": None,
             }
             tool_history = o.get("tool_history", None)
             if tool_history:
@@ -949,11 +953,35 @@ def install(ctx):
                     "outputTokens": total_output,
                     "cost": total_costs,
                     "stats": stats,
+                    "status": ctx.next_loading_message(),
                 },
                 user=user,
             )
 
     ctx.register_chat_response_filter(chat_response)
+
+    async def chat_status(status: str, context: Any):
+        ctx.dbg(f"Chat status: {status}")
+        chat = context.get("chat")
+        if not chat:
+            ctx.dbg("Missing chat")
+            return
+
+        nohistory = context.get("nohistory")
+        updated_at = datetime.now()
+        user = context.get("user", None)
+
+        thread_id = context.get("threadId", None)
+        tasks = []
+        if thread_id and not nohistory:
+            tasks.append(g_db.update_thread_async(thread_id, {"updatedAt": updated_at, "status": status}, user=user))
+        elif not thread_id:
+            ctx.dbg("Missing threadId")
+
+        if len(tasks) > 0:
+            await asyncio.gather(*tasks)
+
+    ctx.register_chat_status_filter(chat_status)
 
     async def chat_error(e: Exception, context: Any):
         error = ctx.error_message(e)
@@ -984,6 +1012,7 @@ def install(ctx):
             "completedAt": completed_at,
             "error": error,
             "stackTrace": context.get("stackTrace", None),
+            "status": None,
         }
         if not context.get("nostore"):
             tasks.append(g_db.create_request_async(request, user=user))
