@@ -220,15 +220,26 @@ export const TypeImage = {
 
 export const TypeAudio = {
     template: `
-        <div data-type="audio" v-if="audio.type === 'audio_url'">
+        <div data-type="audio" v-if="audio.type === 'audio_url' || audio.type === 'input_audio'">
             <slot></slot>
-            <audio controls :src="$ctx.resolveUrl(audio.audio_url.url)" class="h-8 w-64"></audio>
+            <audio controls :src="audioUrl" class="h-8 w-64"></audio>
         </div>
     `,
     props: {
         audio: {
             type: Object,
             required: true
+        }
+    },
+    setup(props) {
+        const ctx = inject('ctx')
+
+        const audioUrl = computed(() => ctx.resolveUrl(props.audio.type === 'input_audio'
+            ? props.audio.input_audio.data
+            : props.audio.audio_url.url))
+
+        return {
+            audioUrl,
         }
     }
 }
@@ -254,7 +265,7 @@ export const ViewType = {
     <div class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
         <TypeText v-if="result.type === 'text'" :text="result" />
         <TypeImage v-else-if="result.type === 'image_url'" :image="result" />
-        <TypeAudio v-else-if="result.type === 'audio_url'" :audio="result" />
+        <TypeAudio v-else-if="result.type === 'audio_url' || result.type === 'input_audio'" :audio="result" />
         <TypeFile v-else-if="result.type === 'file'" :file="result" />
         <div data-type="other" v-else>
             <HtmlFormat :value="result" :classes="$utils.htmlFormatClasses" />
@@ -299,9 +310,9 @@ export const ViewTypes = {
         const cls = "flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
         const texts = computed(() => props.results.filter(r => r.type === 'text'))
         const images = computed(() => props.results.filter(r => r.type === 'image_url'))
-        const audios = computed(() => props.results.filter(r => r.type === 'audio_url'))
+        const audios = computed(() => props.results.filter(r => r.type === 'audio_url' || r.type === 'input_audio'))
         const files = computed(() => props.results.filter(r => r.type === 'file'))
-        const others = computed(() => props.results.filter(r => r.type !== 'text' && r.type !== 'image_url' && r.type !== 'audio_url' && r.type !== 'file'))
+        const others = computed(() => props.results.filter(r => r.type !== 'text' && r.type !== 'image_url' && r.type !== 'audio_url' && r.type !== 'input_audio' && r.type !== 'file'))
         // If has resources, render as plain-text to avoid rendering resources multiple times
         const hasResources = computed(() => images.value.length > 0 || audios.value.length > 0 || files.value.length > 0 || others.value.length > 0)
         return { cls, texts, images, audios, files, others, hasResources }
@@ -995,7 +1006,7 @@ export const ChatBody = {
                                     <!-- Assistant Audios -->
                                     <div v-if="message.audios && message.audios.length > 0" class="mt-2 flex flex-wrap gap-2">
                                         <template v-for="(audio, i) in message.audios" :key="i">
-                                            <TypeAudio v-if="audio.type === 'audio_url'" :audio="audio" 
+                                            <TypeAudio v-if="audio.type === 'audio_url' || audio.type === 'input_audio'" :audio="audio" 
                                                class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                                                 <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
                                             </TypeAudio>
