@@ -62,7 +62,7 @@
             ]
         },
         "file": {
-            "model": "MiMo-V2.5",
+            "model": "MiMo-V2.5-Pro",
             "messages": [
                 {
                     "role": "user",
