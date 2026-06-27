@@ -181,7 +181,7 @@ const GalleryPage = {
                             </div>
 
                             <!-- Prompt -->
-                            <div>
+                            <div v-if="lightboxItem.prompt">
                                 <div class="flex justify-between">
                                     <h3 class="text-xs uppercase tracking-widest text-gray-500 font-semibold mb-3">Prompt</h3>
                                     <button type="button" @click="remixImage" class="mb-2 px-3 py-1 bg-fuchsia-700 text-white border border-fuchsia-600 hover:bg-fuchsia-600 hover:border-fuchsia-400 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-fuchsia-500/10 hover:shadow-fuchsia-500/40">

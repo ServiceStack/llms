@@ -1,4 +1,5 @@
 import { inject, computed, ref, onMounted } from "vue"
+import { ServerTool } from "./server-tools.mjs"
 
 let ext
 
@@ -563,9 +564,13 @@ const ToolSelector = {
         <div class="px-4 py-4 max-h-[80vh] overflow-y-auto border-b" :class="$styles.panel">
             
             <!-- Global Controls -->
-            <div class="flex items-center justify-between mb-4">
-                <span class="text-xs font-bold uppercase tracking-wider" :class="$styles.heading">Include Tools</span>
-                <div class="flex items-center gap-2">
+            <div class="flex items-center justify-between mb-4 h-4">
+                <div class="flex gap-4">
+                    <span @click="ext.setPrefs({ tab: null })" class="text-xs font-bold uppercase tracking-wider" :class="!ext.prefs.tab ? $styles.heading : $styles.muted + ' cursor-pointer'">Client Tools ({{ selectedToolsCount }}/{{ toolsCount }})</span>
+                    <span v-if="serverToolIds.length" @click="ext.setPrefs({ tab: 'server' })" class="text-xs font-bold uppercase tracking-wider" 
+                            :class="ext.prefs.tab === 'server' ? $styles.heading : $styles.muted + ' cursor-pointer'">Server Tools ({{ selectedServerTools.length }}/{{ serverToolIds.length }})</span>
+                </div>
+                <div v-if="!ext.prefs.tab" class="flex items-center gap-2">
                     <button @click="$ctx.setPrefs({ onlyTools: null })"
                         class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
                         :class="$prefs.onlyTools == null
@@ -581,10 +586,26 @@ const ToolSelector = {
                         No Tools
                     </button>
                 </div>
+                <div v-else="ext.prefs.tab === 'server'" class="flex items-center gap-2">
+                    <button @click="toggleServerTools(true)"
+                        class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
+                        :class="selectedServerTools.length === serverToolIds.length
+                            ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border-green-300 dark:border-green-800' 
+                            : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
+                        All Tools
+                    </button>
+                    <button @click="toggleServerTools(false)"
+                        class="px-3 py-1 rounded-md text-xs font-medium border transition-colors select-none"
+                        :class="selectedServerTools.length === 0
+                            ? 'bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800' 
+                            : 'cursor-pointer bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
+                        No Tools
+                    </button>
+                </div>
             </div>
 
             <!-- Groups -->
-            <div class="space-y-3" :key="renderKey">
+            <div v-if="!ext.prefs.tab" class="space-y-3" :key="renderKey">
                 <div v-for="group in toolGroups" :key="group.name" 
                      class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                      
@@ -640,6 +661,11 @@ const ToolSelector = {
                      </div>
                 </div>
             </div>
+            <div v-else-if="ext.prefs.tab === 'server'">
+                <div v-for="toolRef in serverToolIds">
+                    <ServerTool :ext="ext" :tool="$ctx.state.serverTools.find(x => x.$id === toolRef)" />
+                </div>
+            </div>
         </div>
     `,
     setup() {
@@ -671,6 +697,30 @@ const ToolSelector = {
 
             return definedGroups
         })
+
+        const toolsCount = computed(() => {
+            return toolGroups.value.reduce((total, group) => total + group.tools.length, 0)
+        })
+
+        const selectedToolsCount = computed(() => {
+            if (ctx.prefs.onlyTools == null)
+                return toolsCount.value
+            return ctx.prefs.onlyTools.length
+        })
+
+        const serverToolIds = computed(() => {
+            const selectedModel = ctx.chat.getSelectedModel()
+            const provider = selectedModel?.provider
+            if (!provider) return []
+            return ctx.state.config.providers.filter(x => x.id === provider)[0]?.server_tools || []
+        })
+
+        const selectedServerTools = computed(() => {
+            return Object.values(ext.prefs.serverTools || {}).filter(x => x.selected)
+        })
+        function toggleServerTools(enable) {
+            Object.values(ext.prefs.serverTools).forEach(x => x.selected = enable)
+        }
 
         function toggleCollapse(groupName) {
             const key = groupName || '_other_'
@@ -717,12 +767,18 @@ const ToolSelector = {
         }
 
         return {
+            ext,
             renderKey,
             toolGroups,
+            toolsCount,
+            selectedToolsCount,
+            serverToolIds,
+            selectedServerTools,
+            toggleServerTools,
             toggleCollapse,
             isCollapsed,
             setGroupTools,
-            getActiveCount
+            getActiveCount,
         }
     }
 }
@@ -737,6 +793,7 @@ export default {
             Tools,
             ToolSelector,
             ToolResult,
+            ServerTool,
             JsonInput,
         })
 
@@ -762,18 +819,24 @@ export default {
                 component: {
                     template: svg([
                         `@click="$ctx.toggleTop('ToolSelector')"`,
-                        `:class="$prefs.onlyTools == null ? $styles.iconFull : $prefs.onlyTools.length ? $styles.iconPartial : ''"`
+                        `:class="$prefs.onlyTools == null ? $styles.iconFull : ($prefs.onlyTools.length + Object.values(ext.prefs.serverTools || {}).filter(x => x.selected).length) ? $styles.iconPartial : ''"`
                     ].join(' ')),
-                    // , "{{$prefs.onlyTools == null ? 'Include All Tools' : $prefs.onlyTools.length ? 'Include Selected Tools' : 'All Tools Excluded'}}"
+                    setup() {
+                        return { ext }
+                    }
                 },
                 isActive({ top }) {
                     return top === 'ToolSelector'
                 },
                 get title() {
+                    const selectedServerTools = Object.values(ext.prefs.serverTools || {}).filter(x => x.selected)
+                    const combinedCount = (ctx.prefs.onlyTools?.length || 0) + selectedServerTools.length
+                    const suffix = selectedServerTools.length ? ` (${selectedServerTools.length} Server)` : ''
+
                     return ctx.prefs.onlyTools == null
-                        ? `All Tools Included`
-                        : ctx.prefs.onlyTools.length
-                            ? `${ctx.prefs.onlyTools.length} ${ctx.utils.pluralize('Tool', ctx.prefs.onlyTools.length)} Included`
+                        ? `All Tools Included${suffix}`
+                        : combinedCount
+                            ? `${combinedCount} ${ctx.utils.pluralize('Tool', combinedCount)} Included${suffix}`
                             : 'No Tools Included'
                 }
             }
@@ -798,6 +861,55 @@ export default {
             } else {
                 request.metadata.tools = 'all'
             }
+
+            // Inject configured server tools
+            const selectedModel = model || ctx.chat?.getSelectedModel()
+            const provider = selectedModel?.provider
+            if (provider) {
+                const providerTools = ctx.state.config?.providers?.find(x => x.id === provider)?.server_tools || []
+                const serverTools = ext.prefs.serverTools || {}
+
+                providerTools.forEach(toolId => {
+                    const cfg = serverTools[toolId]
+                    if (cfg && cfg.selected) {
+                        if (!request.tools) {
+                            request.tools = []
+                        }
+                        const alreadyExists = request.tools.some(t => t.type === cfg.config?.type)
+                        if (!alreadyExists && cfg.config) {
+                            const toolObj = JSON.parse(JSON.stringify(cfg.config))
+                            // Clean up empty parameters before sending
+                            if (toolObj.parameters) {
+                                Object.keys(toolObj.parameters).forEach(k => {
+                                    if (toolObj.parameters[k] === undefined || toolObj.parameters[k] === "") {
+                                        delete toolObj.parameters[k]
+                                    }
+                                    else if (Array.isArray(toolObj.parameters[k])) {
+                                        toolObj.parameters[k] = toolObj.parameters[k].filter(x => x !== undefined && x !== "")
+                                        if (toolObj.parameters[k].length === 0) {
+                                            delete toolObj.parameters[k]
+                                        }
+                                    }
+                                    else if (typeof toolObj.parameters[k] === 'object' && toolObj.parameters[k] !== null) {
+                                        Object.keys(toolObj.parameters[k]).forEach(subK => {
+                                            if (toolObj.parameters[k][subK] === undefined || toolObj.parameters[k][subK] === "") {
+                                                delete toolObj.parameters[k][subK]
+                                            }
+                                        })
+                                        if (Object.keys(toolObj.parameters[k]).length === 0) {
+                                            delete toolObj.parameters[k]
+                                        }
+                                    }
+                                })
+                                if (Object.keys(toolObj.parameters).length === 0) {
+                                    delete toolObj.parameters
+                                }
+                            }
+                            request.tools.push(toolObj)
+                        }
+                    }
+                })
+            }
         })
 
         ctx.routes.push({ path: '/tools', component: Tools, meta: { title: 'View Tools' } })
@@ -807,10 +919,18 @@ export default {
     },
 
     async load(ctx) {
-        const api = await ext.getJson('/')
+        const [api, apiTools] = await Promise.all([
+            await ext.getJson('/'),
+            await ext.getJson('/server')
+        ])
         if (api.response) {
             ctx.setState({ tool: api.response })
             //console.log(ctx.state.tool)
+        } else {
+            ctx.setError(api.error)
+        }
+        if (apiTools.response) {
+            ctx.setState({ serverTools: apiTools.response })
         } else {
             ctx.setError(api.error)
         }

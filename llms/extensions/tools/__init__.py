@@ -1,4 +1,5 @@
 import json
+import os
 
 from aiohttp import web
 
@@ -62,6 +63,30 @@ def install(ctx):
             raise e
 
     ctx.add_post("exec/{name}", exec_handler)
+
+    async def server_tools_handler(request):
+        user = ctx.get_username(request)
+        paths = []
+        if user:
+            user_path = ctx.app.get_user_path(user)
+            paths.append(os.path.join(user_path, "server-tools.json"))
+
+        default_path = ctx.app.get_user_path("default")
+        paths.append(os.path.join(default_path, "server-tools.json"))
+        paths.append(os.path.join(ctx.path, "ui", "server-tools.json"))
+
+        for path in paths:
+            if os.path.isfile(path):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    return web.json_response(data)
+                except Exception as e:
+                    ctx.err(f"Error reading tools from {path}", e)
+
+        return web.json_response([])
+
+    ctx.add_get("server", server_tools_handler)
 
 
 __install__ = install

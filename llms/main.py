@@ -1210,6 +1210,7 @@ class OpenAiCompatible:
         self.enable_thinking = bool(kwargs["enable_thinking"]) if "enable_thinking" in kwargs else None
         self.check = kwargs.get("check")
         self.modalities = kwargs.get("modalities", {})
+        self.server_tools = kwargs.get("server_tools") or []
 
     def set_models(self, **kwargs):
         models = kwargs.get("models", {})
@@ -1572,7 +1573,7 @@ def get_active_models():
 def api_providers():
     ret = []
     for id, provider in g_handlers.items():
-        ret.append({"id": id, "name": provider.name, "models": provider.models})
+        ret.append({"id": id, "name": provider.name, "models": provider.models, "server_tools": provider.server_tools})
     return ret
 
 
@@ -4800,10 +4801,18 @@ def cli_exec(cli_args, extra_args):
             if "defaults" not in ret:
                 ret["defaults"] = g_config["defaults"]
             enabled, disabled = provider_status()
-            ret["status"] = {"all": list(g_config["providers"].keys()), "enabled": enabled, "disabled": disabled}
+            ret["status"] = {"enabled": enabled, "disabled": disabled}
             ret["extensions"] = [ext.get("name") for ext in g_app.extensions]
             # Add auth configuration
             ret["requiresAuth"] = g_app.is_auth_enabled()
+            ret["providers"] = []
+            for id, provider in g_config["providers"].items():
+                dto = {"id": id}
+                if "modalities" in provider:
+                    dto["modalities"] = provider["modalities"]
+                if len(provider.get("server_tools", [])) > 0:
+                    dto["server_tools"] = provider.get("server_tools")
+                ret["providers"].append(dto)
             return web.json_response(ret)
 
         app.router.add_get("/config", config_handler)

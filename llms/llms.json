@@ -554,7 +554,15 @@
                     "reasoning_effort": "low"
                 },
                 "stream": false
-            }
+            },
+            "server_tools": [
+                "tool://anthropic/web_search",
+                "tool://anthropic/web_fetch",
+                "tool://anthropic/code_execution",
+                "tool://anthropic/advisor",
+                "tool://anthropic/tool_search",
+                "tool://anthropic/mcp_toolset"
+            ]
         },
         "openai": {
             "enabled": true
@@ -622,7 +630,16 @@
         },
         "openrouter": {
             "enabled": true,
-            "id": "openrouter"
+            "id": "openrouter",
+            "server_tools": [
+                "tool://openrouter/web_search",
+                "tool://openrouter/datetime",
+                "tool://openrouter/image_generation",
+                "tool://openrouter/web_fetch",
+                "tool://openrouter/fusion",
+                "tool://openrouter/advisor",
+                "tool://openrouter/subagent"
+            ]
         },
         "nvidia": {
             "enabled": true,

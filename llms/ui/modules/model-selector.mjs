@@ -102,7 +102,7 @@ const ProviderStatus = {
         const popoverRef = ref(null)
         const pending = ref({})
         const renderKey = ref(0)
-        const allProviders = computed(() => ctx.state.config.status?.all)
+        const allProviders = computed(() => ctx.state.config.providers.map(x => x.id))
         const isEnabled = (p) => ctx.state.config.status.enabled.includes(p)
         const togglePopover = () => showPopover.value = !showPopover.value
 
