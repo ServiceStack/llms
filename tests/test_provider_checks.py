@@ -13,10 +13,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from llms.main import (
     check_provider_model,
+    cli,
     create_provider,
     create_provider_kwargs,
     load_config,
-    cli,
 )
 
 config_path = os.path.join(os.path.dirname(__file__), "..", "llms", "llms.json")

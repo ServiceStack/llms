@@ -1336,24 +1336,7 @@ class OpenAiCompatible:
             ret.pop("modalities", None)
         return ret
 
-    async def chat(self, chat, context=None):
-        chat["model"] = self.provider_model(chat["model"]) or chat["model"]
-
-        modalities = chat.get("modalities") or []
-        if len(modalities) > 0:
-            for modality in modalities:
-                # use default implementation for text modalities
-                if modality == "text":
-                    continue
-                modality_provider = self.modalities.get(modality)
-                if modality_provider:
-                    return await modality_provider.chat(chat, self, context=context)
-                else:
-                    raise Exception(f"Provider {self.name} does not support '{modality}' modality")
-
-        # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
-        #     f.write(json.dumps(chat, indent=2))
-
+    def init_chat(self, chat):
         if self.frequency_penalty is not None:
             chat["frequency_penalty"] = self.frequency_penalty
         if self.max_completion_tokens is not None:
@@ -1389,7 +1372,28 @@ class OpenAiCompatible:
         if self.enable_thinking is not None:
             chat["enable_thinking"] = self.enable_thinking
 
+    async def chat(self, chat, context=None):
+        chat["model"] = self.provider_model(chat["model"]) or chat["model"]
+
+        modalities = chat.get("modalities") or []
+        if len(modalities) > 0:
+            for modality in modalities:
+                # use default implementation for text modalities
+                if modality == "text":
+                    continue
+                modality_provider = self.modalities.get(modality)
+                if modality_provider:
+                    return await modality_provider.chat(chat, self, context=context)
+                else:
+                    raise Exception(f"Provider {self.name} does not support '{modality}' modality")
+
+        # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
+        #     f.write(json.dumps(chat, indent=2))
+
+        self.init_chat(chat)
+
         chat = await self.process_chat(chat, provider_id=self.id)
+
         _log(f"POST {self.chat_url}")
         _log(chat_summary(chat))
         # remove metadata if any (conflicts with some providers, e.g. Z.ai)

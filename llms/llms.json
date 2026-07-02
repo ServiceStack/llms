@@ -385,7 +385,6 @@
         },
         "codestral": {
             "enabled": true,
-            "id": "codestral",
             "npm": "codestral",
             "api": "https://codestral.mistral.ai/v1",
             "env": [
@@ -478,7 +477,6 @@
         },
         "ollama": {
             "enabled": false,
-            "id": "ollama",
             "npm": "ollama",
             "api": "http://localhost:11434"
         },
@@ -630,7 +628,6 @@
         },
         "openrouter": {
             "enabled": true,
-            "id": "openrouter",
             "server_tools": [
                 "tool://openrouter/web_search",
                 "tool://openrouter/datetime",

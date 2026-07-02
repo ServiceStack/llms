@@ -16,6 +16,7 @@ const modalityIcons = {
     image: I(`<rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>`),
     audio: I(`<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="m19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>`),
     video: I(`<path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect>`),
+    speech: I(`<g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="6" r="4" /><path d="M18 17.5c0 2.485 0 4.5-8 4.5s-8-2.015-8-4.5S5.582 13 10 13s8 2.015 8 4.5Z" /><path stroke-linecap="round" d="M19 2s2 1.2 2 4s-2 4-2 4m-2-6s1 .6 1 2s-1 2-1 2" /></g>`),
     pdf: I(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14,2 14,8 20,8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10,9 9,9 8,9"></polyline>`),
 }
 
@@ -427,7 +428,7 @@ const ModelSelectorModal = {
         const prefs = ref(ext.getPrefs())
 
         const inputModalityTypes = ['image', 'audio', 'video', 'pdf']
-        const outputModalityTypes = ['image', 'audio']
+        const outputModalityTypes = ['image', 'audio', 'speech']
 
         const models = computed(() => ctx.state.models || [])
 

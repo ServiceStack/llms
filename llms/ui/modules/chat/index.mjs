@@ -158,7 +158,8 @@ export function useChatPrompt(ctx) {
             return
         }
         ctx.setState({
-            selectedModel: model.name
+            selectedModel: model.name,
+            selectedVoice: model.defaults?.voice || undefined
         })
         ctx.setPrefs({
             model: model.name
@@ -175,6 +176,7 @@ export function useChatPrompt(ctx) {
     const canGenerateAudio = model => {
         return model?.modalities?.output?.includes('audio')
     }
+    const getVoices = model => model?.voices ?? []
 
     function applySettings(request) {
         settings.applySettings(request)
@@ -204,7 +206,7 @@ export function useChatPrompt(ctx) {
         return content
     }
 
-    function createRequest({ model, text, files, systemPrompt, aspectRatio }) {
+    function createRequest({ model, text, files, systemPrompt, aspectRatio, voice }) {
         // Construct API Request from History
         const request = {
             model: model.name,
@@ -231,6 +233,10 @@ export function useChatPrompt(ctx) {
         }
         else if (canGenerateAudio(model)) {
             request.modalities = ["audio", "text"]
+        }
+
+        if (voice) {
+            request.metadata['voice'] = voice
         }
 
         if (text) {
@@ -493,6 +499,7 @@ export function useChatPrompt(ctx) {
         getProviderForModel,
         canGenerateImage,
         canGenerateAudio,
+        getVoices,
         getTextContent,
         getAnswer,
         selectAspectRatio,
@@ -750,14 +757,26 @@ const ChatPrompt = {
                         </div>
                     </div>
 
-                    <!-- Image Aspect Ratio Selector -->
-                    <div v-if="$chat.canGenerateImage(model)">
-                        <select name="aspect_ratio" v-model="$state.selectedAspectRatio" 
-                                class="block w-full rounded-md pl-2 pr-6 py-1 text-xs" :class="[$styles.textInput, $styles.bgInput, $styles.borderInput]">
-                            <option v-for="(ratio, size) in imageAspectRatios" :key="size" :value="size">
-                                {{ ratio }}
-                            </option>
-                        </select>
+                    <div class="flex gap-x-2">
+                        <!-- Image Aspect Ratio Selector -->
+                        <div v-if="$chat.canGenerateImage(model)">
+                            <select name="aspect_ratio" v-model="$state.selectedAspectRatio" 
+                                    class="block w-full rounded-md pl-2 pr-6 py-1 text-xs" :class="[$styles.textInput, $styles.bgInput, $styles.borderInput]">
+                                <option v-for="(ratio, size) in imageAspectRatios" :key="size" :value="size">
+                                    {{ ratio }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Voice Selector -->
+                        <div v-if="$chat.getVoices(model).length">
+                            <select name="voice" v-model="$state.selectedVoice" 
+                                    class="block w-full rounded-md pl-2 pr-6 py-1 text-xs" :class="[$styles.textInput, $styles.bgInput, $styles.borderInput]">
+                                <option v-for="(voice, idx) in $chat.getVoices(model)" :key="idx" :value="voice">
+                                    {{ voice }}
+                                </option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
