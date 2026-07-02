@@ -51,7 +51,6 @@ def install(ctx):
         "stats",
         "provider",
         "providerModel",
-        "publishedAt",
         "startedAt",
         "completedAt",
         "metadata",
@@ -59,6 +58,8 @@ def install(ctx):
         "ref",
         "contextTokens",
         "parentId",
+        "publishedAt",
+        "publishedUrl",
     ]
 
     def thread_dto(row):

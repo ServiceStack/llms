@@ -51,7 +51,6 @@ class AppDB:
                 "stats": "JSON",
                 "provider": "TEXT",
                 "providerModel": "TEXT",
-                "publishedAt": "TIMESTAMP",
                 "startedAt": "TIMESTAMP",
                 "completedAt": "TIMESTAMP",
                 "metadata": "JSON",
@@ -61,6 +60,8 @@ class AppDB:
                 "providerResponse": "JSON",
                 "contextTokens": "INTEGER",
                 "parentId": "INTEGER",
+                "publishedAt": "TIMESTAMP",
+                "publishedUrl": "TEXT",
             },
             "request": {
                 "id": "INTEGER",
