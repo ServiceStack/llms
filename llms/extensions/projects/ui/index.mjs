@@ -244,6 +244,18 @@ const ProjectsManagerModal = {
                                                     class="block w-full rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border"
                                                     :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
                                             </div>
+
+                                            <!-- Publish Build Directory -->
+                                            <div>
+                                                <label class="block text-sm font-medium mb-1" :class="[$styles.labelInput]">Publish Build Directory</label>
+                                                <input type="text" v-model="editForm.publish"
+                                                    placeholder="Path to folder, e.g. dist or $WORKSPACE/dist"
+                                                    class="block w-full rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono"
+                                                    :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
+                                                <span class="text-[10px] text-gray-400 dark:text-gray-500 mt-1 block">
+                                                    Default directory to publish (e.g. dist, build, or $WORKSPACE/dist)
+                                                </span>
+                                            </div>
                                             
                                             <!-- Paths -->
                                             <div>
@@ -343,7 +355,8 @@ const ProjectsManagerModal = {
         const editForm = ref({
             name: '',
             description: '',
-            paths: []
+            paths: [],
+            publish: ''
         })
 
         const customPaths = ref([])
@@ -381,7 +394,8 @@ const ProjectsManagerModal = {
             editForm.value = {
                 name: proj.name,
                 description: proj.description || '',
-                paths: [...(proj.paths || [])]
+                paths: [...(proj.paths || [])],
+                publish: proj.publish || ''
             }
             customPaths.value = (proj.paths || []).filter(p => p !== '$WORKSPACE' && p !== '$TEMP')
         }
@@ -392,7 +406,8 @@ const ProjectsManagerModal = {
             editForm.value = {
                 name: '',
                 description: '',
-                paths: []
+                paths: [],
+                publish: ''
             }
             customPaths.value = []
         }
@@ -443,7 +458,8 @@ const ProjectsManagerModal = {
             const updatedProject = {
                 name: editForm.value.name.trim(),
                 description: editForm.value.description.trim(),
-                paths: finalPaths
+                paths: finalPaths,
+                publish: editForm.value.publish ? editForm.value.publish.trim() : ''
             }
 
             // Check duplicate project name
