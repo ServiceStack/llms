@@ -616,6 +616,9 @@
         "deepseek": {
             "enabled": true
         },
+        "atlascloud": {
+            "enabled": true
+        },
         "moonshotai": {
             "enabled": true
         },
