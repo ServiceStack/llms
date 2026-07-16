@@ -643,7 +643,6 @@ The `request_args` dictionary defines supported chat request parameters:
     "vue-router": "/ui/lib/vue-router.min.mjs",
     "@servicestack/client": "/ui/lib/servicestack-client.mjs",
     "@servicestack/vue": "/ui/lib/servicestack-vue.mjs",
-    "idb": "/ui/lib/idb.min.mjs",
     "marked": "/ui/lib/marked.min.mjs",
     "highlight.js": "/ui/lib/highlight.min.mjs",
     "chart.js": "/ui/lib/chart.js",
