@@ -136,19 +136,22 @@ def install(ctx):
                 return web.json_response({"dist": resolved_publish})
             return web.json_response({"dist": publish_prop})
 
-        if not project_paths:
-            project_paths = ["$WORKSPACE"]
+        special_prefixes = ("$WORKSPACE", "$TEMP")
+        custom_paths = [p for p in project_paths if not p.startswith(special_prefixes)]
 
         detected_dist = None
-        for p in project_paths:
+        first_custom_path = None
+        for p in custom_paths:
             resolved = ctx.resolve_directory(p)
             if resolved:
+                if first_custom_path is None:
+                    first_custom_path = resolved
                 dist_path = os.path.join(resolved, "dist")
                 if os.path.exists(dist_path) and os.path.isdir(dist_path):
                     detected_dist = dist_path
                     break
 
-        return web.json_response({"dist": detected_dist or ""})
+        return web.json_response({"dist": detected_dist or first_custom_path or ""})
 
     ctx.add_get("detect-dist", detect_dist)
 
