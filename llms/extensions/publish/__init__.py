@@ -9,9 +9,9 @@ import tarfile
 import aiohttp
 from aiohttp import web
 
-# DEFAULT_BASE_URL = "https://localhost:5001"
-DEFAULT_REGISTER_PATH = "/embed/register.html?domain=llmspy.org"
+# DEFAULT_PUBLISH_BASE_URL = "https://localhost:5001"
 DEFAULT_PUBLISH_BASE_URL = "https://ai.llmspy.org"
+DEFAULT_REGISTER_PATH = "/embed/register.html?domain=llmspy.org"
 DEFAULT_PUBLISH_THREAD_PATH = "/publish/thread"
 DEFAULT_PUBLISH_MEDIA_PATH = "/publish/media"
 DEFAULT_PUBLISH_PROJECT_PATH = "/publish/project/{name}"
