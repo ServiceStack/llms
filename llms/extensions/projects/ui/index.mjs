@@ -15,7 +15,7 @@ function useProjects(ext) {
             ctx.setError(api.error, "Failed to save project")
         } else {
             const projects = api.response
-            ext.setState({ projects })
+            ext.ctx.setState({ projects })
             // Update active project if needed
             const active = ctx.state.prefs.project
             if (active) {
@@ -547,7 +547,7 @@ const ProjectsManagerModal = {
             if (api.error) {
                 ctx.setError(api.error, "Failed to save projects")
             } else {
-                ext.setState({ projects: localProjects.value })
+                ext.ctx.setState({ projects: localProjects.value })
                 // Update active project if needed
                 const active = ctx.state.prefs.project
                 if (active && !localProjects.value.some(p => p.name === active)) {

@@ -126,7 +126,7 @@ def install(ctx):
                 ctx.log(f"Renamed active project from '{active_project}' to '{new_name}'")
 
         ctx.log(f"Saved project '{name}' for {user or 'default'} to {path}")
-        return web.json_response(project_data)
+        return web.json_response(projects)
 
     ctx.add_post("save/{name}", save_project)
 
