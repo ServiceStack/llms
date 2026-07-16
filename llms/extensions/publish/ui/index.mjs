@@ -496,18 +496,29 @@ const SharePanel = {
             closeFolderBrowser()
         }
 
+        const updatePublishedProjectUrl = () => {
+            if (activeProjectName.value) {
+                const project = ctx.projects.getProject(activeProjectName.value)
+                publishedProjectUrl.value = project?.publishedUrl || ''
+            } else {
+                publishedProjectUrl.value = ''
+            }
+        }
+
         watch(activeProjectName, async (newProj) => {
             if (newProj) {
                 publishType.value = 'project'
             } else {
                 publishType.value = 'thread'
             }
+            updatePublishedProjectUrl()
             await detectDistFolder()
         })
 
         onMounted(async () => {
             window.addEventListener('message', handleMessage)
             document.addEventListener('click', onDocClick)
+            updatePublishedProjectUrl()
             await detectDistFolder()
         })
 
@@ -581,6 +592,10 @@ const SharePanel = {
                     if (data.publishedUrl) {
                         publishedProjectUrl.value = data.publishedUrl
                         ext.toast('Project published successfully!')
+                        const proj = ctx.projects.getProject(activeProjectName.value)
+                        if (proj) {
+                            proj.publishedUrl = data.publishedUrl
+                        }
                     } else {
                         ext.setError('Missing publishedUrl in response', 'Failed to publish project')
                     }

@@ -483,6 +483,22 @@ def install(ctx):
             status_code = getattr(resp, "status", 200)
             try:
                 data = json.loads(text)
+                if status_code == 200 and "publishedUrl" in data:
+                    projects_list = ctx.projects.get_user_projects(user)
+                    updated = False
+                    for proj in projects_list:
+                        if proj.get("name") == name:
+                            proj["publishedUrl"] = data["publishedUrl"]
+                            updated = True
+                            break
+                    if updated:
+                        if user:
+                            write_path = os.path.join(ctx.get_user_path(user), "projects", "projects.json")
+                        else:
+                            write_path = os.path.join(ctx.get_user_path(), "projects", "projects.json")
+                        os.makedirs(os.path.dirname(write_path), exist_ok=True)
+                        with open(write_path, "w", encoding="utf-8") as f:
+                            json.dump(projects_list, f, indent=2, ensure_ascii=False)
                 return web.json_response(data, status=status_code)
             except json.JSONDecodeError:
                 content_type = getattr(resp, "content_type", "text/plain")

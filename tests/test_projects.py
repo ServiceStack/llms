@@ -64,7 +64,7 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
             path, handler = args[0][0], args[0][1]
             if path == "projects.json":
                 self.save_projects_handler = handler
-            elif path == "projects/{name}":
+            elif path == "save/{name}":
                 self.save_project_handler = handler
             elif path == "active":
                 self.set_active_handler = handler
@@ -216,7 +216,7 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
 
         response = await self.save_project_handler(request)
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.text), project_data)
+        self.assertEqual(json.loads(response.text), [project_data])
 
         # Verify saved file contents
         projects_file = os.path.join(self.temp_dir, "projects", "projects.json")
@@ -246,7 +246,10 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
 
         response = await self.save_project_handler(request)
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.text), updated_project)
+        self.assertEqual(json.loads(response.text), [
+            updated_project,
+            {"name": "Project Two", "paths": ["/path2"]},
+        ])
 
         # Verify merged file contents
         with open(projects_file, encoding="utf-8") as f:

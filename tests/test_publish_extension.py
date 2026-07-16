@@ -416,6 +416,15 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         resp_data = json.loads(response.text)
         self.assertEqual(resp_data.get("publishedUrl"), "https://test.llmspy.org/project/ProjectA")
 
+        # Verify projects.json is written with publishedUrl
+        projects_file_path = os.path.join(self.mock_ctx.get_user_path("admin"), "projects", "projects.json")
+        self.assertTrue(os.path.exists(projects_file_path))
+        with open(projects_file_path, encoding="utf-8") as f:
+            saved_projects = json.load(f)
+            self.assertEqual(len(saved_projects), 1)
+            self.assertEqual(saved_projects[0]["name"], "ProjectA")
+            self.assertEqual(saved_projects[0]["publishedUrl"], "https://test.llmspy.org/project/ProjectA")
+
         # Verify post arguments
         mock_session_instance.post.assert_called_once()
         call_args = mock_session_instance.post.call_args

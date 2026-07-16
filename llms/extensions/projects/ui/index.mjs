@@ -85,9 +85,9 @@ const ProjectsSelector = {
                     No other projects registered.
                 </div>
                 <div v-else class="max-h-60 overflow-y-auto border-t" :class="$styles.chromeBorder">
-                    <button v-for="project in projects" :key="project.name"
-                        type="button" @click="selectProject(project)"
-                        class="w-full text-left px-3 py-2 flex items-start space-x-3 transition-colors text-sm"
+                    <div v-for="project in projects" :key="project.name"
+                        @click="selectProject(project)"
+                        class="w-full text-left px-3 py-2 flex items-start space-x-3 transition-colors text-sm cursor-pointer select-none"
                         :class="[$state.prefs.project === project.name ? $styles.popoverButtonActive : $styles.popoverButton]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="size-5 mt-0.5 flex-shrink-0" :class="$state.prefs.project === project.name ? 'text-blue-500' : $styles.mutedIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
@@ -102,6 +102,15 @@ const ProjectsSelector = {
                             <div v-if="project.description" class="text-xs truncate mt-0.5" :class="$styles.muted">
                                 {{ project.description }}
                             </div>
+                            <div v-if="project.publishedUrl" class="mt-1.5 flex items-center gap-1">
+                                <a :href="project.publishedUrl" target="_blank" rel="noopener noreferrer" @click.stop
+                                   class="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline">
+                                    <svg class="size-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    <span>Open Published Link</span>
+                                </a>
+                            </div>
                             <div v-for="path in project.paths.filter(x => x[0] !== '$')" :key="path" class="mt-1.5 text-[10px] font-mono truncate" :class="$styles.muted" :title="path">
                                 {{ path }}
                             </div>
@@ -111,7 +120,7 @@ const ProjectsSelector = {
                                 </div>
                             </div>
                         </div>
-                    </button>
+                    </div>
                 </div>
 
                 <!-- Manage Projects Button -->
@@ -282,6 +291,17 @@ const ProjectsManagerModal = {
                                                     Default directory to publish (e.g. dist, build, or $WORKSPACE/dist)
                                                 </span>
                                             </div>
+
+                                            <!-- Published URL -->
+                                            <div v-if="editForm.publishedUrl">
+                                                <label class="block text-sm font-medium mb-1" :class="[$styles.labelInput]">Published URL</label>
+                                                <div class="flex items-center gap-2">
+                                                    <a :href="editForm.publishedUrl" target="_blank" rel="noopener noreferrer"
+                                                       class="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate">
+                                                        {{ editForm.publishedUrl }}
+                                                    </a>
+                                                </div>
+                                            </div>
                                             
                                             <!-- Paths -->
                                             <div>
@@ -382,7 +402,8 @@ const ProjectsManagerModal = {
             name: '',
             description: '',
             paths: [],
-            publish: ''
+            publish: '',
+            publishedUrl: ''
         })
 
         const customPaths = ref([])
@@ -421,7 +442,8 @@ const ProjectsManagerModal = {
                 name: proj.name,
                 description: proj.description || '',
                 paths: [...(proj.paths || [])],
-                publish: proj.publish || ''
+                publish: proj.publish || '',
+                publishedUrl: proj.publishedUrl || ''
             }
             customPaths.value = (proj.paths || []).filter(p => p !== '$WORKSPACE' && p !== '$TEMP')
         }
@@ -433,7 +455,8 @@ const ProjectsManagerModal = {
                 name: '',
                 description: '',
                 paths: [],
-                publish: ''
+                publish: '',
+                publishedUrl: ''
             }
             customPaths.value = []
         }
@@ -485,7 +508,8 @@ const ProjectsManagerModal = {
                 name: editForm.value.name.trim(),
                 description: editForm.value.description.trim(),
                 paths: finalPaths,
-                publish: editForm.value.publish ? editForm.value.publish.trim() : ''
+                publish: editForm.value.publish ? editForm.value.publish.trim() : '',
+                publishedUrl: editForm.value.publishedUrl ? editForm.value.publishedUrl.trim() : ''
             }
 
             // Check duplicate project name
