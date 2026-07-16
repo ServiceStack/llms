@@ -68,11 +68,8 @@ const ProjectsSelector = {
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                     <div class="flex-1 min-w-0">
-                        <div class="font-medium text-gray-900 dark:text-gray-100 flex items-center justify-between">
+                        <div class="font-medium text-gray-900 dark:text-gray-100">
                             <span>Default Workspace</span>
-                            <svg v-if="$state.prefs.project === null" class="size-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
-                            </svg>
                         </div>
                         <div class="text-[10px] font-mono truncate mt-0.5" :class="$styles.muted">
                             Default workspace (no project selected)
@@ -95,21 +92,16 @@ const ProjectsSelector = {
                         <div class="flex-1 min-w-0">
                             <div class="font-medium text-gray-900 dark:text-gray-100 flex items-center justify-between">
                                 <span class="truncate font-semibold">{{ project.name }}</span>
-                                <svg v-if="$state.prefs.project === project.name" class="size-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
-                                </svg>
+                                <a v-if="project.publishedUrl" :href="project.publishedUrl" target="_blank" rel="noopener noreferrer" @click.stop
+                                   class="inline-flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline shrink-0 ml-1">
+                                    <svg class="size-2.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    <span>published</span>
+                                </a>
                             </div>
                             <div v-if="project.description" class="text-xs truncate mt-0.5" :class="$styles.muted">
                                 {{ project.description }}
-                            </div>
-                            <div v-if="project.publishedUrl" class="mt-1.5 flex items-center gap-1">
-                                <a :href="project.publishedUrl" target="_blank" rel="noopener noreferrer" @click.stop
-                                   class="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline">
-                                    <svg class="size-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                    </svg>
-                                    <span>Open Published Link</span>
-                                </a>
                             </div>
                             <div v-for="path in project.paths.filter(x => x[0] !== '$')" :key="path" class="mt-1.5 text-[10px] font-mono truncate" :class="$styles.muted" :title="path">
                                 {{ path }}
