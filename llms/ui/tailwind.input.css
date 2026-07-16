@@ -1,8 +1,10 @@
 /* tailwindcss -i ./tailwind.input.css -o ./ui/app.css --watch */
 @import "tailwindcss";
 @source "./lib/servicestack-vue.mjs";
-@source "../../extensions";
-@source "../../llms-home/extensions/";
+@source "../extensions/**/*.{mjs,html}";
+@source "../../llms-home/extensions/**/*.{mjs,html}";
+@source "/home/mythz/src/ServiceStack/llms/llms-home/extensions/**/*.{mjs,html}";
+@source "./llms-home/extensions/**/*.{mjs,html}";
 @source "../../llms-home/user/default/workspaces/**/theme.json";
 
 @custom-variant dark (&:where(.dark, .dark *));
