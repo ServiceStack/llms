@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any, Dict
 
 from aiohttp import web
 
@@ -58,6 +59,25 @@ def install(ctx):
         return web.json_response({})
 
     ctx.add_delete("media/{hash}", delete_media)
+
+    class MediaApi:
+        def __init__(self, ctx, g_db):
+            self.ctx = ctx
+            self.db = g_db
+
+        def query_media(self, query: Dict[str, Any], user=None):
+            ctx.log(f"query_media({query}, {user})")
+            rows = self.db.query_media(query, user=user)
+            dtos = [media_dto(row) for row in rows]
+            return dtos
+
+        def update_media(self, id, media: Dict[str, Any], user=None):
+            return self.db.update_media(id, media, user=user)
+
+        async def update_media_async(self, id, media: Dict[str, Any], user=None):
+            return await self.db.update_media_async(id, media, user=user)
+
+    ctx.media = MediaApi(ctx, g_db)
 
 
 __install__ = install

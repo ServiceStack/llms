@@ -114,18 +114,8 @@ export async function createContext() {
         ctx.router.push({ path: '/' })
     }
 
-    const loadModules = installedModules.filter(x => x.module.default && x.module.default.load)
-    console.log('Loading modules: ', loadModules.map(x => x.extension.id))
-
-    // Load all extensions in parallel
-    await Promise.all(loadModules.map(async result => {
-        try {
-            await result.module.default.load(ctx)
-            console.log(`Loaded extension: ${result.extension.id}`)
-        } catch (e) {
-            console.error(`Failed to load extension ${result.extension.id}:`, e)
-        }
-    }))
+    ctx.installedModules = installedModules
+    await ctx.load()
 
     return ctx
 }

@@ -153,7 +153,36 @@ export default {
             ctx.chat.setSelectedModel(ctx.chat.getModel(newVal))
         })
 
-        return { ai, modal, isMobile, closeModal }
+        const toastMessage = ref('')
+        const showToast = ref(false)
+        let toastTimeout = null
+
+        watch(() => ctx.state.message, (newMsg) => {
+            if (newMsg) {
+                toastMessage.value = newMsg
+                showToast.value = true
+                if (toastTimeout) {
+                    clearTimeout(toastTimeout)
+                }
+                toastTimeout = setTimeout(() => {
+                    showToast.value = false
+                }, 3000)
+            } else {
+                showToast.value = false
+            }
+        })
+
+        watch(showToast, (val) => {
+            if (!val) {
+                ctx.state.message = null
+                if (toastTimeout) {
+                    clearTimeout(toastTimeout)
+                    toastTimeout = null
+                }
+            }
+        })
+
+        return { ai, modal, isMobile, closeModal, toastMessage, showToast }
     },
     template: `
         <div class="flex h-screen" :class="$styles.app">
@@ -200,6 +229,36 @@ export default {
                 </div>
 
                 <component v-if="modal" :is="modal" :class="$ctx.cls('modal', '!z-[200]')" @done="closeModal" />
+
+                <!-- Toast Popup -->
+                <Transition name="toast">
+                    <div v-if="showToast" 
+                        class="fixed bottom-5 right-5 z-[300] flex items-center gap-3 max-w-sm p-4 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-gray-200/50 dark:border-gray-800/50 rounded-xl shadow-xl transition-all duration-300">
+                        <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-400/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                            <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">
+                            {{ toastMessage }}
+                        </div>
+                        <button type="button" @click="showToast = false" class="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded-lg hover:bg-gray-100/50 dark:hover:bg-gray-800/50">
+                            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </Transition>
+
+                <component :is="'style'">
+                    .toast-enter-from, .toast-leave-to {
+                        opacity: 0;
+                        transform: translateY(1rem) scale(0.95);
+                    }
+                    .toast-enter-active, .toast-leave-active {
+                        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    }
+                </component>
             </div>
         </div>
     `,

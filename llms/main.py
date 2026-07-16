@@ -1945,6 +1945,16 @@ async def g_chat_completion(chat, context=None):
         candidate_providers = [name for name, provider in g_handlers.items() if provider.provider_model(model)]
         if len(candidate_providers) == 0:
             raise (Exception(f"Model {model} not found"))
+
+        # Pre-populate provider/model info in context for pre-chat filters
+        if "provider" not in context and candidate_providers:
+            context["provider"] = candidate_providers[0]
+        if "modelInfo" not in context and candidate_providers:
+            provider = g_handlers[candidate_providers[0]]
+            model_info = provider.model_info(model)
+            context["modelInfo"] = model_info
+            if "modelCost" not in context:
+                context["modelCost"] = model_info.get("cost", provider.model_cost(model)) or {"input": 0, "output": 0}
     except Exception as e:
         await g_app.on_chat_error(e, context or {"chat": chat})
         raise e
@@ -2900,6 +2910,58 @@ def load_config_json(config_json):
     return config
 
 
+def get_extensions_path():
+    return os.getenv("LLMS_EXTENSIONS_DIR", home_llms_path("extensions"))
+
+
+def get_disabled_extensions():
+    ret = DISABLE_EXTENSIONS.copy()
+    if g_config:
+        for ext in g_config.get("disable_extensions", []):
+            if ext not in ret:
+                ret.append(ext)
+    return ret
+
+
+def get_extensions_dirs():
+    """
+    Returns a list of extension directories.
+    """
+    extensions_path = get_extensions_path()
+    os.makedirs(extensions_path, exist_ok=True)
+
+    # allow overriding builtin extensions
+    override_extensions = []
+    if os.path.exists(extensions_path):
+        override_extensions = os.listdir(extensions_path)
+
+    ret = []
+    disabled_extensions = get_disabled_extensions()
+
+    builtin_extensions_dir = _ROOT / "extensions"
+    if not os.path.exists(builtin_extensions_dir):
+        # look for local ./extensions dir from script
+        builtin_extensions_dir = os.path.join(os.path.dirname(__file__), "extensions")
+
+    _dbg(f"Loading extensions from {builtin_extensions_dir}")
+    if os.path.exists(builtin_extensions_dir):
+        for item in os.listdir(builtin_extensions_dir):
+            if os.path.isdir(os.path.join(builtin_extensions_dir, item)):
+                if item in override_extensions:
+                    continue
+                if item in disabled_extensions:
+                    continue
+                ret.append(os.path.join(builtin_extensions_dir, item))
+
+    if os.path.exists(extensions_path):
+        for item in os.listdir(extensions_path):
+            if os.path.isdir(os.path.join(extensions_path, item)):
+                if item in disabled_extensions:
+                    continue
+                ret.append(os.path.join(extensions_path, item))
+    return ret
+
+
 async def reload_providers():
     global g_config, g_handlers
     g_handlers = init_llms(g_config, g_providers)
@@ -3018,11 +3080,25 @@ def set_user_pref(key: str, value, user: Optional[str] = None):
         json.dump(user_prefs, f, indent=2)
 
 
-def get_project_paths(user: Optional[str] = None):
-    project = get_user_prefs(user=user).get("project", None)
-    if project:
-        return [project]
-    return []
+class ThreadApi:
+    def get_thread(self, thread_id, user):
+        _log(f"get_thread [{thread_id}] not implemented")
+        return None
+
+    def get_request(self, request_id, user):
+        _log(f"get_request [{request_id}] not implemented")
+        return None
+
+
+class MediaApi:
+    def query_media(self, query: Dict[str, Any], user=None):
+        _log(f"query_media [{query}] not implemented")
+        return None
+
+
+class ProjectsApi:
+    def get_user_projects(self, user: Optional[str] = None):
+        return []
 
 
 class AppExtensions:
@@ -3112,13 +3188,15 @@ class AppExtensions:
             "vue-router": "/ui/lib/vue-router.min.mjs",
             "@servicestack/client": "/ui/lib/servicestack-client.mjs",
             "@servicestack/vue": "/ui/lib/servicestack-vue.mjs",
-            "idb": "/ui/lib/idb.min.mjs",
             "marked": "/ui/lib/marked.min.mjs",
             "highlight.js": "/ui/lib/highlight.min.mjs",
             "chart.js": "/ui/lib/chart.js",
             "color.js": "/ui/lib/color.js",
             "ctx.mjs": "/ui/ctx.mjs",
         }
+        self.threads = ThreadApi()
+        self.media = MediaApi()
+        self.projects = ProjectsApi()
 
     def set_config(self, config: Dict[str, Any]):
         self.config = config
@@ -3366,6 +3444,48 @@ class AppExtensions:
             if ret != self.last_loading_message:
                 self.last_loading_message = ret
                 return ret + "..."
+
+    def get_user_avatar_path(self, user, filenames=None):
+        if not filenames:
+            filenames = ["avatar.svg", "avatar.webp", "avatar.png"]
+        candidate_paths = []
+        for filename in filenames:
+            candidate_paths.append(os.path.join(self.get_user_path(user=user), filename))
+        for filename in filenames:
+            candidate_paths.append(os.path.join(self.get_user_path(), filename))
+        for path in candidate_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def get_profile_avatar_path(self, user, profile, filenames=None):
+        if not filenames:
+            filenames = ["avatar.svg", "avatar.webp", "avatar.png"]
+        candidate_paths = []
+
+        if user:
+            user_profiles_dir = os.path.join(self.get_user_path(user=user), "profiles")
+            if os.path.exists(user_profiles_dir):
+                for profile_folder in os.listdir(user_profiles_dir):
+                    for filename in filenames:
+                        candidate_paths.append(os.path.join(user_profiles_dir, profile_folder, filename))
+
+        user_profiles_dir = os.path.join(self.get_user_path(), "profiles")
+        if os.path.exists(user_profiles_dir):
+            for profile_folder in os.listdir(user_profiles_dir):
+                for filename in filenames:
+                    candidate_paths.append(os.path.join(user_profiles_dir, profile_folder, filename))
+
+        agents_profiles_dir = os.path.join(get_extensions_path(), "agents", "profiles")
+        if os.path.exists(agents_profiles_dir):
+            for agent_folder in os.listdir(agents_profiles_dir):
+                for filename in filenames:
+                    candidate_paths.append(os.path.join(agents_profiles_dir, agent_folder, filename))
+
+        for path in candidate_paths:
+            if os.path.exists(path):
+                return path
+        return None
 
 
 def handler_name(handler):
@@ -3788,58 +3908,35 @@ class ExtensionContext:
     def next_loading_message(self):
         return self.app.next_loading_message()
 
+    @property
+    def threads(self) -> ThreadApi:
+        return self.app.threads
 
-def get_extensions_path():
-    return os.getenv("LLMS_EXTENSIONS_DIR", home_llms_path("extensions"))
+    @threads.setter
+    def threads(self, threads: ThreadApi):
+        self.app.threads = threads
 
+    @property
+    def media(self) -> MediaApi:
+        return self.app.media
 
-def get_disabled_extensions():
-    ret = DISABLE_EXTENSIONS.copy()
-    if g_config:
-        for ext in g_config.get("disable_extensions", []):
-            if ext not in ret:
-                ret.append(ext)
-    return ret
+    @media.setter
+    def media(self, media: MediaApi):
+        self.app.media = media
 
+    @property
+    def projects(self) -> ProjectsApi:
+        return self.app.projects
 
-def get_extensions_dirs():
-    """
-    Returns a list of extension directories.
-    """
-    extensions_path = get_extensions_path()
-    os.makedirs(extensions_path, exist_ok=True)
+    @projects.setter
+    def projects(self, projects: ProjectsApi):
+        self.app.projects = projects
 
-    # allow overriding builtin extensions
-    override_extensions = []
-    if os.path.exists(extensions_path):
-        override_extensions = os.listdir(extensions_path)
+    def get_user_avatar_path(self, user, filenames=None):
+        return self.app.get_user_avatar_path(user, filenames)
 
-    ret = []
-    disabled_extensions = get_disabled_extensions()
-
-    builtin_extensions_dir = _ROOT / "extensions"
-    if not os.path.exists(builtin_extensions_dir):
-        # look for local ./extensions dir from script
-        builtin_extensions_dir = os.path.join(os.path.dirname(__file__), "extensions")
-
-    _dbg(f"Loading extensions from {builtin_extensions_dir}")
-    if os.path.exists(builtin_extensions_dir):
-        for item in os.listdir(builtin_extensions_dir):
-            if os.path.isdir(os.path.join(builtin_extensions_dir, item)):
-                if item in override_extensions:
-                    continue
-                if item in disabled_extensions:
-                    continue
-                ret.append(os.path.join(builtin_extensions_dir, item))
-
-    if os.path.exists(extensions_path):
-        for item in os.listdir(extensions_path):
-            if os.path.isdir(os.path.join(extensions_path, item)):
-                if item in disabled_extensions:
-                    continue
-                ret.append(os.path.join(extensions_path, item))
-
-    return ret
+    def get_profile_avatar_path(self, user, profile, filenames=None):
+        return self.app.get_profile_avatar_path(user, profile, filenames)
 
 
 def verify_root_path():

@@ -1,5 +1,5 @@
 
-import { reactive, markRaw } from 'vue'
+import { reactive, markRaw, watch } from 'vue'
 import { EventBus, humanize, combinePaths, pick } from "@servicestack/client"
 import { storageObject, isHtml, sanitizeHtml } from './utils.mjs'
 
@@ -142,6 +142,7 @@ export class AppContext {
             theme,
             styles: theme.styles,
             profile: localStorage.getItem('llms.profile') || 'default',
+            message: null,
         })
         this.events = new EventBus()
         this.modalComponents = {}
@@ -191,6 +192,23 @@ export class AppContext {
             globalThis[key] = app.config.globalProperties[key]
         })
         document.addEventListener('keydown', (e) => this.handleKeydown(e))
+
+        let isRefreshing = false
+        watch(() => ai.auth, async (newAuth, oldAuth) => {
+            if (newAuth !== oldAuth) {
+                if (isRefreshing) return
+                isRefreshing = true
+                try {
+                    console.log('Authentication status changed, reloading context and modules...')
+                    Object.assign(this.state, await this.ai.init(this))
+                    await this.load()
+                } catch (e) {
+                    console.error('Failed to refresh context and modules:', e)
+                } finally {
+                    isRefreshing = false
+                }
+            }
+        })
     }
     async init() {
         Object.assign(this.state, await this.ai.init(this))
@@ -198,6 +216,19 @@ export class AppContext {
             markdown: this.renderMarkdown.bind(this),
             content: this.renderContent.bind(this),
         })
+    }
+    async load() {
+        if (!this.installedModules) return
+        const loadModules = this.installedModules.filter(x => x.module.default && x.module.default.load)
+        console.log('Loading modules: ', loadModules.map(x => x.extension.id))
+        await Promise.all(loadModules.map(async result => {
+            try {
+                await result.module.default.load(this)
+                console.log(`Loaded extension: ${result.extension.id}`)
+            } catch (e) {
+                console.error(`Failed to load extension ${result.extension.id}:`, e)
+            }
+        }))
     }
     setGlobals(globals) {
         Object.entries(globals).forEach(([name, global]) => {
@@ -500,7 +531,7 @@ export class AppContext {
         return cls
     }
     toast(msg) {
-        this.setState({ toast: msg })
+        this.setState({ message: msg })
     }
 
     renderMarkdown(content) {

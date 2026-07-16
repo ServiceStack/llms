@@ -453,21 +453,19 @@ def install(ctx):
 
         headers = {"Content-Type": "image/svg+xml"}
 
-        candidate_paths = [
-            os.path.join(ctx.get_user_path(user=user), "avatar." + mode + ".png"),
-            os.path.join(ctx.get_user_path(user=user), "avatar." + mode + ".svg"),
-            os.path.join(ctx.get_user_path(user=user), "avatar.png"),
-            os.path.join(ctx.get_user_path(user=user), "avatar.svg"),
-            os.path.join(ctx.get_user_path(), "avatar." + mode + ".png"),
-            os.path.join(ctx.get_user_path(), "avatar." + mode + ".svg"),
-            os.path.join(ctx.get_user_path(), "avatar.png"),
-            os.path.join(ctx.get_user_path(), "avatar.svg"),
+        filenames = [
+            "avatar." + mode + ".webp",
+            "avatar." + mode + ".png",
+            "avatar." + mode + ".svg",
+            "avatar.webp",
+            "avatar.png",
+            "avatar.svg",
         ]
+        path = ctx.get_user_avatar_path(user, filenames)
 
-        for path in candidate_paths:
-            if os.path.exists(path):
-                headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
-                return web.FileResponse(path, headers=headers)
+        if path:
+            headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
+            return web.FileResponse(path, headers=headers)
 
         default_avatar = f"""
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="color:{text_color}">
@@ -547,6 +545,11 @@ def install(ctx):
         if ext == ".svg" or content_type == "image/svg+xml":
             # Save SVG directly
             avatar_path = os.path.join(user_path, "avatar.svg")
+            with open(avatar_path, "wb") as f:
+                f.write(file_data)
+        elif ext == ".webp" or content_type == "image/webp":
+            # Save webp directly
+            avatar_path = os.path.join(user_path, "avatar.webp")
             with open(avatar_path, "wb") as f:
                 f.write(file_data)
         elif ext == ".png" or content_type == "image/png":
@@ -905,6 +908,7 @@ def install(ctx):
             tools = chat.get("tools", [])
             update_thread = {
                 "model": model,
+                "provider": provider,
                 "providerModel": o.get("model"),
                 "modelInfo": model_info,
                 "messages": messages,
@@ -1022,6 +1026,20 @@ def install(ctx):
             await asyncio.gather(*tasks)
 
     ctx.register_chat_error_filter(chat_error)
+
+    class ThreadApi:
+        def __init__(self, ctx, g_db):
+            self.ctx = ctx
+            self.db = g_db
+
+        def get_thread(self, thread_id, user):
+            ctx.log(f"get_thread({thread_id},{user})")
+            return thread_dto(self.db.get_thread(thread_id, user=user))
+
+        def get_request(self, request_id, user):
+            return request_dto(self.db.get_request(request_id, user=user))
+
+    ctx.threads = ThreadApi(ctx, g_db)
 
 
 __install__ = install

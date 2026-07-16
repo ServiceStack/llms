@@ -17,7 +17,7 @@ os.environ["MOCK_DIR"] = os.path.abspath(os.path.join(os.path.dirname(__file__),
 # Add parent directory to path to import llms module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from llms.main import cli, get_app, get_cache_path, load_config
+from llms.main import cli, get_app, get_cache_path
 
 
 class TestOpenRouterTTS(unittest.IsolatedAsyncioTestCase):

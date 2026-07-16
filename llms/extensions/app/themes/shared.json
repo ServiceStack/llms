@@ -37,6 +37,10 @@
         "app": "bg-[image:var(--background-image)] bg-cover",
         "appInner": "",
         "tagButtonLarge": "rounded-xl shadow-sm",
-        "tagButtonSmall": "rounded-full shadow-sm"
+        "tagButtonSmall": "rounded-full shadow-sm",
+        "tagLabel": "bg-[var(--tw-prose-code-bg)]/50 text-[var(--tw-prose-code)]/90 border border-[var(--tw-prose-code-border)]/70",
+        "tagLabelHover": "hover:bg-[var(--tw-prose-code-bg)] hover:text-[var(--tw-prose-code)] hover:border-[var(--tw-prose-code-border)]",
+        "messageUser": "bg-[var(--user-bg)] text-[var(--user-text)] border border-[var(--user-border)]",
+        "messageAssistant": "bg-[var(--assistant-bg)] text-[var(--assistant-text)] border border-[var(--assistant-border)]"
     }
 }

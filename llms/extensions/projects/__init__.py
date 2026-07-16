@@ -6,14 +6,10 @@ from aiohttp import web
 
 
 def install(ctx):
-    # helper to get user or default projects
     def get_user_projects(user: Optional[str] = None):
         candidate_paths = []
-        # check if user is signed in
         if user:
-            # if signed in (Github OAuth), return the prompts for this user if exists
             candidate_paths.append(os.path.join(ctx.get_user_path(user), "projects", "projects.json"))
-        # return default prompts for all users if exists
         candidate_paths.append(os.path.join(ctx.get_user_path(), "projects", "projects.json"))
 
         # iterate all candidate paths and when exists return its json
@@ -76,6 +72,64 @@ def install(ctx):
 
     ctx.add_post("projects.json", save_projects)
 
+    async def save_project(request):
+        user = ctx.get_username(request)
+        name = request.match_info.get("name")
+        project_data = await request.json()
+
+        if not project_data or not project_data.get("name"):
+            return web.json_response({"error": "Project name is required"}, status=400)
+
+        projects = get_user_projects(user)
+
+        # Create folders for non-existent paths
+        for p in project_data.get("paths", []):
+            if not p or not p.strip():
+                continue
+            resolved_path = ctx.resolve_directory(p)
+            if resolved_path:
+                try:
+                    if not os.path.exists(resolved_path):
+                        os.makedirs(resolved_path, exist_ok=True)
+                        ctx.log(f"Created directory: {resolved_path}")
+                except Exception as e:
+                    ctx.err(f"Failed to create directory {resolved_path}", e)
+
+        # Find the project with the name matching URL parameter `name`
+        found_idx = -1
+        for idx, p in enumerate(projects):
+            if p.get("name") == name:
+                found_idx = idx
+                break
+
+        if found_idx != -1:
+            projects[found_idx] = project_data
+        else:
+            projects.append(project_data)
+
+        if user:
+            path = os.path.join(ctx.get_user_path(user), "projects", "projects.json")
+        else:
+            path = os.path.join(ctx.get_user_path(), "projects", "projects.json")
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(projects, f, indent=2, ensure_ascii=False)
+
+        # Handle active project naming update if renamed
+        active_project = ctx.get_user_pref("project", user=user)
+        if active_project == name:
+            new_name = project_data.get("name")
+            if new_name and new_name != active_project:
+                ctx.set_user_pref("project", new_name, user=user)
+                set_project_directories(new_name, user)
+                ctx.log(f"Renamed active project from '{active_project}' to '{new_name}'")
+
+        ctx.log(f"Saved project '{name}' for {user or 'default'} to {path}")
+        return web.json_response(project_data)
+
+    ctx.add_post("save/{name}", save_project)
+
     def set_project_directories(project_name: str, user: Optional[str] = None):
         user_projects = get_user_projects(user)
         project_paths = ctx.get_allowed_directories()
@@ -133,6 +187,12 @@ def install(ctx):
         ctx.log(f"Projects [{user}] {active_project}: {project_paths}")
 
     ctx.register_setup_user_handler(setup_user)
+
+    class ProjectsApi:
+        def get_user_projects(self, user: Optional[str] = None):
+            return get_user_projects(user)
+
+    ctx.projects = ProjectsApi()
 
 
 __install__ = install

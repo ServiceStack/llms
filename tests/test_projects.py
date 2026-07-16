@@ -52,6 +52,7 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         # Retrieve the registered handlers
         self.get_projects_handler = None
         self.save_projects_handler = None
+        self.save_project_handler = None
         self.set_active_handler = None
 
         for args in self.mock_ctx.add_get.call_args_list:
@@ -63,6 +64,8 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
             path, handler = args[0][0], args[0][1]
             if path == "projects.json":
                 self.save_projects_handler = handler
+            elif path == "projects/{name}":
+                self.save_project_handler = handler
             elif path == "active":
                 self.set_active_handler = handler
 
@@ -202,3 +205,81 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
 
         self.assertTrue(os.path.exists(non_existent_dir))
+
+    async def test_save_project_new(self):
+        project_data = {"name": "New Project", "paths": ["/path/to/new-project"]}
+        request = MagicMock()
+        request.match_info = {"name": "New Project"}
+        async def mock_json():
+            return project_data
+        request.json = mock_json
+
+        response = await self.save_project_handler(request)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.text), project_data)
+
+        # Verify saved file contents
+        projects_file = os.path.join(self.temp_dir, "projects", "projects.json")
+        with open(projects_file, encoding="utf-8") as f:
+            saved_data = json.load(f)
+        self.assertEqual(saved_data, [project_data])
+
+    async def test_save_project_update(self):
+        # Setup existing projects
+        projects_dir = os.path.join(self.temp_dir, "projects")
+        os.makedirs(projects_dir, exist_ok=True)
+        projects_file = os.path.join(projects_dir, "projects.json")
+
+        initial_data = [
+            {"name": "Project One", "paths": ["/path1"]},
+            {"name": "Project Two", "paths": ["/path2"]},
+        ]
+        with open(projects_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(initial_data))
+
+        updated_project = {"name": "Project One", "paths": ["/path1-updated"], "publish": "dist"}
+        request = MagicMock()
+        request.match_info = {"name": "Project One"}
+        async def mock_json():
+            return updated_project
+        request.json = mock_json
+
+        response = await self.save_project_handler(request)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.text), updated_project)
+
+        # Verify merged file contents
+        with open(projects_file, encoding="utf-8") as f:
+            saved_data = json.load(f)
+        self.assertEqual(saved_data, [
+            updated_project,
+            {"name": "Project Two", "paths": ["/path2"]},
+        ])
+
+    async def test_save_project_rename_active(self):
+        # Setup existing projects & active project preference
+        projects_dir = os.path.join(self.temp_dir, "projects")
+        os.makedirs(projects_dir, exist_ok=True)
+        projects_file = os.path.join(projects_dir, "projects.json")
+
+        initial_data = [{"name": "Old Project Name", "paths": ["/path1"]}]
+        with open(projects_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(initial_data))
+
+        self.mock_ctx.set_user_pref("project", "Old Project Name", user="testuser")
+        self.allowed_directories["testuser"] = ["/path1"]
+
+        # Rename project
+        updated_project = {"name": "New Project Name", "paths": ["/path1"]}
+        request = MagicMock()
+        request.match_info = {"name": "Old Project Name"}
+        async def mock_json():
+            return updated_project
+        request.json = mock_json
+
+        response = await self.save_project_handler(request)
+        self.assertEqual(response.status, 200)
+
+        # Verify preference and allowed directories are updated
+        self.assertEqual(self.mock_ctx.get_user_pref("project", user="testuser"), "New Project Name")
+        self.assertEqual(self.allowed_directories.get("testuser"), ["/path1"])

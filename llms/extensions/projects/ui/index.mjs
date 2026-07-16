@@ -3,9 +3,35 @@ import { ref, computed, inject, onMounted, onUnmounted } from "vue"
 let ext
 
 function useProjects(ext) {
+    const ctx = ext.ctx
+
+    function getProject(name) {
+        return (ctx.state.projects || []).find(p => p.name === name)
+    }
+
+    async function saveProject(originalName, updatedProject) {
+        const api = await ext.postJson(`/save/${encodeURIComponent(originalName)}`, updatedProject)
+        if (api.error) {
+            ctx.setError(api.error, "Failed to save project")
+        } else {
+            const projects = api.response
+            ext.setState({ projects })
+            // Update active project if needed
+            const active = ctx.state.prefs.project
+            if (active) {
+                if (active === originalName && updatedProject.name !== originalName) {
+                    ctx.state.prefs.project = updatedProject.name
+                }
+            }
+        }
+        return api
+    }
+
     return {
-        get all() { return ext.state.projects || [] },
-        get active() { return ext.ctx.state.prefs.project },
+        get all() { return ctx.state.projects || [] },
+        get active() { return ctx.ctx.state.prefs.project },
+        getProject,
+        saveProject,
     }
 }
 
@@ -106,7 +132,7 @@ const ProjectsSelector = {
         const triggerRef = ref(null)
         const popoverRef = ref(null)
 
-        const projects = computed(() => ext.state.projects || [])
+        const projects = computed(() => ctx.state.projects || [])
 
         const togglePopover = () => showPopover.value = !showPopover.value
 
@@ -363,7 +389,7 @@ const ProjectsManagerModal = {
 
         // Load project data
         onMounted(() => {
-            localProjects.value = JSON.parse(JSON.stringify(ext.state.projects || []))
+            localProjects.value = JSON.parse(JSON.stringify(ctx.state.projects || []))
         })
 
         const hasWorkspaceAlias = computed(() => editForm.value.paths.includes('$WORKSPACE'))
@@ -476,13 +502,13 @@ const ProjectsManagerModal = {
                 return
             }
 
-            if (isNewProject.value) {
-                localProjects.value.push(updatedProject)
-            } else {
-                localProjects.value[selectedIdx.value] = updatedProject
-            }
+            const originalName = isNewProject.value
+                ? updatedProject.name
+                : localProjects.value[selectedIdx.value].name
 
-            await persistProjects()
+            const success = await persistProject(updatedProject, originalName)
+            if (!success) return
+
             ctx.toast(`Saved project: ${updatedProject.name}`)
 
             // Re-select if name changed
@@ -490,6 +516,28 @@ const ProjectsManagerModal = {
                 selectEditProject(localProjects.value.length - 1)
             } else {
                 selectEditProject(selectedIdx.value)
+            }
+        }
+
+        async function persistProject(updatedProject, originalName) {
+            const api = await ctx.projects.saveProject(originalName, updatedProject)
+            if (api.response) {
+                if (isNewProject.value) {
+                    localProjects.value.push(updatedProject)
+                } else {
+                    localProjects.value[selectedIdx.value] = updatedProject
+                }
+
+                // Update active project if needed
+                const active = ctx.state.prefs.project
+                if (active) {
+                    if (active === originalName && updatedProject.name !== originalName) {
+                        ctx.state.prefs.project = updatedProject.name
+                    } else if (!localProjects.value.some(p => p.name === active)) {
+                        ctx.state.prefs.project = null
+                    }
+                }
+                return true
             }
         }
 
@@ -520,6 +568,7 @@ const ProjectsManagerModal = {
             // Check if name or description changed
             if ((editForm.value.name || '').trim() !== (orig?.name || '').trim()) return true
             if ((editForm.value.description || '').trim() !== (orig?.description || '').trim()) return true
+            if ((editForm.value.publish || '').trim() !== (orig?.publish || '').trim()) return true
 
             // Compare paths
             const curPaths = []
@@ -591,7 +640,7 @@ export default {
     async load(ctx) {
         const api = await ext.getJson(`/projects.json`)
         const projects = api.response || []
-        ext.setState({ projects })
+        ctx.setState({ projects })
         console.log('project.state', JSON.stringify(ext.state, undefined, 2))
     }
 }

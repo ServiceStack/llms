@@ -17,11 +17,8 @@ os.environ["MOCK_DIR"] = os.path.abspath(os.path.join(os.path.dirname(__file__),
 # Add parent directory to path to import llms module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from llms.main import (
-    get_app,
-    cli,
-    get_cache_path
-)
+from llms.main import cli, get_app, get_cache_path
+
 
 class TestOpenRouterAudio(unittest.IsolatedAsyncioTestCase):
     """Test OpenRouter Audio Modality Provider."""
@@ -75,9 +72,9 @@ class TestOpenRouterAudio(unittest.IsolatedAsyncioTestCase):
         """Test that OpenRouterAudioGenerator is registered to audio modality."""
         provider = self.app.get_providers().get("openrouter")
         self.assertIsNotNone(provider)
-        
+
         await provider.load()
-        
+
         # Verify the modality audio is registered to OpenRouterAudioGenerator
         self.assertIn("audio", provider.modalities)
         self.assertEqual(provider.modalities["audio"].__class__.__name__, "OpenRouterAudioGenerator")
@@ -94,26 +91,26 @@ class TestOpenRouterAudio(unittest.IsolatedAsyncioTestCase):
             ],
             "modalities": ["audio"]
         }
-        
+
         response = await self.app.chat_completion(chat)
-        
+
         self.assertIsNotNone(response)
         self.assertIn("choices", response)
         self.assertTrue(len(response["choices"]) > 0)
-        
+
         message = response["choices"][0]["message"]
         self.assertEqual(message["role"], "assistant")
         self.assertEqual(message["content"], "I've generated the audio for you.")
         self.assertIn("audios", message)
-        
+
         audios = message["audios"]
         self.assertTrue(len(audios) > 0)
         self.assertEqual(audios[0]["type"], "audio_url")
-        
+
         url = audios[0]["audio_url"]["url"]
         self.assertTrue(url.startswith("/~cache/"))
         self.assertTrue(url.endswith(".mp3"))
-        
+
         # Verify cached files exist
         cache_rel_path = url[8:] # Strip /~cache/
         cache_full_path = get_cache_path(cache_rel_path)
@@ -132,26 +129,26 @@ class TestOpenRouterAudio(unittest.IsolatedAsyncioTestCase):
             ],
             "modalities": ["audio"]
         }
-        
+
         response = await self.app.chat_completion(chat)
-        
+
         self.assertIsNotNone(response)
         self.assertIn("choices", response)
         self.assertTrue(len(response["choices"]) > 0)
-        
+
         message = response["choices"][0]["message"]
         self.assertEqual(message["role"], "assistant")
         self.assertEqual(message["content"], "I've generated the audio for you.")
         self.assertIn("audios", message)
-        
+
         audios = message["audios"]
         self.assertTrue(len(audios) > 0)
         self.assertEqual(audios[0]["type"], "audio_url")
-        
+
         url = audios[0]["audio_url"]["url"]
         self.assertTrue(url.startswith("/~cache/"))
         self.assertTrue(url.endswith(".wav"))
-        
+
         # Verify cached files exist
         cache_rel_path = url[8:] # Strip /~cache/
         cache_full_path = get_cache_path(cache_rel_path)

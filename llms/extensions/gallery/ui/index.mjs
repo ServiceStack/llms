@@ -2,6 +2,28 @@ import { ref, watch, computed, inject, onMounted, onUnmounted } from "vue"
 
 let ext
 
+function useGallery(ext) {
+    const ctx = ext.ctx
+
+    const lightboxFooters = {}
+    const audioActions = {}
+
+    function setLightboxFooters(components) {
+        Object.assign(lightboxFooters, components)
+    }
+
+    function setAudioActions(components) {
+        Object.assign(audioActions, components)
+    }
+
+    return {
+        lightboxFooters,
+        audioActions,
+        setLightboxFooters,
+        setAudioActions,
+    }
+}
+
 const GalleryPage = {
     template: `
         <div class="w-full max-w-[1600px] mx-auto p-4 md:p-8 text-gray-900 dark:text-gray-200 font-sans selection:bg-blue-500/30">
@@ -111,6 +133,13 @@ const GalleryPage = {
                         </div>
                         <div class="flex justify-between items-center mb-2">
                             <div class="text-xs text-blue-600 dark:text-blue-300/80">{{ item.model }}</div>
+
+                            <!-- AUDIO ACTIONS -->
+                            <div v-if="Object.keys($ctx.gallery.audioActions).length" class="flex items-center gap-1">
+                                <div v-for="(component, key) in $ctx.gallery.audioActions" :key="key">
+                                    <component :is="component" :item="item" />
+                                </div>
+                            </div>
                         </div>
                         <div class="flex items-center gap-2">
                             <audio controls class="w-full h-8 opacity-90" :src="item.url"></audio>
@@ -223,6 +252,13 @@ const GalleryPage = {
                                         <div class="text-gray-500 text-xs mb-1">Cost</div>
                                         <div class="text-green-600 dark:text-green-400 font-mono">$\{{ lightboxItem.cost.toFixed(5) }}</div>
                                     </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Footer Components -->
+                            <div v-if="Object.keys($ctx.gallery.lightboxFooters).length">
+                                <div v-for="(component, key) in $ctx.gallery.lightboxFooters" :key="key">
+                                    <component :is="component" :item="lightboxItem" />
                                 </div>
                             </div>
                         </div>
@@ -469,6 +505,10 @@ export default {
 
     install(ctx) {
         ext = ctx.scope('gallery')
+
+        ctx.setGlobals({
+            gallery: useGallery(ext)
+        })
 
         ctx.components({
             GalleryPage,

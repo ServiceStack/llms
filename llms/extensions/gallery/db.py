@@ -65,7 +65,8 @@ class GalleryDB:
             "objects": "JSON",  # [{"model":"640m","class":"FACE_FEMALE","score":0.5220243334770203,"box":[361,346,367,451]},{"model":"640m","class":"FEMALE_BREAST_EXPOSED","score":0.31755316257476807,"box":[672,1068,212,272]}]
             "variantId": "TEXT",  # 1
             "variantName": "TEXT",  # 4x Upscaled
-            "published": "TIMESTAMP",
+            "publishedAt": "TIMESTAMP",
+            "publishedUrl": "TEXT",
             "metadata": "JSON",  # {"date":1767111852}
         }
 
@@ -138,7 +139,7 @@ class GalleryDB:
             return "WHERE user = :user", args
 
     def prepare_media(self, media, id=None, user=None):
-        now = datetime.now()
+        now = datetime.datetime.now()
         if id:
             media["id"] = id
         else:
@@ -236,6 +237,12 @@ class GalleryDB:
         except Exception as e:
             self.ctx.err(f"query_media ({take}, {skip})", e)
             return []
+
+    def update_media(self, id, media: Dict[str, Any], user=None):
+        return self.db.update("media", self.columns, self.prepare_media(media, id, user=user))
+
+    async def update_media_async(self, id, media: Dict[str, Any], user=None):
+        return await self.db.update_async("media", self.columns, self.prepare_media(media, id, user=user))
 
     def delete_media(self, hash, user=None, callback=None):
         sql_where, params = self.get_user_filter(user)
