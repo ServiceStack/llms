@@ -148,7 +148,20 @@ def install_google(ctx):
             chat = await self.process_chat(chat)
             generation_config = {}
             tools = None
-            supports_tool_calls = model_info.get("tool_call", False)
+
+            modalities = chat.get("modalities")
+            has_media_modality = modalities and ("image" in modalities or "audio" in modalities)
+
+            if has_media_modality:
+                supports_tool_calls = False
+                if "tools" in chat:
+                    del chat["tools"]
+                if "tool_choice" in chat:
+                    del chat["tool_choice"]
+                if "parallel_tool_calls" in chat:
+                    del chat["parallel_tool_calls"]
+            else:
+                supports_tool_calls = model_info.get("tool_call", False)
 
             if "tools" in chat and supports_tool_calls:
                 function_declarations = []
@@ -326,6 +339,12 @@ def install_google(ctx):
                     supports_tool_calls = False
                     tools = None
                     system_prompt = None
+                    if "tools" in chat:
+                        del chat["tools"]
+                    if "tool_choice" in chat:
+                        del chat["tool_choice"]
+                    if "parallel_tool_calls" in chat:
+                        del chat["parallel_tool_calls"]
                     # if "audio" in modalities and "tts" in chat["model"]:
                     #     system_prompt = "You are a text-to-speech engine. Your only job is to generate audio of the exact text the user provides. Do not converse, do not answer questions, and do not generate any extra text"
 
