@@ -652,6 +652,14 @@
                     "steps": 50
                 }
             }
+        },
+        "llmspy": {
+            "enabled": true,
+            "npm": "llms-sdk-provider",
+            "api": "http://localhost:5000/v1",
+            "env": [
+                "LLMSPY_API_KEY"
+            ]
         }
     }
 }

@@ -3647,6 +3647,15 @@ class ExtensionContext:
         self.log(f"Registered provider: {provider.__name__}")
         self.app.all_providers.append(provider)
 
+    def get_registered_provider(self, name: str) -> Optional[Any]:
+        return g_handlers.get(name)
+
+    def get_provider(self, sdk: str):
+        for p in self.app.all_providers:
+            if p.sdk == sdk:
+                return p
+        raise Exception(f"Provider {sdk} not found")
+
     def register_ui_extension(self, index: str):
         path = os.path.join(self.ext_prefix, index)
         self.log(f"Registered UI extension: {path}")
@@ -3752,8 +3761,6 @@ class ExtensionContext:
     def get_providers(self) -> Dict[str, Any]:
         return g_handlers
 
-    def get_provider(self, name: str) -> Optional[Any]:
-        return g_handlers.get(name)
 
     def sanitize_tool_def(self, tool_def: Dict[str, Any]) -> Dict[str, Any]:
         """

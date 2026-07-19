@@ -58,7 +58,7 @@ def install(ctx):
         audio_bytes = audio_file.file.read()
 
         if mode == "voxtral-mini-latest":
-            mistral = ctx.get_provider("mistral")
+            mistral = ctx.get_registered_provider("mistral")
             result = await mistral.transcription.transcribe(audio_bytes, audio_file.filename)
             result["mode"] = mode
             return web.json_response(result)

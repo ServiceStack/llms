@@ -32,7 +32,7 @@ def install_mistral(ctx):
     from llms.main import GeneratorBase, OpenAiCompatible
 
     async def get_models(request):
-        mistral = ctx.get_provider("mistral")
+        mistral = ctx.get_registered_provider("mistral")
         url = mistral.api + "/models"
         async with aiohttp.ClientSession() as session, session.get(
             url, headers=mistral.headers, timeout=ctx.get_client_timeout()

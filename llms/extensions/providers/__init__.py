@@ -8,6 +8,7 @@ from .nvidia import install_nvidia
 from .openai import install_openai
 from .openrouter import install_openrouter
 from .zai import install_zai
+from .llmspy import install_llmspy
 
 
 def install(ctx):
@@ -21,6 +22,7 @@ def install(ctx):
     install_openai(ctx)
     install_openrouter(ctx)
     install_zai(ctx)
+    install_llmspy(ctx)
 
 
 __install__ = install
