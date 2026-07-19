@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 # Ensure mock mode is active
 os.environ["MOCK"] = "1"
@@ -161,6 +162,181 @@ class TestOpenRouterAudio(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(header[:4], b"RIFF")
             self.assertEqual(header[8:12], b"WAVE")
             self.assertEqual(header[12:16], b"fmt ")
+
+    @unittest.mock.patch("aiohttp.ClientSession")
+    async def test_openrouter_audio_non_streamed_json(self, mock_client_session):
+        """Test processing of normal non-streamed JSON audio completions."""
+        # Find providers context and save original mock state
+        providers_ctx = None
+        for ext in self.app.extensions:
+            if ext.get("name") == "providers":
+                providers_ctx = ext.get("ctx")
+                break
+        self.assertIsNotNone(providers_ctx, "Could not find providers extension context")
+        orig_mock = providers_ctx.MOCK
+        providers_ctx.MOCK = False
+        try:
+            # Prepare mock response data with RIFF-encoded (WAV) audio data
+            # base64 encoded for "RIFF" plus some dummy bytes
+            wav_base64 = "UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=="
+            mock_json_response = {
+                "id": "chatcmpl-123",
+                "object": "chat.completion",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Hello! It's great to talk to you.",
+                            "audio": {
+                                "id": "audio_abc123",
+                                "expires_at": 1799999999,
+                                "data": wav_base64,
+                                "transcript": "Hello! It's great to talk to you."
+                            }
+                        },
+                        "finish_reason": "stop"
+                    }
+                ]
+            }
+
+            # Setup mock aiohttp response
+            from unittest.mock import AsyncMock, MagicMock
+            mock_resp = AsyncMock()
+            mock_resp.status = 200
+            mock_resp.headers = {"Content-Type": "application/json"}
+            mock_resp.text = AsyncMock(return_value=json.dumps(mock_json_response))
+
+            mock_session_instance = MagicMock()
+            mock_session_instance.post = MagicMock(return_value=mock_resp)
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock()
+
+            mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+            mock_resp.__aexit__ = AsyncMock()
+
+            mock_client_session.return_value = mock_session_instance
+
+            chat = {
+                "model": "openai/gpt-audio-mini",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello!"
+                    }
+                ],
+                "modalities": ["audio"]
+            }
+
+            response = await self.app.chat_completion(chat)
+
+            self.assertIsNotNone(response)
+            self.assertIn("choices", response)
+            message = response["choices"][0]["message"]
+            self.assertEqual(message["content"], "Hello! It's great to talk to you.")
+            self.assertIn("audios", message)
+            url = message["audios"][0]["audio_url"]["url"]
+            self.assertTrue(url.endswith(".wav"))
+
+            # Verify the cached file exists and starts with RIFF
+            cache_rel_path = url[8:]
+            cache_full_path = get_cache_path(cache_rel_path)
+            self.assertTrue(os.path.exists(cache_full_path))
+            with open(cache_full_path, "rb") as f:
+                content = f.read()
+                self.assertTrue(content.startswith(b"RIFF"))
+
+        finally:
+            if providers_ctx is not None:
+                providers_ctx.MOCK = orig_mock
+
+    @unittest.mock.patch("aiohttp.ClientSession")
+    async def test_openrouter_audio_non_streamed_m4a(self, mock_client_session):
+        """Test processing of normal non-streamed M4A audio completions."""
+        # Find providers context and save original mock state
+        providers_ctx = None
+        for ext in self.app.extensions:
+            if ext.get("name") == "providers":
+                providers_ctx = ext.get("ctx")
+                break
+        self.assertIsNotNone(providers_ctx, "Could not find providers extension context")
+        orig_mock = providers_ctx.MOCK
+        providers_ctx.MOCK = False
+        try:
+            # Prepare mock response data with M4A-encoded (MP4 container) audio data
+            # base64 encoded for something starting with "ftyp" at index 4
+            import base64
+            m4a_base64 = base64.b64encode(b"aaaaftypM4A dummy audio data").decode("utf-8")
+            mock_json_response = {
+                "id": "chatcmpl-123",
+                "object": "chat.completion",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Hello in m4a format!",
+                            "audio": {
+                                "id": "audio_m4a123",
+                                "expires_at": 1799999999,
+                                "data": m4a_base64,
+                                "transcript": "Hello in m4a format!"
+                            }
+                        },
+                        "finish_reason": "stop"
+                    }
+                ]
+            }
+
+            # Setup mock aiohttp response
+            from unittest.mock import AsyncMock, MagicMock
+            mock_resp = AsyncMock()
+            mock_resp.status = 200
+            mock_resp.headers = {"Content-Type": "application/json"}
+            mock_resp.text = AsyncMock(return_value=json.dumps(mock_json_response))
+
+            mock_session_instance = MagicMock()
+            mock_session_instance.post = MagicMock(return_value=mock_resp)
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock()
+
+            mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+            mock_resp.__aexit__ = AsyncMock()
+
+            mock_client_session.return_value = mock_session_instance
+
+            chat = {
+                "model": "openai/gpt-audio-mini",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello!"
+                    }
+                ],
+                "modalities": ["audio"]
+            }
+
+            response = await self.app.chat_completion(chat)
+
+            self.assertIsNotNone(response)
+            self.assertIn("choices", response)
+            message = response["choices"][0]["message"]
+            self.assertEqual(message["content"], "Hello in m4a format!")
+            self.assertIn("audios", message)
+            url = message["audios"][0]["audio_url"]["url"]
+            self.assertTrue(url.endswith(".m4a"))
+
+            # Verify the cached file exists and starts with "aaaaftypM4A "
+            cache_rel_path = url[8:]
+            cache_full_path = get_cache_path(cache_rel_path)
+            self.assertTrue(os.path.exists(cache_full_path))
+            with open(cache_full_path, "rb") as f:
+                content = f.read()
+                self.assertTrue(content.startswith(b"aaaaftypM4A "))
+
+        finally:
+            if providers_ctx is not None:
+                providers_ctx.MOCK = orig_mock
 
 if __name__ == "__main__":
     unittest.main()

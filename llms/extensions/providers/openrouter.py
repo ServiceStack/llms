@@ -403,14 +403,29 @@ def install_openrouter(ctx):
             super().__init__(**kwargs)
             self.default_content = "I've generated the audio for you."
 
-        def to_response(self, audio_data, chat, started_at, provider=None, context=None):
+        def to_response(self, audio_data, chat, started_at, provider=None, context=None, content=None):
             model = chat.get("model", "")
             is_openai = "openai/" in model.lower()
 
-            ext = "wav" if is_openai else "mp3"
+            # Auto-detect audio format from bytes
+            detected_ext = None
+            if audio_data.startswith(b"RIFF"):
+                detected_ext = "wav"
+            elif audio_data.startswith(b"ID3") or audio_data.startswith(b"\xff\xfb") or audio_data.startswith(b"\xff\xf3") or audio_data.startswith(b"\xff\xf2"):
+                detected_ext = "mp3"
+            elif len(audio_data) > 8 and audio_data[4:8] == b"ftyp":
+                detected_ext = "m4a"
+            elif audio_data.startswith(b"\x1a\x45\xdf\xa3"):
+                detected_ext = "webm"
+            elif audio_data.startswith(b"OggS"):
+                detected_ext = "ogg"
+            elif audio_data.startswith(b"\xff\xf1") or audio_data.startswith(b"\xff\xf9"):
+                detected_ext = "aac"
+
+            ext = detected_ext or ("wav" if is_openai else "mp3")
             filename = f"{model.split('/')[-1]}.{ext}"
 
-            if is_openai:
+            if is_openai and ext == "wav" and not audio_data.startswith(b"RIFF"):
                 # Convert raw 16-bit PCM to standard WAV format
                 wav_io = io.BytesIO()
                 with wave.open(wav_io, "wb") as wav_file:
@@ -444,7 +459,7 @@ def install_openrouter(ctx):
                     {
                         "message": {
                             "role": "assistant",
-                            "content": self.default_content,
+                            "content": content or self.default_content,
                             "audios": [
                                 {
                                     "type": "audio_url",
@@ -516,6 +531,27 @@ def install_openrouter(ctx):
                     if metadata:
                         chat["metadata"] = metadata
                     if response.status < 300:
+                        content_type = response.headers.get("Content-Type", "").lower()
+                        if "event-stream" not in content_type:
+                            text = await response.text()
+                            try:
+                                data = json.loads(text)
+                                choice = data["choices"][0]
+                                message = choice.get("message", {})
+                                audio_field = message.get("audio", {})
+                                if audio_field and "data" in audio_field:
+                                    base64_data = audio_field["data"]
+                                    audio_data = base64.b64decode(base64_data)
+                                    content = message.get("content") or audio_field.get("transcript")
+                                    return self.to_response(
+                                        audio_data, chat, started_at, provider=provider, context=context, content=content
+                                    )
+                                else:
+                                    raise Exception("No audio data found in response message.")
+                            except Exception as e:
+                                raise Exception(f"Failed to parse non-streamed audio response: {e}. Response text: {text}")
+
+                        ctx.dbg(">>> openrouter streaming response")
                         response.content._high_water = 10 * 1024 * 1024
                         async for line in response.content:
                             if not line:
