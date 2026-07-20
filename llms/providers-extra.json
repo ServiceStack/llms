@@ -659,7 +659,7 @@
     },
     "chutes": {
         "models": {
-            "chutes-z-image-turbo": {
+            "z-image-turbo": {
                 "name": "Z Image Turbo",
                 "modalities": {
                     "input": [
@@ -670,7 +670,7 @@
                     ]
                 }
             },
-            "qwen-image": {
+            "Qwen-Image-2512": {
                 "modalities": {
                     "input": [
                         "text"
@@ -680,8 +680,8 @@
                     ]
                 }
             },
-            "chutes-qwen-image-edit-2509": {
-                "name": "Qwen Image Edit 2509",
+            "Qwen-Image-Edit-2511": {
+                "name": "Qwen Image Edit",
                 "modalities": {
                     "input": [
                         "text",
@@ -692,8 +692,8 @@
                     ]
                 }
             },
-            "chutes-hidream": {
-                "name": "Hidream",
+            "flux": {
+                "name": "FLUX",
                 "modalities": {
                     "input": [
                         "text"
@@ -703,8 +703,8 @@
                     ]
                 }
             },
-            "chutes-hunyuan-image-3": {
-                "name": "Hunyuan Image 3",
+            "dreamshaper": {
+                "name": "Dreamshaper",
                 "modalities": {
                     "input": [
                         "text"
@@ -714,8 +714,8 @@
                     ]
                 }
             },
-            "FLUX.1-schnell": {
-                "name": "FLUX.1 Schnell",
+            "juggernaut": {
+                "name": "Juggernaut",
                 "modalities": {
                     "input": [
                         "text"
@@ -725,48 +725,8 @@
                     ]
                 }
             },
-            "chroma": {
-                "modalities": {
-                    "input": [
-                        "text"
-                    ],
-                    "output": [
-                        "image"
-                    ]
-                }
-            },
-            "JuggernautXL-Ragnarok": {
-                "name": "JuggernautXL Ragnarok",
-                "modalities": {
-                    "input": [
-                        "text"
-                    ],
-                    "output": [
-                        "image"
-                    ]
-                }
-            },
-            "Animij": {
-                "modalities": {
-                    "input": [
-                        "text"
-                    ],
-                    "output": [
-                        "image"
-                    ]
-                }
-            },
-            "Illustrij": {
-                "modalities": {
-                    "input": [
-                        "text"
-                    ],
-                    "output": [
-                        "image"
-                    ]
-                }
-            },
-            "iLustMix": {
+            "ilustmix": {
+                "name": "Ilustmix",
                 "modalities": {
                     "input": [
                         "text"

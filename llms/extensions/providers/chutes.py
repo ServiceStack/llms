@@ -39,6 +39,16 @@ def install_chutes(ctx):
                 "Animij",
                 "iLustMix",
             ]
+            imageclassic_url = "https://vonkaiser-imageclassic.chutes.ai/generate"
+            self.model_gen_urls = {
+                "flux": imageclassic_url,
+                "dreamshaper": imageclassic_url,
+                "ilustmix": imageclassic_url,
+                "juggernaut": imageclassic_url,
+                "z-image-turbo": "https://vonkaiser-z-image-turbo.chutes.ai/generate",
+                "Qwen-Image-2512": "https://vonkaiser-qwen-image-2512.chutes.ai/generate",
+                "Qwen-Image-Edit-2511": "https://vonkaiser-qwen-image-edit-2511.chutes.ai/generate"
+            }
 
         async def chat(self, chat, provider=None, context=None):
             headers = {"Authorization": f"Bearer {self.api_key}"}
@@ -53,7 +63,7 @@ def install_chutes(ctx):
             steps = self.steps
             width = self.width
             height = self.height
-            if chat["model"] == "chutes-z-image-turbo":
+            if chat["model"] == "z-image-turbo":
                 cfg_scale = min(self.cfg_scale, 5)
             payload = {
                 "model": chat["model"],
@@ -85,8 +95,8 @@ def install_chutes(ctx):
                 del payload["height"]
                 payload["size"] = aspect_ratio
 
-            gen_url = self.gen_url
-            if chat["model"].startswith("chutes-"):
+            gen_url = self.model_gen_urls.get(chat["model"])
+            if not gen_url:
                 model = payload["model"]
                 gen_url = f"https://{model}.chutes.ai/generate"
                 del payload["model"]
