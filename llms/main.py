@@ -3403,9 +3403,11 @@ class AppExtensions:
         tools = current_chat.get("tools")
         if tools is None:
             tools = current_chat["tools"] = []
-        if self.tool_definitions and len(tools) == 0:
+        if self.tool_definitions:
             include_all_tools = use_tools == "all"
-            only_tools_list = use_tools.split(",")
+            only_tools_list = []
+            if isinstance(use_tools, str) and use_tools != "none":
+                only_tools_list = use_tools.split(",")
 
             if include_all_tools or len(only_tools_list) > 0:
                 if "tools" not in current_chat:
@@ -3416,7 +3418,11 @@ class AppExtensions:
                     + str(len(current_chat["tools"]))
                 )
 
-                existing_tools = {t["function"]["name"] for t in current_chat["tools"]}
+                existing_tools = {
+                    t["function"]["name"]
+                    for t in current_chat["tools"]
+                    if isinstance(t, dict) and isinstance(t.get("function"), dict) and "name" in t["function"]
+                }
                 for tool_def in self.tool_definitions:
                     name = tool_def["function"]["name"]
                     if name not in existing_tools and (include_all_tools or name in only_tools_list):
