@@ -971,7 +971,7 @@ wheels = [
 
 [[package]]
 name = "llms-py"
-version = "4.0.0"
+version = "4.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp", version = "3.8.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
