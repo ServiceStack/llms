@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import base64
 import contextlib
+import copy
 import hashlib
 import importlib.util
 import inspect
@@ -1885,7 +1886,7 @@ def get_tool_property(function_name, prop_name):
 
 async def g_exec_tool(function_name, function_args, context=None):
     _log(f"g_exec_tool: {function_name}")
-    if function_name in g_app.tools:
+    if g_app and function_name in g_app.tools:
         try:
             # Type conversion based on tool definition
             function_args = convert_tool_args(function_name, function_args)
@@ -1956,26 +1957,28 @@ async def g_chat_completion(chat, context=None):
             if "modelCost" not in context:
                 context["modelCost"] = model_info.get("cost", provider.model_cost(model)) or {"input": 0, "output": 0}
     except Exception as e:
-        await g_app.on_chat_error(e, context or {"chat": chat})
+        if g_app:
+            await g_app.on_chat_error(e, context or {"chat": chat})
         raise e
 
     started_at = time.time()
     first_exception = None
     provider_name = "Unknown"
-    tool_history = []
-    final_response = None
 
-    retries = g_app.limits["retries"] or DEFAULT_LIMITS["retries"]
-    attempt_round = 0
-    candidate_index = 0
+    retries = (g_app and g_app.limits.get("retries")) or DEFAULT_LIMITS["retries"]
+    max_iterations = (context and context.get("max_iterations")) or (g_app and g_app.limits.get("max_iterations")) or 10
 
     # Inject global tools if present
-    current_chat = g_app.create_chat_with_tools(chat, use_tools=context.get("tools", "all"))
+    base_chat = g_app.create_chat_with_tools(chat, use_tools=context.get("tools", "all")) if g_app else chat
 
     # Apply pre-chat filters ONCE
-    context["chat"] = current_chat
-    for filter_func in g_app.chat_request_filters:
-        await filter_func(current_chat, context)
+    context["chat"] = base_chat
+    if g_app:
+        for filter_func in g_app.chat_request_filters:
+            await filter_func(base_chat, context)
+
+    attempt_round = 0
+    candidate_index = 0
 
     while attempt_round < retries:
         if candidate_index >= len(candidate_providers):
@@ -1988,27 +1991,25 @@ async def g_chat_completion(chat, context=None):
             provider_name = name
             provider = g_handlers[name]
             _log(f"provider: {name} {type(provider).__name__}")
-            started_at = time.time()
             context["startedAt"] = datetime.now()
             context["provider"] = name
             model_info = provider.model_info(model)
             context["modelCost"] = model_info.get("cost", provider.model_cost(model)) or {"input": 0, "output": 0}
             context["modelInfo"] = model_info
 
-            # Accumulate usage across tool calls
-            total_usage = {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            }
+            # Deep copy chat context and reset tool history per provider attempt
+            current_chat = copy.deepcopy(base_chat)
+            tool_history = []
+            final_response = None
+
+            total_completion_tokens = 0
+            last_prompt_tokens = 0
             accumulated_cost = 0.0
 
             # Tool execution loop
-            max_iterations = 10
-
             for request_count in range(max_iterations):
                 if should_cancel_thread(context):
-                    return
+                    return None
 
                 if DEBUG:
                     messages = current_chat.get("messages", [])
@@ -2018,14 +2019,14 @@ async def g_chat_completion(chat, context=None):
                 response = await provider.chat(current_chat, context=context)
 
                 if should_cancel_thread(context):
-                    return
+                    return None
 
-                # Aggregate usage
+                # Aggregate usage across turns
                 if "usage" in response:
                     usage = response["usage"]
-                    total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
-                    total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
-                    total_usage["total_tokens"] += usage.get("total_tokens", 0)
+                    if "prompt_tokens" in usage:
+                        last_prompt_tokens = usage.get("prompt_tokens", 0)
+                    total_completion_tokens += usage.get("completion_tokens", 0)
 
                     # Calculate cost for this step if available
                     if "cost" in response and isinstance(response["cost"], (int, float)):
@@ -2046,33 +2047,41 @@ async def g_chat_completion(chat, context=None):
                     current_chat["messages"].append(message)
                     tool_history.append(message)
 
-                    await g_app.on_chat_tool(current_chat, context)
+                    if g_app:
+                        await g_app.on_chat_tool(current_chat, context)
 
-                    for tool_call in tool_calls:
-                        function_name = tool_call["function"]["name"]
+                    # Execute tool calls (concurrently if multiple)
+                    async def _exec_single_tool(tc):
+                        fn_name = tc["function"]["name"]
                         try:
-                            function_args = json.loads(tool_call["function"]["arguments"])
+                            fn_args = json.loads(tc["function"]["arguments"])
                         except Exception as e:
-                            tool_result = f"Error: Failed to parse JSON arguments for tool '{function_name}': {to_error_message(e)}"
+                            return tc["id"], f"Error: Failed to parse JSON arguments for tool '{fn_name}': {to_error_message(e)}", []
                         else:
-                            if "user" in context and get_tool_property(function_name, "user"):
-                                function_args["user"] = context["user"]
-                            tool_result, resources = await g_exec_tool(function_name, function_args)
+                            if "user" in context and get_tool_property(fn_name, "user"):
+                                fn_args["user"] = context["user"]
+                            tool_result, resources = await g_exec_tool(fn_name, fn_args)
+                            return tc["id"], tool_result, resources
 
-                        # Append tool result to history
-                        tool_msg = {"role": "tool", "tool_call_id": tool_call["id"], "content": to_content(tool_result)}
+                    if len(tool_calls) == 1:
+                        tc_id, tool_result, resources = await _exec_single_tool(tool_calls[0])
+                        tool_results = [(tc_id, tool_result, resources)]
+                    else:
+                        tool_results = await asyncio.gather(*[_exec_single_tool(tc) for tc in tool_calls])
 
+                    for tc_id, tool_result, resources in tool_results:
+                        tool_msg = {"role": "tool", "tool_call_id": tc_id, "content": to_content(tool_result)}
                         tool_msg.update(group_resources(resources))
 
                         current_chat["messages"].append(tool_msg)
                         tool_history.append(tool_msg)
 
-                        await g_app.on_chat_tool(current_chat, context)
+                        if g_app:
+                            await g_app.on_chat_tool(current_chat, context)
 
                     if should_cancel_thread(context):
-                        return
+                        return None
 
-                    attempt_round = 0
                     # Continue loop to send tool results back to LLM
                     continue
 
@@ -2083,46 +2092,56 @@ async def g_chat_completion(chat, context=None):
                 # Update final response with aggregated usage
                 if "usage" not in response:
                     response["usage"] = {}
-                # convert to int seconds
+
                 context["duration"] = duration = int(time.time() - started_at)
-                total_usage.update({"duration": duration})
+                total_usage = {
+                    "prompt_tokens": last_prompt_tokens,
+                    "completion_tokens": total_completion_tokens,
+                    "total_tokens": last_prompt_tokens + total_completion_tokens,
+                    "duration": duration,
+                }
                 response["usage"].update(total_usage)
-                # If we accumulated cost, set it on the response
                 if accumulated_cost > 0:
                     response["cost"] = accumulated_cost
 
                 final_response = response
                 break  # Exit tool loop
 
-            if final_response:
-                # Apply post-chat filters ONCE on final response
+            if final_response is None:
+                raise Exception(f"Reached maximum tool iterations ({max_iterations}) without receiving final response")
+
+            # Apply post-chat filters ONCE on final response
+            if g_app:
                 for filter_func in g_app.chat_response_filters:
                     await filter_func(final_response, context)
 
-                if DEBUG:
-                    _dbg(json.dumps(final_response, indent=2))
+            if DEBUG:
+                _dbg(json.dumps(final_response, indent=2))
 
-                return final_response
+            return final_response
 
         except Exception as e:
             if first_exception is None:
                 first_exception = e
                 context["stackTrace"] = traceback.format_exc()
             _err(f"Provider {provider_name} failed", first_exception)
-            await g_app.on_chat_status(
-                f"Provider {provider_name} failed: {to_error_message(first_exception)} ({candidate_index + 1}/{len(candidate_providers)} x {attempt_round + 1} attempts)",
-                context,
-            )
+            if g_app:
+                await g_app.on_chat_status(
+                    f"Provider {provider_name} failed: {to_error_message(first_exception)} ({candidate_index + 1}/{len(candidate_providers)} x {attempt_round + 1} attempts)",
+                    context,
+                )
             candidate_index += 1
             continue
 
     # If we get here, all providers failed
     if first_exception:
-        await g_app.on_chat_error(first_exception, context or {"chat": chat})
+        if g_app:
+            await g_app.on_chat_error(first_exception, context or {"chat": chat})
         raise first_exception
 
     e = Exception("All providers failed")
-    await g_app.on_chat_error(e, context or {"chat": chat})
+    if g_app:
+        await g_app.on_chat_error(e, context or {"chat": chat})
     raise e
 
 
@@ -3107,6 +3126,8 @@ class AppExtensions:
     """
 
     def __init__(self, cli_args: argparse.Namespace, extra_args: Dict[str, Any]):
+        global g_app
+        g_app = self
         self.cli_args = cli_args
         self.extra_args = extra_args
         self.config = None
