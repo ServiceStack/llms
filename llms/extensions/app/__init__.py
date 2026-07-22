@@ -1,3 +1,4 @@
+from typing import Dict
 import _collections_abc
 import asyncio
 import io
@@ -15,6 +16,14 @@ from llms.db import count_tokens_approx
 from .db import AppDB
 
 g_db = None
+active_chat_tasks: Dict[str, asyncio.Task] = {}
+thread_update_events: Dict[str, asyncio.Event] = {}
+
+
+def notify_thread_update(thread_id):
+    event = thread_update_events.get(str(thread_id))
+    if event:
+        event.set()
 
 
 def install(ctx):
@@ -229,6 +238,8 @@ def install(ctx):
         async def run_chat(chat_req, context_req):
             try:
                 await ctx.chat_completion(chat_req, context=context_req)
+            except asyncio.CancelledError:
+                ctx.dbg(f"run_chat cancelled for thread {id}")
             except Exception as ex:
                 ctx.err("run_chat", ex)
                 # shouldn't be necessary to update thread in db with error as it's done in chat_error filter
@@ -236,7 +247,13 @@ def install(ctx):
                 if thread and not thread.get("error"):
                     await chat_error(ex, context)
 
-        asyncio.create_task(run_chat(chat, context))
+        task = asyncio.create_task(run_chat(chat, context))
+        active_chat_tasks[str(id)] = task
+
+        def _on_task_done(t):
+            active_chat_tasks.pop(str(id), None)
+
+        task.add_done_callback(_on_task_done)
 
         return web.json_response(thread_dto(thread))
 
@@ -250,17 +267,17 @@ def install(ctx):
         if not thread:
             raise Exception("Thread not found")
         if after:
-            started = time.time()
             thread_id = thread.get("id")
             thread_updated_at = thread.get("updatedAt")
 
-            while thread_updated_at <= after:
-                thread_updated_at = g_db.get_thread_column(thread_id, "updatedAt", user=user)
-                # if thread is not updated in 30 seconds, break
-                if time.time() - started > 10:
-                    break
-                await asyncio.sleep(1)
-            ctx.dbg(f"get_thread_updates: {thread_id} / {thread_updated_at} < {after} / {thread_updated_at < after}")
+            if str(thread_updated_at) <= str(after):
+                event = thread_update_events.setdefault(str(id), asyncio.Event())
+                event.clear()
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=10.0)
+                except asyncio.TimeoutError:
+                    pass
+            ctx.dbg(f"get_thread_updates: {thread_id}")
             thread = g_db.get_thread(thread_id, user=user)
         return web.json_response(thread_dto(thread))
 
@@ -268,10 +285,14 @@ def install(ctx):
 
     async def cancel_thread(request):
         id = request.match_info["id"]
+        user = ctx.get_username(request)
+        task = active_chat_tasks.pop(str(id), None)
+        if task and not task.done():
+            task.cancel()
         await g_db.update_thread_async(
-            id, {"completedAt": datetime.now(), "error": "Request was canceled"}, user=ctx.get_username(request)
+            id, {"completedAt": datetime.now(), "error": "Request was canceled"}, user=user
         )
-        thread = g_db.get_thread(id, user=ctx.get_username(request))
+        thread = g_db.get_thread(id, user=user)
         ctx.dbg(f"cancel_thread: {id} / {thread.get('error')} / {thread.get('completedAt')}")
         return web.json_response(thread_dto(thread))
 
@@ -672,8 +693,7 @@ def install(ctx):
                             with open(config_path, encoding="utf-8") as f:
                                 themes[theme_name] = json.load(f)
                         except Exception as e:
-                            if hasattr(ctx, "err"):
-                                ctx.err(f"Failed to load theme {theme_name}", e)
+                            ctx.err(f"Failed to load theme {theme_name}", e)
         return web.json_response(themes)
 
     ctx.add_get("/themes", get_themes)
@@ -1036,8 +1056,15 @@ def install(ctx):
             ctx.log(f"get_thread({thread_id},{user})")
             return thread_dto(self.db.get_thread(thread_id, user=user))
 
+        async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
+            ctx.log(f"update_thread_async({id},{user})")
+            ret = await self.db.update_thread_async(id, thread, user=user)
+            notify_thread_update(id)
+            return ret
+
         def get_request(self, request_id, user):
             return request_dto(self.db.get_request(request_id, user=user))
+
 
     ctx.threads = ThreadApi(ctx, g_db)
 

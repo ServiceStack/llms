@@ -1212,6 +1212,7 @@ class OpenAiCompatible:
         self.check = kwargs.get("check")
         self.modalities = kwargs.get("modalities", {})
         self.server_tools = kwargs.get("server_tools") or []
+        self.stream = kwargs.get("stream", True)
 
     def set_models(self, **kwargs):
         models = kwargs.get("models", {})
@@ -1373,6 +1374,174 @@ class OpenAiCompatible:
         if self.enable_thinking is not None:
             chat["enable_thinking"] = self.enable_thinking
 
+    async def handle_stream_response(self, response, chat, started_at, context=None):
+        if response.status >= 300:
+            text = await response.text()
+            try:
+                data = json.loads(text)
+                if "error" in data and "message" in data["error"]:
+                    raise Exception(data["error"]["message"])
+            except json.JSONDecodeError:
+                pass
+            raise Exception(f"Failed chat completion {response.status}: {text}")
+
+        thread_id = context.get("threadId") if context else None
+        user = context.get("user") if context else None
+        threads_api = (g_app.threads if g_app else None) or (self.ctx.threads if hasattr(self, "ctx") else None)
+
+        response_id = None
+        created_time = None
+        model_name = None
+        content_acc = ""
+        reasoning_acc = ""
+        reasoning_field = None
+        tool_calls_dict = {}
+        finish_reason = None
+        usage_acc = {}
+        last_db_update = 0.0
+        base_messages = list(chat.get("messages", []))
+
+        async for line in response.content:
+            if not line:
+                continue
+            line_str = line.decode("utf-8").strip()
+            if not line_str or line_str.startswith(":"):
+                continue
+            if line_str.startswith("data: "):
+                data_content = line_str[6:].strip()
+                if data_content == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_content)
+                except json.JSONDecodeError:
+                    continue
+
+                if chunk.get("id"):
+                    response_id = chunk["id"]
+                if chunk.get("created"):
+                    created_time = chunk["created"]
+                if chunk.get("model"):
+                    model_name = chunk["model"]
+
+                if "usage" in chunk and isinstance(chunk["usage"], dict):
+                    usage_acc.update(chunk["usage"])
+                if "cost" in chunk and isinstance(chunk["cost"], (int, float)):
+                    usage_acc["cost"] = chunk["cost"]
+
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                if choice.get("finish_reason"):
+                    finish_reason = choice["finish_reason"]
+
+                delta = choice.get("delta", {})
+
+                # Content delta
+                if "content" in delta and delta["content"]:
+                    content_acc += delta["content"]
+
+                # Reasoning / thinking delta
+                for r_key in ["reasoning_content", "reasoning", "thinking"]:
+                    if r_key in delta and delta[r_key]:
+                        reasoning_acc += delta[r_key]
+                        reasoning_field = r_key
+                        break
+
+                # Tool calls delta
+                for tc in delta.get("tool_calls", []):
+                    idx = tc.get("index", 0)
+                    if idx not in tool_calls_dict:
+                        tool_calls_dict[idx] = {
+                            "id": tc.get("id") or "",
+                            "type": tc.get("type") or "function",
+                            "function": {
+                                "name": tc.get("function", {}).get("name") or "",
+                                "arguments": tc.get("function", {}).get("arguments") or "",
+                            },
+                        }
+                    else:
+                        existing = tool_calls_dict[idx]
+                        if tc.get("id"):
+                            existing["id"] += tc["id"]
+                        if tc.get("type"):
+                            existing["type"] = tc["type"]
+                        fn_delta = tc.get("function", {})
+                        if fn_delta.get("name"):
+                            existing["function"]["name"] += fn_delta["name"]
+                        if fn_delta.get("arguments"):
+                            existing["function"]["arguments"] += fn_delta["arguments"]
+
+                if context and should_cancel_thread(context):
+                    break
+
+                now = time.time()
+                if threads_api and thread_id and (now - last_db_update >= 0.1):
+                    last_db_update = now
+                    assistant_msg = {
+                        "role": "assistant",
+                        "content": content_acc,
+                        "model": chat.get("model"),
+                    }
+                    if reasoning_acc:
+                        assistant_msg[reasoning_field or "reasoning_content"] = reasoning_acc
+                    if tool_calls_dict:
+                        assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+                    streaming_messages = base_messages + [assistant_msg]
+                    await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+
+        if context and should_cancel_thread(context):
+            _log(f"Stream cancelled for thread {thread_id}")
+            return None
+
+        # Send final thread update for the completed stream
+        if threads_api and thread_id:
+            assistant_msg = {
+                "role": "assistant",
+                "content": content_acc,
+                "model": chat.get("model"),
+            }
+            if reasoning_acc:
+                assistant_msg[reasoning_field or "reasoning_content"] = reasoning_acc
+            if tool_calls_dict:
+                assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+            streaming_messages = base_messages + [assistant_msg]
+            await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+
+        message_obj = {
+            "role": "assistant",
+            "content": content_acc,
+        }
+        if reasoning_acc:
+            message_obj[reasoning_field or "reasoning_content"] = reasoning_acc
+        if tool_calls_dict:
+            message_obj["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+        choice_obj = {
+            "index": 0,
+            "message": message_obj,
+            "finish_reason": finish_reason or "stop",
+        }
+
+        openai_response = {
+            "id": response_id or f"gen-{int(started_at)}",
+            "object": "chat.completion",
+            "created": created_time or int(started_at),
+            "model": model_name or chat.get("model"),
+            "choices": [choice_obj],
+            "usage": usage_acc or {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            },
+        }
+        if "cost" in usage_acc:
+            openai_response["cost"] = usage_acc["cost"]
+
+        return self.to_response(openai_response, chat, started_at, context=context)
+
     async def chat(self, chat, context=None):
         chat["model"] = self.provider_model(chat["model"]) or chat["model"]
 
@@ -1391,22 +1560,38 @@ class OpenAiCompatible:
         # with open(os.path.join(os.path.dirname(__file__), 'chat.wip.json'), "w") as f:
         #     f.write(json.dumps(chat, indent=2))
 
+        is_stream = chat["stream"] if "stream" in chat else (self.stream or False)
+
         self.init_chat(chat)
 
         chat = await self.process_chat(chat, provider_id=self.id)
 
-        _log(f"POST {self.chat_url}")
+        _log(f"POST {self.chat_url} (stream={is_stream})")
         _log(chat_summary(chat))
         # remove metadata if any (conflicts with some providers, e.g. Z.ai)
         metadata = chat.pop("metadata", None)
 
-        async with aiohttp.ClientSession() as session:
-            started_at = time.time()
-            async with session.post(
-                self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=get_client_timeout()
-            ) as response:
+        if not is_stream:
+            async with aiohttp.ClientSession() as session:
+                started_at = time.time()
+                async with session.post(
+                    self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=get_client_timeout()
+                ) as response:
+                    chat["metadata"] = metadata
+                    return self.to_response(await response_json(response), chat, started_at, context=context)
+
+        # Streaming mode
+        chat["stream"] = True
+        if "stream_options" not in chat:
+            chat["stream_options"] = {"include_usage": True}
+
+        started_at = time.time()
+        async with aiohttp.ClientSession() as session, session.post(
+            self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=get_client_timeout()
+        ) as response:
+            if metadata:
                 chat["metadata"] = metadata
-                return self.to_response(await response_json(response), chat, started_at, context=context)
+            return await self.handle_stream_response(response, chat, started_at, context=context)
 
 
 class GroqProvider(OpenAiCompatible):
@@ -1617,11 +1802,25 @@ def create_error_response(message, error_code="Error", stack_trace=None):
 
 
 def should_cancel_thread(context):
-    ret = context.get("cancelled", False)
-    if ret:
-        thread_id = context.get("threadId")
-        _dbg(f"Thread cancelled {thread_id}")
-    return ret
+    if not context:
+        return False
+    if context.get("cancelled") or context.get("completed"):
+        return True
+    thread_id = context.get("threadId")
+    if thread_id and g_app:
+        now = time.time()
+        last_check = context.get("_last_cancel_check", 0)
+        if now - last_check >= 0.1:
+            context["_last_cancel_check"] = now
+            user = context.get("user")
+            db = getattr(g_app, "db", None) or (g_app.threads.db if g_app and g_app.threads else None)
+            if db and hasattr(db, "get_thread_column"):
+                error = db.get_thread_column(thread_id, "error", user=user)
+                if error and "canceled" in str(error).lower():
+                    context["cancelled"] = True
+                    _dbg(f"Thread cancelled in DB {thread_id}")
+                    return True
+    return False
 
 
 def g_chat_request(template=None, text=None, model=None, system_prompt=None):
@@ -3104,6 +3303,10 @@ class ThreadApi:
         _log(f"get_thread [{thread_id}] not implemented")
         return None
 
+    async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
+        _log(f"update_thread_async [{id}] not implemented")
+        return None
+
     def get_request(self, request_id, user):
         _log(f"get_request [{request_id}] not implemented")
         return None
@@ -3513,6 +3716,9 @@ class AppExtensions:
             if os.path.exists(path):
                 return path
         return None
+
+    def should_cancel_thread(self, context):
+        return should_cancel_thread(context)
 
 
 def handler_name(handler):
@@ -3941,6 +4147,9 @@ class ExtensionContext:
 
     def next_loading_message(self):
         return self.app.next_loading_message()
+
+    def should_cancel_thread(self, context):
+        return self.app.should_cancel_thread(context)
 
     @property
     def threads(self) -> ThreadApi:

@@ -379,22 +379,40 @@ def install_openrouter(ctx):
                     else:
                         raise Exception(f"Provider {self.name} does not support '{modality}' modality")
 
+            is_stream = chat["stream"] if "stream" in chat else self.stream
+
             self.init_chat(chat)
 
             chat = await self.process_chat(chat, provider_id=self.id)
 
-            ctx.log(f"POST {self.chat_url}")
+            ctx.log(f"POST {self.chat_url} (stream={is_stream})")
             ctx.log(self.chat_summary(chat))
 
             metadata = chat.pop("metadata", None)
 
-            async with aiohttp.ClientSession() as session:
-                started_at = time.time()
-                async with session.post(
-                    self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=ctx.get_client_timeout()
-                ) as response:
+            if not is_stream:
+                async with aiohttp.ClientSession() as session:
+                    started_at = time.time()
+                    async with session.post(
+                        self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=ctx.get_client_timeout()
+                    ) as response:
+                        chat["metadata"] = metadata
+                        return self.to_response(await self.response_json(response), chat, started_at, context=context)
+
+            # Streaming mode
+            chat["stream"] = True
+            if "stream_options" not in chat:
+                chat["stream_options"] = {"include_usage": True}
+
+            started_at = time.time()
+            async with aiohttp.ClientSession() as session, session.post(
+                self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=ctx.get_client_timeout()
+            ) as response:
+                if metadata:
                     chat["metadata"] = metadata
-                    return self.to_response(await self.response_json(response), chat, started_at, context=context)
+                return await self.handle_stream_response(response, chat, started_at, context=context)
+
+
 
     class OpenRouterAudioGenerator(GeneratorBase):
         sdk = "openrouter/audio"

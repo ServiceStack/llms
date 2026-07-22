@@ -141,7 +141,172 @@ def install_google(ctx):
                 }
             return None
 
+        async def handle_stream_response(self, response, chat, started_at, context=None):
+            if response.status >= 300:
+                text = await response.text()
+                try:
+                    data = json.loads(text)
+                    if "error" in data and "message" in data["error"]:
+                        raise Exception(data["error"]["message"])
+                except json.JSONDecodeError:
+                    pass
+                raise Exception(f"Failed chat completion {response.status}: {text}")
+
+            thread_id = context.get("threadId") if context else None
+            user = context.get("user") if context else None
+            threads_api = ctx.threads
+
+            response_id = None
+            created_time = None
+            model_name = None
+            content_acc = ""
+            reasoning_acc = ""
+            reasoning_field = None
+            tool_calls_dict = {}
+            finish_reason = None
+            usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            last_db_update = 0.0
+            base_messages = list(chat.get("messages", []))
+
+            async for line in response.content:
+                if not line:
+                    continue
+                line_str = line.decode("utf-8").strip()
+                if not line_str or line_str.startswith(":"):
+                    continue
+                if line_str.startswith("data: "):
+                    data_content = line_str[6:].strip()
+                    if data_content == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_content)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if "error" in chunk:
+                        err = chunk["error"]
+                        msg = err.get("message") if isinstance(err, dict) else str(err)
+                        raise Exception(msg or "Google Gemini streaming error")
+
+                    if chunk.get("modelVersion"):
+                        model_name = chunk["modelVersion"]
+
+                    if "usageMetadata" in chunk and isinstance(chunk["usageMetadata"], dict):
+                        um = chunk["usageMetadata"]
+                        if "promptTokenCount" in um:
+                            usage_acc["prompt_tokens"] = um["promptTokenCount"]
+                        if "candidatesTokenCount" in um:
+                            usage_acc["completion_tokens"] = um["candidatesTokenCount"]
+                        if "totalTokenCount" in um:
+                            usage_acc["total_tokens"] = um["totalTokenCount"]
+                        else:
+                            usage_acc["total_tokens"] = (
+                                usage_acc.get("prompt_tokens", 0) + usage_acc.get("completion_tokens", 0)
+                            )
+
+                    candidates = chunk.get("candidates") or []
+                    for candidate in candidates:
+                        if candidate.get("finishReason"):
+                            finish_reason = candidate["finishReason"]
+
+                        raw_content = candidate.get("content", {})
+                        parts = raw_content.get("parts", [])
+                        for part in parts:
+                            if "text" in part:
+                                text_val = part["text"]
+                                if part.get("thought"):
+                                    reasoning_acc += text_val
+                                    reasoning_field = "reasoning"
+                                else:
+                                    content_acc += text_val
+                            if "functionCall" in part:
+                                fc = part["functionCall"]
+                                idx = len(tool_calls_dict)
+                                fn_name = fc.get("name", "")
+                                fn_args = (
+                                    json.dumps(fc.get("args", {}))
+                                    if isinstance(fc.get("args"), dict)
+                                    else (fc.get("args") or "")
+                                )
+                                tc = {
+                                    "id": f"call_{idx}_{int(started_at)}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": fn_name,
+                                        "arguments": fn_args,
+                                    },
+                                }
+                                signature = part.get("thoughtSignature") or part.get("thought_signature")
+                                if signature:
+                                    tc["thoughtSignature"] = signature
+                                    tc["extra_content"] = {"google": {"thought_signature": signature}}
+                                tool_calls_dict[idx] = tc
+
+                    if context and ctx.should_cancel_thread(context):
+                        break
+
+                    now = time.time()
+                    if threads_api and thread_id and (now - last_db_update >= 0.1):
+                        last_db_update = now
+                        assistant_msg = {
+                            "role": "assistant",
+                            "content": content_acc,
+                            "model": chat.get("model"),
+                        }
+                        if reasoning_acc:
+                            assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
+                        if tool_calls_dict:
+                            assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+                        streaming_messages = base_messages + [assistant_msg]
+                        await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+
+            if context and ctx.should_cancel_thread(context):
+                ctx.log(f"Stream cancelled for thread {thread_id}")
+                return None
+
+            if threads_api and thread_id:
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": content_acc,
+                    "model": chat.get("model"),
+                }
+                if reasoning_acc:
+                    assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
+                if tool_calls_dict:
+                    assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+                streaming_messages = base_messages + [assistant_msg]
+                await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+
+            message_obj = {
+                "role": "assistant",
+                "content": content_acc,
+            }
+            if reasoning_acc:
+                message_obj[reasoning_field or "reasoning"] = reasoning_acc
+            if tool_calls_dict:
+                message_obj["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+            choice_obj = {
+                "index": 0,
+                "message": message_obj,
+                "finish_reason": finish_reason or "stop",
+            }
+
+            openai_response = {
+                "id": response_id or f"chatcmpl-{int(started_at)}",
+                "object": "chat.completion",
+                "created": created_time or int(started_at),
+                "model": model_name or chat.get("model"),
+                "choices": [choice_obj],
+                "usage": usage_acc,
+            }
+
+            return self.to_response(openai_response, chat, started_at, context=context)
+
         async def chat(self, chat, context=None):
+            is_stream = chat["stream"] if "stream" in chat else (self.stream if self.stream is not None else True)
             chat["model"] = self.provider_model(chat["model"]) or chat["model"]
             model_info = (context.get("modelInfo") if context is not None else None) or self.model_info(chat["model"])
 
@@ -151,6 +316,8 @@ def install_google(ctx):
 
             modalities = chat.get("modalities")
             has_media_modality = modalities and ("image" in modalities or "audio" in modalities)
+            if has_media_modality:
+                is_stream = False
 
             if has_media_modality:
                 supports_tool_calls = False
@@ -369,10 +536,17 @@ def install_google(ctx):
                 if "top_logprobs" in chat:
                     generation_config["topK"] = chat["top_logprobs"]
 
+                model_name_lower = chat.get("model", "").lower()
+                is_thinking_model = "thinking" in model_name_lower or (
+                    model_info and (model_info.get("thinking") or model_info.get("thinking_budget"))
+                )
+                enable_thinking = chat.get("enable_thinking")
+
                 if "thinkingConfig" in chat:
                     generation_config["thinkingConfig"] = chat["thinkingConfig"]
-                elif self.thinking_config:
-                    generation_config["thinkingConfig"] = self.thinking_config
+                elif enable_thinking is True or (enable_thinking is not False and is_thinking_model and self.thinking_config):
+                    if self.thinking_config:
+                        generation_config["thinkingConfig"] = self.thinking_config
 
                 if "response_format" in chat:
                     response_format = chat["response_format"]
@@ -412,15 +586,43 @@ def install_google(ctx):
                 if len(generation_config) > 0:
                     gemini_chat["generationConfig"] = generation_config
 
-                started_at = int(time.time() * 1000)
-                gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
-
-                ctx.log(f"POST {gemini_chat_url}")
-                ctx.log(gemini_chat_summary(gemini_chat))
+                is_stream = is_stream and not has_media_modality
                 started_at = time.time()
 
                 max_retries = 3
                 for attempt in range(max_retries):
+                    if is_stream:
+                        gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:streamGenerateContent?key={self.api_key}&alt=sse"
+                        ctx.log(f"POST {gemini_chat_url} (stream={is_stream})")
+                        ctx.log(gemini_chat_summary(gemini_chat))
+
+                        try:
+                            if attempt > 0:
+                                await asyncio.sleep(attempt * 0.5)
+                                ctx.log(f"Retrying request (attempt {attempt + 1}/{max_retries})...")
+
+                            async with session.post(
+                                gemini_chat_url,
+                                headers=self.headers,
+                                data=json.dumps(gemini_chat),
+                                timeout=ctx.get_client_timeout(),
+                            ) as response:
+                                return await self.handle_stream_response(response, chat, started_at, context=context)
+                        except Exception as e:
+                            err_msg = str(e)
+                            if ("thinking budget" in err_msg.lower() or "thinkingconfig" in err_msg.lower()) and attempt < max_retries - 1:
+                                if "generationConfig" in gemini_chat and "thinkingConfig" in gemini_chat["generationConfig"]:
+                                    del gemini_chat["generationConfig"]["thinkingConfig"]
+                                chat.pop("thinkingConfig", None)
+                                ctx.dbg("Thinking budget not supported for model. Retrying stream without thinkingConfig...")
+                                continue
+                            raise e
+
+                    gemini_chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/{chat['model']}:generateContent?key={self.api_key}"
+
+                    ctx.log(f"POST {gemini_chat_url}")
+                    ctx.log(gemini_chat_summary(gemini_chat))
+
                     if ctx.MOCK and "modalities" in chat:
                         print("Mocking Google Gemini Image")
                         with open(f"{ctx.MOCK_DIR}/gemini-image.json") as f:
@@ -455,6 +657,13 @@ def install_google(ctx):
                                 raise e from None
 
                     if "error" in obj:
+                        err_msg = obj["error"].get("message", "") if isinstance(obj["error"], dict) else str(obj["error"])
+                        if ("thinking budget" in err_msg.lower() or "thinkingconfig" in err_msg.lower()) and attempt < max_retries - 1:
+                            if "generationConfig" in gemini_chat and "thinkingConfig" in gemini_chat["generationConfig"]:
+                                del gemini_chat["generationConfig"]["thinkingConfig"]
+                            chat.pop("thinkingConfig", None)
+                            ctx.dbg("Thinking budget not supported for model. Retrying without thinkingConfig...")
+                            continue
                         ctx.log(f"Error: {obj['error']}")
                         raise Exception(obj["error"]["message"])
 
@@ -616,6 +825,6 @@ def install_google(ctx):
                         "prompt_tokens": usage.get("promptTokenCount", 0),
                     }
 
-                return ctx.log_json(self.to_response(response, chat, started_at))
+                return ctx.log_json(self.to_response(response, chat, started_at, context=context))
 
     ctx.add_provider(GoogleProvider)

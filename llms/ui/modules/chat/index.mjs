@@ -1275,17 +1275,17 @@ const ThreadTools = {
     template: `
     <div class="text-sm flex items-center gap-1 flex items-center px-1.5 py-0.5 text-xs rounded cursor-help" :class="[$styles.tagLabel]" :title="title">
         <svg class="size-4" :class="[$styles.icon]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 10h3V7L6.5 3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1-3 3l-6-6a6 6 0 0 1-8-8z"/></svg>
-        <span v-if="toolFns.length==1">{{toolFns[0].function.name}}</span>
+        <span v-if="toolFns.length==1">{{toolFns[0]?.function?.name || ''}}</span>
         <span v-else-if="toolFns.length>1">{{toolFns.length}} Tools</span>
     </div>
     `,
     props: { thread: Object },
     setup(props) {
-        const toolFns = computed(() => props.thread.tools.filter(x => x.type === 'function'))
+        const toolFns = computed(() => (props.thread?.tools || []).filter(x => x && x.type === 'function'))
         const title = computed(() => toolFns.value.length == 1
-            ? toolFns.value[0].function.name
+            ? toolFns.value[0]?.function?.name || ''
             : toolFns.value.length > 1
-                ? toolFns.value.map(x => x.function.name).join('\n')
+                ? toolFns.value.map(x => x?.function?.name || '').join('\n')
                 : '')
         return {
             toolFns,

@@ -40,7 +40,10 @@ async function watchThreadUpdates() {
         // console.log('watchThreadUpdates', api)
         if (api.response) {
             replaceThread(api.response)
-            return
+            if (currentThread.value && currentThread.value.id === thread.id && !currentThread.value.completedAt) {
+                watchThreadTimeout.value = setTimeout(watchThreadUpdates, 0)
+                return
+            }
         } else {
             setError(api.error, `watching thread ${thread.id}`)
         }

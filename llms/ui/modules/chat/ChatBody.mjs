@@ -769,7 +769,7 @@ export const ToolCall = {
             <div class="px-3 py-2 flex items-center justify-between space-x-4">
                 <div class="flex items-center gap-2">
                     <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                    <span class="font-mono text-xs font-bold">{{ tool.function.name }}</span>
+                    <span class="font-mono text-xs font-bold">{{ tool?.function?.name || '' }}</span>
                     <span v-if="toolSummary" :title="toolSummary" class="font-mono text-xs truncate overflow-hidden xl:max-w-2xl lg:max-w-xl md:max-w-lg sm:max-w-sm max-w-xs">{{ toolSummary }}</span>
                 </div>
                 <span class="text-[10px] uppercase tracking-wider font-medium whitespace-nowrap" :class="[$styles.muted]">Tool Call</span>
@@ -780,12 +780,12 @@ export const ToolCall = {
             <div @click="collapsed = !collapsed" class="cursor-pointer px-3 py-2 flex items-center space-x-4 justify-between border-b" :class="[$styles.chromeBorder]">
                 <div class="flex items-center gap-2">
                     <svg class="size-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                    <span class="font-mono text-xs font-bold">{{ tool.function.name }}</span>
+                    <span class="font-mono text-xs font-bold">{{ tool?.function?.name || '' }}</span>
                 </div>
                 <span class="text-[10px] uppercase tracking-wider font-medium whitespace-nowrap">Tool Call</span>
             </div>
             
-            <ToolArguments :value="tool.function.arguments" />
+            <ToolArguments :value="tool?.function?.arguments || ''" />
 
             <ToolOutput :tool="tool" :output="toolOutput" />
         </div>    
@@ -804,15 +804,15 @@ export const ToolCall = {
         const ctx = inject('ctx')
 
         const collapsed = ref(true)
-        const toolOutput = computed(() => props.thread?.messages?.find(m => m.role === 'tool' && m.tool_call_id === props.tool.id))
+        const toolOutput = computed(() => props.thread?.messages?.find(m => m.role === 'tool' && m.tool_call_id === props.tool?.id))
         const toolFailed = computed(() => {
             const output = toolOutput.value
             return output?.content?.includes('Error')
         })
-        const toolArgs = computed(() => ctx.utils.toJsonObject(props.tool.function.arguments))
+        const toolArgs = computed(() => ctx.utils.toJsonObject(props.tool?.function?.arguments))
         const toolSummary = computed(() => {
-            const toolName = props.tool.function.name
-            const args = toolArgs.value
+            const toolName = props.tool?.function?.name || ''
+            const args = toolArgs.value || {}
             const output = toolOutput.value
             if (toolName == 'run_bash' && args.command) {
                 return args.command
@@ -820,7 +820,7 @@ export const ToolCall = {
             else if (toolName == 'skill' && args.name) {
                 return args.name
             }
-            else if (args?.path) {
+            else if (args.path) {
                 if (toolName == 'read_text_file') {
                     return args.path + ' (' + ctx.fmt.humanifyNumber(output?.content?.length || 0) + ')'
                 } else if (toolName == 'directory_tree') {
@@ -883,7 +883,7 @@ export const ChatBody = {
     template: `
         <div class="flex flex-col h-full">
             <!-- Messages Area -->
-            <div id="messages" class="flex-1 overflow-y-auto" ref="messagesContainer">
+            <div id="messages" class="flex-1 overflow-y-auto" ref="messagesContainer" @scroll="checkUserScroll">
                 <div class="mx-auto max-w-6xl px-4 py-6">
 
                     <div v-if="!$ai.hasAccess">
@@ -1145,16 +1145,44 @@ export const ChatBody = {
             return ctx.ai.resolveUrl(url)
         }
 
-        // Auto-scroll to bottom when new messages arrive
-        const scrollToBottom = async () => {
+        // Auto-scroll to bottom as content streams or new messages arrive
+        const isUserScrolledUp = ref(false)
+
+        const checkUserScroll = () => {
+            if (!messagesContainer.value) return
+            const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+            isUserScrolledUp.value = scrollHeight - (scrollTop + clientHeight) > 100
+        }
+
+        const scrollToBottom = async (force = false) => {
             await nextTick()
-            if (messagesContainer.value) {
+            if (messagesContainer.value && (force || !isUserScrolledUp.value)) {
                 messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
             }
         }
 
-        // Watch for new messages and scroll
-        watch(() => currentThread.value?.messages?.length, scrollToBottom)
+        // Reset user scroll state when thread changes
+        watch(() => currentThread.value?.id, () => {
+            isUserScrolledUp.value = false
+            scrollToBottom(true)
+        })
+
+        // Watch for new messages, content stream updates, and thread updatedAt to auto-scroll
+        watch(
+            [
+                () => currentThread.value?.messages?.length,
+                () => currentThread.value?.updatedAt,
+                () => {
+                    const msgs = currentThread.value?.messages
+                    if (!msgs || !msgs.length) return ''
+                    const last = msgs[msgs.length - 1]
+                    return (last?.content || '') + (last?.reasoning || '') + (last?.thinking || '') + (last?.reasoning_content || '')
+                }
+            ],
+            () => {
+                scrollToBottom()
+            }
+        )
 
         // Watch for route changes and load the appropriate thread
         watch(() => route.params.id, async (newId) => {
@@ -1355,6 +1383,8 @@ export const ChatBody = {
             selectedModel,
             selectedModelObj,
             messagesContainer,
+            checkUserScroll,
+            scrollToBottom,
             copying,
             copyMessageContent,
             redoMessage,

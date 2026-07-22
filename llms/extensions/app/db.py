@@ -371,10 +371,22 @@ class AppDB:
         return await self.db.insert_async("thread", self.columns["thread"], self.prepare_thread(thread, user=user))
 
     def update_thread(self, id, thread: Dict[str, Any], user=None):
-        return self.db.update("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
+        ret = self.db.update("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
+        try:
+            from . import notify_thread_update
+            notify_thread_update(id)
+        except Exception:
+            pass
+        return ret
 
     async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
-        return await self.db.update_async("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
+        ret = await self.db.update_async("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
+        try:
+            from . import notify_thread_update
+            notify_thread_update(id)
+        except Exception:
+            pass
+        return ret
 
     def delete_thread(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})

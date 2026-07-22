@@ -171,6 +171,8 @@ def install_anthropic(ctx):
         async def chat(self, chat, context=None):
             chat["model"] = self.provider_model(chat["model"]) or chat["model"]
 
+            is_stream = chat["stream"] if "stream" in chat else (self.stream or False)
+
             chat = await self.process_chat(chat, provider_id=self.id)
 
             # Transform OpenAI format to Anthropic format
@@ -202,7 +204,9 @@ def install_anthropic(ctx):
                 anthropic_request["top_k"] = chat["top_k"]
             if "stop" in chat:
                 anthropic_request["stop_sequences"] = chat["stop"] if isinstance(chat["stop"], list) else [chat["stop"]]
-            if "stream" in chat:
+            if is_stream:
+                anthropic_request["stream"] = True
+            elif "stream" in chat:
                 anthropic_request["stream"] = chat["stream"]
             if "tools" in chat:
                 anthropic_tools = []
@@ -232,20 +236,231 @@ def install_anthropic(ctx):
                             }
                         }
 
-            ctx.log(f"POST {self.chat_url}")
+            ctx.log(f"POST {self.chat_url} (stream={is_stream})")
             ctx.log(json.dumps(anthropic_request, indent=2))
 
-            async with aiohttp.ClientSession() as session:
-                started_at = time.time()
-                async with session.post(
-                    self.chat_url,
-                    headers=self.headers,
-                    data=json.dumps(anthropic_request),
-                    timeout=ctx.get_client_timeout(),
-                ) as response:
-                    return ctx.log_json(
-                        self.to_response(await self.response_json(response), chat, started_at, context=context)
-                    )
+            if not is_stream:
+                async with aiohttp.ClientSession() as session:
+                    started_at = time.time()
+                    async with session.post(
+                        self.chat_url,
+                        headers=self.headers,
+                        data=json.dumps(anthropic_request),
+                        timeout=ctx.get_client_timeout(),
+                    ) as response:
+                        return ctx.log_json(
+                            self.to_response(await self.response_json(response), chat, started_at, context=context)
+                        )
+
+            started_at = time.time()
+            async with aiohttp.ClientSession() as session, session.post(
+                self.chat_url,
+                headers=self.headers,
+                data=json.dumps(anthropic_request),
+                timeout=ctx.get_client_timeout(),
+            ) as response:
+                return await self.handle_stream_response(response, chat, started_at, context=context)
+
+        async def handle_stream_response(self, response, chat, started_at, context=None):
+            if response.status >= 300:
+                text = await response.text()
+                try:
+                    data = json.loads(text)
+                    if "error" in data and "message" in data["error"]:
+                        raise Exception(data["error"]["message"])
+                except json.JSONDecodeError:
+                    pass
+                raise Exception(f"Failed chat completion {response.status}: {text}")
+
+            thread_id = context.get("threadId") if context else None
+            user = context.get("user") if context else None
+            threads_api = ctx.threads
+
+            response_id = None
+            created_time = None
+            model_name = None
+            content_acc = ""
+            reasoning_acc = ""
+            reasoning_field = None
+            tool_calls_dict = {}
+            finish_reason = None
+            usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            last_db_update = 0.0
+            base_messages = list(chat.get("messages", []))
+
+            async for line in response.content:
+                if not line:
+                    continue
+                line_str = line.decode("utf-8").strip()
+                if not line_str or line_str.startswith(":"):
+                    continue
+                if line_str.startswith("data: "):
+                    data_content = line_str[6:].strip()
+                    if data_content == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_content)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = chunk.get("type")
+
+                    if event_type == "message_start":
+                        msg = chunk.get("message", {})
+                        if msg.get("id"):
+                            response_id = msg["id"]
+                        if msg.get("model"):
+                            model_name = msg["model"]
+                        usage = msg.get("usage", {})
+                        if usage:
+                            if "input_tokens" in usage:
+                                usage_acc["prompt_tokens"] = usage["input_tokens"]
+                            if "output_tokens" in usage:
+                                usage_acc["completion_tokens"] = usage["output_tokens"]
+                            usage_acc["total_tokens"] = (
+                                usage_acc.get("prompt_tokens", 0) + usage_acc.get("completion_tokens", 0)
+                            )
+
+                    elif event_type == "content_block_start":
+                        idx = chunk.get("index", 0)
+                        block = chunk.get("content_block", {})
+                        block_type = block.get("type")
+                        if block_type == "tool_use":
+                            tool_calls_dict[idx] = {
+                                "id": block.get("id") or "",
+                                "type": "function",
+                                "function": {
+                                    "name": block.get("name") or "",
+                                    "arguments": "",
+                                },
+                            }
+                            if "input" in block and block["input"] and isinstance(block["input"], dict):
+                                tool_calls_dict[idx]["function"]["arguments"] = json.dumps(block["input"])
+                        elif block_type == "thinking":
+                            if block.get("thinking"):
+                                reasoning_acc += block["thinking"]
+                                reasoning_field = "thinking"
+                        elif block_type == "text":
+                            if block.get("text"):
+                                content_acc += block["text"]
+
+                    elif event_type == "content_block_delta":
+                        idx = chunk.get("index", 0)
+                        delta = chunk.get("delta", {})
+                        delta_type = delta.get("type")
+                        if delta_type == "text_delta":
+                            content_acc += delta.get("text", "")
+                        elif delta_type == "thinking_delta":
+                            reasoning_acc += delta.get("thinking", "")
+                            reasoning_field = "thinking"
+                        elif delta_type == "input_json_delta":
+                            if idx not in tool_calls_dict:
+                                tool_calls_dict[idx] = {
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            tool_calls_dict[idx]["function"]["arguments"] += delta.get("partial_json", "")
+
+                    elif event_type == "message_delta":
+                        delta = chunk.get("delta", {})
+                        if delta.get("stop_reason"):
+                            finish_reason = delta["stop_reason"]
+                        usage = chunk.get("usage", {})
+                        if usage:
+                            if "output_tokens" in usage:
+                                usage_acc["completion_tokens"] = usage["output_tokens"]
+                            if "input_tokens" in usage:
+                                usage_acc["prompt_tokens"] = usage["input_tokens"]
+                            usage_acc["total_tokens"] = (
+                                usage_acc.get("prompt_tokens", 0) + usage_acc.get("completion_tokens", 0)
+                            )
+
+                    elif event_type == "message_stop":
+                        break
+
+                    elif event_type == "error":
+                        err = chunk.get("error", {})
+                        msg = err.get("message") if isinstance(err, dict) else str(err)
+                        raise Exception(msg or "Anthropic streaming error")
+
+                    if context and ctx.should_cancel_thread(context):
+                        break
+
+                    now = time.time()
+                    if threads_api and thread_id and (now - last_db_update >= 0.1):
+                        last_db_update = now
+                        assistant_msg = {
+                            "role": "assistant",
+                            "content": content_acc,
+                            "model": chat.get("model"),
+                        }
+                        if reasoning_acc:
+                            assistant_msg[reasoning_field or "thinking"] = reasoning_acc
+                        if tool_calls_dict:
+                            assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+                        streaming_messages = base_messages + [assistant_msg]
+                        await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+
+            if context and ctx.should_cancel_thread(context):
+                ctx.log(f"Stream cancelled for thread {thread_id}")
+                return None
+
+            if threads_api and thread_id:
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": content_acc,
+                    "model": chat.get("model"),
+                }
+                if reasoning_acc:
+                    assistant_msg[reasoning_field or "thinking"] = reasoning_acc
+                if tool_calls_dict:
+                    assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+                streaming_messages = base_messages + [assistant_msg]
+                await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+
+            message_obj = {
+                "role": "assistant",
+                "content": content_acc,
+            }
+            if reasoning_acc:
+                message_obj[reasoning_field or "thinking"] = reasoning_acc
+            if tool_calls_dict:
+                message_obj["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+
+            choice_obj = {
+                "index": 0,
+                "message": message_obj,
+                "finish_reason": finish_reason or "stop",
+            }
+
+            openai_response = {
+                "id": response_id or f"gen-{int(started_at)}",
+                "object": "chat.completion",
+                "created": created_time or int(started_at),
+                "model": model_name or chat.get("model"),
+                "choices": [choice_obj],
+                "usage": usage_acc or {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+                "metadata": {
+                    "duration": int((time.time() - started_at) * 1000),
+                },
+            }
+
+            if chat is not None and "model" in chat:
+                cost = self.model_cost(chat["model"])
+                if cost and "input" in cost and "output" in cost:
+                    openai_response["metadata"]["pricing"] = f"{cost['input']}/{cost['output']}"
+
+            if context is not None:
+                context["providerResponse"] = openai_response
+
+            return ctx.log_json(openai_response)
 
         def to_response(self, response, chat, started_at, context=None):
             """Convert Anthropic response format to OpenAI-compatible format."""
