@@ -89,6 +89,47 @@
     },
     "openrouter": {
         "models": {
+            "microsoft/mai-image-2.5-pro": {
+                "name": "MAI-Image-2.5 Pro",
+                "release_date": "2026-07-24",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "image"
+                    ]
+                },
+                "cost": {
+                    "input": 0.0,
+                    "output": 5.0
+                }
+            },
+            "microsoft/mai-voice-2-flash": {
+                "name": "MAI-Voice-2-Flash",
+                "release_date": "2026-07-23",
+                "modalities": {
+                    "input": [
+                        "text"
+                    ],
+                    "output": [
+                        "speech"
+                    ]
+                },
+                "cost": {
+                    "input": 0,
+                    "output": 22
+                },
+                "voices": [
+                    "en-US-Harper:MAI-Voice-2",
+                    "es-MX-Valeria:MAI-Voice-2",
+                    "fr-FR-Soleil:MAI-Voice-2",
+                    "de-DE-Klaus:MAI-Voice-2"
+                ],
+                "defaults": {
+                    "voice": "en-US-Harper:MAI-Voice-2"
+                }
+            },
             "microsoft/mai-voice-2": {
                 "name": "MAI-Voice-2",
                 "release_date": "2026-06-03",
