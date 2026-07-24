@@ -1,4 +1,4 @@
-import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 function tryParseJson(str) {
@@ -347,7 +347,7 @@ export const MessageUsage = {
     template: `
     <div class="mt-2 text-xs opacity-70">                                        
         <span v-if="message.model" @click="$chat.setSelectedModel({ name: message.model })" title="Select model"><span class="cursor-pointer hover:underline">{{ message.model }}</span> &#8226; </span>
-        <span>{{ $fmt.time(message.timestamp) }}</span>
+        <span v-if="message.timestamp">{{ $fmt.time(message.timestamp) }}</span>
         <span v-if="usage" :title="$fmt.tokensTitle(usage)">
             &#8226;
             {{ $fmt.humanifyNumber(usage.tokens) }} tokens
@@ -367,21 +367,38 @@ export const MessageReasoning = {
     <div class="mt-2 mb-2">
         <button type="button" @click="toggleReasoning(message.timestamp)" class="text-xs flex items-center space-x-1" :class="[$styles.highlighted, $styles.linkHover]">
             <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" :class="isReasoningExpanded(message.timestamp) ? 'transform rotate-90' : ''"><path fill="currentColor" d="M7 5l6 5l-6 5z"/></svg>
-            <span>{{ isReasoningExpanded(message.timestamp) ? 'Hide reasoning' : 'Show reasoning' }}</span>
+            <span>
+                {{ (!message?.content || String(message.content).trim().length === 0) ? 'Thinking...' : (isReasoningExpanded(message.timestamp) ? 'Hide reasoning' : 'Show reasoning') }}
+                <span v-if="reasoning" class="opacity-75 font-mono ml-1">({{ reasoningLength }} chars)</span>
+            </span>
         </button>
-        <div v-if="isReasoningExpanded(message.timestamp)" class="reasoning mt-2 p-2 rounded-lg border" :class="[$styles.card]">
+        <div v-if="isReasoningExpanded(message.timestamp)" 
+            ref="reasoningBox"
+            class="reasoning mt-2 p-2 rounded-lg border text-xs overflow-y-auto"
+            :class="[
+                $styles.card,
+                (!message?.content || String(message.content).trim().length === 0) ? 'max-h-56' : 'max-h-96'
+            ]">
             <div v-if="typeof reasoning === 'string'" v-html="$fmt.markdown(reasoning)" class="prose prose-xs max-w-none dark:prose-invert"></div>
             <pre v-else class="text-xs whitespace-pre-wrap overflow-x-auto">{{ formatReasoning(reasoning) }}</pre>
         </div>
     </div>
     `,
     props: {
-        reasoning: String,
+        reasoning: [String, Object],
         message: Object,
     },
     setup(props) {
+        const reasoningBox = ref(null)
         const expandedReasoning = ref(new Set())
-        const isReasoningExpanded = (id) => expandedReasoning.value.has(id)
+
+        const isStreaming = computed(() => !props.message?.content || String(props.message.content).trim().length === 0)
+
+        const isReasoningExpanded = (id) => {
+            if (isStreaming.value) return true
+            return expandedReasoning.value.has(id)
+        }
+
         const toggleReasoning = (id) => {
             const s = new Set(expandedReasoning.value)
             if (s.has(id)) {
@@ -391,12 +408,49 @@ export const MessageReasoning = {
             }
             expandedReasoning.value = s
         }
+
+        const reasoningLength = computed(() => {
+            if (!props.reasoning) return '0'
+            const len = typeof props.reasoning === 'string' ? props.reasoning.length : JSON.stringify(props.reasoning).length
+            return len.toLocaleString()
+        })
+
         const formatReasoning = (r) => typeof r === 'string' ? r : JSON.stringify(r, null, 2)
 
+        const scrollToBottom = async () => {
+            await nextTick()
+            if (reasoningBox.value) {
+                reasoningBox.value.scrollTop = reasoningBox.value.scrollHeight
+            }
+            requestAnimationFrame(() => {
+                if (reasoningBox.value) {
+                    reasoningBox.value.scrollTop = reasoningBox.value.scrollHeight
+                }
+            })
+        }
+
+        watch(
+            () => props.reasoning,
+            () => {
+                if (isStreaming.value) {
+                    scrollToBottom()
+                }
+            },
+            { immediate: true }
+        )
+
+        onUpdated(() => {
+            if (isStreaming.value) {
+                scrollToBottom()
+            }
+        })
+
         return {
+            reasoningBox,
             expandedReasoning,
             isReasoningExpanded,
             toggleReasoning,
+            reasoningLength,
             formatReasoning,
         }
     }
@@ -910,7 +964,7 @@ export const ChatBody = {
                             <div
                                 v-for="message in currentThreadMessages"
                                 :key="message.timestamp"
-                                v-show="message.role !== 'tool' && !!(message.content || message.tool_calls?.length || message.images?.length || message.audios?.length)"
+                                v-show="message.role !== 'tool' && !!(message.content || message.reasoning || message.thinking || message.reasoning_content || message.tool_calls?.length || message.images?.length || message.audios?.length)"
                                 :data-role="message.role"
                                 :data-has-content="!!(typeof message.content === 'string' ? message.content?.trim() : message.content?.length)"
                                 :data-has-tools="!!message.tool_calls?.length"
@@ -935,7 +989,7 @@ export const ChatBody = {
                                 </div>
 
                                 <!-- Message bubble -->
-                                <div v-if="message.role === 'assistant' && !message.content?.trim() && message.tool_calls && message.tool_calls.length > 0 && !message.images?.length && !message.audios?.length">
+                                <div v-if="message.role === 'assistant' && !message.content?.trim() && !message.reasoning && !message.thinking && !message.reasoning_content && message.tool_calls && message.tool_calls.length > 0 && !message.images?.length && !message.audios?.length">
 
                                     <div v-if="message.tool_calls && message.tool_calls.length > 0" class="mb-3 space-y-4">
                                         <ToolCall v-for="(tool, i) in message.tool_calls" :key="i" :thread="currentThread" :tool="tool" />
@@ -1373,6 +1427,29 @@ export const ChatBody = {
         const currentThreadMessages = computed(() =>
             currentThread.value?.messages?.filter(x => x.role !== 'system' && !(x.role === 'user' && Array.isArray(x.content) && ignoreUserMessages.includes(x.content[0]?.text))))
 
+        const getBottomLines = (text, maxLines = 2) => {
+            if (!text || typeof text !== 'string') return ''
+            const lines = text.trim().split('\n').filter(line => line.trim().length > 0)
+            if (lines.length === 0) return ''
+            return lines.slice(-maxLines).join(' ')
+        }
+
+        const activeReasoningProgress = computed(() => {
+            const thread = currentThread.value
+            if (!thread || !thread.messages || !thread.messages.length) return thread?.status || null
+            const last = thread.messages[thread.messages.length - 1]
+            if (last && last.role === 'assistant') {
+                const reasoning = last.reasoning || last.thinking || last.reasoning_content
+                const hasContent = last.content && String(last.content).trim().length > 0
+                if (reasoning && !hasContent) {
+                    const reasoningStr = typeof reasoning === 'string' ? reasoning : JSON.stringify(reasoning)
+                    const bottomText = getBottomLines(reasoningStr, 2)
+                    return bottomText ? `Thinking: ${bottomText}` : 'Thinking...'
+                }
+            }
+            return thread?.status || null
+        })
+
         return {
             prefs,
             setPrefs,
@@ -1380,6 +1457,7 @@ export const ChatBody = {
             models,
             currentThread,
             currentThreadMessages,
+            activeReasoningProgress,
             selectedModel,
             selectedModelObj,
             messagesContainer,

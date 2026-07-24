@@ -31,43 +31,65 @@ async function query(query) {
     return (await ext.getJson(appendQueryString(`/threads`, query))).response || []
 }
 
-let watchThreadTimeout = ref(null)
+let watchTimeout = null
+const isWatchingThread = ref(false)
+
 async function watchThreadUpdates() {
+    clearTimeout(watchTimeout)
+    watchTimeout = null
+
     const thread = currentThread.value
-    // console.debug('watchThreadUpdates', thread?.id, thread?.messages?.length, thread?.completedAt)
-    if (thread && thread?.messages?.length && !thread.completedAt) {
-        const api = await ext.getJson(appendQueryString(`/threads/${thread.id}/updates`, { after: thread.updatedAt }))
-        // console.log('watchThreadUpdates', api)
-        if (api.response) {
-            replaceThread(api.response)
-            if (currentThread.value && currentThread.value.id === thread.id && !currentThread.value.completedAt) {
-                watchThreadTimeout.value = setTimeout(watchThreadUpdates, 0)
-                return
-            }
-        } else {
-            setError(api.error, `watching thread ${thread.id}`)
-        }
+    if (!thread?.id || !thread.messages?.length || thread.completedAt || thread.error) {
+        stopWatchingThread()
+        return
     }
-    stopWatchingThread()
+
+    const api = await ext.getJson(appendQueryString(`/threads/${thread.id}/updates`, { sig: thread.sig || '' }))
+
+    if (api.response) {
+        replaceThread(api.response)
+    } else if (api.error) {
+        setError(api.error, `watching thread ${thread.id}`)
+        stopWatchingThread()
+    }
 }
 
 function startWatchingThread() {
     stopWatchingThread()
     const thread = currentThread.value
-    if (thread && thread?.messages?.length && !thread.completedAt) {
-        watchThreadTimeout.value = setTimeout(watchThreadUpdates, 100)
+    if (thread?.id && thread.messages?.length > 0 && !thread.completedAt && !thread.error) {
+        isWatchingThread.value = true
+        watchTimeout = setTimeout(watchThreadUpdates, 100)
+    } else {
+        stopWatchingThread()
     }
 }
 
 function stopWatchingThread() {
-    console.debug('stopWatchingThread')
-    if (watchThreadTimeout.value) {
-        clearTimeout(watchThreadTimeout.value)
+    isWatchingThread.value = false
+    if (watchTimeout) {
+        clearTimeout(watchTimeout)
+        watchTimeout = null
     }
-    watchThreadTimeout.value = null
 }
 
-const isWatchingThread = computed(() => watchThreadTimeout.value != null)
+function replaceThread(thread) {
+    if (!thread) return
+    const index = threads.value.findIndex(t => t.id === thread.id)
+    if (index !== -1) threads.value[index] = thread
+    if (currentThread.value?.id === thread.id) currentThread.value = thread
+
+    if (thread.completedAt || thread.error) {
+        threadDetails.value[thread.id] = thread
+        if (!threadActions.value[thread.id]) {
+            loadThreadActions(thread.id)
+        }
+        stopWatchingThread()
+    } else if (currentThread.value?.id === thread.id) {
+        startWatchingThread()
+    }
+    return thread
+}
 
 async function cancelThread() {
     console.log('cancelThread')
@@ -107,26 +129,6 @@ async function createThread(args = {}) {
         setError(api.error, `Creating thread ${thread.title}`)
     }
 
-    return thread
-}
-
-function replaceThread(thread) {
-    if (!thread) {
-        console.error('replaceThread(null)')
-        return
-    }
-    const index = threads.value.findIndex(t => t.id === thread.id)
-    if (index !== -1) {
-        threads.value[index] = thread
-    }
-    if (currentThread.value?.id === thread.id) {
-        currentThread.value = thread
-    }
-    if (thread.completedAt || thread.error) {
-        threadDetails.value[thread.id] = thread
-        loadThreadActions(thread.id, { force: true })
-    }
-    startWatchingThread()
     return thread
 }
 
@@ -238,19 +240,16 @@ async function deleteThread(threadId) {
 
 // Load thread actions from extension
 async function loadThreadActions(threadId, opt) {
-    console.log('-loadThreadActions', threadId, threadActions.value[threadId])
     if (threadActions.value[threadId] && !opt?.force) {
         return
     }
-    const thread = await getThread(threadId)
+    const thread = threadDetails.value[threadId] || (currentThread.value?.id == threadId ? currentThread.value : await getThread(threadId))
     if (!thread) {
-        console.warn('Thread not found', threadId)
         return
     }
     const profile = thread.metadata?.profile ?? 'default'
     const res = await ctx.getJson(`/ext/agents/${profile}/actions`)
     threadActions.value[threadId] = res.response || []
-    console.log('+loadThreadActions', threadActions.value[threadId])
 }
 
 function getThreadActions(threadId) {
@@ -259,10 +258,17 @@ function getThreadActions(threadId) {
 
 // Set current thread
 async function setCurrentThread(threadId) {
+    if (!threadId) {
+        currentThread.value = null
+        stopWatchingThread()
+        return null
+    }
     const thread = await getThread(threadId)
     if (thread) {
         currentThread.value = thread
         startWatchingThread()
+    } else {
+        stopWatchingThread()
     }
     return thread
 }
@@ -271,12 +277,13 @@ async function setCurrentThread(threadId) {
 async function setCurrentThreadFromRoute(threadId, router) {
     if (!threadId) {
         currentThread.value = null
+        stopWatchingThread()
         return null
     }
 
     loadThreadDetails(threadId)
     loadThreadActions(threadId)
-    const thread = setCurrentThread(threadId)
+    const thread = await setCurrentThread(threadId)
     if (thread) {
         return thread
     } else {
@@ -285,6 +292,7 @@ async function setCurrentThreadFromRoute(threadId, router) {
             router.push((globalThis.ai?.base || '') + '/')
         }
         currentThread.value = null
+        stopWatchingThread()
         return null
     }
 }
@@ -292,6 +300,7 @@ async function setCurrentThreadFromRoute(threadId, router) {
 // Clear current thread (go back to initial state)
 function clearCurrentThread() {
     currentThread.value = null
+    stopWatchingThread()
 }
 
 function getGroupedThreads(total) {

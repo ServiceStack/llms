@@ -1,6 +1,7 @@
 from typing import Dict
 import _collections_abc
 import asyncio
+import hashlib
 import io
 import json
 import mimetypes
@@ -17,6 +18,7 @@ from .db import AppDB
 
 g_db = None
 active_chat_tasks: Dict[str, asyncio.Task] = {}
+active_update_tasks: Dict[str, asyncio.Task] = {}
 thread_update_events: Dict[str, asyncio.Event] = {}
 
 
@@ -24,6 +26,28 @@ def notify_thread_update(thread_id):
     event = thread_update_events.get(str(thread_id))
     if event:
         event.set()
+
+
+def get_thread_signature(thread: Dict[str, Any]):
+    if not thread:
+        return ""
+    messages = thread.get("messages")
+    if isinstance(messages, str):
+        msg_str = messages
+    elif isinstance(messages, list):
+        msg_str = json.dumps(messages, separators=(',', ':'))
+    else:
+        msg_str = str(messages or "")
+
+    msg_len = len(msg_str)
+    msg_tail = msg_str[-100:] if msg_len > 100 else msg_str
+    status = str(thread.get("status") or "")
+    completed = str(thread.get("completedAt") or "")
+    error = str(thread.get("error") or "")
+
+    raw = f"{msg_len}:{msg_tail}:{status}:{completed}:{error}"
+    h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+    return f"{msg_len}:{h}"
 
 
 def install(ctx):
@@ -72,7 +96,9 @@ def install(ctx):
     ]
 
     def thread_dto(row):
-        return row and g_db.to_dto(
+        if not row:
+            return None
+        dto = g_db.to_dto(
             row,
             [
                 "messages",
@@ -86,6 +112,9 @@ def install(ctx):
                 "providerResponse",
             ],
         )
+        if dto:
+            dto["sig"] = get_thread_signature(dto)
+        return dto
 
     def request_dto(row):
         return row and g_db.to_dto(row, ["usage"])
@@ -261,25 +290,49 @@ def install(ctx):
 
     async def get_thread_updates(request):
         id = request.match_info["id"]
-        after = request.query.get("after", None)
         user = ctx.get_username(request)
+        client_sig = request.query.get("sig", "")
+
         thread = g_db.get_thread(id, user=user)
         if not thread:
             raise Exception("Thread not found")
-        if after:
-            thread_id = thread.get("id")
-            thread_updated_at = thread.get("updatedAt")
 
-            if str(thread_updated_at) <= str(after):
-                event = thread_update_events.setdefault(str(id), asyncio.Event())
+        dto = thread_dto(thread)
+        if not dto:
+            raise Exception("Thread not found")
+
+        if dto.get("completedAt") or dto.get("error"):
+            return web.json_response(dto)
+
+        if client_sig and dto.get("sig") != client_sig:
+            return web.json_response(dto)
+
+        event = thread_update_events.setdefault(str(id), asyncio.Event())
+        timeout = 10.0
+        end_time = time.time() + timeout
+
+        while time.time() < end_time:
+            remaining = max(0.1, end_time - time.time())
+            try:
+                await asyncio.wait_for(event.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                break
+            finally:
                 event.clear()
-                try:
-                    await asyncio.wait_for(event.wait(), timeout=10.0)
-                except asyncio.TimeoutError:
-                    pass
-            ctx.dbg(f"get_thread_updates: {thread_id}")
-            thread = g_db.get_thread(thread_id, user=user)
-        return web.json_response(thread_dto(thread))
+
+            updated_thread = g_db.get_thread(id, user=user)
+            if not updated_thread:
+                break
+
+            updated_dto = thread_dto(updated_thread)
+            if not updated_dto:
+                break
+
+            if updated_dto.get("completedAt") or updated_dto.get("error") or updated_dto.get("sig") != client_sig:
+                dto = updated_dto
+                break
+
+        return web.json_response(dto)
 
     ctx.add_get("threads/{id}/updates", get_thread_updates)
 
