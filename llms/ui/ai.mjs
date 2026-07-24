@@ -22,7 +22,10 @@ export const o = {
     },
 
     resolveUrl(url) {
-        return url.startsWith('http') || url.startsWith('/v1') ? url : base + url
+        // urls built from ctx.ai.base (e.g. ExtensionScope.baseUrl) are already resolved
+        return url.startsWith('http') || url.startsWith('/v1') || (base && url.startsWith(base + '/'))
+            ? url
+            : base + url
     },
     get(url, options) {
         return fetch(this.resolveUrl(url), {

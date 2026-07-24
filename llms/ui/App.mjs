@@ -23,9 +23,9 @@ const LeftBar = {
             </div>
             <!-- bottom icons -->
             <div>
-                <div class="pb-1 relative flex items-center justify-center" title="Settings" @click="$router.push($route.path == '/settings' ? '/' : '/settings')">
-                    <svg class="size-7 p-1 cursor-pointer rounded block" 
-                        :class="[$route.path == '/settings' ? $styles.iconActive : $styles.icon, $styles.iconHover]" 
+                <div class="pb-1 relative flex items-center justify-center" title="Settings" @click="$ctx.to($route.path.endsWith('/settings') ? '/' : '/settings')">
+                    <svg class="size-7 p-1 cursor-pointer rounded block"
+                        :class="[$route.path.endsWith('/settings') ? $styles.iconActive : $styles.icon, $styles.iconHover]"
                         xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M19 7.5h-7.628a2.251 2.251 0 0 0-4.244 0H5V9h2.128a2.25 2.25 0 0 0 4.244 0H19zm0 7.5h-2.128a2.251 2.251 0 0 0-4.244 0H5v1.5h7.628a2.251 2.251 0 0 0 4.244 0H19z"/></svg>
                 </div>
             </div>
