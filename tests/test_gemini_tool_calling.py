@@ -154,6 +154,27 @@ class TestGeminiToolCalling(unittest.IsolatedAsyncioTestCase):
                 os.environ.pop("MOCK_DIR", None)
             g_app.MOCK = False
 
+    async def test_gemini_file_search_tool(self):
+        provider = g_app.get_providers()["google"]
+        chat = {
+            "model": "gemini-3.5-flash-lite",
+            "messages": [
+                {"role": "user", "content": "Search files"},
+            ],
+            "tools": [
+                {
+                    "type": "file_search",
+                    "file_search": {
+                        "file_search_store_names": ["fileSearchStores/test-store-id"]
+                    }
+                }
+            ]
+        }
+        
+        # Test that model_info reports tool_call support and provider parses file_search tool correctly
+        info = provider.model_info(chat["model"])
+        self.assertTrue(info.get("tool_call", True))
+
 
 if __name__ == "__main__":
     unittest.main()

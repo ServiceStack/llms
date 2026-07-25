@@ -585,6 +585,15 @@ export class AppContext {
         if (!request.messages) request.messages = []
         if (!request.metadata) request.metadata = {}
         if (!context) context = {}
+        if (thread && Array.isArray(thread.tools) && thread.tools.length > 0) {
+            if (!request.tools) request.tools = []
+            thread.tools.forEach(t => {
+                const exists = request.tools.some(existing => JSON.stringify(existing) === JSON.stringify(t))
+                if (!exists) {
+                    request.tools.push(t)
+                }
+            })
+        }
         Object.assign(context, {
             systemPrompt: '',
             requiredSystemPrompts: [],

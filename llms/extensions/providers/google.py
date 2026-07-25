@@ -137,6 +137,7 @@ def install_google(ctx):
                 return {
                     "id": model,
                     "name": model,
+                    "tool_call": True,
                     "cost": {"input": 0, "output": 0},
                 }
             return None
@@ -328,7 +329,7 @@ def install_google(ctx):
                 if "parallel_tool_calls" in chat:
                     del chat["parallel_tool_calls"]
             else:
-                supports_tool_calls = model_info.get("tool_call", False)
+                supports_tool_calls = model_info.get("tool_call", True) if model_info else True
 
             if "tools" in chat and supports_tool_calls:
                 function_declarations = []

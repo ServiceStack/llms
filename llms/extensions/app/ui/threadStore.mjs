@@ -353,7 +353,8 @@ function getLatestCachedThread() {
     return threads.value[0]
 }
 
-async function startNewThread({ title, model, messages, redirect }) {
+async function startNewThread(args = {}) {
+    let { title, model, messages, redirect, tools, ...rest } = typeof args === 'string' ? { title: args } : args
     if (!title) {
         title = 'New Chat'
     }
@@ -370,6 +371,9 @@ async function startNewThread({ title, model, messages, redirect }) {
     }
     const newThread = await createThread({
         title,
+        ...(tools ? { tools } : {}),
+        ...(model ? { model: typeof model === 'string' ? model : model.name || model.id } : {}),
+        ...rest
     })
 
     console.log('newThread', newThread)
