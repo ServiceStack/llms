@@ -1,5 +1,5 @@
 import { reactive } from "vue"
-import { ApiResult } from "@servicestack/client"
+import { ApiResult, combinePaths } from "@servicestack/client"
 
 const base = ''
 const headers = { 'Accept': 'application/json' }
@@ -21,6 +21,9 @@ export const o = {
         return !this.requiresAuth || this.auth
     },
 
+    resolvePath(path) {
+        return this.base ? combinePaths(this.base, path) : path
+    },
     resolveUrl(url) {
         // urls built from ctx.ai.base (e.g. ExtensionScope.baseUrl) are already resolved
         return url.startsWith('http') || url.startsWith('/v1') || (base && url.startsWith(base + '/'))

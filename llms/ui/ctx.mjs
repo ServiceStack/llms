@@ -431,9 +431,23 @@ export class AppContext {
         console.log('toggleTop', name, toggle, this.layout.top, this.layout.top === name)
         return this.layout.top === name
     }
+    matchesPath(pathA, pathB) {
+        if (!pathA || !pathB) {
+            return pathA === pathB
+        }
+        const a = pathA.startsWith(this.ai.base) ? pathA.substring(this.ai.base.length) : pathA
+        const b = pathB.startsWith(this.ai.base) ? pathB.substring(this.ai.base.length) : pathB
+
+        if (pathB.endsWith('*')) {
+            return a.startsWith(pathB.substring(0, pathB.length - 1))
+        }
+
+        return a === b
+    }
     togglePath(path, { left = true } = {}) {
+        path = this.ai.resolvePath(path)
         const currentPath = this.router.currentRoute.value?.path
-        const isSamePath = currentPath === path
+        const isSamePath = this.matchesPath(currentPath, path)
         console.log('togglePath', path, currentPath, left, isSamePath)
         if (!isSamePath) {
             this.router.push({ path })

@@ -838,7 +838,9 @@ export default {
         ctx.setLeftIcons({
             skills: {
                 component: { template: svg([`@click="$ctx.togglePath('/skills', { left:false })"`].join(' ')) },
-                isActive({ path }) { return path === '/skills' }
+                isActive({ path }) {
+                    return ctx.matchesPath(path, '/skills')
+                }
             }
         })
 

@@ -809,7 +809,7 @@ export default {
                     template: svg(`@click="$ctx.togglePath('/tools')"`),
                 },
                 isActive({ path }) {
-                    return path === '/tools'
+                    return ctx.matchesPath(path, '/tools')
                 }
             }
         })
