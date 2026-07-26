@@ -8,7 +8,7 @@ const LeftBar = {
         <div class="select-none flex flex-col justify-between h-full">
             <!-- top icons -->
             <div class="flex flex-col space-y-2 pt-2.5 px-1">
-                <div v-for="(icon, id) in $ctx.left" :key="id" class="relative flex items-center justify-center">
+                <div v-for="(icon, id) in $ctx.visibleComponents($ctx.left)" :key="id" class="relative flex items-center justify-center">
                     <component :is="icon.component" 
                         class="size-7 p-1 cursor-pointer block rounded"
                         :class="[icon.isActive({ ...$layout }) ? $styles.iconActive : $styles.icon, $styles.iconHover]" 
@@ -61,7 +61,7 @@ const LeftPanel = {
 const TopBar = {
     template: `
         <div class="select-none flex space-x-1">
-            <div v-for="(icon, id) in $ctx.top" :key="id" class="relative flex items-center justify-center">
+            <div v-for="(icon, id) in $ctx.visibleComponents($ctx.top)" :key="id" class="relative flex items-center justify-center">
                 <component :is="icon.component" 
                     class="size-7 p-1 cursor-pointer block border border-transparent rounded"
                     :class="[icon.isActive({ ...$layout }) ? $styles.iconActive : $styles.icon, $styles.iconHover]"
@@ -213,7 +213,7 @@ export default {
                         <div v-if="$ai.hasAccess" id="header" :class="$ctx.cls('header', 'py-1 pr-1 flex items-center justify-between shrink-0')">
                             <div class="flex items-center gap-2">
                                 <ModelSelector :models="$state.models" v-model="$state.selectedModel" />
-                                <component v-for="(c, id) in $ctx.leftTop" :is="c.component" />
+                                <component v-for="(c, id) in $ctx.visibleComponents($ctx.leftTop)" :is="c.component" />
                                 <!--ThemeSelector /-->
                             </div>
                             <div class="flex items-center gap-2">

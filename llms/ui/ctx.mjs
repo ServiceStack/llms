@@ -347,6 +347,16 @@ export class AppContext {
     setLeftIcons(icons) {
         Object.assign(this.left, this._validateIcons(icons))
     }
+    visibleComponents(componentsMap) {
+        const to = {}
+        Object.entries(componentsMap).forEach(([name, def]) => {
+            if (typeof def.isVisible == 'function' && !def.isVisible()) {
+                return
+            }
+            to[name] = def
+        })
+        return to
+    }
     component(name, component) {
         if (!name) return name
         if (component) {
