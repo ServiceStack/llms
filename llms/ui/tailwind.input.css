@@ -277,7 +277,7 @@
         border-left: 4px solid #e5e7eb;
         padding-left: 1rem;
         font-style: italic;
-        color: #6b7280;
+        /* color: #6b7280; */
     }
 
     .prose table {
