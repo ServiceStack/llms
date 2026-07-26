@@ -76,6 +76,7 @@ def install(ctx):
         "modelInfo",
         "modalities",
         "messages",
+        "streamingMessage",
         "tools",
         "args",
         "cost",
@@ -102,6 +103,7 @@ def install(ctx):
             row,
             [
                 "messages",
+                "streamingMessage",
                 "tools",
                 "toolHistory",
                 "modalities",
@@ -113,6 +115,11 @@ def install(ctx):
             ],
         )
         if dto:
+            # The in-flight message is stored separately so a failed stream can't damage
+            # `messages`, but clients read one list, so present it merged on the way out.
+            streaming = dto.pop("streamingMessage", None)
+            if isinstance(streaming, dict) and isinstance(dto.get("messages"), list):
+                dto["messages"] = dto["messages"] + [{**streaming, "streaming": True}]
             dto["sig"] = get_thread_signature(dto)
         return dto
 
@@ -123,6 +130,9 @@ def install(ctx):
         return prompt[:100] + ("..." if len(prompt) > 100 else "") if prompt else None
 
     def timestamp_messages(messages):
+        # Drop any in-flight message a client echoed back from a merged DTO, it belongs
+        # to a stream still in progress and must not become durable history.
+        messages = [m for m in messages if not m.get("streaming")]
         timestamp = int(time.time() * 1000)
         for message in messages:
             if "timestamp" not in message:
@@ -196,10 +206,14 @@ def install(ctx):
         tools = chat.get("tools", thread.get("tools", []))
         update_thread = {
             "messages": messages,
+            # editing/redoing a message deliberately rewrites history, everything else
+            # may only extend it (see AppDB.guard_messages)
+            "truncate": bool(chat.get("truncate")),
             "tools": tools,
             "startedAt": datetime.now(),
             "completedAt": None,
             "error": None,
+            "streamingMessage": None,
         }
 
         model = chat.get("model", None)
@@ -487,6 +501,7 @@ def install(ctx):
             "modelInfo": thread.get("modelInfo"),
             "modalities": thread.get("modalities"),
             "messages": compact_messages,
+            "truncate": True,  # compacting is an explicit rewrite of history
             "toolHistory": thread.get("toolHistory"),
             "args": thread.get("args"),
             "tools": thread.get("tools"),
@@ -792,7 +807,8 @@ def install(ctx):
 
         metadata = chat.get("metadata", {})
         model = chat.get("model", None)
-        messages = timestamp_messages(chat.get("messages", []))
+        # assign back so an echoed in-flight message isn't sent to the provider either
+        chat["messages"] = messages = timestamp_messages(chat.get("messages", []))
         tools = chat.get("tools", [])
         title = context.get("title") or prompt_to_title(ctx.last_user_prompt(chat) if chat else None)
         started_at = context.get("startedAt")
@@ -829,6 +845,7 @@ def install(ctx):
                 "error": None,
                 "metadata": metadata,
                 "status": ctx.next_loading_message(),
+                "streamingMessage": None,  # a previous attempt's partial is stale now
             }
             await g_db.update_thread_async(thread_id, update_thread, user=user)
 
@@ -949,7 +966,15 @@ def install(ctx):
             tasks.append(g_db.create_request_async(request, user=user))
 
         if thread_id and not nohistory:
-            messages = chat.get("messages", [])
+            # Append to the conversation the thread already has rather than rebuilding it
+            # from the request: the request's copy is missing anything appended while it
+            # was in flight (tool call/result messages) and has been rewritten for the
+            # provider, so writing it back would drop messages.
+            stored = thread_dto(g_db.get_thread(thread_id, user=user)) or {}
+            messages = stored.get("messages")
+            if not isinstance(messages, list) or not messages:
+                messages = chat.get("messages", [])
+            messages = [m for m in messages if not m.get("streaming")]
             last_role = messages[-1].get("role", None) if len(messages) > 0 else None
             output_cost = (input_price * input_tokens) / 1000000 if not is_per_request else cost
 
@@ -988,6 +1013,7 @@ def install(ctx):
                 "tools": tools,
                 "completedAt": completed_at,
                 "status": None,
+                "streamingMessage": None,  # the in-flight message is now committed
             }
             tool_history = o.get("tool_history", None)
             if tool_history:
@@ -1112,6 +1138,16 @@ def install(ctx):
         async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
             ctx.log(f"update_thread_async({id},{user})")
             ret = await self.db.update_thread_async(id, thread, user=user)
+            notify_thread_update(id)
+            return ret
+
+        async def checkpoint_stream_async(self, id, message: Dict[str, Any], user=None):
+            """
+            Persist the in-flight assistant message. This writes only `streamingMessage`,
+            never `messages`, so however a stream fails the conversation is untouched -
+            the most that can be lost is the response currently being generated.
+            """
+            ret = await self.db.update_thread_async(id, {"streamingMessage": message}, user=user)
             notify_thread_update(id)
             return ret
 

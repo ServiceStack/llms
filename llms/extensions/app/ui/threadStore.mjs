@@ -153,7 +153,9 @@ async function deleteMessageFromThread(threadId, timestamp) {
     if (!thread) throw new Error('Thread not found')
     const updatedMessages = thread.messages.filter(m => m.timestamp !== timestamp)
     console.log('deleteMessageFromThread', threadId, timestamp, updatedMessages)
-    await updateThread(threadId, { messages: updatedMessages })
+    // truncate: deleting a message deliberately shrinks history, the server rejects
+    // shrinking writes that don't opt in so an in-flight request can't erase a thread
+    await updateThread(threadId, { messages: updatedMessages, truncate: true })
 }
 
 async function updateMessageInThread(threadId, messageId, updates) {
@@ -196,8 +198,8 @@ async function redoMessageFromThread(threadId, timestamp) {
     // Keep only messages up to and including the target message
     const updatedMessages = thread.messages.slice(0, messageIndex + 1)
 
-    // Update the thread with the new messages
-    const request = { messages: updatedMessages }
+    // Update the thread with the new messages (truncate: an intentional rewrite)
+    const request = { messages: updatedMessages, truncate: true }
 
     const model = thread.modelInfo
     const api = await queueChat({ request, thread, model })

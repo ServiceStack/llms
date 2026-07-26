@@ -153,10 +153,6 @@ def install_google(ctx):
                     pass
                 raise Exception(f"Failed chat completion {response.status}: {text}")
 
-            thread_id = context.get("threadId") if context else None
-            user = context.get("user") if context else None
-            threads_api = ctx.threads
-
             response_id = None
             created_time = None
             model_name = None
@@ -166,89 +162,88 @@ def install_google(ctx):
             tool_calls_dict = {}
             finish_reason = None
             usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-            last_db_update = 0.0
-            base_messages = list(chat.get("messages", []))
+            writer = self.stream_writer(context)
 
-            async for line in response.content:
-                if not line:
-                    continue
-                line_str = line.decode("utf-8").strip()
-                if not line_str or line_str.startswith(":"):
-                    continue
-                if line_str.startswith("data: "):
-                    data_content = line_str[6:].strip()
-                    if data_content == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data_content)
-                    except json.JSONDecodeError:
+            try:
+                async for line in response.content:
+                    if not line:
                         continue
+                    line_str = line.decode("utf-8").strip()
+                    if not line_str or line_str.startswith(":"):
+                        continue
+                    if line_str.startswith("data: "):
+                        data_content = line_str[6:].strip()
+                        if data_content == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_content)
+                        except json.JSONDecodeError:
+                            continue
 
-                    if "error" in chunk:
-                        err = chunk["error"]
-                        msg = err.get("message") if isinstance(err, dict) else str(err)
-                        raise Exception(msg or "Google Gemini streaming error")
-
-                    if chunk.get("modelVersion"):
-                        model_name = chunk["modelVersion"]
-
-                    if "usageMetadata" in chunk and isinstance(chunk["usageMetadata"], dict):
-                        um = chunk["usageMetadata"]
-                        if "promptTokenCount" in um:
-                            usage_acc["prompt_tokens"] = um["promptTokenCount"]
-                        if "candidatesTokenCount" in um:
-                            usage_acc["completion_tokens"] = um["candidatesTokenCount"]
-                        if "totalTokenCount" in um:
-                            usage_acc["total_tokens"] = um["totalTokenCount"]
-                        else:
-                            usage_acc["total_tokens"] = (
-                                usage_acc.get("prompt_tokens", 0) + usage_acc.get("completion_tokens", 0)
+                        if "error" in chunk:
+                            raise Exception(
+                                self.stream_error_message(chunk["error"], "Google Gemini streaming error")
                             )
 
-                    candidates = chunk.get("candidates") or []
-                    for candidate in candidates:
-                        if candidate.get("finishReason"):
-                            finish_reason = candidate["finishReason"]
+                        if chunk.get("modelVersion"):
+                            model_name = chunk["modelVersion"]
 
-                        raw_content = candidate.get("content", {})
-                        parts = raw_content.get("parts", [])
-                        for part in parts:
-                            if "text" in part:
-                                text_val = part["text"]
-                                if part.get("thought"):
-                                    reasoning_acc += text_val
-                                    reasoning_field = "reasoning"
-                                else:
-                                    content_acc += text_val
-                            if "functionCall" in part:
-                                fc = part["functionCall"]
-                                idx = len(tool_calls_dict)
-                                fn_name = fc.get("name", "")
-                                fn_args = (
-                                    json.dumps(fc.get("args", {}))
-                                    if isinstance(fc.get("args"), dict)
-                                    else (fc.get("args") or "")
+                        if "usageMetadata" in chunk and isinstance(chunk["usageMetadata"], dict):
+                            um = chunk["usageMetadata"]
+                            if "promptTokenCount" in um:
+                                usage_acc["prompt_tokens"] = um["promptTokenCount"]
+                            if "candidatesTokenCount" in um:
+                                usage_acc["completion_tokens"] = um["candidatesTokenCount"]
+                            if "totalTokenCount" in um:
+                                usage_acc["total_tokens"] = um["totalTokenCount"]
+                            else:
+                                usage_acc["total_tokens"] = (
+                                    usage_acc.get("prompt_tokens", 0) + usage_acc.get("completion_tokens", 0)
                                 )
-                                tc = {
-                                    "id": f"call_{idx}_{int(started_at)}",
-                                    "type": "function",
-                                    "function": {
-                                        "name": fn_name,
-                                        "arguments": fn_args,
-                                    },
-                                }
-                                signature = part.get("thoughtSignature") or part.get("thought_signature")
-                                if signature:
-                                    tc["thoughtSignature"] = signature
-                                    tc["extra_content"] = {"google": {"thought_signature": signature}}
-                                tool_calls_dict[idx] = tc
 
-                    if context and ctx.should_cancel_thread(context):
-                        break
+                        candidates = chunk.get("candidates") or []
+                        for candidate in candidates:
+                            if candidate.get("finishReason"):
+                                finish_reason = candidate["finishReason"]
 
-                    now = time.time()
-                    if threads_api and thread_id and (now - last_db_update >= 0.1):
-                        last_db_update = now
+                            raw_content = candidate.get("content", {})
+                            parts = raw_content.get("parts", [])
+                            for part in parts:
+                                if "text" in part:
+                                    text_val = part["text"]
+                                    if part.get("thought"):
+                                        reasoning_acc += text_val
+                                        reasoning_field = "reasoning"
+                                    else:
+                                        content_acc += text_val
+                                if "functionCall" in part:
+                                    fc = part["functionCall"]
+                                    idx = len(tool_calls_dict)
+                                    fn_name = fc.get("name", "")
+                                    fn_args = (
+                                        json.dumps(fc.get("args", {}))
+                                        if isinstance(fc.get("args"), dict)
+                                        else (fc.get("args") or "")
+                                    )
+                                    tc = {
+                                        "id": f"call_{idx}_{int(started_at)}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": fn_name,
+                                            "arguments": fn_args,
+                                        },
+                                    }
+                                    signature = part.get("thoughtSignature") or part.get("thought_signature")
+                                    if signature:
+                                        tc["thoughtSignature"] = signature
+                                        tc["extra_content"] = {"google": {"thought_signature": signature}}
+                                    tool_calls_dict[idx] = tc
+
+                        if context and ctx.should_cancel_thread(context):
+                            break
+
+                        # Hand every chunk to the writer: it keeps the latest in memory
+                        # and only reaches the db on its checkpoint interval.
                         assistant_msg = {
                             "role": "assistant",
                             "content": content_acc,
@@ -259,26 +254,29 @@ def install_google(ctx):
                         if tool_calls_dict:
                             assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
 
-                        streaming_messages = base_messages + [assistant_msg]
-                        await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+                        await writer.write(assistant_msg)
+
+            except Exception:
+                # Keep whatever streamed before the failure instead of losing the
+                # tail of it, the conversation itself is never at risk here.
+                await writer.flush()
+                raise
 
             if context and ctx.should_cancel_thread(context):
-                ctx.log(f"Stream cancelled for thread {thread_id}")
+                ctx.log(f"Stream cancelled for thread {writer.thread_id}")
                 return None
 
-            if threads_api and thread_id:
-                assistant_msg = {
-                    "role": "assistant",
-                    "content": content_acc,
-                    "model": chat.get("model"),
-                }
-                if reasoning_acc:
-                    assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
-                if tool_calls_dict:
-                    assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+            assistant_msg = {
+                "role": "assistant",
+                "content": content_acc,
+                "model": chat.get("model"),
+            }
+            if reasoning_acc:
+                assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
+            if tool_calls_dict:
+                assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
 
-                streaming_messages = base_messages + [assistant_msg]
-                await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+            await writer.write(assistant_msg, final=True)
 
             message_obj = {
                 "role": "assistant",
@@ -606,7 +604,7 @@ def install_google(ctx):
                                 gemini_chat_url,
                                 headers=self.headers,
                                 data=json.dumps(gemini_chat),
-                                timeout=ctx.get_client_timeout(),
+                                timeout=ctx.get_client_timeout(streaming=True),
                             ) as response:
                                 return await self.handle_stream_response(response, chat, started_at, context=context)
                         except Exception as e:

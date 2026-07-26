@@ -406,7 +406,10 @@ def install_openrouter(ctx):
 
             started_at = time.time()
             async with aiohttp.ClientSession() as session, session.post(
-                self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=ctx.get_client_timeout()
+                self.chat_url,
+                headers=self.headers,
+                data=json.dumps(chat),
+                timeout=ctx.get_client_timeout(streaming=True),
             ) as response:
                 if metadata:
                     chat["metadata"] = metadata

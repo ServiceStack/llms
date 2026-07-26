@@ -1,8 +1,9 @@
+import asyncio
+import contextlib
 import json
 import os
 import re
 import sqlite3
-import threading
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Event, Thread
@@ -25,7 +26,10 @@ def create_reader_connection(db_path):
 def create_writer_connection(db_path):
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA busy_timeout=5000")  # Reasonable timeout for busy connections
-    conn.execute("PRAGMA journal_mode=WAL")  # Enable WAL mode for better concurrency
+    # WAL is a persistent property of the database, so losing the race to another
+    # connection setting it on a new file is not worth aborting startup for
+    with contextlib.suppress(sqlite3.OperationalError):
+        conn.execute("PRAGMA journal_mode=WAL")  # Enable WAL mode for better concurrency
     conn.execute("PRAGMA cache_size=-128000")  # Increase cache size for better performance
     conn.execute("PRAGMA synchronous=NORMAL")  # Reasonable durability/performance balance
     return conn
@@ -380,24 +384,32 @@ class DbManager:
 
         self.write(sql, tuple(args[k] for k in insert_keys), callback)
 
-    async def insert_async(self, table, columns, info):
-        event = threading.Event()
+    def _await_write(self, write, result_index):
+        """
+        Bridge the writer thread's callback to the event loop.
 
-        ret = [None, None]
+        These used to block on a threading.Event, which stalls the *whole* asyncio loop
+        until the write commits - during a stream that happened on every checkpoint.
+        """
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
 
         def cb(lastrowid, rowcount, error=None):
-            nonlocal ret
-            if error:
-                ret[1] = error
-            else:
-                ret[0] = lastrowid
-            event.set()
+            def resolve():
+                if future.done():
+                    return
+                if error:
+                    future.set_exception(error)
+                else:
+                    future.set_result((lastrowid, rowcount)[result_index])
 
-        self.insert(table, columns, info, cb)
-        event.wait()
-        if ret[1]:
-            raise ret[1]
-        return ret[0]
+            loop.call_soon_threadsafe(resolve)
+
+        write(cb)
+        return future
+
+    async def insert_async(self, table, columns, info):
+        return await self._await_write(lambda cb: self.insert(table, columns, info, cb), 0)
 
     def update(self, table, columns, info, callback=None):
         if not info:
@@ -418,23 +430,7 @@ class DbManager:
         self.write(sql, args, callback)
 
     async def update_async(self, table, columns, info):
-        event = threading.Event()
-
-        ret = [None, None]
-
-        def cb(lastrowid, rowcount, error=None):
-            nonlocal ret
-            if error:
-                ret[1] = error
-            else:
-                ret[0] = rowcount
-            event.set()
-
-        self.update(table, columns, info, cb)
-        event.wait()
-        if ret[1]:
-            raise ret[1]
-        return ret[0]
+        return await self._await_write(lambda cb: self.update(table, columns, info, cb), 1)
 
     def close(self):
         self.ctx.dbg("Closing database")

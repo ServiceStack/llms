@@ -71,6 +71,10 @@ DEFAULT_LIMITS = {
     "client_timeout": 120,
     "client_max_size": 20971520,
     "retries": 3,
+    # How often an in-flight streamed response is persisted. This is also how often the
+    # UI sees it, so it trades smoothness against write volume. Cheap now that a
+    # checkpoint writes one small column instead of rewriting the whole conversation.
+    "stream_checkpoint_interval": 0.25,
 }
 DEFAULT_LOADING_MESSAGES = ["Computing", "Cooking", "Crafting", "Creating"]
 g_config_path = None
@@ -1168,6 +1172,76 @@ class GeneratorBase:
         }
 
 
+class StreamCheckpointWriter:
+    """
+    Persists the in-flight assistant message while a response streams in.
+
+    It writes only the thread's `streamingMessage`, never `messages`. The durable
+    conversation is therefore untouchable from the streaming path: however a stream
+    fails - provider dying, timeout, retry, cancel, process crash - the most that can
+    be lost is the response currently being generated, never the thread.
+
+    Writes are checkpoints, not per-chunk: a thread's history can be megabytes and the
+    old per-chunk write rewrote all of it ~10x/second. Chunks accumulate in memory and
+    reach the db every `interval` seconds, plus once when the stream ends.
+    """
+
+    def __init__(self, threads_api, thread_id, user=None, interval=0.25):
+        self.threads_api = threads_api
+        self.thread_id = thread_id
+        self.user = user
+        self.interval = interval
+        self.last_update = 0.0
+        self.pending = None
+
+    @property
+    def enabled(self):
+        return bool(self.threads_api and self.thread_id)
+
+    def due(self):
+        return self.enabled and (time.time() - self.last_update >= self.interval)
+
+    @staticmethod
+    def payload_len(message):
+        """Size of everything a streaming assistant message can accumulate."""
+        total = len(message.get("content") or "")
+        for key in ["reasoning_content", "reasoning", "thinking"]:
+            value = message.get(key)
+            if isinstance(value, str):
+                total += len(value)
+        for tool_call in message.get("tool_calls") or []:
+            fn = tool_call.get("function") or {}
+            total += len(fn.get("name") or "") + len(fn.get("arguments") or "")
+        return total
+
+    async def write(self, assistant_message, final=False):
+        """
+        Checkpoint the in-flight message. Returns True if it reached the db.
+
+        `final` forces a write regardless of the interval, so the last chunks of a
+        completed stream are never left only in memory.
+        """
+        if not self.enabled:
+            return False
+        # An empty message says nothing and would only blank out a partial that a
+        # previous attempt already produced.
+        if self.payload_len(assistant_message) == 0:
+            return False
+        self.pending = assistant_message
+        if not final and not self.due():
+            return False
+        self.last_update = time.time()
+        self.pending = None
+        await self.threads_api.checkpoint_stream_async(self.thread_id, assistant_message, user=self.user)
+        return True
+
+    async def flush(self):
+        """Checkpoint whatever hasn't reached the db yet, e.g. after a stream fails."""
+        if self.pending is None:
+            return False
+        return await self.write(self.pending, final=True)
+
+
 # OpenAI Providers
 class OpenAiCompatible:
     sdk = "@ai-sdk/openai-compatible"
@@ -1307,6 +1381,28 @@ class OpenAiCompatible:
     def response_json(self, response):
         return response_json(response)
 
+    def stream_writer(self, context=None):
+        """
+        Checkpoints the in-flight response to the thread's `streamingMessage`. It never
+        writes `messages`, so a provider dying mid-stream cannot damage the conversation.
+        """
+        threads_api = (g_app.threads if g_app else None) or (self.ctx.threads if hasattr(self, "ctx") else None)
+        interval = (g_app.limits.get("stream_checkpoint_interval") if g_app else None) or DEFAULT_LIMITS[
+            "stream_checkpoint_interval"
+        ]
+        return StreamCheckpointWriter(
+            threads_api,
+            context.get("threadId") if context else None,
+            user=context.get("user") if context else None,
+            interval=interval,
+        )
+
+    def stream_error_message(self, error, default="Streaming error"):
+        """Message for an error a provider reported mid-stream as an SSE chunk."""
+        if isinstance(error, dict):
+            return error.get("message") or str(error)
+        return str(error) if error else default
+
     def to_response(self, response, chat, started_at, context=None):
         if "metadata" not in response:
             response["metadata"] = {}
@@ -1385,10 +1481,6 @@ class OpenAiCompatible:
                 pass
             raise Exception(f"Failed chat completion {response.status}: {text}")
 
-        thread_id = context.get("threadId") if context else None
-        user = context.get("user") if context else None
-        threads_api = (g_app.threads if g_app else None) or (self.ctx.threads if hasattr(self, "ctx") else None)
-
         response_id = None
         created_time = None
         model_name = None
@@ -1398,86 +1490,93 @@ class OpenAiCompatible:
         tool_calls_dict = {}
         finish_reason = None
         usage_acc = {}
-        last_db_update = 0.0
-        base_messages = list(chat.get("messages", []))
+        writer = self.stream_writer(context)
 
-        async for line in response.content:
-            if not line:
-                continue
-            line_str = line.decode("utf-8").strip()
-            if not line_str or line_str.startswith(":"):
-                continue
-            if line_str.startswith("data: "):
-                data_content = line_str[6:].strip()
-                if data_content == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_content)
-                except json.JSONDecodeError:
+        try:
+            async for line in response.content:
+                if not line:
                     continue
-
-                if chunk.get("id"):
-                    response_id = chunk["id"]
-                if chunk.get("created"):
-                    created_time = chunk["created"]
-                if chunk.get("model"):
-                    model_name = chunk["model"]
-
-                if "usage" in chunk and isinstance(chunk["usage"], dict):
-                    usage_acc.update(chunk["usage"])
-                if "cost" in chunk and isinstance(chunk["cost"], (int, float)):
-                    usage_acc["cost"] = chunk["cost"]
-
-                choices = chunk.get("choices") or []
-                if not choices:
+                line_str = line.decode("utf-8").strip()
+                if not line_str or line_str.startswith(":"):
                     continue
-                choice = choices[0]
-                if choice.get("finish_reason"):
-                    finish_reason = choice["finish_reason"]
+                if line_str.startswith("data: "):
+                    data_content = line_str[6:].strip()
+                    if data_content == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_content)
+                    except json.JSONDecodeError:
+                        continue
 
-                delta = choice.get("delta", {})
+                    # Providers report an upstream failure as an error chunk mid-stream
+                    # (e.g. OpenRouter rate-limiting). Surface it instead of ending the
+                    # stream quietly, which leaves a truncated answer looking complete.
+                    if chunk.get("error"):
+                        raise Exception(self.stream_error_message(chunk["error"]))
 
-                # Content delta
-                if "content" in delta and delta["content"]:
-                    content_acc += delta["content"]
+                    if chunk.get("id"):
+                        response_id = chunk["id"]
+                    if chunk.get("created"):
+                        created_time = chunk["created"]
+                    if chunk.get("model"):
+                        model_name = chunk["model"]
 
-                # Reasoning / thinking delta
-                for r_key in ["reasoning_content", "reasoning", "thinking"]:
-                    if r_key in delta and delta[r_key]:
-                        reasoning_acc += delta[r_key]
-                        reasoning_field = r_key
+                    if "usage" in chunk and isinstance(chunk["usage"], dict):
+                        usage_acc.update(chunk["usage"])
+                    if "cost" in chunk and isinstance(chunk["cost"], (int, float)):
+                        usage_acc["cost"] = chunk["cost"]
+
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    if choice.get("error"):
+                        raise Exception(self.stream_error_message(choice["error"]))
+                    if choice.get("finish_reason"):
+                        finish_reason = choice["finish_reason"]
+
+                    delta = choice.get("delta", {})
+
+                    # Content delta
+                    if "content" in delta and delta["content"]:
+                        content_acc += delta["content"]
+
+                    # Reasoning / thinking delta
+                    for r_key in ["reasoning_content", "reasoning", "thinking"]:
+                        if r_key in delta and delta[r_key]:
+                            reasoning_acc += delta[r_key]
+                            reasoning_field = r_key
+                            break
+
+                    # Tool calls delta
+                    for tc in delta.get("tool_calls", []):
+                        idx = tc.get("index", 0)
+                        if idx not in tool_calls_dict:
+                            tool_calls_dict[idx] = {
+                                "id": tc.get("id") or "",
+                                "type": tc.get("type") or "function",
+                                "function": {
+                                    "name": tc.get("function", {}).get("name") or "",
+                                    "arguments": tc.get("function", {}).get("arguments") or "",
+                                },
+                            }
+                        else:
+                            existing = tool_calls_dict[idx]
+                            if tc.get("id"):
+                                existing["id"] += tc["id"]
+                            if tc.get("type"):
+                                existing["type"] = tc["type"]
+                            fn_delta = tc.get("function", {})
+                            if fn_delta.get("name"):
+                                existing["function"]["name"] += fn_delta["name"]
+                            if fn_delta.get("arguments"):
+                                existing["function"]["arguments"] += fn_delta["arguments"]
+
+                    if context and should_cancel_thread(context):
                         break
 
-                # Tool calls delta
-                for tc in delta.get("tool_calls", []):
-                    idx = tc.get("index", 0)
-                    if idx not in tool_calls_dict:
-                        tool_calls_dict[idx] = {
-                            "id": tc.get("id") or "",
-                            "type": tc.get("type") or "function",
-                            "function": {
-                                "name": tc.get("function", {}).get("name") or "",
-                                "arguments": tc.get("function", {}).get("arguments") or "",
-                            },
-                        }
-                    else:
-                        existing = tool_calls_dict[idx]
-                        if tc.get("id"):
-                            existing["id"] += tc["id"]
-                        if tc.get("type"):
-                            existing["type"] = tc["type"]
-                        fn_delta = tc.get("function", {})
-                        if fn_delta.get("name"):
-                            existing["function"]["name"] += fn_delta["name"]
-                        if fn_delta.get("arguments"):
-                            existing["function"]["arguments"] += fn_delta["arguments"]
-
-                if context and should_cancel_thread(context):
-                    break
-
-                now = time.time()
-                if threads_api and thread_id and (now - last_db_update >= 0.1):
-                    last_db_update = now
+                    # Hand every chunk to the writer: it keeps the latest in memory and
+                    # only reaches the db on its checkpoint interval.
                     assistant_msg = {
                         "role": "assistant",
                         "content": content_acc,
@@ -1488,27 +1587,30 @@ class OpenAiCompatible:
                     if tool_calls_dict:
                         assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
 
-                    streaming_messages = base_messages + [assistant_msg]
-                    await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+                    await writer.write(assistant_msg)
+
+        except Exception:
+            # Keep whatever streamed before the failure instead of losing the tail
+            # of it, the conversation itself is never at risk here.
+            await writer.flush()
+            raise
 
         if context and should_cancel_thread(context):
-            _log(f"Stream cancelled for thread {thread_id}")
+            _log(f"Stream cancelled for thread {writer.thread_id}")
             return None
 
         # Send final thread update for the completed stream
-        if threads_api and thread_id:
-            assistant_msg = {
-                "role": "assistant",
-                "content": content_acc,
-                "model": chat.get("model"),
-            }
-            if reasoning_acc:
-                assistant_msg[reasoning_field or "reasoning_content"] = reasoning_acc
-            if tool_calls_dict:
-                assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+        assistant_msg = {
+            "role": "assistant",
+            "content": content_acc,
+            "model": chat.get("model"),
+        }
+        if reasoning_acc:
+            assistant_msg[reasoning_field or "reasoning_content"] = reasoning_acc
+        if tool_calls_dict:
+            assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
 
-            streaming_messages = base_messages + [assistant_msg]
-            await threads_api.update_thread_async(thread_id, {"messages": streaming_messages}, user=user)
+        await writer.write(assistant_msg, final=True)
 
         message_obj = {
             "role": "assistant",
@@ -1587,7 +1689,7 @@ class OpenAiCompatible:
 
         started_at = time.time()
         async with aiohttp.ClientSession() as session, session.post(
-            self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=get_client_timeout()
+            self.chat_url, headers=self.headers, data=json.dumps(chat), timeout=get_client_timeout(streaming=True)
         ) as response:
             if metadata:
                 chat["metadata"] = metadata
@@ -3270,9 +3372,15 @@ class AuthProvider:
         return False, None
 
 
-def get_client_timeout(app=None):
+def get_client_timeout(app=None, streaming=False):
     app = app or g_app
     timeout = app.limits.get("client_timeout", 120) if app else 120
+    if streaming:
+        # A streamed response can legitimately take much longer to read than a single
+        # request/response, so cap the time between chunks instead of the total time.
+        # A `total` timeout kills long responses mid-stream, which then get retried
+        # from scratch and overwrite what was already streamed into the thread.
+        return aiohttp.ClientTimeout(total=None, sock_connect=timeout, sock_read=timeout)
     return aiohttp.ClientTimeout(total=timeout)
 
 
@@ -3305,6 +3413,10 @@ class ThreadApi:
 
     async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
         _log(f"update_thread_async [{id}] not implemented")
+        return None
+
+    async def checkpoint_stream_async(self, id, message: Dict[str, Any], user=None):
+        _log(f"checkpoint_stream_async [{id}] not implemented")
         return None
 
     def get_request(self, request_id, user):
@@ -3430,8 +3542,8 @@ class AppExtensions:
         self.limits["retries"] = self.limits.get("retries", 3)
         self.loading_messages = self.config.get("loading", DEFAULT_LOADING_MESSAGES)
 
-    def get_client_timeout(self):
-        return get_client_timeout(self)
+    def get_client_timeout(self, streaming=False):
+        return get_client_timeout(self, streaming=streaming)
 
     def abspath(self, path: str):
         return path if path.startswith("$") else os.path.abspath(path)
@@ -3752,8 +3864,8 @@ class ExtensionContext:
         self.oauth_states = app.oauth_states
         self.disabled = False
 
-    def get_client_timeout(self):
-        return self.app.get_client_timeout()
+    def get_client_timeout(self, streaming=False):
+        return self.app.get_client_timeout(streaming=streaming)
 
     def enabled_auth(self) -> bool:
         return self.app.enabled_auth()

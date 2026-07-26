@@ -389,6 +389,9 @@ export function useChatPrompt(ctx) {
         }
 
         // Handle Editing / Redo Logic
+        // truncate tells the server this request intends to rewrite history; without it
+        // a shrinking write is refused so an in-flight request can't erase the thread
+        let truncate = false
         const editingMsg = editingMessage.value
         if (editingMsg) {
             let messageIndex = messages.findIndex(m => m.timestamp === editingMsg)
@@ -401,6 +404,7 @@ export function useChatPrompt(ctx) {
                 messages[messageIndex].content = content
                 // Truncate messages to only include up to the edited message
                 messages.length = messageIndex + 1
+                truncate = true
             } else {
                 messages.push({
                     timestamp: new Date().valueOf(),
@@ -442,10 +446,14 @@ export function useChatPrompt(ctx) {
                 if (lastMessage.role === 'assistant') {
                     messages.pop()
                 }
+                truncate = true
             }
         }
 
         const request = createRequest({ model })
+        if (truncate) {
+            request.truncate = true
+        }
 
         // Add Thread History
         messages.forEach(m => {

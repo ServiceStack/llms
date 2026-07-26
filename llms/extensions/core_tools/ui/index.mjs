@@ -1,4 +1,4 @@
-import { ref, onMounted, watch, inject, nextTick } from "vue"
+import { ref, computed, onMounted, watch, inject, nextTick } from "vue"
 import { ApiResult, createErrorStatus } from "@servicestack/client"
 
 let ext
@@ -8,21 +8,25 @@ const languages = {
         name: 'Python',
         mime: 'text/x-python',
         default: 'print("Hello, Python!")\n',
+        tool: 'run_python',
     },
     javascript: {
         name: 'JavaScript',
         mime: 'text/javascript',
         default: 'console.log("Hello, JavaScript!");\n',
+        tool: 'run_javascript',
     },
     typescript: {
         name: 'TypeScript',
         mime: 'text/typescript',
         default: 'const msg: string = "Hello, TypeScript!";\nconsole.log(msg);\n',
+        tool: 'run_typescript',
     },
     csharp: {
         name: 'C#',
         mime: 'text/x-csharp',
         default: 'Console.WriteLine("Hello, C#!");\n',
+        tool: 'run_csharp',
     },
 }
 
@@ -628,10 +632,16 @@ export default {
     install(ctx) {
         ext = ctx.scope('core_tools')
 
+        const LANGUAGE_TOOLS = Object.values(languages).map(x => x.tool)
         ctx.setLeftIcons({
             code: {
                 component: {
-                    template: `<svg @click="$ctx.togglePath('/code')" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none"><path d="M0 0h24v24H0z"/><path fill="currentColor" d="M14.486 3.143a1 1 0 0 1 .692 1.233l-4.43 15.788a1 1 0 0 1-1.926-.54l4.43-15.788a1 1 0 0 1 1.234-.693M7.207 7.05a1 1 0 0 1 0 1.414L3.672 12l3.535 3.535a1 1 0 1 1-1.414 1.415L1.55 12.707a1 1 0 0 1 0-1.414L5.793 7.05a1 1 0 0 1 1.414 0m9.586 1.414a1 1 0 1 1 1.414-1.414l4.243 4.243a1 1 0 0 1 0 1.414l-4.243 4.243a1 1 0 0 1-1.414-1.415L20.328 12z"/></g></svg>`
+                    template: `<svg @click="$ctx.togglePath('/code')" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none"><path d="M0 0h24v24H0z"/><path fill="currentColor" d="M14.486 3.143a1 1 0 0 1 .692 1.233l-4.43 15.788a1 1 0 0 1-1.926-.54l4.43-15.788a1 1 0 0 1 1.234-.693M7.207 7.05a1 1 0 0 1 0 1.414L3.672 12l3.535 3.535a1 1 0 1 1-1.414 1.415L1.55 12.707a1 1 0 0 1 0-1.414L5.793 7.05a1 1 0 0 1 1.414 0m9.586 1.414a1 1 0 1 1 1.414-1.414l4.243 4.243a1 1 0 0 1 0 1.414l-4.243 4.243a1 1 0 0 1-1.414-1.415L20.328 12z"/></g></svg>`,
+                    setup() {
+                    }
+                },
+                isVisible() {
+                    return LANGUAGE_TOOLS.some(tool => ctx.state.tool?.groups?.core_tools?.includes(tool))
                 },
                 isActive({ path }) {
                     return ctx.matchesPath(path, '/code')
@@ -641,6 +651,11 @@ export default {
             calc: {
                 component: {
                     template: `<svg @click="$ctx.togglePath('/calc')" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"><path d="M11.5.5h-9a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-11a1 1 0 0 0-1-1m-10 5h11"/><path d="M4.25 8.5a.25.25 0 0 1 0-.5m0 .5a.25.25 0 0 0 0-.5M7 8.5A.25.25 0 0 1 7 8m0 .5A.25.25 0 0 0 7 8m2.75.5a.25.25 0 0 1 0-.5m0 .5a.25.25 0 0 0 0-.5m-5.5 3a.25.25 0 1 1 0-.5m0 .5a.25.25 0 1 0 0-.5M7 11a.25.25 0 1 1 0-.5m0 .5a.25.25 0 1 0 0-.5m2.75.5a.25.25 0 1 1 0-.5m0 .5a.25.25 0 1 0 0-.5M10 3H9"/></g></svg>`,
+                    setup() {
+                    }
+                },
+                isVisible() {
+                    return ctx.state.tool?.groups?.core_tools?.includes('calc')
                 },
                 isActive({ path }) {
                     return ctx.matchesPath(path, '/calc')

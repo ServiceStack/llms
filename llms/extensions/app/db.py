@@ -42,6 +42,9 @@ class AppDB:
                 "modelInfo": "JSON",
                 "modalities": "JSON",
                 "messages": "JSON",
+                # in-flight assistant message while streaming, kept out of `messages`
+                # so a failed stream can never damage the durable conversation
+                "streamingMessage": "JSON",
                 "args": "JSON",
                 "tools": "JSON",
                 "toolHistory": "JSON",
@@ -342,11 +345,71 @@ class AppDB:
             self.ctx.err(f"query_threads ({take}, {skip})", e)
             return []
 
+    def stored_message_count(self, id):
+        """Message count without shipping the (potentially MBs of) messages to Python."""
+        try:
+            return self.db.scalar(
+                "SELECT json_array_length(messages) FROM thread WHERE id = :id AND json_valid(messages)", {"id": id}
+            )
+        except Exception as e:
+            self.ctx.err(f"stored_message_count({id})", e)
+            return None
+
+    def guard_messages(self, id, thread):
+        """
+        `messages` is the durable conversation: it must never shrink as a side effect of
+        an in-flight request. That is how an entire thread gets erased - one request
+        carrying a single turn replaces hundreds of messages.
+
+        Callers that legitimately rewrite history (editing a message, redo, deleting a
+        message, compacting) opt in by passing `truncate=True`.
+
+        A shrinking write that hasn't opted in is repaired rather than rejected: the
+        stored history is kept and any genuinely new messages in the update are appended,
+        so the worst case is a duplicated message rather than a lost conversation.
+        """
+        truncate = thread.pop("truncate", False)
+        messages = thread.get("messages")
+        if truncate or not id or not isinstance(messages, list):
+            return thread
+
+        stored_count = self.stored_message_count(id)
+        if not stored_count or len(messages) >= stored_count:
+            return thread
+
+        stored = None
+        row = self.db.one("SELECT messages FROM thread WHERE id = :id", {"id": id})
+        if row and isinstance(row.get("messages"), str):
+            try:
+                stored = json.loads(row["messages"])
+            except Exception as e:
+                self.ctx.err(f"guard_messages({id}) parsing stored messages", e)
+        if not isinstance(stored, list) or len(stored) <= len(messages):
+            return thread
+
+        known = {m.get("timestamp") for m in stored if isinstance(m, dict)}
+        appended = [m for m in messages if isinstance(m, dict) and m.get("timestamp") not in known]
+        thread["messages"] = stored + appended
+        self.ctx.err(
+            f"Refused to shrink thread {id} from {len(stored)} to {len(messages)} messages, "
+            f"kept history and appended {len(appended)}",
+            None,
+        )
+        return thread
+
     def prepare_thread(self, thread, id=None, user=None):
         now = datetime.now()
+        # An in-flight message lives in `streamingMessage` and is only merged into
+        # `messages` on the way out to clients. Never let one back in: it belongs to a
+        # stream still running and is committed by chat_response when it finishes.
+        # Filtered before guard_messages so the guard compares the final list.
+        if isinstance(thread.get("messages"), list):
+            thread["messages"] = [m for m in thread["messages"] if not (isinstance(m, dict) and m.get("streaming"))]
         if id:
             thread["id"] = id
+            self.guard_messages(id, thread)
         else:
+            thread.pop("truncate", None)
             thread["createdAt"] = now
         thread["updatedAt"] = now
         initial_timestamp = int(time.time() * 1000) + 1
