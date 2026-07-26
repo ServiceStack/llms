@@ -325,7 +325,7 @@ const SkillPage = {
                 </div>
             </div>
             <div v-if="showCreateDialog" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="showCreateDialog = false">
-                <div class="rounded-lg shadow-xl w-full max-w-md mx-4">
+                <div class="rounded-lg shadow-xl w-full max-w-md mx-4 bg-white dark:bg-gray-800">
                     <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold">Create New Skill</h3></div>
                     <div class="p-4 space-y-4">
                         <div>
@@ -342,7 +342,7 @@ const SkillPage = {
                 </div>
             </div>
             <div v-if="showAddFileDialog" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="showAddFileDialog = false">
-                <div class="rounded-lg shadow-xl w-full max-w-md mx-4">
+                <div class="rounded-lg shadow-xl w-full max-w-md mx-4 bg-white dark:bg-gray-800">
                     <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700"><h3 class="text-lg font-semibold">Add New File</h3></div>
                     <div class="p-4 space-y-4">
                         <div>
@@ -359,7 +359,7 @@ const SkillPage = {
                 </div>
             </div>
             <div v-if="deleteConfirm" class="fixed inset-0 z-100 flex items-center justify-center bg-black/50" @click.self="deleteConfirm = null">
-                <div class="rounded-lg shadow-xl w-full max-w-sm mx-4">
+                <div class="rounded-lg shadow-xl w-full max-w-sm mx-4 bg-white dark:bg-gray-800">
                     <div class="p-4">
                         <h3 class="text-lg font-semibold mb-2">Confirm Delete</h3>
                         <p class="text-gray-600 dark:text-gray-400 text-sm">{{ deleteConfirm.type === 'skill' ? 'Delete skill "' + deleteConfirm.name + '"? This cannot be undone.' : 'Delete "' + deleteConfirm.path + '"?' }}</p>
