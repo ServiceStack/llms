@@ -365,14 +365,15 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         # Mock project data
         project_data = {
             "name": "ProjectA",
+            "folder": "project-a",
             "description": "My test project",
-            "path": "ProjectA_path",
             "publish": "dist_dir"
         }
         self.mock_ctx.projects.get_user_projects.return_value = [project_data]
 
         # Setup dist directory and files
-        dist_dir = os.path.join(self.temp_dir, "dist_dir")
+        admin_path = self.mock_ctx.get_user_path("admin")
+        dist_dir = os.path.join(admin_path, "projects", "project-a", "dist_dir")
         os.makedirs(dist_dir, exist_ok=True)
 
         # Create some files inside the dist directory

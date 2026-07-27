@@ -305,7 +305,6 @@ export class AppContext {
         return this.prefs
     }
     setPrefs(o) {
-        console.log('setPrefs', o)
         storageObject(this.getPrefsKey(), Object.assign(this.prefs, o))
     }
     _validateComponents(componentMap) {

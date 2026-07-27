@@ -210,8 +210,8 @@ const SharePanel = {
                                     <label class="block text-xs font-bold uppercase tracking-wider mb-1.5" :class=[$styles.muted]>Build Directory (dist)</label>
                                     <div class="flex items-stretch gap-2">
                                         <div class="relative flex-1">
-                                            <input type="text" v-model="overrideDistPath" placeholder="Path to build/dist folder"
-                                                   class="block w-full rounded-lg px-3.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono bg-white dark:bg-gray-900"
+                                            <input type="text" v-model="overrideDistPath" placeholder="deploy root project folder"
+                                                   class="block w-full rounded-lg px-3.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono bg-white dark:bg-gray-900 placeholder:text-gray-400"
                                                    :class="[$styles.textInput, $styles.borderInput]" spellcheck="false" />
                                             <span v-if="isDetectingDist" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">
                                                 Detecting...
@@ -227,7 +227,7 @@ const SharePanel = {
                                         </button>
                                     </div>
                                     <span class="text-xs mt-1 block" :class=[$styles.muted]>
-                                        Auto-detected dist folder based on project paths. You can modify this.
+                                        Relative path from project folder to publish (e.g. dist, build, or leave empty for project root).
                                     </span>
                                 </div>
 
@@ -313,14 +313,14 @@ const SharePanel = {
 
                         <!-- Current path header / navigation -->
                         <div class="px-4 py-2 border-b bg-gray-50/50 dark:bg-gray-950/20 flex items-center gap-2" :class="$styles.chromeBorder">
-                            <button type="button" @click="goUpFolder" :disabled="!browserParentPath"
+                            <button type="button" @click="goUpFolder" :disabled="browserParentPath === null || browserParentPath === undefined"
                                     class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                                 </svg>
                             </button>
                             <span class="text-[11px] font-mono text-gray-600 dark:text-gray-400 break-all select-all flex-1">
-                                {{ browserCurrentPath }}
+                                {{ browserDisplayPath }}
                             </span>
                         </div>
 
@@ -374,6 +374,12 @@ const SharePanel = {
         const isConfigured = computed(() => !!(publish.value.userName && publish.value.apiKey))
 
         const activeProjectName = computed(() => ctx.state.prefs.project || null)
+        const activeProjectFolder = computed(() => {
+            if (!activeProjectName.value) return ''
+            const p = ctx.projects?.getProject ? ctx.projects.getProject(activeProjectName.value) : null
+            return p?.folder || ctx.utils.toKebabCase(activeProjectName.value)
+        })
+
         const publishType = ref(activeProjectName.value ? 'project' : 'thread')
         const currentThread = computed(() => ctx.threads?.currentThread?.value || null)
 
@@ -432,12 +438,37 @@ const SharePanel = {
         const isDetectingDist = ref(false)
         const overrideDistPath = ref('')
 
+        function sanitizePublishPath(path, folderName) {
+            if (!path) return ''
+            path = path.trim()
+            if (folderName) {
+                const marker = `projects/${folderName}/`
+                const idx = path.indexOf(marker)
+                if (idx !== -1) {
+                    path = path.substring(idx + marker.length)
+                } else if (path === `projects/${folderName}` || path.endsWith(`/${folderName}`) || path === folderName) {
+                    return ''
+                } else if (path.startsWith(`${folderName}/`)) {
+                    path = path.substring(folderName.length + 1)
+                }
+            }
+            path = path.replace(/^[/\\]+/, '')
+            const parts = path.split(/[/\\]+/).filter(p => p && p !== '.' && p !== '..')
+            return parts.join('/')
+        }
+
         const detectDistFolder = async () => {
             isDetectingDist.value = true
             try {
+                const project = activeProjectName.value ? ctx.projects?.getProject(activeProjectName.value) : null
+                const folder = project?.folder
+                if (project && project.publish !== undefined && project.publish !== null) {
+                    overrideDistPath.value = sanitizePublishPath(project.publish, folder)
+                    return
+                }
                 const api = await ext.getJson('/detect-dist')
-                if (api.response && api.response.dist) {
-                    overrideDistPath.value = api.response.dist
+                if (api.response && api.response.dist !== undefined) {
+                    overrideDistPath.value = sanitizePublishPath(api.response.dist, folder)
                 } else {
                     overrideDistPath.value = ''
                 }
@@ -453,6 +484,7 @@ const SharePanel = {
         const showFolderBrowser = ref(false)
         const isBrowsing = ref(false)
         const browserCurrentPath = ref('')
+        const browserDisplayPath = ref('')
         const browserParentPath = ref(null)
         const browserSubdirs = ref([])
 
@@ -468,14 +500,23 @@ const SharePanel = {
         const fetchSubdirs = async (path) => {
             isBrowsing.value = true
             try {
-                const api = await ext.getJson(`/list-subdirs?path=${encodeURIComponent(path)}`)
+                const projParam = activeProjectName.value ? `&project=${encodeURIComponent(activeProjectName.value)}` : ''
+                const api = await ext.getJson(`/list-subdirs?path=${encodeURIComponent(path || '')}${projParam}`)
                 if (api.response) {
-                    browserCurrentPath.value = api.response.currentPath
+                    browserCurrentPath.value = api.response.currentPath || ''
+                    const folderName = activeProjectFolder.value || 'project'
+                    const rel = api.response.currentPath
+                    browserDisplayPath.value = api.response.displayPath || (`~/${folderName}` + (rel ? `/${rel}` : ''))
                     browserParentPath.value = api.response.parentPath
                     browserSubdirs.value = api.response.subdirs || []
+                } else if (path) {
+                    await fetchSubdirs('')
                 }
             } catch (e) {
                 console.warn('Failed to load subdirectories', e)
+                if (path) {
+                    await fetchSubdirs('')
+                }
             } finally {
                 isBrowsing.value = false
             }
@@ -486,7 +527,7 @@ const SharePanel = {
         }
 
         const goUpFolder = async () => {
-            if (browserParentPath.value) {
+            if (browserParentPath.value !== null && browserParentPath.value !== undefined) {
                 await fetchSubdirs(browserParentPath.value)
             }
         }
@@ -575,8 +616,11 @@ const SharePanel = {
                 return
             }
 
-            if (overrideDistPath.value != project.publish) {
-                project.publish = overrideDistPath.value
+            const cleanPublish = sanitizePublishPath(overrideDistPath.value, project.folder)
+            overrideDistPath.value = cleanPublish
+
+            if (cleanPublish != project.publish) {
+                project.publish = cleanPublish
                 const api = await ctx.projects.saveProject(project.name, project)
                 if (api.error) {
                     ext.setError(api.error, 'Failed to save project publish path')
@@ -637,6 +681,7 @@ const SharePanel = {
             disconnect,
             publishType,
             activeProjectName,
+            activeProjectFolder,
             currentThread,
             isPublishing,
             publishedProjectUrl,
@@ -654,6 +699,7 @@ const SharePanel = {
             showFolderBrowser,
             isBrowsing,
             browserCurrentPath,
+            browserDisplayPath,
             browserParentPath,
             browserSubdirs,
             openFolderBrowser,

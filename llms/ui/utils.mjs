@@ -288,6 +288,16 @@ export function sanitizeHtml(html) {
     return result
 }
 
+export function toKebabCase(str) {
+    if (!str) return ''
+    return str
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .replace(/[\s_]+/g, '-')
+        .replace(/-+/g, '-')
+        .toLowerCase()
+}
+
 /**
  * Returns an ever-increasing unique integer id.
  */
@@ -335,6 +345,7 @@ export function utilsFunctions() {
         htmlFormatClasses,
         encodeHtml,
         sanitizeHtml,
+        toKebabCase,
         hashString,
         sleep,
         idToName,

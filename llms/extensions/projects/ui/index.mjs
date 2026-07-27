@@ -15,7 +15,7 @@ function useProjects(ext) {
             ctx.setError(api.error, "Failed to save project")
         } else {
             const projects = api.response
-            ext.ctx.setState({ projects })
+            ctx.setState({ projects })
             // Update active project if needed
             const active = ctx.state.prefs.project
             if (active) {
@@ -103,13 +103,8 @@ const ProjectsSelector = {
                             <div v-if="project.description" class="text-xs truncate mt-0.5" :class="$styles.muted">
                                 {{ project.description }}
                             </div>
-                            <div v-for="path in project.paths.filter(x => x[0] !== '$')" :key="path" class="mt-1.5 text-[10px] font-mono truncate" :class="$styles.muted" :title="path">
-                                {{ path }}
-                            </div>
-                            <div v-if="project.paths.filter(x => x[0] == '$').length" class="mt-1.5 flex flex-wrap gap-1.5">
-                                <div v-for="path in project.paths.filter(x => x[0] == '$')" :key="path" class="text-[10px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1" :class="[$styles.codeTag]" :title="path.substring(1)">
-                                    <span>{{ path.substring(1) }}</span>
-                                </div>
+                            <div class="mt-1.5 text-[10px] font-mono truncate" :class="$styles.muted" :title="project.folder || $utils.toKebabCase(project.name)">
+                                ~/{{ project.folder || $utils.toKebabCase(project.name) }}
                             </div>
                         </div>
                     </div>
@@ -172,7 +167,7 @@ const ProjectsSelector = {
             projects,
             togglePopover,
             selectProject,
-            manageProjects
+            manageProjects,
         }
     }
 }
@@ -227,9 +222,6 @@ const ProjectsManagerModal = {
                                         </svg>
                                         <span class="truncate">{{ p.name }}</span>
                                     </div>
-                                    <span v-if="p.paths.length > 0" class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 opacity-60">
-                                        {{ p.paths.length }}
-                                    </span>
                                 </button>
                             </div>
                         </div>
@@ -257,7 +249,7 @@ const ProjectsManagerModal = {
                                             <!-- Project Name -->
                                             <div>
                                                 <label class="block text-sm font-medium mb-1" :class="[$styles.labelInput]">Project Name *</label>
-                                                <input type="text" v-model="editForm.name"
+                                                <input type="text" v-model="editForm.name" @input="onNameInput"
                                                     placeholder="e.g. My Awesome App"
                                                     class="block w-full rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border"
                                                     :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
@@ -272,15 +264,27 @@ const ProjectsManagerModal = {
                                                     :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
                                             </div>
 
+                                            <!-- Folder Name -->
+                                            <div>
+                                                <label class="block text-sm font-medium mb-1" :class="[$styles.labelInput]">Folder Name *</label>
+                                                <input type="text" v-model="editForm.folder" @input="isFolderManuallyEdited = true"
+                                                    placeholder="e.g. my-awesome-app"
+                                                    class="block w-full rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono"
+                                                    :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
+                                                <span class="text-[10px] text-gray-400 dark:text-gray-500 mt-1 block">
+                                                    User Projects folder path: <code class="font-mono">~/{{ editForm.folder || 'folder-name' }}</code>
+                                                </span>
+                                            </div>
+
                                             <!-- Publish Build Directory -->
                                             <div>
                                                 <label class="block text-sm font-medium mb-1" :class="[$styles.labelInput]">Publish Build Directory</label>
                                                 <input type="text" v-model="editForm.publish"
-                                                    placeholder="Path to folder, e.g. dist or $WORKSPACE/dist"
-                                                    class="block w-full rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono"
+                                                    placeholder="deploy root project folder"
+                                                    class="block w-full rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono placeholder:text-gray-500"
                                                     :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
                                                 <span class="text-[10px] text-gray-400 dark:text-gray-500 mt-1 block">
-                                                    Default directory to publish (e.g. dist, build, or $WORKSPACE/dist)
+                                                    Relative path from project folder to publish (e.g. dist, build, or leave empty for project root)
                                                 </span>
                                             </div>
 
@@ -292,60 +296,6 @@ const ProjectsManagerModal = {
                                                        class="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate">
                                                         {{ editForm.publishedUrl }}
                                                     </a>
-                                                </div>
-                                            </div>
-                                            
-                                            <!-- Paths -->
-                                            <div>
-                                                <label class="block text-sm font-medium mb-2" :class="[$styles.labelInput]">Allowed Directories & Paths</label>
-                                                
-                                                <!-- Special Alias Options -->
-                                                <div class="flex items-center gap-6 p-3 rounded-lg border mb-4 text-sm" :class="[$styles.card, $styles.borderInput]">
-                                                    <div class="flex items-center space-x-2">
-                                                        <input type="checkbox" id="chk_workspace" :checked="hasWorkspaceAlias" @change="toggleWorkspaceAlias"
-                                                            class="rounded cursor-pointer focus:ring-blue-500" :class="[$styles.borderInput, $styles.textInput, $styles.checkbox]" />
-                                                        <label for="chk_workspace" class="cursor-pointer font-medium flex items-center space-x-1">
-                                                            <span>WORKSPACE</span>
-                                                            <span class="text-[10px] font-normal opacity-60">(Current workspace root)</span>
-                                                        </label>
-                                                    </div>
-                                                    <div class="flex items-center space-x-2">
-                                                        <input type="checkbox" id="chk_temp" :checked="hasTempAlias" @change="toggleTempAlias"
-                                                            class="rounded cursor-pointer focus:ring-blue-500" :class="[$styles.borderInput, $styles.textInput, $styles.checkbox]" />
-                                                        <label for="chk_temp" class="cursor-pointer font-medium flex items-center space-x-1">
-                                                            <span>TEMP</span>
-                                                            <span class="text-[10px] font-normal opacity-60">(OS temp directory)</span>
-                                                        </label>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Custom Paths List -->
-                                                <div class="space-y-2">
-                                                    <div v-for="(path, idx) in customPaths" :key="idx" class="flex items-center space-x-2">
-                                                        <input type="text" v-model="customPaths[idx]"
-                                                            placeholder="/absolute/path/to/directory"
-                                                            spellcheck="false"
-                                                            class="flex-1 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none border font-mono"
-                                                            :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
-                                                        <button type="button" @click="removeCustomPath(idx)"
-                                                            class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
-                                                            title="Remove path">
-                                                            <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                                <polyline points="3 6 5 6 21 6"></polyline>
-                                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                    
-                                                    <button type="button" @click="addCustomPath"
-                                                        class="text-xs font-semibold flex items-center space-x-1.5 py-1.5 px-3 rounded-lg border border-dashed transition-colors"
-                                                        :class="[$styles.borderInput, $styles.textInput, 'hover:bg-gray-50 dark:hover:bg-gray-800']">
-                                                        <svg class="size-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                                                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                                                        </svg>
-                                                        <span>Add Custom Path</span>
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -369,10 +319,10 @@ const ProjectsManagerModal = {
                                             Close
                                         </button>
                                         <button type="button" @click="saveForm"
-                                            :disabled="!isDirty || !editForm.name.trim()"
+                                            :disabled="!editForm.name.trim()"
                                             class="px-4 py-2 text-sm font-semibold rounded-lg transition-colors"
                                             :class="[$styles.primaryButton]">
-                                            Save
+                                            {{ isDirty ? 'Save Project' : 'Select Project' }}
                                         </button>
                                     </div>
                                 </div>
@@ -389,55 +339,59 @@ const ProjectsManagerModal = {
         const localProjects = ref([])
         const selectedIdx = ref(null)
         const isNewProject = ref(false)
+        const isFolderManuallyEdited = ref(false)
 
         const editForm = ref({
             name: '',
+            folder: '',
             description: '',
-            paths: [],
             publish: '',
             publishedUrl: ''
         })
-
-        const customPaths = ref([])
 
         // Load project data
         onMounted(() => {
             localProjects.value = JSON.parse(JSON.stringify(ctx.state.projects || []))
         })
 
-        const hasWorkspaceAlias = computed(() => editForm.value.paths.includes('$WORKSPACE'))
-        const hasTempAlias = computed(() => editForm.value.paths.includes('$TEMP'))
-
-        function toggleWorkspaceAlias() {
-            const idx = editForm.value.paths.indexOf('$WORKSPACE')
-            if (idx === -1) {
-                editForm.value.paths.push('$WORKSPACE')
-            } else {
-                editForm.value.paths.splice(idx, 1)
+        function onNameInput() {
+            if (!isFolderManuallyEdited.value) {
+                editForm.value.folder = ctx.utils.toKebabCase(editForm.value.name)
             }
         }
 
-        function toggleTempAlias() {
-            const idx = editForm.value.paths.indexOf('$TEMP')
-            if (idx === -1) {
-                editForm.value.paths.push('$TEMP')
-            } else {
-                editForm.value.paths.splice(idx, 1)
+        function sanitizePublishPath(path, folderName) {
+            if (!path) return ''
+            path = path.trim()
+            if (folderName) {
+                const marker = `projects/${folderName}/`
+                const idx = path.indexOf(marker)
+                if (idx !== -1) {
+                    path = path.substring(idx + marker.length)
+                } else if (path === `projects/${folderName}` || path.endsWith(`/${folderName}`) || path === folderName) {
+                    return ''
+                } else if (path.startsWith(`${folderName}/`)) {
+                    path = path.substring(folderName.length + 1)
+                }
             }
+            path = path.replace(/^[/\\]+/, '')
+            const parts = path.split(/[/\\]+/).filter(p => p && p !== '.' && p !== '..')
+            return parts.join('/')
         }
 
         function selectEditProject(idx) {
             isNewProject.value = false
             selectedIdx.value = idx
             const proj = localProjects.value[idx]
+            const folder = proj.folder || ctx.utils.toKebabCase(proj.name)
             editForm.value = {
                 name: proj.name,
+                folder: folder,
                 description: proj.description || '',
-                paths: [...(proj.paths || [])],
-                publish: proj.publish || '',
+                publish: sanitizePublishPath(proj.publish || '', folder),
                 publishedUrl: proj.publishedUrl || ''
             }
-            customPaths.value = (proj.paths || []).filter(p => p !== '$WORKSPACE' && p !== '$TEMP')
+            isFolderManuallyEdited.value = true
         }
 
         function createNewProject() {
@@ -445,20 +399,12 @@ const ProjectsManagerModal = {
             selectedIdx.value = -1 // temporary index
             editForm.value = {
                 name: '',
+                folder: '',
                 description: '',
-                paths: [],
                 publish: '',
                 publishedUrl: ''
             }
-            customPaths.value = []
-        }
-
-        function addCustomPath() {
-            customPaths.value.push('')
-        }
-
-        function removeCustomPath(idx) {
-            customPaths.value.splice(idx, 1)
+            isFolderManuallyEdited.value = false
         }
 
         function cancelEdit() {
@@ -483,24 +429,13 @@ const ProjectsManagerModal = {
                 return
             }
 
-            // Combine aliases and custom paths
-            const finalPaths = []
-            if (hasWorkspaceAlias.value) finalPaths.push('$WORKSPACE')
-            if (hasTempAlias.value) finalPaths.push('$TEMP')
-
-            // Filter out empty custom paths and trim them
-            customPaths.value.forEach(p => {
-                const trimmed = p.trim()
-                if (trimmed) {
-                    finalPaths.push(trimmed)
-                }
-            })
+            const folder = (editForm.value.folder.trim() || ctx.utils.toKebabCase(editForm.value.name)).trim()
 
             const updatedProject = {
                 name: editForm.value.name.trim(),
+                folder: folder,
                 description: editForm.value.description.trim(),
-                paths: finalPaths,
-                publish: editForm.value.publish ? editForm.value.publish.trim() : '',
+                publish: sanitizePublishPath(editForm.value.publish, folder),
                 publishedUrl: editForm.value.publishedUrl ? editForm.value.publishedUrl.trim() : ''
             }
 
@@ -525,13 +460,14 @@ const ProjectsManagerModal = {
             const success = await persistProject(updatedProject, originalName)
             if (!success) return
 
-            ctx.toast(`Saved project: ${updatedProject.name}`)
-
-            // Re-select if name changed
-            if (isNewProject.value) {
-                selectEditProject(localProjects.value.length - 1)
+            const name = updatedProject.name
+            const api = await ext.postJson('/active', { name })
+            if (api.error) {
+                ctx.setError(api.error, "Failed to switch project")
             } else {
-                selectEditProject(selectedIdx.value)
+                ctx.state.prefs.project = name
+                ctx.toast(`Saved project: ${name}`)
+                closeDialog()
             }
         }
 
@@ -563,7 +499,7 @@ const ProjectsManagerModal = {
             if (api.error) {
                 ctx.setError(api.error, "Failed to save projects")
             } else {
-                ext.ctx.setState({ projects: localProjects.value })
+                ctx.setState({ projects: localProjects.value })
                 // Update active project if needed
                 const active = ctx.state.prefs.project
                 if (active && !localProjects.value.some(p => p.name === active)) {
@@ -576,29 +512,14 @@ const ProjectsManagerModal = {
             if (selectedIdx.value === null) return false
 
             const orig = isNewProject.value
-                ? { name: '', description: '', paths: ['$WORKSPACE'] }
+                ? { name: '', folder: '', description: '', publish: '' }
                 : localProjects.value[selectedIdx.value]
 
-            const origPaths = orig?.paths || []
-
-            // Check if name or description changed
+            // Check if name, folder, description, or publish changed
             if ((editForm.value.name || '').trim() !== (orig?.name || '').trim()) return true
+            if ((editForm.value.folder || '').trim() !== (orig?.folder || ctx.utils.toKebabCase(orig?.name || '')).trim()) return true
             if ((editForm.value.description || '').trim() !== (orig?.description || '').trim()) return true
             if ((editForm.value.publish || '').trim() !== (orig?.publish || '').trim()) return true
-
-            // Compare paths
-            const curPaths = []
-            if (hasWorkspaceAlias.value) curPaths.push('$WORKSPACE')
-            if (hasTempAlias.value) curPaths.push('$TEMP')
-            customPaths.value.forEach(p => {
-                const trimmed = p.trim()
-                if (trimmed) curPaths.push(trimmed)
-            })
-
-            if (curPaths.length !== origPaths.length) return true
-            for (let i = 0; i < curPaths.length; i++) {
-                if (curPaths[i] !== origPaths[i]) return true
-            }
 
             return false
         })
@@ -612,20 +533,15 @@ const ProjectsManagerModal = {
             selectedIdx,
             isNewProject,
             editForm,
-            customPaths,
-            hasWorkspaceAlias,
-            hasTempAlias,
-            toggleWorkspaceAlias,
-            toggleTempAlias,
+            isFolderManuallyEdited,
+            onNameInput,
             selectEditProject,
             createNewProject,
-            addCustomPath,
-            removeCustomPath,
             cancelEdit,
             deleteProject,
             saveForm,
             closeDialog,
-            isDirty
+            isDirty,
         }
     }
 }

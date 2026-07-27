@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import tarfile
+from typing import Optional
 
 import aiohttp
 from aiohttp import web
@@ -19,6 +20,57 @@ DEFAULT_PUBLISH_AVATARS_PATH = "/publish/avatar/{profile}"
 DEFAULT_PUBLISH_TO_CACHE_PATH = "/publish/cache"
 
 
+def sanitize_publish_path(publish: Optional[str], project_dir: Optional[str] = None) -> str:
+    if not publish or not publish.strip():
+        return ""
+    publish = publish.strip()
+
+    if project_dir:
+        abs_project = os.path.abspath(project_dir)
+        project_folder_name = os.path.basename(abs_project)
+
+        if os.path.isabs(publish):
+            abs_publish = os.path.abspath(publish)
+            if abs_publish == abs_project:
+                return ""
+            if abs_publish.startswith(abs_project + os.sep):
+                rel = os.path.relpath(abs_publish, abs_project)
+                parts = [p for p in re.split(r"[/\\]+", rel) if p and p != "." and p != ".."]
+                return "/".join(parts)
+
+        clean = publish.lstrip("/\\")
+        if clean == project_folder_name or clean == f"projects/{project_folder_name}":
+            return ""
+        if clean.startswith(f"projects/{project_folder_name}/"):
+            clean = clean[len(f"projects/{project_folder_name}/"):]
+        elif clean.startswith(f"{project_folder_name}/"):
+            clean = clean[len(f"{project_folder_name}/"):]
+
+        parts = [p for p in re.split(r"[/\\]+", clean) if p and p != "." and p != ".."]
+        return "/".join(parts)
+
+    path = publish.lstrip("/\\")
+    if "projects/" in path:
+        parts_path = path.split("projects/")[-1]
+        subparts = parts_path.split("/", 1)
+        if len(subparts) > 1:
+            path = subparts[1]
+        else:
+            path = ""
+
+    parts = [p for p in re.split(r"[/\\]+", path) if p and p != "." and p != ".."]
+    return "/".join(parts)
+
+
+def kebab_case(s: str) -> str:
+    if not s:
+        return ""
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"[\s_]+", "-", s)
+    s = re.sub(r"-+", "-", s)
+    return s.strip("-").lower()
+
+
 def install(ctx):
 
     class PublishUrls:
@@ -31,8 +83,8 @@ def install(ctx):
             self.publish_avatars_url = f"{self.base_url}{DEFAULT_PUBLISH_AVATARS_PATH}"
             self.publish_to_cache_url = f"{self.base_url}{DEFAULT_PUBLISH_TO_CACHE_PATH}"
 
-        def get_avatar_url(self, user):
-            return self.publish_avatars_url.format(profile=user)
+        def get_avatar_url(self, profile):
+            return self.publish_avatars_url.format(profile=profile)
 
         def get_project_url(self, name):
             return self.publish_project_url.format(name=name)
@@ -41,12 +93,9 @@ def install(ctx):
     def get_publish_config(user=None, obscure=True):
         candidate_paths = []
         if user:
-            # if signed in, return the prompts for this user if exists
             candidate_paths.append(os.path.join(ctx.get_user_path(user), "publish", "config.json"))
-        # return default prompts for all users if exists
         candidate_paths.append(os.path.join(ctx.get_user_path(), "publish", "config.json"))
 
-        # iterate all candidate paths and when exists return its json
         obj = {"apiKey": None, "userName": None, "userId": None}
         for path in candidate_paths:
             if os.path.exists(path):
@@ -54,12 +103,10 @@ def install(ctx):
                     txt = f.read()
                     obj = json.loads(txt)
                     if obscure and "apiKey" in obj and obj["apiKey"]:
-                        # hide visible key first 3 and last 4 chars
                         obj["apiKey"] = obj["apiKey"][:3] + "******" + obj["apiKey"][-4:]
 
         publish_base_url = obj.get("baseUrl", DEFAULT_PUBLISH_BASE_URL)
 
-        # used by client to load register form
         if "registerUrl" not in obj:
             obj["registerUrl"] = publish_base_url + DEFAULT_REGISTER_PATH
         return obj
@@ -72,7 +119,6 @@ def install(ctx):
             json.dump(config, f, indent=2)
 
     async def handle_publish_config(request):
-        # check if user is signed in
         return web.json_response(get_publish_config(user=ctx.get_username(request)))
 
     ctx.add_get("config.json", handle_publish_config)
@@ -88,7 +134,6 @@ def install(ctx):
 
     async def save_publish_config(request):
         user = ctx.get_username(request)
-        # read the request body
         body = await request.json()
         existing_config = get_publish_config(user=user, obscure=False)
         if existing_config:
@@ -98,7 +143,6 @@ def install(ctx):
             save_config(user, existing_config)
         else:
             save_config(user, body)
-
         return web.json_response(get_publish_config(user=user))
 
     ctx.add_post("config.json", save_publish_config)
@@ -106,87 +150,48 @@ def install(ctx):
     async def detect_dist(request):
         user = ctx.get_username(request)
         active_project = ctx.get_user_pref("project", user=user)
+        user_projects = ctx.projects.get_user_projects(user) if hasattr(ctx, "projects") else []
+        proj = next((p for p in user_projects if p.get("name") == active_project), None) if active_project else None
 
-        candidate_paths = []
-        if user:
-            candidate_paths.append(os.path.join(ctx.get_user_path(user), "projects", "projects.json"))
-        candidate_paths.append(os.path.join(ctx.get_user_path(), "projects", "projects.json"))
+        if proj:
+            folder = proj.get("folder") or kebab_case(proj.get("name", ""))
+            project_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects", folder))
+            publish_prop = sanitize_publish_path(proj.get("publish"), project_dir)
 
-        project_paths = []
-        publish_prop = None
-        if active_project:
-            for path in candidate_paths:
-                if os.path.exists(path):
-                    try:
-                        with open(path, encoding="utf-8") as f:
-                            projects = json.load(f)
-                            for proj in projects:
-                                if proj.get("name") == active_project:
-                                    project_paths = proj.get("paths", [])
-                                    publish_prop = proj.get("publish")
-                                    break
-                            if project_paths or publish_prop:
-                                break
-                    except Exception as e:
-                        ctx.err("Failed to read projects in publish detect-dist", e)
+            if publish_prop:
+                return web.json_response({"dist": publish_prop})
 
-        if publish_prop:
-            resolved_publish = ctx.resolve_directory(publish_prop)
-            if resolved_publish:
-                return web.json_response({"dist": resolved_publish})
-            return web.json_response({"dist": publish_prop})
+            dist_path = os.path.join(project_dir, "dist")
+            if os.path.exists(dist_path) and os.path.isdir(dist_path):
+                return web.json_response({"dist": "dist"})
+            return web.json_response({"dist": ""})
 
-        special_prefixes = ("$WORKSPACE", "$TEMP")
-        custom_paths = [p for p in project_paths if not p.startswith(special_prefixes)]
-
-        detected_dist = None
-        first_custom_path = None
-        for p in custom_paths:
-            resolved = ctx.resolve_directory(p)
-            if resolved:
-                if first_custom_path is None:
-                    first_custom_path = resolved
-                dist_path = os.path.join(resolved, "dist")
-                if os.path.exists(dist_path) and os.path.isdir(dist_path):
-                    detected_dist = dist_path
-                    break
-
-        return web.json_response({"dist": detected_dist or first_custom_path or ""})
+        return web.json_response({"dist": ""})
 
     ctx.add_get("detect-dist", detect_dist)
 
     async def list_subdirs(request):
         user = ctx.get_username(request)
         path_param = request.query.get("path", "")
+        project_param = request.query.get("project", "")
 
-        # If path is empty, default to active project paths or workspace root
-        if not path_param:
-            active_project = ctx.get_user_pref("project", user=user)
-            project_paths = []
-            if active_project:
-                candidate_paths = []
-                if user:
-                    candidate_paths.append(os.path.join(ctx.get_user_path(user), "projects", "projects.json"))
-                candidate_paths.append(os.path.join(ctx.get_user_path(), "projects", "projects.json"))
-                for path in candidate_paths:
-                    if os.path.exists(path):
-                        try:
-                            with open(path, encoding="utf-8") as f:
-                                projects = json.load(f)
-                                for proj in projects:
-                                    if proj.get("name") == active_project:
-                                        project_paths = proj.get("paths", [])
-                                        break
-                                if project_paths:
-                                    break
-                        except Exception:
-                            pass
-            if not project_paths:
-                project_paths = ["$WORKSPACE"]
-            path_param = project_paths[0]
+        active_project = project_param or ctx.get_user_pref("project", user=user)
+        project_dir = None
+        proj = None
+        if active_project:
+            user_projects = ctx.projects.get_user_projects(user) if hasattr(ctx, "projects") else []
+            proj = next((p for p in user_projects if p.get("name") == active_project or p.get("folder") == active_project), None)
+            if proj:
+                folder = proj.get("folder") or kebab_case(proj.get("name", ""))
+                project_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects", folder))
 
-        resolved_path = ctx.resolve_directory(path_param)
-        if not resolved_path or not os.path.exists(resolved_path) or not os.path.isdir(resolved_path):
+        if not project_dir:
+            project_dir = os.path.abspath(ctx.get_user_path(user))
+
+        clean_rel = sanitize_publish_path(path_param, project_dir)
+        resolved_path = os.path.abspath(os.path.join(project_dir, clean_rel))
+
+        if not resolved_path.startswith(project_dir) or not os.path.exists(resolved_path) or not os.path.isdir(resolved_path):
             return web.json_response({"error": "Invalid or non-existent path", "path": path_param}, status=400)
 
         try:
@@ -194,21 +199,36 @@ def install(ctx):
             for item in os.listdir(resolved_path):
                 full_path = os.path.join(resolved_path, item)
                 if os.path.isdir(full_path) and not item.startswith("."):
-                    subdirs.append({"name": item, "path": full_path})
+                    rel_sub = os.path.relpath(full_path, project_dir)
+                    subdirs.append({"name": item, "path": rel_sub})
             subdirs.sort(key=lambda x: x["name"].lower())
 
-            parent_path = os.path.dirname(resolved_path)
-            is_parent_allowed = False
-            allowed_dirs = ctx.resolve_allowed_directories(user)
-            for allowed_dir in allowed_dirs:
-                if parent_path.startswith(allowed_dir) or parent_path == allowed_dir:
-                    is_parent_allowed = True
-                    break
+            rel_current = os.path.relpath(resolved_path, project_dir)
+            if rel_current == ".":
+                rel_current = ""
+
+            parent_path = None
+            if resolved_path != project_dir:
+                parent_abs = os.path.dirname(resolved_path)
+                if parent_abs.startswith(project_dir):
+                    rel_parent = os.path.relpath(parent_abs, project_dir)
+                    parent_path = "" if rel_parent == "." else rel_parent
+
+            user_projects_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects"))
+            if resolved_path.startswith(user_projects_dir):
+                rel_proj = os.path.relpath(resolved_path, user_projects_dir)
+                display_path = "~/" if rel_proj == "." else f"~/{rel_proj}"
+            elif proj:
+                folder_name = proj.get("folder") or kebab_case(proj.get("name", ""))
+                display_path = f"~/{folder_name}" + (f"/{rel_current}" if rel_current else "")
+            else:
+                display_path = "~/" + os.path.basename(resolved_path)
 
             return web.json_response(
                 {
-                    "currentPath": resolved_path,
-                    "parentPath": parent_path if is_parent_allowed else None,
+                    "currentPath": rel_current,
+                    "displayPath": display_path,
+                    "parentPath": parent_path,
                     "subdirs": subdirs,
                 }
             )
@@ -431,17 +451,24 @@ def install(ctx):
         if not publish_api_key:
             raise Exception("No API key configured")
 
-        publish_dir = project.get("publish")
-        if not publish_dir:
+        folder = project.get("folder") or kebab_case(project.get("name", ""))
+        project_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects", folder))
+
+        if project.get("publish") is None:
             raise Exception("No publish directory configured for the project")
 
-        resolved_publish_dir = ctx.resolve_directory(publish_dir)
+        publish_dir = sanitize_publish_path(project.get("publish"), project_dir)
+        resolved_publish_dir = os.path.abspath(os.path.join(project_dir, publish_dir))
+
+        if not resolved_publish_dir.startswith(project_dir):
+            raise Exception("Publish directory must be within the project folder")
+
         if (
             not resolved_publish_dir
             or not os.path.exists(resolved_publish_dir)
             or not os.path.isdir(resolved_publish_dir)
         ):
-            raise Exception(f"Publish directory does not exist: {publish_dir}")
+            raise Exception(f"Publish directory does not exist: {publish_dir or 'project root'}")
 
         tar_stream = io.BytesIO()
         with tarfile.open(fileobj=tar_stream, mode="w:gz") as tar:
