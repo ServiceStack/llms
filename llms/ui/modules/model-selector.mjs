@@ -621,11 +621,11 @@ const ModelSelectorModal = {
             })
         }
 
-        // Save preferences when sort changes
-        watch(() => [prefs.value.query], () => {
-            console.log('setPrefs', prefs.value.query)
+        // Save preferences when the search query or sort changes
+        watch(() => [prefs.value.query, prefs.value.sortBy], () => {
             setPrefs({
                 query: prefs.value.query,
+                sortBy: prefs.value.sortBy,
             })
         })
 
