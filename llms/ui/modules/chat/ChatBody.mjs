@@ -1400,17 +1400,21 @@ export const ChatBody = {
         }
 
         const getMessageUsage = (message) => {
-            if (message.usage) return message.usage
-            if (message.tool_calls?.length) {
+            let usage = message.usage
+            if (!usage && message.tool_calls?.length) {
                 const toolUsages = message.tool_calls.map(tc => getToolOutput(tc.id)?.usage)
-                const agg = {
+                usage = {
                     tokens: toolUsages.reduce((a, b) => a + (b?.tokens || 0), 0),
                     cost: toolUsages.reduce((a, b) => a + (b?.cost || 0), 0),
                     duration: toolUsages.reduce((a, b) => a + (b?.duration || 0), 0)
                 }
-                return agg
             }
-            return null
+            if (usage && !usage.tokens && (message.content || message.reasoning)) {
+                const text = (message.content || '') + (message.reasoning || '')
+                const estTokens = Math.max(1, Math.round(text.length / 4))
+                usage = { ...usage, tokens: estTokens }
+            }
+            return usage
         }
 
         const isToolLinked = (message) => {

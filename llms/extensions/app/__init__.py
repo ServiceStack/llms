@@ -976,15 +976,18 @@ def install(ctx):
                 messages = chat.get("messages", [])
             messages = [m for m in messages if not m.get("streaming")]
             last_role = messages[-1].get("role", None) if len(messages) > 0 else None
-            output_cost = (input_price * input_tokens) / 1000000 if not is_per_request else cost
+            input_cost = (input_price * input_tokens) / 1000000 if not is_per_request else cost
 
             if last_role == "user" or last_role == "tool":
                 user_message = messages[-1]
                 user_message["model"] = model
+                if not input_tokens and user_message.get("content"):
+                    input_tokens = count_tokens_approx(user_message.get("content"))
+                    input_cost = (input_price * input_tokens) / 1000000 if not is_per_request else cost
                 user_message["usage"] = {
                     "tokens": input_tokens,
                     "price": input_price,
-                    "cost": output_cost,
+                    "cost": input_cost,
                 }
             else:
                 ctx.dbg(
@@ -992,10 +995,16 @@ def install(ctx):
                 )
             assistant_message = ctx.chat_response_to_message(o)
             assistant_message["model"] = model
+            if not output_tokens and assistant_message:
+                content_text = assistant_message.get("content") or ""
+                reasoning_text = assistant_message.get("reasoning") or ""
+                output_tokens = count_tokens_approx(content_text) + count_tokens_approx(reasoning_text)
+
+            assistant_cost = (output_price * output_tokens) / 1000000 if not is_per_request else cost
             assistant_message["usage"] = {
                 "tokens": output_tokens,
                 "price": output_price,
-                "cost": output_cost,
+                "cost": assistant_cost,
                 "duration": duration,
             }
             if is_per_request:

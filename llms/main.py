@@ -49,6 +49,7 @@ from typing import (
 )
 from urllib.parse import parse_qs, urljoin
 
+from llms.db import count_tokens_approx
 import aiohttp
 from aiohttp import web
 
@@ -2393,6 +2394,13 @@ async def g_chat_completion(chat, context=None):
                 # Update final response with aggregated usage
                 if "usage" not in response:
                     response["usage"] = {}
+
+                if not total_completion_tokens:
+                    choice = response.get("choices", [])[0] if response.get("choices") else {}
+                    message = choice.get("message", {})
+                    content_text = message.get("content") or ""
+                    reasoning_text = message.get("reasoning") or ""
+                    total_completion_tokens = count_tokens_approx(content_text) + count_tokens_approx(reasoning_text)
 
                 context["duration"] = duration = int(time.time() - started_at)
                 total_usage = {

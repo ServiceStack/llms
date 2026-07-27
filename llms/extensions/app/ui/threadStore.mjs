@@ -34,6 +34,18 @@ async function query(query) {
 let watchTimeout = null
 const isWatchingThread = ref(false)
 
+async function fetchThread(threadId) {
+    if (!threadId) return null
+    const api = await ext.getJson(`/threads/${threadId}`)
+    if (api.response) {
+        const latestThread = api.response
+        threadDetails.value[threadId] = latestThread
+        replaceThread(latestThread, { forceActions: true })
+        return latestThread
+    }
+    return null
+}
+
 async function watchThreadUpdates() {
     clearTimeout(watchTimeout)
     watchTimeout = null
@@ -47,7 +59,11 @@ async function watchThreadUpdates() {
     const api = await ext.getJson(appendQueryString(`/threads/${thread.id}/updates`, { sig: thread.sig || '' }))
 
     if (api.response) {
+        const isCompleted = !!(api.response.completedAt || api.response.error)
         replaceThread(api.response)
+        if (isCompleted) {
+            await fetchThread(thread.id)
+        }
     } else if (api.error) {
         setError(api.error, `watching thread ${thread.id}`)
         stopWatchingThread()
@@ -73,7 +89,7 @@ function stopWatchingThread() {
     }
 }
 
-function replaceThread(thread) {
+function replaceThread(thread, opt = {}) {
     if (!thread) return
     const index = threads.value.findIndex(t => t.id === thread.id)
     if (index !== -1) threads.value[index] = thread
@@ -81,8 +97,8 @@ function replaceThread(thread) {
 
     if (thread.completedAt || thread.error) {
         threadDetails.value[thread.id] = thread
-        if (!threadActions.value[thread.id]) {
-            loadThreadActions(thread.id)
+        if (!threadActions.value[thread.id] || opt?.forceActions) {
+            loadThreadActions(thread.id, opt?.forceActions ? { force: true } : undefined)
         }
         stopWatchingThread()
     } else if (currentThread.value?.id === thread.id) {
@@ -99,6 +115,7 @@ async function cancelThread() {
     const api = await ext.postJson(`/threads/${thread.id}/cancel`)
     if (api.response) {
         replaceThread(api.response)
+        await fetchThread(thread.id)
     } else {
         setError(api.error, `Canceling thread ${thread.id}`)
     }
@@ -459,6 +476,7 @@ export function useThreadStore() {
         redoMessageFromThread,
         loadThreads,
         getThread,
+        fetchThread,
         deleteThread,
         setCurrentThread,
         setCurrentThreadFromRoute,
