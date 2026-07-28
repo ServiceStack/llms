@@ -621,7 +621,7 @@ export const Analytics = {
 
             try {
                 const dailySummary = await ctx.requests.getDailySummary(dateKey)
-                const { modelData, providerData } = dailySummary
+                const { modelData = {}, providerData = {} } = dailySummary ?? {}
 
                 // Prepare model pie chart data
                 const modelLabels = Object.keys(modelData).sort()
@@ -666,7 +666,7 @@ export const Analytics = {
 
             try {
                 const dailySummary = await ctx.requests.getDailySummary(dateKey)
-                const { modelData, providerData } = dailySummary
+                const { modelData = {}, providerData = {} } = dailySummary ?? {}
 
                 // Prepare model pie chart data
                 const modelLabels = Object.keys(modelData).sort()
