@@ -22,6 +22,8 @@ const BTN_GROUP =
 const BTN_ON = 'bg-indigo-600 text-white'
 const BTN_OFF = 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
 const AI_HISTORY_MAX = 10
+// how many times the model gets to fix its own output before we stop and show the errors
+const MAX_FIX_ATTEMPTS = 3
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif']
 // editor key for generated code, so it never collides with a real file of the same name
 const GEN_PREFIX = 'generated:'
@@ -53,9 +55,13 @@ function isSchemaFile(path) {
     return (path ?? '').endsWith('.ui.json')
 }
 /** invoice.typ, invoice.json, invoice.ui.json, invoice.cs all share the stem "invoice" */
+/**
+ * Everything before the first dot, so one rule covers the lot: invoice.json, invoice.ui.json,
+ * invoice.signature.png and lib.preview.typ all belong to their base document. It matches how
+ * rename picks up a template's companions.
+ */
 function stemOf(name) {
-    // <name>.preview.typ belongs with <name>.typ, the way <name>.ui.json belongs with <name>.json
-    return name.replace(/\.ui\.json$/, '').replace(/\.[^.]+$/, '').replace(/\.preview$/, '')
+    return name.split('.')[0] || name
 }
 const LIB_NAME = 'lib.typ'
 const isLibrary = path => baseName(path ?? '') === LIB_NAME
@@ -177,7 +183,7 @@ const TYPST_ACTIONS = [
     { divider: true },
     { id: 'raw', text: '✗', cls: '', title: 'Raw / code', wrap: ['`', '`'], placeholder: 'code' },
     { id: 'link', icon: 'link', title: 'Link', snippet: '#link("https://example.com")[link text]', inline: true },
-    { id: 'image', icon: 'image', title: 'Image', snippet: '#image("logo.png", width: 40%)' },
+    { id: 'image', icon: 'image', title: 'Image', dialog: 'image' },
     {
         id: 'table',
         icon: 'table',
@@ -834,6 +840,152 @@ const PdfPageSetup = {
     },
 }
 
+const IMAGE_DIR = 'images'
+
+const PdfImagePicker = {
+    template: `
+    <div class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs" @click.self="$emit('close')">
+        <div class="w-full max-w-lg flex flex-col rounded-lg shadow-2xl overflow-hidden border" :class="[$styles.dialog, $styles.chromeBorder]">
+            <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0" :class="$styles.chromeBorder">
+                <h3 class="text-sm font-semibold">Insert image</h3>
+                <button type="button" @click="$emit('close')" class="p-1 rounded" :class="[$styles.icon, $styles.iconHover]" title="Close (Esc)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-3 flex flex-col gap-3 text-xs">
+                <!-- drop / choose a file -->
+                <div @dragover.prevent="over = true" @dragleave="over = false" @drop.prevent="onDrop" @paste="onPaste"
+                    class="rounded-md border-2 border-dashed p-4 text-center"
+                    :class="over ? 'border-indigo-400 bg-indigo-50 dark:bg-gray-900' : $styles.chromeBorder">
+                    <template v-if="!file">
+                        <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onPick" />
+                        <button type="button" @click="$refs.fileInput.click()" class="px-3 py-1.5" :class="$styles.secondaryButton">Choose an image…</button>
+                        <div class="mt-1.5" :class="$styles.muted">or drop one here</div>
+                    </template>
+                    <div v-else class="flex items-center gap-3 text-left">
+                        <img :src="file.url" class="size-16 object-contain rounded border" :class="$styles.chromeBorder" />
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate font-medium">{{ file.name }}</div>
+                            <div :class="$styles.muted">{{ file.width }} × {{ file.height }} · {{ Math.round(file.size / 1024) }}KB</div>
+                        </div>
+                        <button type="button" @click="file = null" class="px-2 py-1" :class="$styles.secondaryButton">Clear</button>
+                    </div>
+                </div>
+
+                <!-- where it goes -->
+                <div v-if="file" class="flex flex-col gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-16 flex-shrink-0" :class="$styles.muted">Save as:</span>
+                        <input v-model="name" type="text" class="flex-1 px-1.5 py-1 rounded border outline-none font-mono"
+                            :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-16 flex-shrink-0" :class="$styles.muted">Store in:</span>
+                        <div class="inline-flex rounded border overflow-hidden" :class="$styles.borderInput">
+                            <button type="button" @click="shared = true" class="px-2 py-1"
+                                :class="shared ? 'bg-indigo-600 text-white font-semibold' : [$styles.bgInput, $styles.textInput]">{{ imageDir }}/</button>
+                            <button type="button" @click="shared = false" class="px-2 py-1"
+                                :class="!shared ? 'bg-indigo-600 text-white font-semibold' : [$styles.bgInput, $styles.textInput]">With this template</button>
+                        </div>
+                    </div>
+                    <p :class="$styles.muted">
+                        <template v-if="shared">Shared by every template - the place for logos and signatures.</template>
+                        <template v-else>Named <span class="font-mono">{{ attachedName }}</span>, so it groups with the template and follows it when renamed.</template>
+                    </p>
+                </div>
+
+                <!-- images already in the folder -->
+                <div v-if="existing.length" class="border-t pt-3" :class="$styles.chromeBorder">
+                    <div class="mb-1.5" :class="$styles.muted">Or use one already here:</div>
+                    <div class="flex flex-wrap gap-2 overflow-y-auto" style="max-height:8rem">
+                        <button v-for="path in existing" :key="path" type="button" @click="$emit('insert', { path, width })"
+                            class="p-1 rounded border hover:border-blue-400" :class="$styles.chromeBorder" :title="path">
+                            <img :src="rawUrl(path)" class="size-12 object-contain" />
+                            <div class="mt-0.5 w-12 truncate text-[10px]" :class="$styles.muted">{{ baseName(path) }}</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                    <span class="w-16 flex-shrink-0" :class="$styles.muted">Width:</span>
+                    <input v-model="width" type="text" class="w-20 px-1.5 py-1 rounded border outline-none font-mono"
+                        :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]" />
+                    <span :class="$styles.muted">e.g. 40%, 3cm, auto</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between px-4 py-3 border-t flex-shrink-0" :class="[$styles.bgSidebar, $styles.chromeBorder]">
+                <code class="text-[11px] truncate" :class="$styles.muted">{{ file ? targetPath : 'pick or upload an image' }}</code>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button type="button" @click="$emit('close')" class="px-3 py-1.5 text-xs" :class="$styles.secondaryButton">Cancel</button>
+                    <button type="button" @click="upload" :disabled="!file || busy" class="px-4 py-1.5 text-xs disabled:opacity-40" :class="$styles.primaryButton">
+                        {{ busy ? 'Uploading…' : 'Upload & insert' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>`,
+    props: {
+        existing: { type: Array, default: () => [] },
+        stem: { type: String, default: '' },
+        rawUrl: { type: Function, required: true },
+    },
+    emits: ['insert', 'upload', 'close'],
+    setup(props, { emit }) {
+        const file = ref(null)
+        const name = ref('')
+        const shared = ref(true)
+        const width = ref('40%')
+        const over = ref(false)
+        const busy = ref(false)
+        const fileInput = ref(null)
+
+        const attachedName = computed(() => `${props.stem}.${name.value}`)
+        const targetPath = computed(() =>
+            shared.value ? `${IMAGE_DIR}/${name.value}` : attachedName.value,
+        )
+
+        async function take(picked) {
+            over.value = false
+            if (!picked || !picked.type.startsWith('image/')) return
+            const url = await new Promise(resolve => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(reader.result)
+                reader.readAsDataURL(picked)
+            })
+            const img = await new Promise(resolve => {
+                const el = new Image()
+                el.onload = () => resolve(el)
+                el.onerror = () => resolve({ naturalWidth: 0, naturalHeight: 0 })
+                el.src = url
+            })
+            // a name typst can reference without quoting gymnastics
+            name.value = (picked.name || 'image.png').toLowerCase().replace(/[^a-z0-9.\-_]+/g, '-')
+            file.value = { blob: picked, url, name: picked.name, size: picked.size, width: img.naturalWidth, height: img.naturalHeight }
+        }
+
+        const onPick = e => take(e.target.files?.[0])
+        const onDrop = e => take(e.dataTransfer?.files?.[0])
+        const onPaste = e => take(e.clipboardData?.files?.[0])
+
+        async function upload() {
+            if (!file.value) return
+            busy.value = true
+            try {
+                await emit('upload', { blob: file.value.blob, path: targetPath.value, width: width.value })
+            } finally {
+                busy.value = false
+            }
+        }
+
+        return { file, name, shared, width, over, busy, fileInput, attachedName, targetPath,
+                 onPick, onDrop, onPaste, upload, imageDir: IMAGE_DIR, baseName }
+    },
+}
+
 const PdfDesigner = {
     template: `
     <div id="pdf-designer" class="relative h-full w-full min-w-0 overflow-hidden">
@@ -1006,7 +1158,12 @@ const PdfDesigner = {
                         Drop a screenshot or PDF to build the template from
                     </div>
                     <div class="flex-1 overflow-y-auto px-2 pt-2 min-h-0">
-                        <div v-if="aiError" class="px-2 py-1.5 text-xs rounded border bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">{{ aiError }}</div>
+                        <div v-if="aiError" class="px-2 py-1.5 text-xs rounded border bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
+                            <div class="flex items-start gap-2">
+                                <span class="flex-1">{{ aiError }}</span>
+                                <button v-if="aiUndo" type="button" @click="undoAiEdit" class="flex-shrink-0 px-1.5 py-0.5 rounded hover:bg-red-100" title="Restore the previous contents">Undo</button>
+                            </div>
+                        </div>
                         <div v-else-if="aiResult" class="px-2 py-1.5 text-xs rounded" :class="$styles.bgPopover">
                             <div v-if="aiResult.message" class="mb-1.5 whitespace-pre-wrap" :class="$styles.muted">{{ aiResult.message }}</div>
                             <div v-if="aiResult.paths.length" class="flex flex-wrap items-center gap-1">
@@ -1044,7 +1201,7 @@ const PdfDesigner = {
                             </svg>
                         </button>
                         <textarea ref="aiInput" v-model="aiPrompt" :disabled="aiBusy" @paste="onAiPaste"
-                            @keydown.enter.exact.prevent="sendAiEdit"
+                            @keydown.enter.exact.prevent="sendAiEdit()"
                             @keydown.up="cycleHistory(-1, $event)"
                             @keydown.down="cycleHistory(1, $event)"
                             @input="historyIndex = -1"
@@ -1052,9 +1209,7 @@ const PdfDesigner = {
                             class="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-md border resize-none disabled:opacity-50"
                             :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"></textarea>
                         <div class="flex flex-col items-end gap-1 flex-shrink-0">
-                            <span v-if="aiHistory.length" class="text-[10px] select-none" :class="$styles.muted"
-                                :title="aiHistory.length + ' previous prompt' + (aiHistory.length === 1 ? '' : 's')">&uarr;&darr; history</span>
-                            <button type="button" @click="sendAiEdit" :disabled="aiBusy || !aiPrompt.trim() || !entry"
+                            <button type="button" @click="sendAiEdit()" :disabled="aiBusy || !aiPrompt.trim() || !entry"
                                 class="px-3 py-1.5 text-xs disabled:opacity-40" :class="$styles.primaryButton">
                                 {{ aiBusy ? 'Working…' : 'Send' }}
                             </button>
@@ -1095,9 +1250,18 @@ const PdfDesigner = {
                 </button>
             </div>
 
-            <div v-if="diagnostics.length" style="max-height:8rem" class="flex-shrink-0 overflow-y-auto px-3 py-2 text-xs font-mono border-b bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
-                <div v-for="(d, i) in diagnostics" :key="i" @click="goToDiagnostic(d)" class="truncate cursor-pointer" :title="d.message">
-                    <span v-if="d.line" class="opacity-70 mr-2">{{ d.file }}:{{ d.line }}:{{ d.col }}</span>{{ d.message }}
+            <div v-if="diagnostics.length" style="max-height:8rem" class="flex-shrink-0 overflow-y-auto pl-3 pr-1 py-1 text-xs font-mono border-b bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
+                <div class="flex items-center gap-2">
+                    <div class="flex-1 min-w-0">
+                        <div v-for="(d, i) in diagnostics" :key="i" @click="goToDiagnostic(d)" class="truncate cursor-pointer" :title="d.message">
+                            <span v-if="d.line" class="opacity-70 mr-2">{{ d.file }}:{{ d.line }}:{{ d.col }}</span>{{ d.message }}
+                        </div>
+                    </div>
+                    <button v-if="errorDiagnostics.length" type="button" @click="fixWithAi" :disabled="aiBusy"
+                        class="flex-shrink-0 px-2 py-0.5 rounded border font-sans border-red-300 dark:border-red-700 hover:bg-red-100 disabled:opacity-40"
+                        :title="'Ask ' + (aiModel || 'the model') + ' to fix ' + errorDiagnostics.length + ' error' + (errorDiagnostics.length === 1 ? '' : 's')">
+                        {{ aiBusy ? 'Fixing…' : 'Fix' }}
+                    </button>
                 </div>
             </div>
 
@@ -1143,6 +1307,8 @@ const PdfDesigner = {
                 </div>
             </template>
         </PdfPrompt>
+        <PdfImagePicker v-if="showImagePicker" :existing="folderImages" :stem="entryStem" :raw-url="rawUrl"
+            @insert="insertImage" @upload="uploadImage" @close="showImagePicker = false" />
         <PdfPageSetup v-if="showPageSetup" :document-settings="documentPageSettings" @apply="handleApplyPageStyle" @close="showPageSetup = false" />
         <PdfFontPicker v-if="showFontPicker" :fonts="fonts" :document-settings="documentTextSettings" @apply="handleApplyTextStyle" @close="showFontPicker = false" />
 
@@ -1199,7 +1365,7 @@ const PdfDesigner = {
         const aiBusy = ref(false)
         const aiError = ref('')
         const aiResult = ref(null)
-        let aiUndo = null
+        const aiUndo = ref(null) // { path: previous content } from the last AI run, for one click Undo
 
         const editorEl = ref(null)
         const previewEl = ref(null)
@@ -1296,6 +1462,7 @@ const PdfDesigner = {
         function applyFormat(action) {
             if (!cm) return
             cm.focus()
+            if (action.dialog === 'image') return (showImagePicker.value = true)
             if (action.wrap) return wrapSelection(action)
             if (action.line) return toggleLinePrefix(action.line)
             if (action.snippet) return insertSnippet(action.snippet, action.inline)
@@ -1372,6 +1539,36 @@ const PdfDesigner = {
             const tracking = body.match(/tracking:\s*([\d.]+)pt/)?.[1] ?? null
             return { font, size, fill, weight, style, tracking }
         })
+
+        const showImagePicker = ref(false)
+        const folderImages = computed(() => filePaths.value.filter(isImage))
+        const entryStem = computed(() => baseName(entry.value ?? 'template.typ').split('.')[0])
+
+        /** typst resolves #image() relative to the template, so walk up out of any subfolder */
+        function imageRef(path) {
+            const depth = dirName(entry.value ?? '') ? dirName(entry.value).split('/').length : 0
+            return '../'.repeat(depth) + path
+        }
+
+        function insertImage({ path, width }) {
+            showImagePicker.value = false
+            const size = width?.trim() && width.trim() !== 'auto' ? `, width: ${width.trim()}` : ''
+            insertSnippet(`#image("${imageRef(path)}"${size})`)
+        }
+
+        async function uploadImage({ blob, path, width }) {
+            const res = await ext.post(`/asset?path=${encodeURIComponent(path)}`, {
+                body: blob,
+                headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+            })
+            if (!res.ok) {
+                const api = await res.json().catch(() => null)
+                showImagePicker.value = false
+                return ext.setError(api?.responseStatus ?? { message: `Could not upload ${baseName(path)}` })
+            }
+            await loadFiles()
+            insertImage({ path, width })
+        }
 
         const showPageSetup = ref(false)
 
@@ -2119,9 +2316,9 @@ const PdfDesigner = {
         function cycleHistory(direction, e) {
             const history = aiHistory.value
             if (!history.length || aiBusy.value) return
+            // only from the very start of the box - anywhere else the arrows just move the caret
             const box = e.target
-            if (direction < 0 && box.value.slice(0, box.selectionStart).includes('\n')) return
-            if (direction > 0 && box.value.slice(box.selectionEnd).includes('\n')) return
+            if (box.selectionStart !== 0 || box.selectionEnd !== 0) return
 
             const next = historyIndex.value + (direction < 0 ? 1 : -1)
             if (next < -1 || next >= history.length) return
@@ -2130,10 +2327,8 @@ const PdfDesigner = {
             if (historyIndex.value === -1) historyDraft = aiPrompt.value
             historyIndex.value = next
             aiPrompt.value = next === -1 ? historyDraft : history[next]
-            nextTick(() => {
-                const end = aiPrompt.value.length
-                aiInput.value?.setSelectionRange(end, end)
-            })
+            // leave the caret where it was so the next press keeps walking the history
+            nextTick(() => aiInput.value?.setSelectionRange(0, 0))
         }
 
         function selectedModelInfo() {
@@ -2204,9 +2399,32 @@ const PdfDesigner = {
             nextTick(() => aiInput.value?.focus())
         }
 
-        async function sendAiEdit() {
+        const errorDiagnostics = computed(() => diagnostics.value.filter(d => d.severity !== 'warning'))
+
+        /** Hand the model exactly what typst said, positions and all */
+        function buildFixPrompt(errors) {
+            const lines = errors.map(d =>
+                d.line ? `${d.file ?? entry.value}:${d.line}:${d.col ?? 1}: ${d.message}` : d.message,
+            )
+            return (
+                `This does not compile. typst reports:\n\n${lines.join('\n')}\n\n` +
+                'Fix the errors and return the complete corrected files.'
+            )
+        }
+
+        /** The Fix button: same request the auto-repair makes, but started by hand */
+        async function fixWithAi() {
+            if (!errorDiagnostics.value.length || aiBusy.value) return
+            ext.setPrefs({ showAi: true })
+            aiPrompt.value = buildFixPrompt(errorDiagnostics.value)
+            await sendAiEdit()
+        }
+
+        async function sendAiEdit({ fixAttempt = 0 } = {}) {
             const request = aiPrompt.value.trim()
-            if (!request || aiBusy.value || !entry.value) return
+            if (!request || !entry.value) return
+            // a retry runs inside the original call, so it has to be allowed past the busy guard
+            if (aiBusy.value && !fixAttempt) return
 
             aiError.value = ''
             if (!aiModel.value) {
@@ -2249,20 +2467,44 @@ const PdfDesigner = {
                     return
                 }
                 const edits = api.response.files ?? {}
-                // keep the previous contents so the edit can be undone in one click
-                aiUndo = Object.fromEntries(Object.keys(edits).map(path => [path, buffers[path]?.content ?? null]))
+                // keep the previous contents so the edit can be undone in one click. On a retry the
+                // earlier snapshot wins, so Undo reverts the whole chain rather than the last attempt.
+                const before = Object.fromEntries(Object.keys(edits).map(path => [path, buffers[path]?.content ?? null]))
+                aiUndo.value = fixAttempt ? { ...before, ...aiUndo.value } : before
                 applyAiEdits(edits)
                 aiResult.value = { message: api.response.message, paths: Object.keys(edits) }
-                rememberPrompt(request)
+                if (!fixAttempt) rememberPrompt(request) // a generated fix prompt isn't worth recalling
                 aiImages.value = []
                 aiPrompt.value = ''
                 historyIndex.value = -1
                 historyDraft = ''
+                if (Object.keys(edits).length) await verifyOrFix(fixAttempt)
             } catch (e) {
                 aiError.value = `${e.message ?? e}`
             } finally {
                 aiBusy.value = false
             }
+        }
+
+        /**
+         * Compile what the model just wrote and, if typst rejects it, hand the errors straight back -
+         * up to MAX_FIX_ATTEMPTS times before leaving it to the user.
+         */
+        async function verifyOrFix(fixAttempt) {
+            clearTimeout(renderTimer) // the buffer watcher queued one; render now so we can read the result
+            await render()
+            const errors = errorDiagnostics.value
+            if (!errors.length) return
+            if (fixAttempt >= MAX_FIX_ATTEMPTS) {
+                aiError.value = `Still not compiling after ${MAX_FIX_ATTEMPTS} attempts - fix the errors above, or try again.`
+                return
+            }
+            aiPrompt.value = buildFixPrompt(errors)
+            aiResult.value = {
+                message: `Attempt ${fixAttempt + 1} of ${MAX_FIX_ATTEMPTS}: asking ${aiModel.value} to fix ${errors.length} error${errors.length === 1 ? '' : 's'}…`,
+                paths: [],
+            }
+            await sendAiEdit({ fixAttempt: fixAttempt + 1 })
         }
 
         /** Land AI edits as unsaved buffers so they re-render live and can be reviewed before saving */
@@ -2278,13 +2520,13 @@ const PdfDesigner = {
         }
 
         function undoAiEdit() {
-            if (!aiUndo) return
-            for (const [path, content] of Object.entries(aiUndo)) {
+            if (!aiUndo.value) return
+            for (const [path, content] of Object.entries(aiUndo.value)) {
                 if (content === null) continue
                 if (buffers[path]) buffers[path].content = content
                 docs.get(path)?.setValue(content)
             }
-            aiUndo = null
+            aiUndo.value = null
             aiResult.value = null
         }
 
@@ -2575,12 +2817,14 @@ const PdfDesigner = {
             activeIsJson, activeIsData, dataView, dataViews, showForm, setDataView,
             showTypstBar, typstActions: TYPST_ACTIONS, icons: ICON, applyFormat, insertMarkdown,
             showPageSetup, documentPageSettings, handleApplyPageStyle,
+            showImagePicker, folderImages, entryStem, insertImage, uploadImage,
             fonts, documentFont, applyFont, documentTextSettings, applyTextStyle, handleApplyTextStyle, showFontPicker, openFontPicker,
             typeLanguages, selectLanguage, langFile, copyEditor, copied, editorContent,
             btnGroup: BTN_GROUP, btnOn: BTN_ON, btnOff: BTN_OFF,
             formSchema, formData, formError, schemaBusy, generateSchema, onFormChange, schemaOf,
-            aiPrompt, aiInput, aiBusy, aiError, aiResult, aiModel, sendAiEdit, undoAiEdit,
+            aiPrompt, aiInput, aiBusy, aiError, aiResult, aiUndo, aiModel, sendAiEdit, undoAiEdit,
             aiImages, aiAttaching, aiDragging, onAiFiles, onAiDrop, onAiPaste, removeAiImage, maxPdfPages: MAX_PDF_PAGES,
+            errorDiagnostics, fixWithAi,
             aiHistory, historyIndex, cycleHistory,
             editorEl, previewEl, canvasEls, hasCodeMirror,
             loadFiles, onNodeSelect, openTab, selectTab, closeTab, save, download, promptSavePdf, zoom, fitToWidth, goToDiagnostic,
@@ -2617,6 +2861,7 @@ export default {
             PdfPrompt,
             PdfFontPicker,
             PdfPageSetup,
+            PdfImagePicker,
             PdfDesigner,
         })
 

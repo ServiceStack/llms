@@ -131,6 +131,17 @@ until you Save. **Undo** next to the summary restores the previous contents, and
 tab as usual. Because the AI only ever returns file contents, it has no filesystem access and no
 `allowed_directories` changes are needed.
 
+### Fixing compile errors
+
+Render failures show above the preview with a **Fix** button that feeds the diagnostics - `file:line:col:
+message` for each one - back to the model as a prompt.
+
+The same prompt drives an automatic loop: after an AI edit lands, the designer compiles it and, if typst
+rejects it, sends the errors back for another go, up to `MAX_FIX_ATTEMPTS` (3) times. Retries run inside the
+original request (past the busy guard), aren't added to the prompt history, and merge their undo snapshots so
+one **Undo** reverts the entire chain - including when the loop gives up, where the error keeps its own Undo.
+This sits on top of the server's own single repair attempt inside `/ai`.
+
 ## Form UI for the data
 
 A `.json` data file gets its own sub-toolbar: **Code | Form** on the left, then a button per language -
@@ -158,7 +169,8 @@ it so you can type straight over it:
 | --- | --- |
 | `B` `I` `U` `S` `` ` `` | `*bold*`, `_italic_`, `#underline[...]`, `#strike[...]`, `` `raw` `` |
 | `H1` `H2` `•` `1.` | line prefixes (`=`, `==`, `-`, `+`) applied to every selected line - click again to remove them |
-| link, image, table, centre, rule, page break | block snippets: `#link`, `#image`, a `#table` with a header row, `#align(center)`, `#line`, `#pagebreak()` |
+| link, table, centre, rule, page break | block snippets: `#link`, a `#table` with a header row, `#align(center)`, `#line`, `#pagebreak()` |
+| image | uploads a picture (or picks one already in the folder) and inserts its `#image(...)` |
 | `T` | the text and font picker below |
 | page | the page setup dialog below |
 
@@ -234,6 +246,7 @@ editor.
 | Method | Route | Description |
 | --- | --- | --- |
 | POST | `/ext/pdf/pdf?path=` | raw `application/pdf` body, written to that path (must be under the templates folder, `%PDF` magic checked, 50MB cap) |
+| POST | `/ext/pdf/asset?path=` | raw image body - png/jpg/gif/svg/webp, magic checked, 20MB cap, 409 if it exists |
 
 ## Deep links
 

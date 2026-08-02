@@ -28,6 +28,10 @@ IMAGE_DATA_URL_RE = re.compile(r"^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Z
 PROMPTS_DIR = os.path.join(_DIR, "prompts")
 RENDER_TIMEOUT = 30
 MAX_PDF_BYTES = 50 * 1024 * 1024
+# images a template can #image() - typst reads png, jpeg, gif, svg and webp
+ASSET_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+MAX_ASSET_BYTES = 20 * 1024 * 1024
+IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF", b"<svg", b"<?xml")
 _fonts_cache = {}
 
 # typst --diagnostic-format short, e.g: /path/to/invoice.typ:3:5: error: unknown variable: total
@@ -356,6 +360,34 @@ def install(ctx):
         )
 
     ctx.add_post("pdf", save_pdf)
+
+    async def upload_asset(request):
+        """Store an uploaded image in the templates folder so templates can #image() it"""
+        user = ctx.assert_username(request)
+        root = pdf_root(user)
+        rel_path = request.query.get("path") or ""
+        ext_name = os.path.splitext(rel_path)[1].lower()
+        if ext_name not in ASSET_EXTS:
+            raise Exception(f"'{ext_name or rel_path}' isn't a supported image ({', '.join(sorted(ASSET_EXTS))})")
+        full_path = resolve(root, rel_path)
+        if os.path.exists(full_path):
+            return web.json_response(
+                {"responseStatus": {"errorCode": "AlreadyExists", "message": f"'{rel_path}' already exists"}},
+                status=409,
+            )
+        data = await request.read()
+        if not data:
+            raise Exception("No image data")
+        if len(data) > MAX_ASSET_BYTES:
+            raise Exception(f"Image is too large: {len(data) // 1024}KB, at most {MAX_ASSET_BYTES // 1024}KB")
+        if ext_name != ".svg" and not any(data.startswith(magic) for magic in IMAGE_MAGIC):
+            raise Exception("That doesn't look like an image")
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, "wb") as f:
+            f.write(data)
+        return web.json_response({"path": rel_path, "size": len(data)})
+
+    ctx.add_post("asset", upload_asset)
 
     async def create_template(request):
         """Create a new .typ template (and optionally its .json sidecar) from the starter example"""

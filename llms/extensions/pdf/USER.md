@@ -103,10 +103,29 @@ Working on a `.typ` file gives you a toolbar for the markup you'd otherwise memo
 
 - **B** *I* U S and `` ` `` wrap the selected text.
 - **H1 H2 • 1.** prefix the selected lines - click again to remove them.
-- Link, image, table, centre, rule and page-break drop in ready-made blocks.
+- Link, table, centre, rule and page-break drop in ready-made blocks.
+- The image button opens the image picker below.
 - **T** opens the text and font picker.
 - The page icon opens page setup.
 - **Markdown** renders Markdown inside the page.
+
+### Images
+
+![The insert image dialog](./docs/image-picker.png)
+<!-- screenshot: the Insert image dialog with a dropped logo, the images/ vs With this template toggle -->
+
+The image button uploads a picture and inserts the `#image(...)` for it - choose a file, drop one on the
+dialog, or paste from the clipboard. Images already in your folder are shown as thumbnails, so it doubles as a
+picker for ones you've used before.
+
+You choose where it goes:
+
+| | |
+| --- | --- |
+| **images/** | a shared folder - the right place for a logo or signature used by several templates |
+| **With this template** | saved as `<template>.<name>.png`, so it groups under the template in the explorer and is renamed and deleted along with it |
+
+The reference is written relative to the template, so it also works for templates in subfolders.
 
 ### Fonts and text
 
@@ -140,11 +159,12 @@ template lay it out.
 
 Expand **Edit with AI** at the bottom of the editor, describe what you want - *"add a Due column and highlight
 overdue invoices in red"* - and the selected model rewrites the template and its data together. Changes land
-as unsaved edits you can read, re-render and **Undo** in one click before saving. `↑`/`↓` cycles your last ten
-prompts.
+as unsaved edits you can read, re-render and **Undo** in one click before saving. With the cursor at the very
+start of the box, `↑`/`↓` walks your last ten prompts; anywhere else the arrows just move the cursor.
 
-If the model writes something typst rejects, the designer hands the error back and gives it one shot at fixing
-its own work before showing you the result.
+If the model writes something typst rejects, the designer hands the errors straight back - with their file,
+line and column - and lets it try again, up to three times. If it still doesn't compile you get the errors and
+an **Undo**, so a bad rewrite is never something you have to unpick by hand.
 
 ### Building a template from a screenshot or PDF
 
@@ -204,10 +224,10 @@ Saved PDFs appear in the explorer like any other file; click one to open it in a
 - **Renaming keeps everything wired up.** Renaming a template renames its data and schema with it, rewrites
   the references inside it, and fixes the `#import` in any other template that used it - so renaming
   `lib.typ` doesn't break every document that imports it. Unsaved changes are written out first.
-- **Errors point at the line.** A typst error shows under the toolbar with its file and line number - click it
-  to jump there. The last good preview stays on screen while you fix it.
-- **Images and assets.** Drop them anywhere in your templates folder and reference them relatively, e.g.
-  `#image("logo.png", width: 40%)`.
+- **Errors point at the line.** A typst error shows above the preview with its file and line number - click it
+  to jump there, or press **Fix** to hand it to the model. The last good preview stays on screen meanwhile.
+- **Images and assets.** Upload them from the toolbar, or drop files anywhere in your templates folder and
+  reference them relatively, e.g. `#image("images/logo.png", width: 40%)`.
 - **Fonts.** A `fonts/` folder in your templates directory is passed to the compiler, so you can ship brand
   fonts alongside the templates that use them.
 
@@ -217,7 +237,7 @@ Saved PDFs appear in the explorer like any other file; click one to open it in a
 | --- | --- |
 | `Ctrl`/`Cmd` + `S` | save every unsaved file |
 | `Enter` in the AI box | send the prompt |
-| `↑` / `↓` in the AI box | cycle previous prompts |
+| `↑` / `↓` at the start of the AI box | cycle previous prompts |
 | `Esc` | close a dialog or menu |
 
 ## Learning typst
