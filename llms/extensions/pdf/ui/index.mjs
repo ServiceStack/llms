@@ -31,7 +31,8 @@ const GEN_PREFIX = 'generated:'
 const SAVED_DIR = 'saved'
 
 // files a typst template pulls in: json("x.json"), image("logo.png"), #include "part.typ", ...
-const RESOURCE_RE = /\b(?:json|yaml|toml|csv|xml|cbor|read|image|bibliography)\s*\(\s*"([^"]+)"|#?\b(?:include|import)\s+"([^"]+)"/g
+// lib.typ's load-data() counts too, since that's how every bundled template reaches its .json
+const RESOURCE_RE = /\b(?:json|yaml|toml|csv|xml|cbor|read|image|bibliography|load-data)\s*\(\s*"([^"]+)"|#?\b(?:include|import)\s+"([^"]+)"/g
 
 function baseName(path) {
     return path ? path.split('/').pop() : ''
@@ -333,7 +334,7 @@ const PdfContextMenu = {
 /** Small inline prompt/confirm used for new, rename and delete */
 const PdfPrompt = {
     template: `
-    <div class="absolute inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="$emit('cancel')">
+    <div class="absolute inset-0 z-100 flex items-center justify-center bg-black/40" @click.self="$emit('cancel')">
         <div class="w-full max-w-md mx-4 p-4" :class="$styles.dialog">
             <h3 class="text-sm font-semibold mb-2">{{ title }}</h3>
             <p v-if="message" class="text-xs mb-3" :class="$styles.muted">{{ message }}</p>
@@ -981,8 +982,10 @@ const PdfImagePicker = {
             }
         }
 
-        return { file, name, shared, width, over, busy, fileInput, attachedName, targetPath,
-                 onPick, onDrop, onPaste, upload, imageDir: IMAGE_DIR, baseName }
+        return {
+            file, name, shared, width, over, busy, fileInput, attachedName, targetPath,
+            onPick, onDrop, onPaste, upload, imageDir: IMAGE_DIR, baseName
+        }
     },
 }
 
@@ -1120,7 +1123,18 @@ const PdfDesigner = {
                         </p>
                         <button type="button" @click="generateSchema" class="px-3 py-1.5 text-xs" :class="$styles.primaryButton">Generate form schema</button>
                     </div>
-                    <JsonSchemaForm v-else :schema="formSchema" :data="formData" :show-title="false" class="p-3" @change="onFormChange" />
+                    <template v-else>
+                        <div class="flex items-center justify-end px-3 pt-2">
+                            <button type="button" @click="generateSchema()" :disabled="schemaBusy"
+                                class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded disabled:opacity-40"
+                                :class="[$styles.muted, $styles.mutedHover]"
+                                :title="'Rebuild ' + baseName(schemaOf(activeTab)) + ' from the current data - use it after changing the shape of the data'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                Regenerate form
+                            </button>
+                        </div>
+                        <JsonSchemaForm :schema="formSchema" :data="formData" :show-title="false" class="px-3 pb-3" @change="onFormChange" />
+                    </template>
                 </div>
                 <div v-show="!activeIsImage && !showForm" ref="editorEl" class="h-full text-sm">
                     <textarea v-if="!hasCodeMirror" :value="editorContent" :readonly="!!langFile" @input="onTextareaInput" spellcheck="false"
@@ -1942,10 +1956,10 @@ const PdfDesigner = {
             const order = TYPE_LANGUAGES.some(l => l.id === preferred)
                 ? [preferred, 'form', 'code', 'typ']
                 : preferred === 'form'
-                  ? ['form', 'code', 'typ']
-                  : preferred === 'code'
-                    ? ['code', 'typ']
-                    : ['typ', 'code']
+                    ? ['form', 'code', 'typ']
+                    : preferred === 'code'
+                        ? ['code', 'typ']
+                        : ['typ', 'code']
 
             for (const step of order) {
                 if (step === 'typ' && typ) return { view: 'typ', typ }
@@ -2110,10 +2124,10 @@ const PdfDesigner = {
         }
 
         function promptDelete(node) {
-            const hasSidecar = node.ext === '.typ' && filePaths.value.includes(sidecarOf(node.path))
+            const others = companionsOf(node.path).map(baseName)
             prompt.value = {
                 title: `Delete ${node.name}?`,
-                message: hasSidecar ? `${baseName(sidecarOf(node.path))} will be deleted too` : '',
+                message: others.length ? `${others.join(', ')} will be deleted too` : '',
                 okText: 'Delete',
                 danger: true,
                 confirmOnly: true,
@@ -2211,7 +2225,8 @@ const PdfDesigner = {
                 return
             }
             const path = schemaOf(dataPath)
-            if (!filePaths.value.includes(path)) {
+            // a freshly generated schema is only an unsaved buffer, so it won't be in the file list yet
+            if (!buffers[path] && !filePaths.value.includes(path)) {
                 formSchema.value = null
                 return
             }
@@ -2234,13 +2249,12 @@ const PdfDesigner = {
             docs.get(dataPath)?.setValue(json)
         }
 
-        async function generateSchema() {
-            const dataPath = activeTab.value
-            if (!dataPath || schemaBusy.value) return
+        async function generateSchema(dataPath = activeTab.value, { quiet = false } = {}) {
+            if (!dataPath || schemaBusy.value) return false
             formError.value = ''
             if (!aiModel.value) {
-                formError.value = 'Select a model first, then generate the form schema.'
-                return
+                if (!quiet) formError.value = 'Select a model first, then generate the form schema.'
+                return false
             }
             schemaBusy.value = true
             try {
@@ -2250,18 +2264,20 @@ const PdfDesigner = {
                     content: buffers[dataPath]?.content,
                 })
                 if (api.error) {
-                    formError.value = api.error.message ?? 'Schema generation failed'
-                    return
+                    if (!quiet) formError.value = api.error.message ?? 'Schema generation failed'
+                    return false
                 }
                 const path = schemaOf(dataPath)
                 const { content } = api.response
                 buffers[path] = { content, saved: null } // unsaved, like every other generated file
                 docs.get(path)?.setValue(content)
                 if (!extraTabs.value.includes(path)) extraTabs.value = [...extraTabs.value, path]
-                formSchema.value = JSON.parse(content)
+                if (dataPath === activeTab.value) formSchema.value = JSON.parse(content)
                 ext.toast(`Generated ${baseName(path)} - Save to keep it`)
+                return true
             } catch (e) {
-                formError.value = `${e.message ?? e}`
+                if (!quiet) formError.value = `${e.message ?? e}`
+                return false
             } finally {
                 schemaBusy.value = false
             }
@@ -2479,11 +2495,24 @@ const PdfDesigner = {
                 historyIndex.value = -1
                 historyDraft = ''
                 if (Object.keys(edits).length) await verifyOrFix(fixAttempt)
+                // only the outer call, and only once it compiles - a broken template isn't worth a schema
+                if (!fixAttempt && !errorDiagnostics.value.length) await ensureSchema()
             } catch (e) {
                 aiError.value = `${e.message ?? e}`
             } finally {
                 aiBusy.value = false
             }
+        }
+
+        /**
+         * A template that renders is worth a form. Generate the schema the first time one is missing,
+         * so the Form tab works without the user having to ask for it.
+         */
+        async function ensureSchema() {
+            const dataPath = sidecarOf(entry.value ?? '')
+            if (!dataPath || !buffers[dataPath] || filePaths.value.includes(schemaOf(dataPath))) return
+            if (buffers[schemaOf(dataPath)]) return // already generated this session, just unsaved
+            await generateSchema(dataPath, { quiet: true })
         }
 
         /**
