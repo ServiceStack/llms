@@ -3797,7 +3797,7 @@ class AppExtensions:
 
     def get_user_avatar_path(self, user, filenames=None):
         if not filenames:
-            filenames = ["avatar.svg", "avatar.webp", "avatar.png"]
+            filenames = ["avatar.svg", "avatar.webp", "avatar.png", "avatar.jpg", "avatar.jpeg"]
         candidate_paths = []
         for filename in filenames:
             candidate_paths.append(os.path.join(self.get_user_path(user=user), filename))
@@ -3810,7 +3810,7 @@ class AppExtensions:
 
     def get_profile_avatar_path(self, user, profile, filenames=None):
         if not filenames:
-            filenames = ["avatar.svg", "avatar.webp", "avatar.png"]
+            filenames = ["avatar.svg", "avatar.webp", "avatar.png", "avatar.jpg", "avatar.jpeg"]
         candidate_paths = []
 
         if user:

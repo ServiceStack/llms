@@ -545,15 +545,20 @@ def install(ctx):
         filenames = [
             "avatar." + mode + ".webp",
             "avatar." + mode + ".png",
+            "avatar." + mode + ".jpg",
+            "avatar." + mode + ".jpeg",
             "avatar." + mode + ".svg",
             "avatar.webp",
             "avatar.png",
+            "avatar.jpg",
+            "avatar.jpeg",
             "avatar.svg",
         ]
         path = ctx.get_user_avatar_path(user, filenames)
 
         if path:
-            headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
+            content_type, _ = mimetypes.guess_type(path)
+            headers["Content-Type"] = content_type or "image/png"
             return web.FileResponse(path, headers=headers)
 
         default_avatar = f"""
@@ -587,15 +592,22 @@ def install(ctx):
         headers = {"Content-Type": "image/svg+xml"}
 
         candidate_paths = [
+            os.path.join(ctx.get_user_path(), "agent." + mode + ".webp"),
             os.path.join(ctx.get_user_path(), "agent." + mode + ".png"),
+            os.path.join(ctx.get_user_path(), "agent." + mode + ".jpg"),
+            os.path.join(ctx.get_user_path(), "agent." + mode + ".jpeg"),
             os.path.join(ctx.get_user_path(), "agent." + mode + ".svg"),
+            os.path.join(ctx.get_user_path(), "agent.webp"),
             os.path.join(ctx.get_user_path(), "agent.png"),
+            os.path.join(ctx.get_user_path(), "agent.jpg"),
+            os.path.join(ctx.get_user_path(), "agent.jpeg"),
             os.path.join(ctx.get_user_path(), "agent.svg"),
         ]
 
         for path in candidate_paths:
             if os.path.exists(path):
-                headers["Content-Type"] = "image/png" if path.endswith(".png") else "image/svg+xml"
+                content_type, _ = mimetypes.guess_type(path)
+                headers["Content-Type"] = content_type or "image/png"
                 return web.FileResponse(path, headers=headers)
 
         default_avatar = f"""
