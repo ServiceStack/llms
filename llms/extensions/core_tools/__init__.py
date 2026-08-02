@@ -4,9 +4,11 @@ Core System Tools providing essential file operations, memory persistence, math 
 
 import ast
 import contextlib
+import json
 import math
 import operator
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -356,6 +358,34 @@ def get_current_time(tz_name: Optional[str] = None) -> str:
     return datetime.now(tz).isoformat()
 
 
+# JSON -> JSON Schema generation --------------------------------------------
+_DIR = os.path.dirname(os.path.abspath(__file__))
+PROMPTS_DIR = os.path.join(_DIR, "prompts")
+
+# ```json ... ``` block returned by the schema prompt
+CODE_BLOCK_RE = re.compile(r"```([^\n`]*)\n(.*?)[ \t]*```", re.DOTALL)
+
+SCHEMA_SUFFIX = ".ui.json"
+
+
+def read_prompt(name: str) -> str:
+    with open(os.path.join(PROMPTS_DIR, name), encoding="utf-8") as f:
+        return f.read()
+
+
+def json_stem(name: str) -> str:
+    """invoice.json / invoice.ui.json -> invoice"""
+    base = os.path.basename(name or "data.json")
+    if base.endswith(SCHEMA_SUFFIX):
+        return base[: -len(SCHEMA_SUFFIX)]
+    return os.path.splitext(base)[0] or "data"
+
+
+def first_code_block(answer: str) -> str:
+    blocks = CODE_BLOCK_RE.findall(answer or "")
+    return (blocks[0][1] if blocks else (answer or "")).strip()
+
+
 def install(ctx):
     global g_ctx
     g_ctx = ctx
@@ -413,6 +443,89 @@ def install(ctx):
         return web.json_response({"result": result})
 
     ctx.add_post("calc", run_calc)
+
+    # JSON -> typed classes / UI schema, used by the /code json tab and the pdf designer ------------
+
+    def find_model(model_id: str):
+        for provider in ctx.get_providers().values():
+            models = getattr(provider, "models", None) or {}
+            for model in models.values() if isinstance(models, dict) else models:
+                if isinstance(model, dict) and model_id in (model.get("id"), model.get("name")):
+                    return model
+        return None
+
+    def assert_text_model(model_id: str):
+        """Codegen needs a model that answers with text, not an image/audio generation model"""
+        model = find_model(model_id)
+        if not model:
+            return  # unknown to us (custom/proxied model), let the provider decide
+        output = (model.get("modalities") or {}).get("output")
+        if output and "text" not in output:
+            raise Exception(f"'{model_id}' outputs {'/'.join(output)}, not text. Select a text model.")
+
+    async def ask_model(ctx_user, model: str, system_prompt: str, user_message: str) -> dict:
+        response = await ctx.chat_completion(
+            {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            },
+            context={"tools": "none", "nohistory": True, "nostore": True, "user": ctx_user},
+        )
+        answer = (response.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        if not answer.strip():
+            raise Exception("The model returned an empty response")
+        return {"answer": answer, "usage": response.get("usage")}
+
+    def read_json_body(body: dict):
+        """Every codegen request carries the JSON document itself, so nothing touches the filesystem"""
+        name = body.get("name") or body.get("path") or "data.json"
+        content = body.get("content")
+        model = body.get("model")
+        if not model:
+            raise Exception("No model selected")
+        if not content or not content.strip():
+            raise Exception("No JSON content supplied")
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as e:
+            raise Exception(f"'{os.path.basename(name)}' is not valid JSON: {e}") from None
+        assert_text_model(model)
+        return name, content, model
+
+    async def generate_ui_schema(request):
+        """Turn a JSON document into a JSON Schema that JsonSchemaForm renders"""
+        user = ctx.assert_username(request)
+        body = await request.json()
+        name, content, model = read_json_body(body)
+
+        out_name = json_stem(name) + SCHEMA_SUFFIX
+        result = await ask_model(
+            user,
+            model,
+            read_prompt("generate-ui-schema.md"),
+            f"Data file: `{os.path.basename(name)}`\nSchema file: `{out_name}`\n\n```json\n{content}\n```",
+        )
+        schema_text = first_code_block(result["answer"])
+        try:
+            schema = json.loads(schema_text)
+        except json.JSONDecodeError as e:
+            raise Exception(f"The model did not return valid JSON Schema: {e}") from None
+        if not isinstance(schema, dict) or "properties" not in schema:
+            raise Exception("The model's schema has no 'properties'")
+
+        return web.json_response(
+            {
+                "path": out_name,
+                "content": json.dumps(schema, indent=2) + "\n",
+                "model": model,
+                "usage": result["usage"],
+            }
+        )
+
+    ctx.add_post("schema", generate_ui_schema)
 
     ctx.add_index_footer(
         f"""
