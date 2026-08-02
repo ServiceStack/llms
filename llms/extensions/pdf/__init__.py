@@ -563,11 +563,13 @@ def install(ctx):
             shutil.rmtree(full_path)
         else:
             os.remove(full_path)
+            # the whole document goes with it: its data, schema, preview, any <stem>.* image
             if request.query.get("sidecar") == "true" and rel_path.endswith(".typ"):
-                data_path = resolve(root, sidecar_path(rel_path))
-                if os.path.isfile(data_path):
-                    os.remove(data_path)
-                    deleted.append(sidecar_path(rel_path))
+                for rel_other in companions(root, rel_path):
+                    other = resolve(root, rel_other)
+                    if os.path.isfile(other):
+                        os.remove(other)
+                        deleted.append(rel_other)
 
         # prune empty parent dirs
         parent = os.path.dirname(full_path)
