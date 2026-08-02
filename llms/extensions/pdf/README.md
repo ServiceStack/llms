@@ -156,6 +156,10 @@ collapsible groups, arrays become rows you can add to and remove, and it also po
 `/code` page. The schema endpoint lives in `core_tools` (`/ext/core_tools/schema`) since it isn't
 typst-specific.
 
+A template that hasn't got a schema gets one generated automatically after an AI edit compiles (quietly - a
+failure there isn't worth interrupting for), and **Regenerate form** in the Form tab rebuilds it from the
+current data after the shape changes.
+
 Edits in the form write straight back into the `.json` buffer, so the PDF re-renders as you type, and the
 schema is just another file: it opens as a tab, you can hand-edit it to relabel or reorder fields, and it
 isn't written to disk until you Save.

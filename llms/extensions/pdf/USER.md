@@ -1,9 +1,11 @@
 # PDF Designer
 
-Design PDFs the way you write code: a plain-text template on the left, the finished page on the right,
-updating as you type.
+Design pixel-identical PDFs using Typst templates, real-time live preview, schema-driven form editing, typed code generation, and AI assistance.
 
-![The PDF Designer with a template open and its live preview](./docs/designer-overview.png)
+The PDF Designer extension brings code-first document design to llms.py. Design PDFs the way you write code: a plain-text Typst template on the left, the rendered page on the right, updating in real-time as you type or edit data.
+
+![The PDF Designer with a template open and its live preview](../../../docs/img/pdf/designer-overview.webp)
+
 <!-- screenshot: the full /pdf page - explorer, invoice.typ in the editor, rendered invoice in the preview -->
 
 Documents like invoices, certificates, reports and statements are usually trapped in a Word file someone has
@@ -45,7 +47,7 @@ They're yours - edit them freely. Upgrading the app never overwrites your change
 
 ## The workspace
 
-![The three panes: explorer, editor, preview](./docs/designer-panes.png)
+![The three panes: explorer, editor, preview](../../../docs/img/pdf/designer-panes.webp)
 <!-- screenshot: annotate the three columns - explorer / editor+toolbar / preview -->
 
 **Explorer** (left) lists your templates. Related files are grouped: `invoice` holds `invoice.typ`, its
@@ -65,22 +67,27 @@ The preview always shows your unsaved state, so you can experiment freely and wa
 
 A template's data lives in the `.json` file beside it. Open that tab and you get two ways to edit it:
 
-![The Form view of a template's data](./docs/data-form.png)
+![The Form view of a template's data](../../../docs/img/pdf/data-form.webp)
 <!-- screenshot: invoice.json with the Form toggle active, showing grouped fields and an array of line items -->
 
 - **Code** - the raw JSON.
 - **Form** - a real form with labelled fields, collapsible sections and add/remove buttons for lists.
 
-Either way the preview re-renders as you go. The Form is built from the `.ui.json` schema; if a template
-doesn't have one, press **Schema** and a model writes it for you - the only part of the data workflow that
-needs a model selected.
+Either way the preview re-renders as you go. The Form is built from the `.ui.json` schema. You rarely have to
+ask for one: after an AI edit compiles, a template without a schema gets one automatically. Otherwise press
+**Schema** (or **Generate form schema** in the Form tab) and a model writes it - the only part of the data
+workflow that needs a model selected.
+
+**Regenerate form**, at the top of the Form tab, rebuilds the schema from the current data. Use it after you
+change the shape of the data - adding a field, turning a value into a list - so the form catches up.
 
 ## Generating code for your app
 
 The language buttons turn the data file into typed classes, so the JSON your application produces always
 matches what the template expects.
 
-![C# classes generated from the invoice data](./docs/generated-types.png)
+![C# classes generated from the invoice data](../../../docs/img/pdf/generated-types-csharp.webp)
+
 <!-- screenshot: the .json tab with the C# button active, generated classes in the editor, Copy button visible -->
 
 | | |
@@ -96,7 +103,7 @@ output: it's what turns `required` into non-nullable members, `multipleOf: 0.01`
 
 ## The formatting toolbar
 
-![The formatting toolbar above a template](./docs/toolbar.png)
+![The formatting toolbar above a template](../../../docs/img/pdf/toolbar.webp)
 <!-- screenshot: the toolbar row above the editor, with the buttons visible -->
 
 Working on a `.typ` file gives you a toolbar for the markup you'd otherwise memorise:
@@ -111,7 +118,7 @@ Working on a `.typ` file gives you a toolbar for the markup you'd otherwise memo
 
 ### Images
 
-![The insert image dialog](./docs/image-picker.png)
+![The insert image dialog](../../../docs/img/pdf/image-picker.webp)
 <!-- screenshot: the Insert image dialog with a dropped logo, the images/ vs With this template toggle -->
 
 The image button uploads a picture and inserts the `#image(...)` for it - choose a file, drop one on the
@@ -129,7 +136,7 @@ The reference is written relative to the template, so it also works for template
 
 ### Fonts and text
 
-![The text and font picker](./docs/font-picker.png)
+![The text and font picker](../../../docs/img/pdf/font-picker.webp)
 <!-- screenshot: the Text & Font Formatting dialog, filtered font list with a live sample -->
 
 **T** lists every font typst can see - your system fonts, plus anything you drop in a `fonts/` folder next to
@@ -138,7 +145,7 @@ its own face. **Apply Style** styles the selected text, or the whole document wh
 
 ### Page setup
 
-![The page setup dialog](./docs/page-setup.png)
+![The page setup dialog](../../../docs/img/pdf/page-setup.webp)
 <!-- screenshot: the Page Setup dialog showing paper, layout, margin, columns, numbering and the page preview -->
 
 The page icon covers paper size (A3-A6, US Letter/Legal/Tabloid, slides, or a custom size), portrait or
@@ -154,7 +161,9 @@ template lay it out.
 
 ## Editing with AI
 
-![The Edit with AI panel](./docs/edit-with-ai.png)
+![The Edit with AI panel](../../../docs/img/pdf/edit-with-ai-before.webp)
+![The Edit with AI panel](../../../docs/img/pdf/edit-with-ai-after.webp)
+
 <!-- screenshot: the Edit with AI panel expanded, a prompt typed, and the Updated file chips after a run -->
 
 Expand **Edit with AI** at the bottom of the editor, describe what you want - *"add a Due column and highlight
@@ -168,7 +177,10 @@ an **Undo**, so a bad rewrite is never something you have to unpick by hand.
 
 ### Building a template from a screenshot or PDF
 
-![Attaching a screenshot to the AI panel](./docs/ai-attachment.png)
+![Attaching a screenshot to the AI panel - new](../../../docs/img/pdf/ai-attachment-new.webp)
+
+![Attaching a screenshot to the AI panel - edit](../../../docs/img/pdf/ai-attachment-edit.webp)
+
 <!-- screenshot: the AI panel with a thumbnail attached and the pre-filled "Rebuild ..." prompt -->
 
 Attach with the paperclip, drag a file onto the panel, or paste a screenshot straight into the prompt box -
@@ -193,7 +205,7 @@ Every template starts with the same three lines:
 `lib.typ` is where your house style lives - fonts, colours, the page setup, your logo and letterhead, and
 helpers like `money()` and `title-block()`. Change it once and every document follows.
 
-![lib.preview.typ showing the library's styles](./docs/lib-preview.png)
+![lib.preview.typ showing the library's styles](../../../docs/img/pdf/lib-preview.webp)
 <!-- screenshot: the lib group expanded in the explorer with lib.preview.typ open and rendered -->
 
 The explorer marks it with a **lib** badge, and `lib.preview.typ` is grouped underneath: one page exercising
@@ -210,7 +222,7 @@ it reads the `.json` beside it, and in production it takes data passed straight 
 - **Save** keeps a copy in `saved/<template>/`, numbered `invoice-0001.pdf`, `invoice-0002.pdf` and so on -
   the same bytes the preview is showing.
 
-![Saved PDFs in the explorer](./docs/saved-pdfs.png)
+![Saved PDFs in the explorer](../../../docs/img/pdf/saved-pdfs.webp)
 <!-- screenshot: the saved/ folder expanded in the explorer showing numbered PDFs -->
 
 Saved PDFs appear in the explorer like any other file; click one to open it in a new tab.
