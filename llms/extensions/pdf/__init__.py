@@ -1,5 +1,5 @@
 """
-PDF Designer - edit typst (.typ) templates with a sidecar .json data file and preview the compiled PDF live.
+PDF Studio - edit typst (.typ) templates with a sidecar .json data file and preview the compiled PDF live.
 
 Requires the `typst` CLI (https://typst.app) to be available on PATH, otherwise the extension disables itself.
 Templates are stored in ~/.llms/user/<user>/pdf
@@ -124,7 +124,7 @@ def install(ctx):
     global TYPST
     TYPST = shutil.which("typst")
     if not TYPST:
-        ctx.log("typst not found in PATH, PDF Designer disabled")
+        ctx.log("typst not found in PATH, PDF Studio disabled")
         ctx.disabled = True
         return
     ctx.log(f"Using {TYPST} for PDF rendering")

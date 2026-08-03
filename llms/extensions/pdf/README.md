@@ -1,4 +1,4 @@
-# PDF Designer
+# PDF Studio
 
 Design PDFs with [typst](https://typst.app): edit a `.typ` template and the resources it references in tabs,
 with the compiled PDF re-rendering beside them as you type — or describe the change you want and let the

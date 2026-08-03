@@ -1,10 +1,10 @@
-# PDF Designer
+# PDF Studio
 
 Design pixel-identical PDFs using Typst templates, real-time live preview, schema-driven form editing, typed code generation, and AI assistance.
 
-The PDF Designer extension brings code-first document design to llms.py. Design PDFs the way you write code: a plain-text Typst template on the left, the rendered page on the right, updating in real-time as you type or edit data.
+The PDF extension brings code-first document design to llms.py. Design PDFs the way you write code: a plain-text Typst template on the left, the rendered page on the right, updating in real-time as you type or edit data.
 
-![The PDF Designer with a template open and its live preview](../../../docs/img/pdf/designer-overview.webp)
+![PDF Studio with a template open and its live preview](../../../docs/img/pdf/designer-overview.webp)
 
 <!-- screenshot: the full /pdf page - explorer, invoice.typ in the editor, rendered invoice in the preview -->
 
@@ -28,7 +28,7 @@ rendered to a pixel-identical PDF every time.
 
 The designer needs the [typst](https://github.com/typst/typst) compiler on your `PATH`. Install it with
 `cargo install typst-cli`, `brew install typst`, `winget install typst`, or grab a binary from its releases
-page. Without it the **PDF Designer** icon doesn't appear at all.
+page. Without it the **PDF Studio** icon doesn't appear at all.
 
 ## Your first visit
 
