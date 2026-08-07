@@ -3615,6 +3615,12 @@ class AppExtensions:
     def is_auth_enabled(self) -> bool:
         return self.auth_provider is not None
 
+    def is_admin(self, request: web.Request) -> bool:
+        if not self.is_auth_enabled():
+            return True
+        session = self.get_session(request)
+        return session is not None and "Admin" in session.get("roles", [])
+
     def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
         if self.auth_provider is None:
             return None
@@ -3885,6 +3891,9 @@ class ExtensionContext:
 
     def is_auth_enabled(self) -> bool:
         return self.app.is_auth_enabled()
+
+    def is_admin(self, request: web.Request) -> bool:
+        return self.app.is_admin(request)
 
     def get_session(self, request: web.Request) -> Optional[Dict[str, Any]]:
         return self.app.get_session(request)

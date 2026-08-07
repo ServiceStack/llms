@@ -124,7 +124,7 @@ def install(ctx):
         return dto
 
     def request_dto(row):
-        return row and g_db.to_dto(row, ["usage"])
+        return row if isinstance(row, (str, int, float)) else (row and g_db.to_dto(row, ["usage"]))
 
     def prompt_to_title(prompt):
         return prompt[:100] + ("..." if len(prompt) > 100 else "") if prompt else None
@@ -144,7 +144,10 @@ def install(ctx):
         query = request.query.copy()
         if "fields" not in query:
             query["fields"] = thread_fields
-        rows = g_db.query_threads(query, user=ctx.get_username(request))
+        user = get_target_user(request)
+        rows = g_db.query_threads(query, user=user)
+        if len(rows) == 0 and ctx.is_admin(request) and "id" in query and "user" not in query:
+            rows = g_db.query_threads(query, user="all")
         dtos = [thread_dto(row) for row in rows]
         return web.json_response(dtos)
 
@@ -161,6 +164,8 @@ def install(ctx):
     async def get_thread(request):
         id = request.match_info["id"]
         row = g_db.get_thread(id, user=ctx.get_username(request))
+        if not row and ctx.is_admin(request):
+            row = g_db.get_thread(id, user="all")
         return web.json_response(thread_dto(row) if row else "")
 
     ctx.add_get("threads/{id}", get_thread)
@@ -168,17 +173,29 @@ def install(ctx):
     async def update_thread(request):
         thread = await request.json()
         id = request.match_info["id"]
-        update_count = await g_db.update_thread_async(id, thread, user=ctx.get_username(request))
+        user = ctx.get_username(request)
+        row = g_db.get_thread(id, user=user)
+        if not row and ctx.is_admin(request):
+            row = g_db.get_thread(id, user="all")
+            if row:
+                user = row.get("user") or "all"
+        update_count = await g_db.update_thread_async(id, thread, user=user)
         if update_count == 0:
             raise Exception("Thread not found")
-        row = g_db.get_thread(id, user=ctx.get_username(request))
+        row = g_db.get_thread(id, user=user)
         return web.json_response(thread_dto(row) if row else "")
 
     ctx.add_patch("threads/{id}", update_thread)
 
     async def delete_thread(request):
         id = request.match_info["id"]
-        g_db.delete_thread(id, user=ctx.get_username(request))
+        user = ctx.get_username(request)
+        row = g_db.get_thread(id, user=user)
+        if not row and ctx.is_admin(request):
+            row = g_db.get_thread(id, user="all")
+            if row:
+                user = row.get("user") or "all"
+        g_db.delete_thread(id, user=user)
         return web.json_response({})
 
     ctx.add_delete("threads/{id}", delete_thread)
@@ -199,7 +216,13 @@ def install(ctx):
             raise Exception("messages required")
 
         id = request.match_info["id"]
-        thread = thread_dto(g_db.get_thread(id, user=ctx.get_username(request)))
+        user = ctx.get_username(request)
+        row = g_db.get_thread(id, user=user)
+        if not row and ctx.is_admin(request):
+            row = g_db.get_thread(id, user="all")
+            if row:
+                user = row.get("user") or "all"
+        thread = thread_dto(row)
         if not thread:
             raise Exception("Thread not found")
 
@@ -365,8 +388,14 @@ def install(ctx):
 
     ctx.add_post("threads/{id}/cancel", cancel_thread)
 
+    def get_target_user(request):
+        user_param = request.query.get("user")
+        if user_param and ctx.is_admin(request):
+            return user_param
+        return ctx.get_username(request)
+
     async def query_requests(request):
-        rows = g_db.query_requests(request.query, user=ctx.get_username(request))
+        rows = g_db.query_requests(request.query, user=get_target_user(request))
         dtos = [request_dto(row) for row in rows]
         return web.json_response(dtos)
 
@@ -380,7 +409,7 @@ def install(ctx):
     ctx.add_delete("requests/{id}", delete_request)
 
     async def requests_summary(request):
-        rows = g_db.get_request_summary(user=ctx.get_username(request))
+        rows = g_db.get_request_summary(user=get_target_user(request))
         stats = {
             "dailyData": {},
             "years": [],
@@ -412,10 +441,35 @@ def install(ctx):
 
     async def daily_requests_summary(request):
         day = request.match_info["day"]
-        summary = g_db.get_daily_request_summary(day, user=ctx.get_username(request))
+        summary = g_db.get_daily_request_summary(day, user=get_target_user(request))
         return web.json_response(summary)
 
     ctx.add_get("requests/summary/{day}", daily_requests_summary)
+
+    async def admin_users_summary(request):
+        if not ctx.is_admin(request):
+            return web.json_response(ctx.create_error_response("Admin role required", "Forbidden"), status=403)
+        summary = g_db.get_users_summary()
+        return web.json_response(summary)
+
+    ctx.add_get("requests/users", admin_users_summary)
+
+    async def admin_users_list(request):
+        if not ctx.is_admin(request):
+            return web.json_response(ctx.create_error_response("Admin role required", "Forbidden"), status=403)
+        db_users = set(g_db.get_users_list())
+        users_file = os.path.join(ctx.get_user_path(), "users.json")
+        if os.path.exists(users_file):
+            try:
+                with open(users_file, "r") as f:
+                    users_data = json.load(f)
+                    for uname in users_data.keys():
+                        db_users.add(uname)
+            except Exception:
+                pass
+        return web.json_response(sorted(list(db_users)))
+
+    ctx.add_get("requests/users/list", admin_users_list)
 
     async def sync_thread(request):
         user = ctx.get_username(request)
@@ -761,17 +815,35 @@ def install(ctx):
     # THEMES
     async def get_themes(request):
         themes = {}
-
         themes_dirs = get_theme_roots(request)
         for themes_dir in themes_dirs:
             if os.path.exists(themes_dir):
-                for theme_name in os.listdir(themes_dir):
-                    theme_path = os.path.join(themes_dir, theme_name)
-                    config_path = os.path.join(theme_path, "theme.json")
-                    if os.path.isdir(theme_path) and os.path.exists(config_path):
+                for item in os.listdir(themes_dir):
+                    item_path = os.path.join(themes_dir, item)
+                    if os.path.isdir(item_path):
+                        config_path = os.path.join(item_path, "theme.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, encoding="utf-8") as f:
+                                    sub_theme = json.load(f)
+                                    if item not in themes:
+                                        themes[item] = sub_theme
+                                    else:
+                                        themes[item].update(sub_theme)
+                            except Exception as e:
+                                ctx.err(f"Failed to load theme {item}", e)
+                    elif item.endswith(".json") and item != "shared.json":
+                        theme_name = item[:-5]
                         try:
-                            with open(config_path, encoding="utf-8") as f:
-                                themes[theme_name] = json.load(f)
+                            with open(item_path, encoding="utf-8") as f:
+                                file_theme = json.load(f)
+                                if theme_name not in themes:
+                                    themes[theme_name] = file_theme
+                                else:
+                                    merged = dict(file_theme)
+                                    if "vars" in themes[theme_name]:
+                                        merged.setdefault("vars", {}).update(themes[theme_name]["vars"])
+                                    themes[theme_name] = merged
                         except Exception as e:
                             ctx.err(f"Failed to load theme {theme_name}", e)
         return web.json_response(themes)

@@ -275,11 +275,13 @@ class AppDB:
         return to_dto(self.ctx, row, json_columns)
 
     def get_user_filter(self, user=None, params=None):
-        if user is None:
-            return "WHERE user IS NULL", params or {}
+        args = params.copy() if params else {}
+        if user is None or user == "Anonymous" or user == "null" or user == "NULL" or user == "":
+            return "WHERE (user IS NULL OR user = '' OR user = 'Anonymous')", args
+        elif user == "all" or user == "*":
+            return "", args
         else:
-            args = params.copy() if params else {}
-            args.update({"user": user})
+            args["user"] = user
             return "WHERE user = :user", args
 
     def get_thread(self, id, user=None):
@@ -310,31 +312,36 @@ class AppDB:
             # always filter by user
             sql_where, params = self.get_user_filter(user, {"take": take, "skip": skip})
 
+            where_conds = []
+            if sql_where.startswith("WHERE "):
+                where_conds.append(sql_where[6:])
+
             filter = {}
             for k in query:
-                if k in all_columns:
+                if k in all_columns and k != "user":
                     filter[k] = query[k]
                     params[k] = query[k]
 
             if len(filter) > 0:
-                sql_where += " AND " + " AND ".join([f"{k} = :{k}" for k in filter])
+                where_conds.extend([f"{k} = :{k}" for k in filter])
 
             if "null" in query:
                 cols = valid_columns(all_columns, query["null"])
                 if len(cols) > 0:
-                    sql_where += " AND " + " AND ".join([f"{k} IS NULL" for k in cols])
+                    where_conds.extend([f"{k} IS NULL" for k in cols])
 
             if "not_null" in query:
                 cols = valid_columns(all_columns, query.get("not_null"))
                 if len(cols) > 0:
-                    sql_where += " AND " + " AND ".join([f"{k} IS NOT NULL" for k in cols])
+                    where_conds.extend([f"{k} IS NOT NULL" for k in cols])
 
             if "q" in query:
-                sql_where += " AND " if sql_where else "WHERE "
-                sql_where += "(title LIKE :q OR messages LIKE :q)"
+                where_conds.append("(title LIKE :q OR messages LIKE :q)")
                 params["q"] = f"%{query['q']}%"
 
-            sql = f"{select_columns(all_columns, query.get('fields'), select=query.get('select'))} FROM thread {sql_where} {order_by(all_columns, sort)} LIMIT :take OFFSET :skip"
+            full_where = ("WHERE " + " AND ".join(where_conds)) if where_conds else ""
+
+            sql = f"{select_columns(all_columns, query.get('fields'), select=query.get('select'))} FROM thread {full_where} {order_by(all_columns, sort)} LIMIT :take OFFSET :skip"
 
             if query.get("as") == "column":
                 return self.db.column(sql, params)
@@ -467,35 +474,40 @@ class AppDB:
             # always filter by user
             sql_where, params = self.get_user_filter(user, {"take": take, "skip": skip})
 
+            where_conds = []
+            if sql_where.startswith("WHERE "):
+                where_conds.append(sql_where[6:])
+
             filter = {}
             for k in query:
-                if k in all_columns:
+                if k in all_columns and k != "user":
                     filter[k] = query[k]
                     params[k] = query[k]
 
             if len(filter) > 0:
-                sql_where += " AND " + " AND ".join([f"{k} = :{k}" for k in filter])
+                where_conds.extend([f"{k} = :{k}" for k in filter])
 
             if "null" in query:
                 cols = valid_columns(all_columns, query["null"])
                 if len(cols) > 0:
-                    sql_where += " AND " + " AND ".join([f"{k} IS NULL" for k in cols])
+                    where_conds.extend([f"{k} IS NULL" for k in cols])
 
             if "not_null" in query:
                 cols = valid_columns(all_columns, query.get("not_null"))
                 if len(cols) > 0:
-                    sql_where += " AND " + " AND ".join([f"{k} IS NOT NULL" for k in cols])
+                    where_conds.extend([f"{k} IS NOT NULL" for k in cols])
 
             if "q" in query:
-                sql_where += " AND " if sql_where else "WHERE "
-                sql_where += "(title LIKE :q)"
+                where_conds.append("(title LIKE :q)")
                 params["q"] = f"%{query['q']}%"
 
             if "month" in query:
-                sql_where += " AND strftime('%Y-%m', createdAt) = :month"
+                where_conds.append("strftime('%Y-%m', createdAt) = :month")
                 params["month"] = query["month"]
 
-            sql = f"{select_columns(all_columns, query.get('fields'), select=query.get('select'))} FROM request {sql_where} {order_by(all_columns, sort)}LIMIT :take OFFSET :skip"
+            full_where = ("WHERE " + " AND ".join(where_conds)) if where_conds else ""
+
+            sql = f"{select_columns(all_columns, query.get('fields'), select=query.get('select'))} FROM request {full_where} {order_by(all_columns, sort)}LIMIT :take OFFSET :skip"
 
             if query.get("as") == "column":
                 return self.db.column(sql, params)
@@ -530,7 +542,10 @@ class AppDB:
         try:
             sql_where, params = self.get_user_filter(user)
             # Add date filter
-            sql_where += " AND strftime('%Y-%m-%d', createdAt) = :day"
+            if sql_where:
+                sql_where += " AND strftime('%Y-%m-%d', createdAt) = :day"
+            else:
+                sql_where = "WHERE strftime('%Y-%m-%d', createdAt) = :day"
             params["day"] = day
 
             # Model aggregation
@@ -588,6 +603,45 @@ class AppDB:
         except Exception as e:
             self.ctx.err(f"get_daily_request_summary ({day}, {user})", e)
             return {"modelData": {}, "providerData": {}}
+
+    def get_users_summary(self):
+        try:
+            sql = """
+                SELECT
+                    COALESCE(NULLIF(user, ''), 'Anonymous') as user,
+                    count(id) as requests,
+                    sum(cost) as cost,
+                    sum(inputTokens) as inputTokens,
+                    sum(outputTokens) as outputTokens,
+                    max(createdAt) as lastActive
+                FROM request
+                GROUP BY COALESCE(NULLIF(user, ''), 'Anonymous')
+                ORDER BY requests DESC
+            """
+            rows = self.db.all(sql)
+            return [
+                {
+                    "user": r["user"] or "Anonymous",
+                    "requests": r["requests"] or 0,
+                    "cost": r["cost"] or 0,
+                    "inputTokens": r["inputTokens"] or 0,
+                    "outputTokens": r["outputTokens"] or 0,
+                    "lastActive": r["lastActive"],
+                }
+                for r in rows
+            ]
+        except Exception as e:
+            self.ctx.err("get_users_summary", e)
+            return []
+
+    def get_users_list(self):
+        try:
+            sql = "SELECT DISTINCT COALESCE(NULLIF(user, ''), 'Anonymous') as user FROM request ORDER BY user"
+            rows = self.db.all(sql)
+            return [r["user"] for r in rows if r.get("user")]
+        except Exception as e:
+            self.ctx.err("get_users_list", e)
+            return []
 
     def create_request(self, request: Dict[str, Any], user=None):
         request["createdAt"] = request["updatedAt"] = datetime.now()
