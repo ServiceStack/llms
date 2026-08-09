@@ -448,6 +448,7 @@ export default {
                 isVisible: c => ctx.ai.isAdmin && c.entry?.endsWith('.typ')
                     && !/^(?:lib(?:\.preview)?\.typ|lib\/)/i.test(c.entry),
                 component: {
+                    inheritAttrs: false,
                     props: ['entry', 'buffers', 'rendering', 'save'],
                     template: `
                         <button v-if="publishable" type="button" @click="publish" :disabled="rendering || publishing"
