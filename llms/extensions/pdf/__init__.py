@@ -19,8 +19,10 @@ TYPST = None
 _DIR = os.path.dirname(os.path.abspath(__file__))
 EXAMPLES_DIR = os.path.join(_DIR, "examples")
 # shared styles every template imports, plus the document that shows what it does
-LIB_NAME = "lib.typ"
-LIB_PREVIEW = "lib.preview.typ"
+LIB_NAME = "lib.typ"  # legacy root library, still supported
+LIB_DIR = "lib"
+DEFAULT_LIB_NAME = "lib/v1.typ"
+LIB_PREVIEW = "lib/v1.preview.typ"
 # attachments: screenshots or rasterised PDF pages the model reads to build a template from
 MAX_IMAGES = 8
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -171,34 +173,44 @@ def install(ctx):
             return
         if os.listdir(root):
             seed_library(root)
+            upgrade_bundled_examples(root)
             return
-        for name in sorted(os.listdir(EXAMPLES_DIR)):
-            src = os.path.join(EXAMPLES_DIR, name)
-            if os.path.isfile(src):
-                shutil.copy2(src, os.path.join(root, name))
+        shutil.copytree(EXAMPLES_DIR, root, dirs_exist_ok=True)
         ctx.log(f"Seeded example templates in {root}")
 
     def lib_import(rel_path: str) -> str:
-        """lib.typ sits at the root, so a template in a subfolder imports it as ../lib.typ"""
+        """The versioned library sits below the root, so nested templates walk back to it."""
         depth = len(os.path.dirname(rel_path).split("/")) if os.path.dirname(rel_path) else 0
-        return "../" * depth + LIB_NAME
+        return "../" * depth + DEFAULT_LIB_NAME
+
+    def lib_data_ref(rel_path: str) -> str:
+        """load-data executes in lib/v1.typ, one directory below the artifact root."""
+        return "../" + typst_ref(rel_path)
 
     def seed_library(root: str):
-        """
-        Templates don't compile without the library they import, so put it back if it goes missing -
-        but only while something still imports it. Renaming lib.typ shouldn't conjure up a second copy.
-        """
-        lib = os.path.join(root, LIB_NAME)
+        """Every workspace keeps a versioned library baseline. Legacy root lib.typ remains untouched."""
+        lib = os.path.join(root, DEFAULT_LIB_NAME)
         if os.path.exists(lib):
             return
-        imports_lib = re.compile(r'#(?:import|include)\s+"(?:\.\./)*' + re.escape(LIB_NAME) + r'"')
-        if not any(imports_lib.search(read_text(os.path.join(root, rel))) for rel in all_templates(root)):
-            return
-        for name in (LIB_NAME, LIB_PREVIEW):
+        for name in (DEFAULT_LIB_NAME, LIB_PREVIEW):
             src = os.path.join(EXAMPLES_DIR, name)
             if os.path.isfile(src):
-                shutil.copy2(src, os.path.join(root, name))
-        ctx.log(f"Restored {LIB_NAME} in {root}")
+                dst = os.path.join(root, name)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy2(src, dst)
+        ctx.log(f"Restored {DEFAULT_LIB_NAME} in {root}")
+
+    def upgrade_bundled_examples(root: str):
+        """Upgrade known, unchanged starter files without overwriting user edits."""
+        path = os.path.join(root, "invoice.json")
+        bundled_path = os.path.join(EXAMPLES_DIR, "invoice.json")
+        if not os.path.isfile(path) or not os.path.isfile(bundled_path):
+            return
+        bundled = read_text(bundled_path)
+        previous = bundled.replace('"date": "2025-03-15"', '"date": "15 March 2025"')
+        if read_text(path) == previous:
+            shutil.copy2(bundled_path, path)
+            ctx.log(f"Upgraded unchanged example invoice data in {path}")
 
     def file_tree(root: str, dir_path: str, rel_prefix: str = "") -> list:
         nodes = []
@@ -418,9 +430,8 @@ def install(ctx):
             write_text(
                 full_path,
                 f'#import "{lib_import(rel_path)}": *\n\n'
-                # relative to lib.typ at the root, not to this template: it's load-data's json()
-                # that reads the file, and typst resolves that relative to the file calling it
-                f'#let data = load-data("{typst_ref(rel_data)}")\n\n'
+                # load-data is defined in lib/v1.typ, so its data path starts one level above lib/
+                f'#let data = load-data("{lib_data_ref(rel_data)}")\n\n'
                 "#show: theme\n\n"
                 "#title-block(data.title)\n\n"
                 "#data.body\n",
@@ -447,7 +458,7 @@ def install(ctx):
     ctx.add_post("folder", create_folder)
 
     def companions(root: str, rel_path: str) -> list:
-        """Siblings that belong to the same document: invoice.json, invoice.ui.json, lib.preview.typ"""
+        """Siblings that belong to the same document: invoice.json, invoice.ui.json, v1.preview.typ"""
         rel_dir = os.path.dirname(rel_path)
         stem = os.path.basename(rel_path).split(".")[0]
         full_dir = os.path.dirname(resolve(root, rel_path))
@@ -472,6 +483,122 @@ def install(ctx):
                     rel = os.path.relpath(os.path.join(dir_path, name), root).replace("\\", "/")
                     out.append(rel)
         return sorted(out)
+
+    def normalize_rel_path(path: Optional[str]) -> str:
+        return (path or "").replace("\\", "/").lstrip("/")
+
+    def is_library_template(rel_path: str) -> bool:
+        rel_path = normalize_rel_path(rel_path)
+        if not rel_path.lower().endswith(".typ"):
+            return False
+        if rel_path.lower() == LIB_NAME:
+            return True
+        return rel_path.lower().startswith(LIB_DIR + "/") and ".preview" not in os.path.splitext(
+            os.path.basename(rel_path)
+        )[0].lower()
+
+    def library_templates(root: str) -> list:
+        return [rel for rel in all_templates(root) if rel.lower().startswith(LIB_DIR + "/") and is_library_template(rel)]
+
+    def strip_typst_comments(source: str) -> str:
+        return re.sub(r"//.*$|/\*[\s\S]*?\*/", "", source, flags=re.MULTILINE)
+
+    def find_imports(root: str, rel_path: str) -> list:
+        source = strip_typst_comments(read_text(resolve(root, rel_path, must_exist=True)))
+        rel_dir = os.path.dirname(rel_path)
+        imports = []
+        for target in re.findall(r'#(?:import|include)\s+"([^"]+)"', source):
+            if target.startswith("@"):
+                continue
+            normalized = os.path.normpath(os.path.join(rel_dir, target)).replace("\\", "/").lstrip("/")
+            if normalized not in imports:
+                imports.append(normalized)
+        return imports
+
+    def find_dependants(root: str, target: str) -> list:
+        target = normalize_rel_path(target)
+        templates = all_templates(root)
+        imports = {rel: find_imports(root, rel) for rel in templates}
+        affected = {target}
+        changed = True
+        while changed:
+            changed = False
+            for template, dependencies in imports.items():
+                if template not in affected and any(dep in affected for dep in dependencies):
+                    affected.add(template)
+                    changed = True
+        affected.discard(target)
+        return sorted(affected, key=str.lower)
+
+    def blocked(message: str, error_code: str):
+        return web.json_response(
+            {"responseStatus": {"errorCode": error_code, "message": message}}, status=409
+        )
+
+    def conflict(rel_path: str):
+        return web.json_response(
+            {"responseStatus": {"errorCode": "AlreadyExists", "message": f"'{rel_path}' already exists"}},
+            status=409,
+        )
+
+    def assert_operation_name(rel_from: str, rel_to: str):
+        if os.path.dirname(rel_from) != os.path.dirname(rel_to):
+            raise Exception("Rename and duplicate accept a new file name, not a destination path")
+        name = os.path.basename(rel_to)
+        if not name.strip() or name in (".", "..") or name.startswith("."):
+            raise Exception(f"Invalid file name '{name}'")
+
+    def companion_moves(root: str, rel_from: str, rel_to: str) -> list:
+        moves = [(rel_from, rel_to)]
+        to_stem = os.path.basename(rel_to)[: -len(".typ")]
+        to_dir = os.path.dirname(rel_to)
+        from_stem_len = len(os.path.basename(rel_from).split(".")[0])
+        for rel_other in companions(root, rel_from):
+            suffix = os.path.basename(rel_other)[from_stem_len:]
+            moves.append((rel_other, f"{to_dir}/{to_stem}{suffix}" if to_dir else to_stem + suffix))
+        return moves
+
+    async def get_dependencies(request):
+        user = ctx.assert_username(request)
+        root = pdf_root(user)
+        rel_path = normalize_rel_path(request.query.get("path"))
+        resolve(root, rel_path, must_exist=True)
+        return web.json_response({"path": rel_path, "dependencies": find_dependants(root, rel_path)})
+
+    ctx.add_get("dependencies", get_dependencies)
+
+    async def duplicate_file(request):
+        user = ctx.assert_username(request)
+        root = pdf_root(user)
+        body = await request.json()
+        rel_from = normalize_rel_path(body.get("from"))
+        rel_to = normalize_rel_path(body.get("to"))
+        resolve(root, rel_from, must_exist=True)
+        assert_operation_name(rel_from, rel_to)
+        if not rel_from.lower().endswith(".typ") or not rel_to.lower().endswith(".typ"):
+            raise Exception("PDF templates must use a .typ name")
+        copies = companion_moves(root, rel_from, rel_to)
+        for _, destination in copies:
+            if os.path.exists(resolve(root, destination)):
+                return conflict(destination)
+        created = []
+        try:
+            for source, destination in copies:
+                destination_path = resolve(root, destination)
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                shutil.copy2(resolve(root, source, must_exist=True), destination_path)
+                created.append(destination)
+            for rel_path in (path for path in created if path.lower().endswith(".typ")):
+                retarget_references(root, rel_path, copies)
+        except Exception:
+            for rel_path in created:
+                path = resolve(root, rel_path)
+                if os.path.isfile(path):
+                    os.remove(path)
+            raise
+        return web.json_response({"path": rel_to, "copied": created})
+
+    ctx.add_post("duplicate", duplicate_file)
 
     def retarget_references(root: str, rel_path: str, renames: list, imports_only: bool = False):
         """
@@ -508,25 +635,28 @@ def install(ctx):
         user = ctx.assert_username(request)
         root = pdf_root(user)
         body = await request.json()
-        rel_from, rel_to = body.get("from"), body.get("to")
+        rel_from = normalize_rel_path(body.get("from"))
+        rel_to = normalize_rel_path(body.get("to"))
         resolve(root, rel_from, must_exist=True)  # validates it exists and stays inside the folder
+        assert_operation_name(rel_from, rel_to)
         to_path = resolve(root, rel_to)
         if os.path.exists(to_path):
-            return web.json_response(
-                {"responseStatus": {"errorCode": "AlreadyExists", "message": f"'{rel_to}' already exists"}},
-                status=409,
-            )
+            return conflict(rel_to)
+
+        if is_library_template(rel_from):
+            dependants = find_dependants(root, rel_from)
+            if dependants:
+                return blocked(
+                    f"Cannot rename '{rel_from}' because it is referenced by: {', '.join(dependants)}",
+                    "LibraryInUse",
+                )
 
         renames = [(rel_from, rel_to)]
         if rel_from.endswith(".typ") and rel_to.endswith(".typ"):
-            to_stem = os.path.basename(rel_to)[: -len(".typ")]
-            to_dir = os.path.dirname(rel_to)
-            for rel_other in companions(root, rel_from):
-                # invoice.ui.json keeps everything after the stem, so .ui.json and .preview.typ survive
-                suffix = os.path.basename(rel_other)[len(os.path.basename(rel_from).split(".")[0]) :]
-                rel_other_to = os.path.join(to_dir, to_stem + suffix).replace("\\", "/") if to_dir else to_stem + suffix
-                if not os.path.exists(resolve(root, rel_other_to)):
-                    renames.append((rel_other, rel_other_to))
+            renames = companion_moves(root, rel_from, rel_to)
+            for _, destination in renames[1:]:
+                if os.path.exists(resolve(root, destination)):
+                    return conflict(destination)
 
         os.makedirs(os.path.dirname(to_path), exist_ok=True)
         for old_rel, new_rel in renames:
@@ -558,6 +688,26 @@ def install(ctx):
         rel_path = request.query.get("path")
         full_path = resolve(root, rel_path, must_exist=True)
         deleted = [rel_path]
+
+        normalized = normalize_rel_path(rel_path)
+        if os.path.isdir(full_path) and any(
+            rel.lower().startswith(normalized.lower() + "/") for rel in library_templates(root)
+        ):
+            return blocked(
+                "Delete library templates individually so their dependencies can be checked", "LibraryDirectory"
+            )
+
+        if is_library_template(normalized):
+            libraries = library_templates(root)
+            if normalized.lower().startswith(LIB_DIR + "/") and len(libraries) <= 1:
+                return blocked(
+                    f"Cannot delete '{rel_path}' because at least one lib/*.typ template is required", "LastLibrary"
+                )
+            dependants = find_dependants(root, normalized)
+            if dependants:
+                return blocked(
+                    f"Cannot delete '{rel_path}' because it is referenced by: {', '.join(dependants)}", "LibraryInUse"
+                )
 
         if os.path.isdir(full_path):
             shutil.rmtree(full_path)
