@@ -284,8 +284,8 @@ is left to the provider).
 The language buttons in the `.json` sub-toolbar turn the data file into typed classes so application code can
 produce the JSON the template expects.
 
-Generation is **deterministic and local** ([`jsonTypes.mjs`](../../ui/components/jsonTypes.mjs)) - no model, no
-request, no waiting, and the same input always produces the same output. A JSON example only carries JSON's six
+Generation is **deterministic and local** using `@servicestack/vue`'s `generateTypes()` - no model, no request,
+no waiting, and the same input always produces the same output. A JSON example only carries JSON's six
 types, so **generate the form schema first** if you want richer types: `.ui.json` turns `required` into
 non-nullable members, `multipleOf: 0.01` into `decimal`, `format` into date/uuid types, `enum` into a real enum
 and `description` into doc comments. Where the schema and the example disagree - a `format: date` against a

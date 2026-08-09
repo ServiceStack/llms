@@ -8,6 +8,22 @@ function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value))
 }
 
+function normalizeSchemaValue(schema = {}, value) {
+    if (schema.type === 'array' && Array.isArray(value))
+        return value.map(x => normalizeSchemaValue(schema.items || {}, x))
+    if (schema.type !== 'object' || !value || typeof value !== 'object' || Array.isArray(value))
+        return clone(value)
+
+    const properties = schema.properties || {}
+    const names = Object.keys(properties)
+    const to = {}
+    for (const [key, childValue] of Object.entries(value)) {
+        const canonicalName = names.find(name => name.toLowerCase() === key.toLowerCase()) || key
+        to[canonicalName] = normalizeSchemaValue(properties[canonicalName] || {}, childValue)
+    }
+    return to
+}
+
 function initialValue(schema = {}) {
     if (schema.default !== undefined) return clone(schema.default)
     if (schema.type === 'object') return {}
@@ -214,7 +230,7 @@ export const ApiApprovalForm = {
     `,
     setup(props, { emit }) {
         const ctx = inject('ctx')
-        const args = reactive(clone(props.approval.proposedArgs || {}))
+        const args = reactive(normalizeSchemaValue(props.approval.schema, props.approval.proposedArgs || {}))
         const showOptional = ref(false)
         const submitting = ref(false)
         const errors = ref([])
