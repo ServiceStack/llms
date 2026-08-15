@@ -8,6 +8,8 @@ import time
 
 from aiohttp import web
 
+from llms.main import remove_avatar_files
+
 
 def get_profile_color(name):
     colors = [
@@ -359,13 +361,16 @@ def install(ctx):
                 ext = "svg"
             avatar_data = await req.read()
 
-        for ex in ["png", "webp", "jpg", "jpeg", "svg"]:
-            old_p = os.path.join(user_profile_dir, f"avatar.{ex}")
-            if os.path.exists(old_p):
-                try:
-                    os.remove(old_p)
-                except Exception:
-                    pass
+        if hasattr(ctx, "remove_avatar_files"):
+            ctx.remove_avatar_files(
+                user_profile_dir,
+                prefixes=["avatar", "avatar.dark", "avatar.light", "agent", "agent.dark", "agent.light"],
+            )
+        else:
+            remove_avatar_files(
+                user_profile_dir,
+                prefixes=["avatar", "avatar.dark", "avatar.light", "agent", "agent.dark", "agent.light"],
+            )
 
         avatar_path = os.path.join(user_profile_dir, f"avatar.{ext}")
         with open(avatar_path, "wb") as fh:

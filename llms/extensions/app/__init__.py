@@ -13,6 +13,7 @@ from typing import Any
 from aiohttp import web
 
 from llms.db import count_tokens_approx
+from llms.main import remove_avatar_files
 
 from .db import AppDB
 
@@ -697,7 +698,14 @@ def install(ctx):
         # Determine file type from extension or content type
         ext = os.path.splitext(filename)[1].lower() if filename else ""
 
+        # Remove existing avatar images in all formats before saving new one
+        if hasattr(ctx, "remove_avatar_files"):
+            ctx.remove_avatar_files(user_path, prefixes=["avatar", "avatar.dark", "avatar.light"])
+        else:
+            remove_avatar_files(user_path, prefixes=["avatar", "avatar.dark", "avatar.light"])
+
         if ext == ".svg" or content_type == "image/svg+xml":
+
             # Save SVG directly
             avatar_path = os.path.join(user_path, "avatar.svg")
             with open(avatar_path, "wb") as f:
@@ -757,12 +765,24 @@ def install(ctx):
         # Determine file type from extension or content type
         ext = os.path.splitext(filename)[1].lower() if filename else ""
 
+        # Remove existing default agent avatar images in all formats before saving new one
+        if hasattr(ctx, "remove_avatar_files"):
+            ctx.remove_avatar_files(user_path, prefixes=["agent", "agent.dark", "agent.light"])
+        else:
+            remove_avatar_files(user_path, prefixes=["agent", "agent.dark", "agent.light"])
+
         if ext == ".svg" or content_type == "image/svg+xml":
             # Save SVG directly
             avatar_path = os.path.join(user_path, "agent.svg")
             with open(avatar_path, "wb") as f:
                 f.write(file_data)
+        elif ext == ".webp" or content_type == "image/webp":
+            # Save webp directly
+            avatar_path = os.path.join(user_path, "agent.webp")
+            with open(avatar_path, "wb") as f:
+                f.write(file_data)
         elif ext == ".png" or content_type == "image/png":
+
             # Save PNG directly
             avatar_path = os.path.join(user_path, "agent.png")
             with open(avatar_path, "wb") as f:

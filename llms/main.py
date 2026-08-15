@@ -261,6 +261,31 @@ def get_file_mime_type(filename):
     return mimetype or "application/octet-stream"
 
 
+def remove_avatar_files(directory, prefixes=None):
+    """Remove all avatar image files in all image formats from a directory."""
+    if not directory or not os.path.exists(directory):
+        return
+    if prefixes is None:
+        prefixes = ["avatar", "avatar.dark", "avatar.light", "agent", "agent.dark", "agent.light"]
+    image_exts = {"png", "webp", "jpg", "jpeg", "svg"}
+    try:
+        for filename in os.listdir(directory):
+            filepath = os.path.join(directory, filename)
+            if not os.path.isfile(filepath):
+                continue
+            parts = filename.rsplit(".", 1)
+            if len(parts) == 2:
+                name_prefix, ext = parts[0], parts[1].lower()
+                if name_prefix in prefixes and ext in image_exts:
+                    try:
+                        os.remove(filepath)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+
 def price_to_string(price: float | int | str | None) -> str | None:
     """Convert numeric price to string without scientific notation.
 
@@ -3814,6 +3839,9 @@ class AppExtensions:
                 return path
         return None
 
+    def remove_avatar_files(self, directory, prefixes=None):
+        return remove_avatar_files(directory, prefixes)
+
     def get_profile_avatar_path(self, user, profile, filenames=None):
         if not filenames:
             filenames = ["avatar.svg", "avatar.webp", "avatar.png", "avatar.jpg", "avatar.jpeg"]
@@ -4309,6 +4337,9 @@ class ExtensionContext:
 
     def get_profile_avatar_path(self, user, profile, filenames=None):
         return self.app.get_profile_avatar_path(user, profile, filenames)
+
+    def remove_avatar_files(self, directory, prefixes=None):
+        return self.app.remove_avatar_files(directory, prefixes)
 
 
 def verify_root_path():
