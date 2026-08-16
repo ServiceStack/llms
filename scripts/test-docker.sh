@@ -280,6 +280,35 @@ else
     fail "dotnet sdk present" "$OUT"
 fi
 
+# dotnet aborts at startup without libicu, so this catches a missing ICU package
+# even though `dotnet --version` above may have succeeded from a cached response.
+if OUT=$(docker run --rm --entrypoint sh "$IMAGE" -c \
+        'cd /tmp && dotnet --list-sdks' 2>&1 | tr -d '\r'); then
+    case "$OUT" in
+        *ICU*|*icu*) fail "dotnet globalization works (libicu present)" "$OUT" ;;
+        *) pass "dotnet globalization works (libicu present)" ;;
+    esac
+else
+    fail "dotnet globalization works (libicu present)" "$(printf '%s' "$OUT" | tail -2 | tr '\n' ' ')"
+fi
+
+if OUT=$(run_in typst --version 2>&1 | tr -d '\r'); then
+    pass "typst present ($OUT)"
+else
+    fail "typst present" "$OUT — the PDF Studio extension disables itself without it"
+fi
+
+# Compile a real document: proves typst runs and has usable fonts.
+if OUT=$(docker run --rm --entrypoint sh "$IMAGE" -c \
+        'cd /tmp && printf "= Hi\n" > t.typ && typst compile t.typ t.pdf && head -c4 t.pdf' 2>&1 | tr -d '\r'); then
+    case "$OUT" in
+        *%PDF*) pass "typst compiles a document to PDF" ;;
+        *)      fail "typst compiles a document to PDF" "unexpected output: $OUT" ;;
+    esac
+else
+    fail "typst compiles a document to PDF" "$(printf '%s' "$OUT" | tail -2 | tr '\n' ' ')"
+fi
+
 if run_in sh -c 'command -v llms' >/dev/null 2>&1; then
     pass "llms is on PATH"
 else
@@ -290,6 +319,13 @@ if run_in sh -c 'command -v git' >/dev/null 2>&1; then
     pass "git present"
 else
     fail "git present"
+fi
+
+# ffmpeg is what the voice extension uses to convert the browser's recording.
+if OUT=$(docker run --rm --entrypoint sh "$IMAGE" -c 'ffmpeg -version 2>&1 | head -1' 2>&1 | tr -d '\r'); then
+    pass "ffmpeg present (${OUT%% https*})"
+else
+    fail "ffmpeg present" "voice input needs it for the voxtype/transcribe modes"
 fi
 
 # -------------------------------------------------------------------- CLI ---
@@ -348,11 +384,43 @@ fi
 
 if OUT=$(docker run --rm -v "$WORKDIR/config:/home/llms/.llms" --entrypoint llms "$IMAGE" ls 2>&1); then
     pass "llms ls"
+    case "$OUT" in
+        *"PDF Studio disabled"*|*"typst not found"*)
+            fail "PDF Studio extension is enabled" "typst missing from the image" ;;
+    esac
     ENABLED=$(printf '%s' "$OUT" | grep -o 'enabled providers:.*' | head -1)
     [ -n "$ENABLED" ] && info "$ENABLED"
 else
     fail "llms ls" "$(printf '%s' "$OUT" | tail -3 | tr '\n' ' ')"
 fi
+
+# ---- voice extension -------------------------------------------------------
+# `api` mode should come up from a provider key alone...
+OUT=$(docker run --rm -v "$WORKDIR/config:/home/llms/.llms" -e GROQ_API_KEY=test-key-not-real \
+      -e VERBOSE=1 --entrypoint llms "$IMAGE" ls 2>&1 | tr -d '\r')
+case "$OUT" in
+    *"Using api for voice"*) pass "voice api mode activates from a provider key" ;;
+    *) fail "voice api mode activates from a provider key" \
+            "$(printf '%s' "$OUT" | grep -i voice | head -2 | tr '\n' ' ')" ;;
+esac
+
+# ...and a voice section in llms.json should choose the endpoint and model.
+mkdir -p "$WORKDIR/voice"
+cp "$WORKDIR/config/llms.json" "$WORKDIR/config/providers.json" "$WORKDIR/voice/" 2>/dev/null
+python3 - "$WORKDIR/voice/llms.json" <<'PYEOF' 2>/dev/null
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+cfg["voice"] = {"url": "http://127.0.0.1:9/v1/audio/transcriptions", "model": "test-model"}
+json.dump(cfg, open(sys.argv[1], "w"), indent=4)
+PYEOF
+chmod -R 777 "$WORKDIR/voice" 2>/dev/null
+OUT=$(docker run --rm -v "$WORKDIR/voice:/home/llms/.llms" -e VERBOSE=1 \
+      --entrypoint llms "$IMAGE" ls 2>&1 | tr -d '\r')
+case "$OUT" in
+    *"model=test-model"*) pass "voice config is read from llms.json" ;;
+    *) fail "voice config is read from llms.json" \
+            "$(printf '%s' "$OUT" | grep -i voice | head -2 | tr '\n' ' ')" ;;
+esac
 
 # Optional live provider check when a key happens to be in the environment.
 LIVE_PROVIDER=""; LIVE_KEY=""

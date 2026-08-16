@@ -1,8 +1,8 @@
 # Running llms-py in Docker
 
 The Docker image bundles llms.py with everything its extensions need — Python,
-`bun`, and the .NET SDK — so nothing has to be installed on the host beyond
-Docker itself.
+`bun`, the .NET SDK and `typst` — so nothing has to be installed on the host
+beyond Docker itself.
 
 - [Quick start](#quick-start) — the one-line installer
 - [What the installer does](#what-the-installer-does)
@@ -290,6 +290,137 @@ It exits non-zero if any check fails, so it works as a release gate. If a
 provider API key happens to be in your environment it also runs a live
 `llms --check` against that provider.
 
+## What's in the image
+
+| Tool | Used for |
+| --- | --- |
+| Python 3.11 + llms-py | the CLI and server |
+| `bun` / `bunx` | JavaScript extensions and tools |
+| .NET SDK 10 | running C# code |
+| `typst` | the PDF Studio extension (`.typ` templates → PDF) |
+| `ffmpeg` | audio conversion for voice input |
+| `git` | installing extensions from a repo |
+
+Each is verified at build time, so a broken image fails to build rather than
+failing on your first request.
+
+## Voice input
+
+The microphone lives in the browser, not the container — the chat UI records
+audio and POSTs it to `/transcribe`, so no device passthrough is needed. The
+container's only job is turning that audio into text.
+
+The voice extension's `api` mode needs nothing installed, so it works in the
+container out of the box. Add a key and restart:
+
+```bash
+echo 'GROQ_API_KEY=gsk_...' >> ~/.llms/.env
+llms restart
+```
+
+Configure the provider and model under `defaults` in `~/.llms/llms.json`:
+
+```json
+{
+  "defaults": {
+    "voice": {
+      "provider": "groq",
+      "model": "whisper-large-v3",
+      "language": "en"
+    }
+  }
+}
+```
+
+Or point it at a local speech-to-text server — no key required. From inside the
+container the host is `host.docker.internal`:
+
+```json
+{
+  "defaults": {
+    "voice": {
+      "url": "http://host.docker.internal:8001/v1/audio/transcriptions",
+      "model": "Systran/faster-whisper-small"
+    }
+  }
+}
+```
+
+This is the same configuration llms.py uses everywhere, not something
+Docker-specific — see [Voice Input](https://llmspy.org/docs/features/voice-input)
+for every setting, the `LLMS_TRANSCRIBE_*` environment overrides, and the other
+modes.
+
+Check which mode was selected:
+
+```bash
+llms restart --verbose && llms logs | grep -i voice
+```
+
+```
+Using api for voice: groq [llms.json] model=whisper-large-v3 [llms.json]
+```
+
+The image also ships `ffmpeg`, which the `voxtype` and `transcribe` modes need
+to convert the browser's webm recording. `voxtype` requires a graphical desktop
+session so it never applies in a container; `transcribe` is available if you
+mount your own script at `/usr/local/bin/transcribe`.
+
+### The microphone button is missing
+
+Browsers only expose `getUserMedia` in a **secure context**: HTTPS, or
+`http://localhost` / `http://127.0.0.1`. The default `llms up` binds to
+`127.0.0.1`, so it works.
+
+If you set `LLMS_BIND=0.0.0.0` and browse to `http://192.168.x.x:8000`, the
+browser silently withholds the microphone API and no button appears — nothing to
+do with Docker or your configuration. Reach it over an SSH tunnel
+(`ssh -L 8000:localhost:8000 host`) or put it behind a TLS-terminating reverse
+proxy.
+
+### Logging
+
+`llms` reads two environment variables, both off by default:
+
+| Variable | Effect |
+| --- | --- |
+| `VERBOSE=1` | request/response logging (same as `--verbose`) |
+| `DEBUG=1` | debug logging |
+
+The `llms` command turns them into container env vars for you:
+
+```bash
+llms up --verbose          # request logging
+llms up --debug            # verbose + debug
+llms up --debug -f         # ...and follow the logs
+llms restart --debug       # turn it on for a running server
+llms --debug ls            # one-shot commands too
+llms logs                  # last 200 lines
+llms logs -f               # follow
+llms status                # shows the active log level
+```
+
+To make it permanent, set `LLMS_VERBOSE=1` or `LLMS_DEBUG=1` in `~/.llms/config`.
+
+Running the image directly, pass them as normal env vars:
+
+```bash
+docker run -e VERBOSE=1 -e DEBUG=1 -p 8000:8000 \
+  -v ~/.llms:/home/llms/.llms ghcr.io/servicestack/llms:latest
+```
+
+### Passing your own environment variables
+
+Everything in `~/.llms/.env` is passed into the container, not just API keys, so
+it doubles as a place for any setting the container should see:
+
+```bash
+echo 'TZ=Australia/Perth' >> ~/.llms/.env
+llms restart
+```
+
+`llms setup` preserves anything there that isn't a provider API key.
+
 ## Troubleshooting
 
 **`docker: command not found` / daemon not running**
@@ -300,6 +431,35 @@ Docker Desktop actually launched, not just installed.
 The image runs as UID 1000. If your UID is different, the installer detects it
 and adds `--user $(id -u):$(id -g)` — stored as `LLMS_DOCKER_USER_ARGS` in
 `~/.llms/config`. If you're running Docker by hand, add that flag yourself.
+
+**Voice input isn't working**
+Check which mode the extension picked:
+
+```bash
+llms restart --verbose && llms logs | grep -i voice
+```
+
+`Cannot use api - no voice provider configured` means no key and no `voice`
+section — add one. If no microphone button appears at all, see the secure-context
+note above.
+
+**PDF Studio isn't available**
+It disables itself when `typst` isn't on PATH. Check the image has it:
+
+```bash
+llms shell -c 'typst --version'
+```
+
+If it's missing you're on an image built before typst was added — run
+`llms update`.
+
+**C# code fails with "Couldn't find a valid ICU package"**
+An old image without `libicu`. Run `llms update`. As a stopgap you can disable
+globalization instead:
+
+```bash
+echo 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1' >> ~/.llms/.env && llms restart
+```
 
 **A provider is enabled but its models don't appear**
 Check the key is actually reaching the container:
