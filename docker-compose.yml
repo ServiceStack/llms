@@ -3,29 +3,26 @@ services:
     image: ghcr.io/servicestack/llms:latest
     container_name: llms-py
     ports:
-      - "8000:8000"
-    environment:
-      # API Keys - Set these in your .env file or pass them directly
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - GOOGLE_FREE_API_KEY=${GOOGLE_FREE_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - CODESTRAL_API_KEY=${CODESTRAL_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - GROK_API_KEY=${GROK_API_KEY:-}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
-      - ZAI_API_KEY=${ZAI_API_KEY:-}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
-      - VERBOSE=1
+      # Only reachable from this machine. Use "8000:8000" to expose it on your LAN.
+      - "127.0.0.1:8000:8000"
+    env_file:
+      # All API keys live here, one VAR=value per line, no quotes.
+      # Create it with `cp .env.example .env`, or run:
+      #   curl -fsSL https://llmspy.org/install.sh | bash
+      # which generates ~/.llms/.env for you.
+      - .env
     volumes:
-      # Maintain user-modifiable config files outside the container
-      # llms.json and providers.json will be auto-created on first run
+      # User-modifiable config kept outside the container.
+      # llms.json and providers.json are auto-created on first run.
       - ~/.llms:/home/llms/.llms
+    extra_hosts:
+      # Lets the container reach services on the host (ollama, LM Studio, ...)
+      # via http://host.docker.internal:11434 etc.
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()" ]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 5s
+      start_period: 10s
