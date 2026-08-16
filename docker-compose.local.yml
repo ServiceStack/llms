@@ -6,35 +6,30 @@ services:
     image: llms-py:latest
     container_name: llms-py
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    env_file:
+      # All API keys live here, one VAR=value per line, no quotes.
+      # Create it with `cp .env.example .env`.
+      - .env
     environment:
-      # API Keys - Set these in your .env file or pass them directly
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - GOOGLE_FREE_API_KEY=${GOOGLE_FREE_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - CODESTRAL_API_KEY=${CODESTRAL_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - GROK_API_KEY=${GROK_API_KEY:-}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
-      - ZAI_API_KEY=${ZAI_API_KEY:-}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - VERBOSE=1
     volumes:
-      # Persist configuration and analytics data
-      # The container will auto-create llms.json and providers.json on first run
+      # Persist configuration and analytics data.
+      # llms.json and providers.json are auto-created on first run.
       - llms-data:/home/llms/.llms
-      # Alternative: Mount a local directory to use custom config files
-      # Uncomment the line below and comment out the line above to use local configs
-      # Place your custom llms.json and providers.json in ./config/ directory
+      # Alternative: mount a local directory to use custom config files.
+      # Comment out the line above and uncomment this one, then put your
+      # llms.json / providers.json / providers-extra.json in ./config/
       # - ./config:/home/llms/.llms
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000').read()" ]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 5s
+      start_period: 10s
 
 volumes:
   llms-data:
