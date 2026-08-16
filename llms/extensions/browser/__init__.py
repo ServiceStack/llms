@@ -688,7 +688,7 @@ def install(ctx):
     ctx.add_index_footer(
         f"""
         <link rel="stylesheet" href="{ctx.ext_prefix}/xterm.css">
-        <script src="{ctx.ext_prefix}/shell.js"></script>
+        <script defer src="{ctx.ext_prefix}/shell.js"></script>
         """
     )
 
