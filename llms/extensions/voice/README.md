@@ -7,16 +7,81 @@ Adds voice-to-text transcription to the chat interface via a microphone button o
 Set the `LLMS_VOICE` environment variable to configure which transcription modes are available and in what priority order:
 
 ```bash
-export LLMS_VOICE="voxtype,transcribe,voxtral-mini-latest"
+export LLMS_VOICE="voxtype,transcribe,api,voxtral-mini-latest"
 ```
 
-The extension tries each mode in order and uses the first one that's available. The default order is `voxtype,transcribe,voxtral-mini-latest`.
+The extension tries each mode in order and uses the first one that's available. The default order is `voxtype,transcribe,api,voxtral-mini-latest`, so local tools are preferred over hosted APIs.
+
+Set `LLMS_VOICE=""` to disable voice input entirely.
 
 ## Available Modes
 
+### api
+
+Posts the recording to any OpenAI-compatible `/v1/audio/transcriptions` endpoint. Needs nothing installed.
+
+**Requirements:**
+- An API key for a supported provider, or a `url` and `model` for your own endpoint
+
+llms.py ships with `mistral` / `voxtral-mini-latest` configured in `defaults.voice`. If that
+provider has no API key it falls back to any other provider that does, so the shipped default
+never disables voice input for someone using a different provider.
+
+> **Audio format.** Browsers record `webm/opus`, which Groq and OpenAI accept but Mistral rejects
+> with *"Audio input could not be decoded"*. The chat UI converts the recording to 16 kHz mono WAV
+> before uploading, so every provider works with no extra software. If the browser can't do the
+> conversion the server falls back to `ffmpeg` when it's installed, and otherwise sends the
+> original — in which case use `groq` or `openai`, which decode `webm` directly.
+
+Configured under `defaults.voice` in `llms.json`:
+
+```json
+{
+  "defaults": {
+    "voice": {
+      "provider": "groq",
+      "model": "whisper-large-v3",
+      "language": "en"
+    }
+  }
+}
+```
+
+| Setting | Purpose |
+| --- | --- |
+| `provider` | `groq`, `openai` or `mistral` — selects the endpoint and default model |
+| `model` | Model id |
+| `url` | Full endpoint URL; set instead of `provider` for any other server |
+| `api_key` | API key. Prefer `$SOME_VAR` over a literal key |
+| `language` | ISO-639-1 hint, e.g. `en`. Omit to auto-detect |
+| `prompt` | Biasing prompt for names and jargon |
+
+With no `defaults.voice` section it falls back to the first provider key it finds:
+
+| Environment variable | Provider | Default model |
+| --- | --- | --- |
+| `GROQ_API_KEY` | Groq | `whisper-large-v3-turbo` |
+| `OPENAI_API_KEY` | OpenAI | `whisper-1` |
+| `MISTRAL_API_KEY` | Mistral | `voxtral-mini-latest` |
+
+A local server needs no key:
+
+```json
+{
+  "defaults": {
+    "voice": {
+      "url": "http://localhost:8001/v1/audio/transcriptions",
+      "model": "Systran/faster-whisper-small"
+    }
+  }
+}
+```
+
+Each setting can be overridden by an environment variable, which takes precedence over `llms.json`: `LLMS_TRANSCRIBE_PROVIDER`, `LLMS_TRANSCRIBE_MODEL`, `LLMS_TRANSCRIBE_URL`, `LLMS_TRANSCRIBE_KEY`, `LLMS_TRANSCRIBE_LANG`, `LLMS_TRANSCRIBE_PROMPT`.
+
 ### voxtype
 
-Uses the [voxtype.io](https://voxtype.io) CLI tool for local transcription.
+Uses the [voxtype.io](https://voxtype.io) CLI tool for local transcription. Requires a graphical desktop session, so it isn't available in headless or containerised deployments.
 
 **Requirements:**
 - `voxtype` must be installed and on your `$PATH`
@@ -30,97 +95,16 @@ Uses a custom `transcribe` executable for flexible local transcription. This let
 - A `transcribe` executable on your `$PATH` that accepts an audio wav file and outputs text to stdout
 - `ffmpeg` must be installed for audio format conversion
 
-**Interface:**
-```bash
-transcribe recording.wav > transcript.txt
-```
-
-See [Creating a transcribe Script](#creating-a-transcribe-script) for implementation examples.
-
 ### voxtral-mini-latest
 
-Uses [Mistral's Voxtral model](https://docs.mistral.ai/models/voxtral-mini-transcribe-26-02) for cloud-based transcription.
+Uses Mistral's Voxtral model through the configured Mistral provider. Any `voxtral*` model id works, e.g. `LLMS_VOICE="voxtral-small-latest"`.
 
 **Requirements:**
 - Mistral provider must be enabled in your configuration
 - `MISTRAL_API_KEY` environment variable must be set
 
-**Pricing:** ~$0.003/minute
+## Troubleshooting
 
-## Usage
+Run with `--verbose` to see which mode was chosen and why the others were skipped.
 
-### Microphone Button
-
-Click the microphone icon in the chat input area to start recording. Click again to stop and transcribe.
-
-### Keyboard Shortcut
-
-**Alt+D** toggles voice recording with two modes:
-
-- **Tap (< 500ms):** Toggle mode — starts recording, press again to stop
-- **Hold (≥ 500ms):** Push-to-talk — records while held, stops when released
-
-The transcribed text is appended to the current message input.
-
----
-
-## Creating a transcribe Script
-
-### Using OpenAI Whisper
-
-Create a script using [uvx](https://github.com/astral-sh/uv) and [openai-whisper](https://github.com/openai/whisper):
-
-```bash
-#!/usr/bin/env bash
-uvx --from openai-whisper whisper "$1" --model base.en --output_format txt --output_dir /tmp >/dev/null 2>&1
-
-BASENAME=$(basename "${1%.*}")
-cat "/tmp/${BASENAME}.txt"
-rm -f "/tmp/${BASENAME}.txt"
-```
-
-### Using Whisper.cpp
-
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) provides a faster, dependency-free C++ implementation.
-
-**Setup:**
-
-```bash
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
-
-# Download a model
-sh ./models/download-ggml-model.sh base.en
-
-# Build
-cmake -B build
-cmake --build build -j --config Release
-
-# Test
-./build/bin/whisper-cli -f samples/jfk.wav
-```
-
-**Create the transcribe script:**
-
-```bash
-#!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-MODEL="$SCRIPT_DIR/models/ggml-base.en.bin"
-CLI="$SCRIPT_DIR/build/bin/whisper-cli"
-TMPFILE=$(mktemp /tmp/whisper-XXXXXX)
-
-trap 'rm -f "$TMPFILE" "${TMPFILE}.txt"' EXIT
-
-"$CLI" -m "$MODEL" -otxt -f "$1" -of "$TMPFILE" >/dev/null 2>&1
-
-cat "${TMPFILE}.txt"
-```
-
-### Installation
-
-Make the script executable and add it to your `$PATH`:
-
-```bash
-chmod +x ./transcribe
-sudo ln -s $(pwd)/transcribe /usr/local/bin/transcribe
-```
+If the microphone button doesn't appear at all, check the browser is on a secure origin — `getUserMedia` is only available over HTTPS or on `localhost`/`127.0.0.1`.

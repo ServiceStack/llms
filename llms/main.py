@@ -5303,7 +5303,13 @@ def cli_exec(cli_args, extra_args):
             await g_app.on_request(request)
             ret = {}
             if "defaults" not in ret:
-                ret["defaults"] = g_config["defaults"]
+                defaults = g_config["defaults"]
+                # defaults is sent to the browser, so never expose a literal voice API key
+                voice = defaults.get("voice")
+                if isinstance(voice, dict) and "api_key" in voice:
+                    defaults = dict(defaults)
+                    defaults["voice"] = {k: v for k, v in voice.items() if k != "api_key"}
+                ret["defaults"] = defaults
             enabled, disabled = provider_status()
             ret["status"] = {"enabled": enabled, "disabled": disabled}
             ret["extensions"] = [ext.get("name") for ext in g_app.extensions]
