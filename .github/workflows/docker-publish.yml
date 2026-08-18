@@ -77,11 +77,22 @@ jobs:
           attempt_limit: 3
           attempt_delay: 60000
 
+      - name: Extract build digest
+        id: digest
+        if: github.event_name != 'pull_request'
+        run: |
+          DIGEST=$(echo '${{ steps.build.outputs.outputs }}' | jq -r '.digest')
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "null" ]; then
+            echo "ERROR: Could not extract image digest from build outputs"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
       - name: Generate artifact attestation
         if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ fromJSON(steps.build.outputs.outputs).digest }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
           push-to-registry: true
 
