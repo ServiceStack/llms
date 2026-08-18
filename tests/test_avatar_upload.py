@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from aiohttp import web
-from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
+from aiohttp.test_utils import AioHTTPTestCase
 
 from llms.extensions.agents import install as install_agents
 from llms.extensions.app import install as install_app
@@ -16,6 +16,10 @@ from llms.main import remove_avatar_files
 
 class TestAvatarUpload(AioHTTPTestCase):
     async def get_application(self):
+        import llms.extensions.app as app_mod
+
+        self.original_g_db = app_mod.g_db
+        app_mod.g_db = None
         self.temp_dir = tempfile.mkdtemp()
         self.user_dir = os.path.join(self.temp_dir, "user", "admin")
         os.makedirs(os.path.join(self.user_dir, "profiles", "custom_assistant"), exist_ok=True)
@@ -33,6 +37,7 @@ class TestAvatarUpload(AioHTTPTestCase):
         mock_ctx.dbg = lambda msg: None
         mock_ctx.err = lambda msg, e: None
         mock_ctx.remove_avatar_files = remove_avatar_files
+        mock_ctx.config = {"defaults": {}}
 
         routes = []
 
@@ -48,6 +53,7 @@ class TestAvatarUpload(AioHTTPTestCase):
         mock_ctx.add_delete = MagicMock()
 
         install_app(mock_ctx)
+        self.app_db = app_mod.g_db
         install_agents(mock_ctx)
 
         for method, path, handler in routes:
@@ -66,6 +72,9 @@ class TestAvatarUpload(AioHTTPTestCase):
 
     def tearDown(self):
         super().tearDown()
+        self.app_db.close()
+        import llms.extensions.app as app_mod
+        app_mod.g_db = self.original_g_db
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_remove_avatar_files_function(self):
@@ -102,7 +111,6 @@ class TestAvatarUpload(AioHTTPTestCase):
         self.assertTrue(os.path.exists(os.path.join(self.user_dir, "config.json")))
         self.assertTrue(os.path.exists(os.path.join(self.user_dir, "SYSTEM.md")))
 
-    @unittest_run_loop
     async def test_agent_profile_avatar_upload_overrides_formats(self):
         profile_dir = os.path.join(self.user_dir, "profiles", "custom_assistant")
 

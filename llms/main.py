@@ -589,6 +589,206 @@ def read_binary_file(url):
         raise e
 
 
+def normalize_content_for_model(chat, model_info):
+    """Project multipart history into text when the selected model is text-only."""
+    modalities = (model_info or {}).get("modalities") or {}
+    input_modalities = modalities.get("input") or []
+    if input_modalities != ["text"]:
+        return chat
+    labels = {
+        "image_url": "image",
+        "input_image": "image",
+        "input_audio": "audio",
+        "audio": "audio",
+        "file": "file",
+        "input_file": "file",
+        "pdf": "PDF",
+        "video": "video",
+    }
+    for message in chat.get("messages", []):
+        content = message.get("content")
+        text = []
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, str):
+                    if item:
+                        text.append(item)
+                    continue
+                if not isinstance(item, dict):
+                    text.append(str(item))
+                    continue
+                item_type = item.get("type")
+                if item_type in ("text", "input_text") or (not item_type and "text" in item):
+                    value = item.get("text")
+                    if value:
+                        text.append(str(value))
+                    continue
+                label = labels.get(item_type, item_type or "non-text")
+                name = item.get("name") or item.get("filename")
+                suffix = f": {name}" if name else ""
+                text.append(f"[{label} attachment omitted for text-only model{suffix}]")
+        elif content is not None:
+            text.append(str(content))
+
+        # Tool resources are stored as top-level fields and generic provider
+        # preparation normally expands `images` back into multipart content. Consume
+        # them here so a text-only model can never receive a late image/audio/file part.
+        resource_fields = {
+            "images": "image",
+            "audios": "audio",
+            "files": "file",
+            "resources": "resource",
+        }
+        for field, label in resource_fields.items():
+            resources = message.pop(field, None)
+            if not resources:
+                continue
+            count = len(resources) if isinstance(resources, list) else 1
+            noun = label if count == 1 else f"{label}s"
+            text.append(f"[{count} {noun} omitted for text-only model]")
+
+        message["content"] = "\n".join(text)
+    return chat
+
+
+def normalize_message_sequence_for_model(chat, model_info, provider_id=None):
+    """Repair legacy history shapes rejected by strict GLM chat endpoints.
+
+    Canonical history remains untouched in storage; this only projects a valid
+    provider request. Tool-call/result groups are retained, while orphaned tool
+    results are represented as ordinary context instead of an illegal tool turn.
+    """
+    family = str((model_info or {}).get("family") or "").lower()
+    model = str(chat.get("model") or "").lower()
+    provider = str(provider_id or "").lower()
+    if family != "glm" and "glm" not in model and provider != "zai-coding-plan":
+        return chat
+
+    normalized = []
+    pending_tool_ids = set()
+    skipped_tool_ids = set()
+    seen_tool_ids = set()
+    repaired_incomplete_group = False
+    messages = chat.get("messages", [])
+
+    valid_tool_groups = set()
+    for index, message in enumerate(messages):
+        calls = message.get("tool_calls") or []
+        if message.get("role") != "assistant" or not calls:
+            continue
+        expected = {x.get("id") for x in calls if x.get("id")}
+        found = set()
+        next_index = index + 1
+        while next_index < len(messages) and messages[next_index].get("role") == "tool":
+            tool_call_id = messages[next_index].get("tool_call_id")
+            if tool_call_id:
+                found.add(tool_call_id)
+            next_index += 1
+        if expected and expected.issubset(found):
+            valid_tool_groups.add(index)
+
+    def append_ordinary(role, content, message=None):
+        if content is None or content == "":
+            return
+        item = dict(message or {})
+        item["role"] = role
+        item["content"] = str(content)
+        item.pop("tool_call_id", None)
+        item.pop("tool_calls", None)
+        if (normalized and normalized[-1].get("role") == role
+                and not normalized[-1].get("tool_calls")):
+            previous = normalized[-1].get("content") or ""
+            normalized[-1]["content"] = f"{previous}\n\n{item['content']}" if previous else item["content"]
+        else:
+            normalized.append(item)
+
+    for index, original in enumerate(messages):
+        message = dict(original)
+        role = message.get("role")
+        tool_calls = message.get("tool_calls") or []
+        if role == "assistant" and tool_calls:
+            if index in valid_tool_groups:
+                call_ids = {x.get("id") for x in tool_calls if x.get("id")}
+                if call_ids & seen_tool_ids:
+                    # A former projected-checkpoint bug could append the same complete
+                    # tool exchange repeatedly. Tool-call IDs must be unique in the
+                    # provider history, so retain only its first occurrence.
+                    skipped_tool_ids = call_ids
+                    pending_tool_ids.clear()
+                else:
+                    normalized.append(message)
+                    pending_tool_ids = call_ids
+                    seen_tool_ids.update(call_ids)
+                    skipped_tool_ids.clear()
+            else:
+                # A prior persistence bug could retain the assistant envelope but lose
+                # its results. Replaying that envelope is invalid; keep useful prose
+                # while omitting the unverifiable call metadata.
+                repaired_incomplete_group = True
+                pending_tool_ids.clear()
+                append_ordinary("assistant", message.get("content"), message)
+            continue
+        if role == "tool":
+            tool_call_id = message.get("tool_call_id")
+            if tool_call_id in skipped_tool_ids:
+                skipped_tool_ids.discard(tool_call_id)
+                continue
+            if tool_call_id and tool_call_id in pending_tool_ids:
+                normalized.append(message)
+                pending_tool_ids.discard(tool_call_id)
+            else:
+                label = f"Tool result ({tool_call_id})" if tool_call_id else "Tool result"
+                append_ordinary("user", f"[{label}]\n{message.get('content') or ''}")
+            continue
+        pending_tool_ids.clear()
+        skipped_tool_ids.clear()
+        if role in ("system", "user", "assistant"):
+            append_ordinary(role, message.get("content"), message)
+
+    # A compacted/legacy projection may begin with assistant state. Treat that as
+    # context, not as a model turn, so strict endpoints receive a valid beginning.
+    first_non_system = next((i for i, x in enumerate(normalized) if x.get("role") != "system"), None)
+    if first_non_system is not None and normalized[first_non_system].get("role") == "assistant" \
+            and not normalized[first_non_system].get("tool_calls"):
+        message = normalized.pop(first_non_system)
+        content = f"Prior assistant context:\n{message.get('content') or ''}"
+        if first_non_system and normalized[first_non_system - 1].get("role") == "system":
+            previous = normalized[first_non_system - 1].get("content") or ""
+            normalized[first_non_system - 1]["content"] = f"{previous}\n\n{content}" if previous else content
+        else:
+            normalized.insert(0, {"role": "system", "content": content})
+
+    # Strict GLM endpoints require system instructions at the beginning. Recovery
+    # histories may contain duplicated mid-stream system messages from older durable
+    # checkpoint bugs; move unique instructions to the front and collapse duplicates.
+    system_messages = []
+    system_contents = set()
+    remaining = []
+    for message in normalized:
+        if message.get("role") == "system":
+            content = message.get("content") or ""
+            if content not in system_contents:
+                system_messages.append(message)
+                system_contents.add(content)
+        else:
+            remaining.append(message)
+    if len(system_messages) > 1:
+        system_messages = [{
+            "role": "system",
+            "content": "\n\n".join(x.get("content", "") for x in system_messages if x.get("content")),
+        }]
+    normalized = system_messages + remaining
+
+    if repaired_incomplete_group and normalized and normalized[-1].get("role") == "assistant":
+        normalized.append({
+            "role": "user",
+            "content": "Continue the interrupted agent run from the available history.",
+        })
+
+    chat["messages"] = normalized
+    return chat
+
+
 async def process_chat(chat, provider_id=None):
     if not chat:
         raise Exception("No chat provided")
@@ -602,6 +802,7 @@ async def process_chat(chat, provider_id=None):
 
     # Normalize reasoning/thinking fields for assistant messages in history to match provider/model requirements
     expected_field = None
+    model_info = None
     if provider_id and provider_id in g_handlers:
         provider = g_handlers[provider_id]
         model = chat.get("model")
@@ -628,6 +829,9 @@ async def process_chat(chat, provider_id=None):
                     or "minimax" in model_lower
                 ):
                     expected_field = "thinking"
+
+    normalize_content_for_model(chat, model_info)
+    normalize_message_sequence_for_model(chat, model_info, provider_id)
 
     for message in chat["messages"]:
         if message.get("role") == "assistant":
@@ -1454,6 +1658,8 @@ class OpenAiCompatible:
                 msg.pop("timestamp", None)
                 msg.pop("model", None)
                 msg.pop("usage", None)
+                msg.pop("_sequence", None)
+                msg.pop("streaming", None)
                 cleaned_messages.append(msg)
             ret["messages"] = cleaned_messages
         if provider_id == "nvidia" or self.id == "nvidia":
@@ -1692,7 +1898,10 @@ class OpenAiCompatible:
 
         self.init_chat(chat)
 
-        chat = await self.process_chat(chat, provider_id=self.id)
+        # Provider normalization strips internal persistence metadata and can merge
+        # malformed legacy messages. Never mutate the agent's authoritative working
+        # history: tool checkpointing still needs its stable message identities.
+        chat = await self.process_chat(copy.deepcopy(chat), provider_id=self.id)
 
         _log(f"POST {self.chat_url} (stream={is_stream})")
         _log(chat_summary(chat))
@@ -2257,6 +2466,15 @@ def group_resources(resources: list):
     return grouped
 
 
+class AgentSliceYield(Exception):
+    """A durable agent run exhausted its worker slice and should be resumed."""
+
+    def __init__(self, chat, iterations):
+        super().__init__(f"Agent run yielded after {iterations} tool iterations")
+        self.chat = chat
+        self.iterations = iterations
+
+
 async def g_chat_completion(chat, context=None):
     try:
         model = chat.get("model")
@@ -2442,6 +2660,8 @@ async def g_chat_completion(chat, context=None):
                 break  # Exit tool loop
 
             if final_response is None:
+                if context.get("runId"):
+                    raise AgentSliceYield(current_chat, max_iterations)
                 raise Exception(f"Reached maximum tool iterations ({max_iterations}) without receiving final response")
 
             # Apply post-chat filters ONCE on final response
@@ -2454,6 +2674,8 @@ async def g_chat_completion(chat, context=None):
 
             return final_response
 
+        except AgentSliceYield:
+            raise
         except Exception as e:
             if first_exception is None:
                 first_exception = e
@@ -2625,10 +2847,10 @@ def load_config(config, providers, verbose=None, debug=None, disable_extensions:
         DISABLE_EXTENSIONS = disable_extensions
 
 
-def init_llms(config, providers):
+def init_llms(config, providers=None):
     global g_config, g_handlers
 
-    load_config(config, providers)
+    load_config(config, providers or {})
     g_handlers = {}
     # iterate over config and replace $ENV with env value
     for key, value in g_config.items():
@@ -2637,7 +2859,7 @@ def init_llms(config, providers):
 
     # if g_verbose:
     #     printdump(g_config)
-    providers = g_config["providers"]
+    providers = g_config.get("providers") or {}
 
     for id, orig in providers.items():
         if "enabled" in orig and not orig["enabled"]:
@@ -3498,6 +3720,8 @@ class AppExtensions:
         self.server_add_delete = []
         self.server_add_patch = []
         self.cache_saved_filters = []
+        self.startup_handlers = []
+        self.cleanup_handlers = []
         self.shutdown_handlers = []
         self.tools = {}
         self.tool_definitions = []
@@ -4078,6 +4302,14 @@ class ExtensionContext:
     def register_shutdown_handler(self, handler: Callable):
         self.log(f"Registered shutdown handler: {handler_name(handler)}")
         self.app.shutdown_handlers.append(handler)
+
+    def register_startup_handler(self, handler: Callable[[], Awaitable[None]]):
+        self.log(f"Registered startup handler: {handler_name(handler)}")
+        self.app.startup_handlers.append(handler)
+
+    def register_cleanup_handler(self, handler: Callable[[], Awaitable[None]]):
+        self.log(f"Registered cleanup handler: {handler_name(handler)}")
+        self.app.cleanup_handlers.append(handler)
 
     def register_setup_user_handler(self, handler: Callable[[web.Request], Awaitable[None]]) -> None:
         self.log(f"Registered setup user handler: {handler_name(handler)}")
@@ -5433,10 +5665,26 @@ def cli_exec(cli_args, extra_args):
         # Setup file watcher for config files
         async def start_background_tasks(app):
             """Start background tasks when the app starts"""
+            for handler in g_app.startup_handlers:
+                await handler()
             # Start watching config files in the background
-            asyncio.create_task(watch_config_files(g_config_path, home_providers_path))
+            app["config_watcher"] = asyncio.create_task(watch_config_files(g_config_path, home_providers_path))
+
+        async def stop_background_tasks(app):
+            for handler in reversed(g_app.cleanup_handlers):
+                try:
+                    await handler()
+                except Exception as ex:
+                    _err("cleanup handler failed", ex)
+            watcher = app.get("config_watcher")
+            if watcher:
+                watcher.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watcher
+            g_app.shutdown()
 
         app.on_startup.append(start_background_tasks)
+        app.on_cleanup.append(stop_background_tasks)
 
         # go through and register all g_app extensions
 

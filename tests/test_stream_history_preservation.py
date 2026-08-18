@@ -318,6 +318,7 @@ class TestStreamDiesMidResponse(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.app.shutdown()
         cls.temp_dir.cleanup()
 
     def make_session(self, lines, die_after, exc):

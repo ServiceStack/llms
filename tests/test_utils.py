@@ -21,6 +21,8 @@ from llms.main import (
     get_filename,
     is_base_64,
     is_url,
+    normalize_content_for_model,
+    normalize_message_sequence_for_model,
     parse_args_params,
     price_to_string,
 )
@@ -300,6 +302,120 @@ class TestChatSummary(unittest.TestCase):
         self.assertIsInstance(result, str)
         # Check that audio data is replaced with size
         self.assertNotIn("B" * 1000, result)
+
+
+class TestTextOnlyContentNormalization(unittest.TestCase):
+    def test_text_only_model_preserves_text_and_replaces_unsupported_parts(self):
+        chat = {"messages": [{"role": "user", "content": [
+            {"type": "input_text", "text": "Please inspect this"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+            {"type": "input_audio", "input_audio": {"data": "BBBB"}},
+            {"type": "file", "filename": "report.pdf"},
+        ]}]}
+
+        normalize_content_for_model(chat, {"modalities": {"input": ["text"]}})
+
+        content = chat["messages"][0]["content"]
+        self.assertEqual(type(content), str)
+        self.assertIn("Please inspect this", content)
+        self.assertIn("[image attachment omitted for text-only model]", content)
+        self.assertIn("[audio attachment omitted for text-only model]", content)
+        self.assertIn("[file attachment omitted for text-only model: report.pdf]", content)
+        self.assertNotIn("AAAA", content)
+        self.assertNotIn("BBBB", content)
+
+    def test_multimodal_model_keeps_multipart_content(self):
+        content = [{"type": "image_url", "image_url": {"url": "/image.png"}}]
+        chat = {"messages": [{"role": "user", "content": content}]}
+
+        normalize_content_for_model(chat, {"modalities": {"input": ["text", "image"]}})
+
+        self.assertIs(chat["messages"][0]["content"], content)
+
+    def test_text_only_model_consumes_top_level_tool_resources(self):
+        chat = {"messages": [{
+            "role": "tool", "tool_call_id": "view-1", "content": "Screenshot captured",
+            "images": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}],
+        }]}
+
+        normalize_content_for_model(chat, {"modalities": {"input": ["text"]}})
+
+        message = chat["messages"][0]
+        self.assertEqual(type(message["content"]), str)
+        self.assertIn("Screenshot captured", message["content"])
+        self.assertIn("[1 image omitted for text-only model]", message["content"])
+        self.assertNotIn("images", message)
+        self.assertNotIn("AAAA", message["content"])
+
+
+class TestStrictMessageSequenceNormalization(unittest.TestCase):
+    def test_glm_merges_synthetic_assistant_runs_and_repairs_leading_context(self):
+        chat = {"model": "glm-5.3", "messages": [
+            {"role": "assistant", "content": "summary one"},
+            {"role": "assistant", "content": "summary two"},
+            {"role": "user", "content": "continue"},
+        ]}
+
+        normalize_message_sequence_for_model(chat, {"family": "glm"}, "zai-coding-plan")
+
+        self.assertEqual([x["role"] for x in chat["messages"]], ["system", "user"])
+        self.assertIn("summary one\n\nsummary two", chat["messages"][0]["content"])
+
+    def test_glm_preserves_valid_tool_group_and_repairs_orphan_result(self):
+        tool_call = {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "call-1", "type": "function", "function": {"name": "read", "arguments": "{}"}}
+        ]}
+        chat = {"model": "glm-5.3", "messages": [
+            {"role": "user", "content": "inspect"}, tool_call,
+            {"role": "tool", "tool_call_id": "call-1", "content": "ok"},
+            {"role": "tool", "tool_call_id": "missing", "content": "legacy"},
+        ]}
+
+        normalize_message_sequence_for_model(chat, {"family": "glm"}, "zai-coding-plan")
+
+        self.assertIs(chat["messages"][1]["tool_calls"], tool_call["tool_calls"])
+        self.assertEqual(chat["messages"][2]["role"], "tool")
+        self.assertEqual(chat["messages"][3]["role"], "user")
+        self.assertIn("Tool result (missing)", chat["messages"][3]["content"])
+
+    def test_glm_repairs_assistant_tool_call_whose_result_was_not_persisted(self):
+        chat = {"model": "glm-5.3", "messages": [
+            {"role": "user", "content": "implement the plan"},
+            {"role": "assistant", "content": "I inspected the files", "tool_calls": [
+                {"id": "lost", "type": "function",
+                 "function": {"name": "read", "arguments": "{}"}},
+            ]},
+            {"role": "assistant", "content": "The tests need updating", "tool_calls": [
+                {"id": "also-lost", "type": "function",
+                 "function": {"name": "test", "arguments": "{}"}},
+            ]},
+        ]}
+
+        normalize_message_sequence_for_model(chat, {"family": "glm"}, "zai-coding-plan")
+
+        self.assertEqual([x["role"] for x in chat["messages"]], ["user", "assistant", "user"])
+        self.assertNotIn("tool_calls", chat["messages"][1])
+        self.assertIn("I inspected the files\n\nThe tests need updating", chat["messages"][1]["content"])
+        self.assertIn("Continue the interrupted agent run", chat["messages"][-1]["content"])
+
+    def test_glm_collapses_repeated_system_and_tool_groups(self):
+        system = {"role": "system", "content": "instructions", "_sequence": 1}
+        assistant = {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "same-call", "type": "function",
+             "function": {"name": "read", "arguments": "{}"}},
+        ]}
+        result = {"role": "tool", "tool_call_id": "same-call", "content": "result"}
+        chat = {"model": "glm-5.3", "messages": [
+            system, {"role": "user", "content": "work"}, assistant, result,
+            dict(system), {"role": "user", "content": "work"},
+            dict(assistant), dict(result),
+        ]}
+
+        normalize_message_sequence_for_model(chat, {"family": "glm"}, "zai-coding-plan")
+
+        self.assertEqual(sum(x["role"] == "system" for x in chat["messages"]), 1)
+        self.assertEqual(sum(bool(x.get("tool_calls")) for x in chat["messages"]), 1)
+        self.assertEqual(sum(x["role"] == "tool" for x in chat["messages"]), 1)
 
 
 if __name__ == "__main__":

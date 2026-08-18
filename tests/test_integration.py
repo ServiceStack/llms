@@ -35,7 +35,7 @@ class TestCLIIntegration(unittest.TestCase):
 
     def test_llms_help_command(self):
         """Test that llms --help works."""
-        result = subprocess.run(["python", "-m", "llms", "--help"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run([sys.executable, "-m", "llms", "--help"], capture_output=True, text=True, timeout=10)
         # Should exit with 0 or show help
         self.assertIn("usage:", result.stdout.lower() + result.stderr.lower())
 

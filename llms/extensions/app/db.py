@@ -24,6 +24,7 @@ class AppDB:
 
         self.ctx = ctx
         self.db_path = str(db_path)
+        self._closed = False
 
         dirname = os.path.dirname(self.db_path)
         if dirname:
@@ -93,6 +94,68 @@ class AppDB:
                 "stackTrace": "TEXT",
                 "ref": "TEXT",
             },
+            "agent_run": {
+                "id": "INTEGER",
+                "threadId": "INTEGER",
+                "user": "TEXT",
+                "status": "TEXT",
+                "nextAction": "TEXT",
+                "model": "TEXT",
+                "stepCount": "INTEGER",
+                "sliceCount": "INTEGER",
+                "maxSteps": "INTEGER",
+                "contextTokens": "INTEGER",
+                "contextLimit": "INTEGER",
+                "leaseOwner": "TEXT",
+                "leaseExpiresAt": "TIMESTAMP",
+                "nextAttemptAt": "TIMESTAMP",
+                "error": "TEXT",
+                "createdAt": "TIMESTAMP",
+                "updatedAt": "TIMESTAMP",
+                "completedAt": "TIMESTAMP",
+            },
+            "agent_step": {
+                "id": "INTEGER",
+                "runId": "INTEGER",
+                "sequence": "INTEGER",
+                "type": "TEXT",
+                "status": "TEXT",
+                "input": "JSON",
+                "output": "JSON",
+                "idempotencyKey": "TEXT",
+                "attempt": "INTEGER",
+                "error": "TEXT",
+                "startedAt": "TIMESTAMP",
+                "completedAt": "TIMESTAMP",
+                "createdAt": "TIMESTAMP",
+            },
+            "chat_message": {
+                "id": "INTEGER",
+                "threadId": "INTEGER",
+                "sequence": "INTEGER",
+                "runId": "INTEGER",
+                "stepId": "INTEGER",
+                "role": "TEXT",
+                "message": "JSON",
+                "timestamp": "INTEGER",
+                "toolCallId": "TEXT",
+                "toolName": "TEXT",
+                "tokenCount": "INTEGER",
+                "active": "INTEGER",
+                "createdAt": "TIMESTAMP",
+            },
+            "context_snapshot": {
+                "id": "INTEGER",
+                "threadId": "INTEGER",
+                "runId": "INTEGER",
+                "version": "INTEGER",
+                "fromSequence": "INTEGER",
+                "toSequence": "INTEGER",
+                "summary": "JSON",
+                "tokenCount": "INTEGER",
+                "model": "TEXT",
+                "createdAt": "TIMESTAMP",
+            },
         }
         with self.create_writer_connection() as conn:
             self.init_db(conn)
@@ -156,6 +219,22 @@ class AppDB:
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_request_createdat ON request(createdAt)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_request_cost ON request(cost)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_request_threadid ON request(threadId)")
+
+        for table in ("agent_run", "agent_step", "chat_message", "context_snapshot"):
+            sql_columns = ",".join(
+                f"{col} {overrides.get(col, dtype)}" for col, dtype in self.columns[table].items()
+            )
+            self.db.exec(conn, f"CREATE TABLE IF NOT EXISTS {table} ({sql_columns})")
+            self.add_missing_columns(conn, table)
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_agent_run_thread ON agent_run(threadId, id)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_agent_run_queue ON agent_run(status, nextAttemptAt)")
+        self.db.exec(conn, "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_step_seq ON agent_step(runId, sequence)")
+        self.db.exec(conn, "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_step_key ON agent_step(idempotencyKey)")
+        self.db.exec(conn, "CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_message_seq ON chat_message(threadId, sequence)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_chat_message_active_seq ON chat_message(threadId, active, sequence)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_chat_message_run ON chat_message(runId, sequence)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_context_snapshot_thread ON context_snapshot(threadId, version)")
+        self.db.exec(conn, "UPDATE chat_message SET active=1 WHERE active IS NULL")
 
     def import_db(self, threads, requests):
         self.ctx.log("import threads and requests")
@@ -435,13 +514,30 @@ class AppDB:
         return with_user(thread, user=user)
 
     def create_thread(self, thread: Dict[str, Any], user=None):
-        return self.db.insert("thread", self.columns["thread"], self.prepare_thread(thread, user=user))
+        prepared = self.prepare_thread(thread, user=user)
+        keys = [k for k in self.columns["thread"] if k != "id" and k in prepared]
+        params = {k: self.db.value(prepared[k]) for k in keys}
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(
+                conn, f"INSERT INTO thread ({','.join(keys)}) VALUES ({','.join(':'+k for k in keys)})", params
+            )
+            conn.commit()
+            thread_id = cur.lastrowid
+        self.sync_chat_messages(thread_id, prepared.get("messages", []))
+        return thread_id
 
     async def create_thread_async(self, thread: Dict[str, Any], user=None):
-        return await self.db.insert_async("thread", self.columns["thread"], self.prepare_thread(thread, user=user))
+        prepared = self.prepare_thread(thread, user=user)
+        thread_id = await self.db.insert_async("thread", self.columns["thread"], prepared)
+        self.sync_chat_messages(thread_id, prepared.get("messages", []))
+        return thread_id
 
     def update_thread(self, id, thread: Dict[str, Any], user=None):
-        ret = self.db.update("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
+        truncate = bool(thread.get("truncate"))
+        prepared = self.prepare_thread(thread, id, user=user)
+        ret = self.db.update("thread", self.columns["thread"], prepared)
+        if "messages" in prepared:
+            (self.rewrite_chat_messages if truncate else self.sync_chat_messages)(id, prepared["messages"])
         try:
             from . import notify_thread_update
             notify_thread_update(id)
@@ -450,7 +546,11 @@ class AppDB:
         return ret
 
     async def update_thread_async(self, id, thread: Dict[str, Any], user=None):
-        ret = await self.db.update_async("thread", self.columns["thread"], self.prepare_thread(thread, id, user=user))
+        truncate = bool(thread.get("truncate"))
+        prepared = self.prepare_thread(thread, id, user=user)
+        ret = await self.db.update_async("thread", self.columns["thread"], prepared)
+        if "messages" in prepared:
+            (self.rewrite_chat_messages if truncate else self.sync_chat_messages)(id, prepared["messages"])
         try:
             from . import notify_thread_update
             notify_thread_update(id)
@@ -458,9 +558,341 @@ class AppDB:
             pass
         return ret
 
+    def sync_chat_messages(self, thread_id, messages, run_id=None, step_id=None):
+        """Append new canonical messages without rewriting existing normalized rows.
+
+        The legacy thread.messages JSON remains during the compatibility period. Sequence
+        rows are the durable source used by runs and can be backfilled idempotently.
+        """
+        if not isinstance(messages, list):
+            return
+        with self.create_writer_connection() as conn:
+            existing = self.db.exec(
+                conn, "SELECT sequence, timestamp FROM chat_message WHERE threadId = :threadId AND active=1 ORDER BY sequence",
+                {"threadId": thread_id},
+            ).fetchall()
+            known_timestamps = {row[1] for row in existing if row[1] is not None}
+            max_sequence = self.db.exec(
+                conn, "SELECT max(sequence) FROM chat_message WHERE threadId=:threadId", {"threadId": thread_id}
+            ).fetchone()[0]
+            sequence = (max_sequence or 0) + 1
+            for message in messages:
+                if not isinstance(message, dict) or message.get("streaming"):
+                    continue
+                timestamp = message.get("timestamp")
+                if timestamp is not None and timestamp in known_timestamps:
+                    continue
+                tool_call_id = message.get("tool_call_id")
+                tool_name = None
+                calls = message.get("tool_calls") or []
+                if calls and isinstance(calls[0], dict):
+                    tool_name = (calls[0].get("function") or {}).get("name")
+                self.db.exec(
+                    conn,
+                    """INSERT INTO chat_message
+                       (threadId,sequence,runId,stepId,role,message,timestamp,toolCallId,toolName,tokenCount,active,createdAt)
+                       VALUES (:threadId,:sequence,:runId,:stepId,:role,:message,:timestamp,:toolCallId,:toolName,:tokenCount,1,:createdAt)""",
+                    {
+                        "threadId": thread_id, "sequence": sequence, "runId": run_id, "stepId": step_id,
+                        "role": message.get("role"), "message": json.dumps(message), "timestamp": timestamp,
+                        "toolCallId": tool_call_id, "toolName": tool_name,
+                        "tokenCount": count_tokens_approx([message]), "createdAt": datetime.now(),
+                    },
+                )
+                if timestamp is not None:
+                    known_timestamps.add(timestamp)
+                sequence += 1
+            conn.commit()
+
+    def get_chat_messages(self, thread_id, after=0, take=None):
+        limit = " LIMIT :take" if take else ""
+        params = {"threadId": thread_id, "after": after}
+        if take:
+            params["take"] = take
+        rows = self.db.all(
+            f"SELECT * FROM chat_message WHERE threadId=:threadId AND active=1 AND sequence>:after ORDER BY sequence{limit}", params
+        )
+        for row in rows:
+            if isinstance(row.get("message"), str):
+                row["message"] = json.loads(row["message"])
+        return rows
+
+    def get_chat_message_page(self, thread_id, before=None, after=None, take=100):
+        take = max(1, min(int(take), 200))
+        params = {"threadId": thread_id, "take": take}
+        if before is not None:
+            params["before"] = int(before)
+            sql = """SELECT * FROM chat_message
+                     WHERE threadId=:threadId AND active=1 AND sequence<:before
+                     ORDER BY sequence DESC LIMIT :take"""
+            rows = list(reversed(self.db.all(sql, params)))
+        else:
+            params["after"] = int(after or 0)
+            sql = """SELECT * FROM chat_message
+                     WHERE threadId=:threadId AND active=1 AND sequence>:after
+                     ORDER BY sequence LIMIT :take"""
+            rows = self.db.all(sql, params)
+        return self._expand_tool_message_boundaries(
+            thread_id, [self._chat_message_dto(row) for row in rows]
+        )
+
+    def get_chat_message_window(self, thread_id, head=20, tail=100):
+        head = max(0, min(int(head), 100))
+        tail = max(0, min(int(tail), 200))
+        head_rows = self.get_chat_message_page(thread_id, after=0, take=head) if head else []
+        tail_rows = self.db.all(
+            """SELECT * FROM chat_message WHERE threadId=:threadId AND active=1
+               ORDER BY sequence DESC LIMIT :take""",
+            {"threadId": thread_id, "take": tail},
+        ) if tail else []
+        tail_rows = self._expand_tool_message_boundaries(
+            thread_id, [self._chat_message_dto(row) for row in reversed(tail_rows)]
+        )
+        by_sequence = {row["_sequence"]: row for row in head_rows}
+        by_sequence.update({row["_sequence"]: row for row in tail_rows})
+        return [by_sequence[key] for key in sorted(by_sequence)]
+
+    def get_chat_message_bounds(self, thread_id):
+        row = self.db.one(
+            """SELECT count(*) AS messageCount, min(sequence) AS firstSequence,
+                      max(sequence) AS lastSequence
+               FROM chat_message WHERE threadId=:threadId AND active=1""",
+            {"threadId": thread_id},
+        )
+        return row or {"messageCount": 0, "firstSequence": None, "lastSequence": None}
+
+    def _chat_message_dto(self, row):
+        row = dict(row)
+        if isinstance(row.get("message"), str):
+            row["message"] = json.loads(row["message"])
+        message = row.get("message") or {}
+        return {**message, "_sequence": row.get("sequence")}
+
+    def _expand_tool_message_boundaries(self, thread_id, messages):
+        if not messages:
+            return messages
+        expanded = list(messages)
+        # A page beginning with tool results must also contain their originating
+        # assistant tool call, otherwise the UI/provider sees an orphaned result.
+        while expanded and expanded[0].get("role") == "tool":
+            row = self.db.one(
+                """SELECT * FROM chat_message WHERE threadId=:threadId AND active=1
+                   AND sequence<:sequence ORDER BY sequence DESC LIMIT 1""",
+                {"threadId": thread_id, "sequence": expanded[0]["_sequence"]},
+            )
+            if not row:
+                break
+            message = self._chat_message_dto(row)
+            expanded.insert(0, message)
+            if message.get("role") != "tool":
+                break
+        # Likewise include all contiguous results following a tool call at the end.
+        if expanded and expanded[-1].get("tool_calls"):
+            rows = self.db.all(
+                """SELECT * FROM chat_message WHERE threadId=:threadId AND active=1
+                   AND sequence>:sequence ORDER BY sequence LIMIT 100""",
+                {"threadId": thread_id, "sequence": expanded[-1]["_sequence"]},
+            )
+            for row in rows:
+                message = self._chat_message_dto(row)
+                if message.get("role") != "tool":
+                    break
+                expanded.append(message)
+        return expanded
+
+    def rewrite_chat_messages(self, thread_id, messages):
+        """Start a new active history branch while preserving prior rows for audit."""
+        with self.create_writer_connection() as conn:
+            self.db.exec(conn, "UPDATE chat_message SET active=0 WHERE threadId=:threadId AND active=1", {"threadId": thread_id})
+            self.db.exec(conn, "DELETE FROM context_snapshot WHERE threadId=:threadId", {"threadId": thread_id})
+            conn.commit()
+        self.sync_chat_messages(thread_id, messages)
+
+    def annotate_chat_messages(self, thread_id, messages, run_id=None, step_id=None):
+        timestamps = [m.get("timestamp") for m in messages if isinstance(m, dict) and m.get("timestamp") is not None]
+        if not timestamps or (run_id is None and step_id is None):
+            return
+        with self.create_writer_connection() as conn:
+            for timestamp in timestamps:
+                self.db.exec(conn, """UPDATE chat_message SET
+                    runId=COALESCE(runId,:runId), stepId=COALESCE(stepId,:stepId)
+                    WHERE threadId=:threadId AND timestamp=:timestamp AND active=1""",
+                    {"runId": run_id, "stepId": step_id, "threadId": thread_id, "timestamp": timestamp})
+            conn.commit()
+
+    def backfill_chat_messages(self, thread_id):
+        row = self.db.one("SELECT messages FROM thread WHERE id=:id", {"id": thread_id})
+        if row and isinstance(row.get("messages"), str):
+            self.sync_chat_messages(thread_id, json.loads(row["messages"]))
+
+    def create_agent_run(self, thread_id, user, model, max_steps=250):
+        now = datetime.now()
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(conn, """INSERT INTO agent_run
+                (threadId,user,status,nextAction,model,stepCount,sliceCount,maxSteps,nextAttemptAt,createdAt,updatedAt)
+                VALUES (:threadId,:user,'queued','model',:model,0,0,:maxSteps,:now,:now,:now)""",
+                {"threadId": thread_id, "user": user, "model": model, "maxSteps": max_steps, "now": now})
+            conn.commit()
+            return cur.lastrowid
+
+    def get_agent_run(self, run_id, user=None):
+        sql_where, params = self.get_user_filter(user, {"id": run_id})
+        joiner = " AND " if sql_where else " WHERE "
+        return self.db.one(f"SELECT * FROM agent_run {sql_where}{joiner}id=:id", params)
+
+    def get_active_agent_run(self, thread_id, user=None):
+        sql_where, params = self.get_user_filter(user, {"threadId": thread_id})
+        joiner = " AND " if sql_where else " WHERE "
+        return self.db.one(
+            f"SELECT * FROM agent_run {sql_where}{joiner}threadId=:threadId "
+            "AND status IN ('queued','running','waiting_approval') ORDER BY id DESC LIMIT 1", params
+        )
+
+    def requeue_interrupted_agent_runs(self):
+        """Recover work left running when the previous in-process scheduler stopped."""
+        now = datetime.now()
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(
+                conn,
+                """UPDATE agent_run
+                   SET status='queued', leaseOwner=NULL, leaseExpiresAt=NULL, updatedAt=:now
+                   WHERE status='running'""",
+                {"now": now},
+            )
+            conn.commit()
+            return cur.rowcount
+
+    def claim_agent_runs(self, owner, limit=1, lease_seconds=300):
+        """Atomically claim eligible queued runs for one bounded in-process worker."""
+        if limit <= 0:
+            return []
+        now = datetime.now()
+        lease_expires = now + timedelta(seconds=max(30, lease_seconds))
+        claimed = []
+        with self.create_writer_connection() as conn:
+            rows = self.db.exec(
+                conn,
+                """SELECT id FROM agent_run
+                   WHERE status='queued' AND (nextAttemptAt IS NULL OR nextAttemptAt<=:now)
+                   ORDER BY createdAt,id LIMIT :limit""",
+                {"now": now, "limit": limit},
+            ).fetchall()
+            for row in rows:
+                run_id = row["id"] if hasattr(row, "keys") else row[0]
+                cur = self.db.exec(
+                    conn,
+                    """UPDATE agent_run
+                       SET status='running', leaseOwner=:owner, leaseExpiresAt=:leaseExpiresAt, updatedAt=:now
+                       WHERE id=:id AND status='queued'""",
+                    {"id": run_id, "owner": owner, "leaseExpiresAt": lease_expires, "now": now},
+                )
+                if cur.rowcount:
+                    claimed.append(run_id)
+            conn.commit()
+        return [self.get_agent_run(run_id, user="all") for run_id in claimed]
+
+    def renew_agent_run_lease(self, run_id, owner, lease_seconds=300):
+        now = datetime.now()
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(
+                conn,
+                """UPDATE agent_run
+                   SET leaseExpiresAt=:leaseExpiresAt, updatedAt=:now
+                   WHERE id=:id AND status='running' AND leaseOwner=:owner""",
+                {
+                    "id": run_id,
+                    "owner": owner,
+                    "leaseExpiresAt": now + timedelta(seconds=max(30, lease_seconds)),
+                    "now": now,
+                },
+            )
+            conn.commit()
+            return cur.rowcount
+
+    def update_agent_run(self, run_id, values):
+        values = {**values, "id": run_id, "updatedAt": datetime.now()}
+        return self._update_durable_row("agent_run", run_id, values)
+
+    def create_agent_step(self, run_id, sequence, step_type, status="running", **values):
+        now = datetime.now()
+        data = {
+            "runId": run_id, "sequence": sequence, "type": step_type, "status": status,
+            "attempt": values.pop("attempt", 1), "createdAt": now, "startedAt": now, **values,
+        }
+        keys = [k for k in self.columns["agent_step"] if k != "id" and k in data]
+        params = {k: self.db.value(data[k]) for k in keys}
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(
+                conn,
+                f"INSERT INTO agent_step ({','.join(keys)}) VALUES ({','.join(':'+k for k in keys)})",
+                params,
+            )
+            conn.commit()
+            return cur.lastrowid
+
+    def update_agent_step(self, step_id, values):
+        return self._update_durable_row("agent_step", step_id, values)
+
+    def _update_durable_row(self, table, row_id, values):
+        columns = self.columns[table]
+        keys = [k for k in values if k in columns and k != "id"]
+        if not keys:
+            return 0
+        params = {k: self.db.value(values[k]) for k in keys}
+        params["id"] = row_id
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(
+                conn, f"UPDATE {table} SET {','.join(k+'=:'+k for k in keys)} WHERE id=:id", params
+            )
+            conn.commit()
+            return cur.rowcount
+
+    def get_agent_steps(self, run_id, after=0):
+        rows = self.db.all(
+            "SELECT * FROM agent_step WHERE runId=:runId AND sequence>:after ORDER BY sequence",
+            {"runId": run_id, "after": after},
+        )
+        return [self.to_dto(row, ["input", "output"]) for row in rows]
+
+    def create_context_snapshot(self, thread_id, run_id, from_sequence, to_sequence, summary, model=None):
+        previous = self.db.scalar(
+            "SELECT max(version) FROM context_snapshot WHERE threadId=:threadId", {"threadId": thread_id}
+        ) or 0
+        now = datetime.now()
+        with self.create_writer_connection() as conn:
+            cur = self.db.exec(conn, """INSERT INTO context_snapshot
+                (threadId,runId,version,fromSequence,toSequence,summary,tokenCount,model,createdAt)
+                VALUES (:threadId,:runId,:version,:fromSequence,:toSequence,:summary,:tokenCount,:model,:createdAt)""",
+                {"threadId": thread_id, "runId": run_id, "version": previous + 1,
+                 "fromSequence": from_sequence, "toSequence": to_sequence,
+                 "summary": json.dumps(summary), "tokenCount": count_tokens_approx(summary),
+                 "model": model, "createdAt": now})
+            conn.commit()
+            return cur.lastrowid
+
+    def get_latest_context_snapshot(self, thread_id):
+        row = self.db.one(
+            "SELECT * FROM context_snapshot WHERE threadId=:threadId ORDER BY version DESC LIMIT 1",
+            {"threadId": thread_id},
+        )
+        return self.to_dto(row, ["summary"]) if row else None
+
     def delete_thread(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
-        self.db.write(f"DELETE FROM thread {sql_where} AND id = :id", params, callback)
+        joiner = " AND " if sql_where else " WHERE "
+        with self.create_writer_connection() as conn:
+            allowed = self.db.exec(conn, f"SELECT id FROM thread {sql_where}{joiner}id=:id", params).fetchone()
+            if not allowed:
+                return 0
+            self.db.exec(conn, "DELETE FROM agent_step WHERE runId IN (SELECT id FROM agent_run WHERE threadId=:id)", {"id": id})
+            self.db.exec(conn, "DELETE FROM agent_run WHERE threadId=:id", {"id": id})
+            self.db.exec(conn, "DELETE FROM context_snapshot WHERE threadId=:id", {"id": id})
+            self.db.exec(conn, "DELETE FROM chat_message WHERE threadId=:id", {"id": id})
+            cur = self.db.exec(conn, "DELETE FROM thread WHERE id=:id", {"id": id})
+            conn.commit()
+            if callback:
+                callback(None, cur.rowcount)
+            return cur.rowcount
 
     def query_requests(self, query: Dict[str, Any], user=None):
         try:
@@ -666,15 +1098,46 @@ class AppDB:
         self.db.write(f"DELETE FROM request {sql_where} AND id = :id", params, callback)
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         self.db.close()
 
-        # complete all in progress tasks
+        # Durable agent runs were requeued by AgentScheduler.stop(). Keep their
+        # threads resumable; only legacy/non-durable unfinished work is terminal.
         with self.db.create_writer_connection() as conn:
             conn.execute(
-                "UPDATE thread SET completedAt = :completedAt, error = :error WHERE completedAt IS NULL",
+                """UPDATE thread
+                   SET completedAt=NULL, error=NULL, streamingMessage=NULL,
+                       status=CASE
+                           WHEN EXISTS (
+                               SELECT 1 FROM agent_run r
+                               WHERE r.threadId=thread.id AND r.status='waiting_approval'
+                           ) THEN 'Waiting for approval'
+                           WHEN COALESCE((
+                               SELECT r.stepCount FROM agent_run r
+                               WHERE r.threadId=thread.id
+                                 AND r.status IN ('queued','running','waiting_approval')
+                               ORDER BY r.id DESC LIMIT 1
+                           ),0) > 0 THEN 'Continuing…'
+                           ELSE 'Queued'
+                       END
+                   WHERE completedAt IS NULL AND EXISTS (
+                       SELECT 1 FROM agent_run r
+                       WHERE r.threadId=thread.id
+                         AND r.status IN ('queued','running','waiting_approval')
+                   )"""
+            )
+            conn.execute(
+                """UPDATE thread SET completedAt=:completedAt, error=:error, status=NULL
+                   WHERE completedAt IS NULL AND NOT EXISTS (
+                       SELECT 1 FROM agent_run r
+                       WHERE r.threadId=thread.id
+                         AND r.status IN ('queued','running','waiting_approval')
+                   )""",
                 {"completedAt": datetime.now().isoformat(" "), "error": "Server Shutdown"},
             )
             conn.execute(
-                "UPDATE request SET completedAt = :completedAt, error = :error WHERE completedAt IS NULL",
+                "UPDATE request SET completedAt=:completedAt, error=:error WHERE completedAt IS NULL",
                 {"completedAt": datetime.now().isoformat(" "), "error": "Server Shutdown"},
             )

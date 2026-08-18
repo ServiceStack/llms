@@ -73,6 +73,7 @@ class TestOpenRouterStreaming(unittest.IsolatedAsyncioTestCase):
         self.provider = self.app.get_providers().get("openrouter") or g_handlers.get("openrouter")
 
     def tearDown(self):
+        self.app.shutdown()
         self.temp_dir.cleanup()
 
     async def test_openrouter_streaming_thread_updates(self):
@@ -156,6 +157,7 @@ class TestOpenRouterStreaming(unittest.IsolatedAsyncioTestCase):
 
         mock_response = AsyncMock()
         mock_response.status = 200
+        mock_response.raise_for_status = MagicMock()
         mock_response.text = AsyncMock(return_value=json.dumps(response_json_payload))
 
         mock_session_post = MagicMock()

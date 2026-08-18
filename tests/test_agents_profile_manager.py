@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from aiohttp import web
-from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
+from aiohttp.test_utils import AioHTTPTestCase
 
 from llms.extensions.agents import install
 
@@ -75,7 +75,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         super().tearDown()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @unittest_run_loop
     async def test_get_profiles_and_is_builtin(self):
         resp = await self.client.get("/ext/agents")
         self.assertEqual(resp.status, 200)
@@ -91,7 +90,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         self.assertIn("SYSTEM.template", data["custom_assistant"]["files"])
         self.assertIn("IDENTITY.md", data["custom_assistant"]["files"])
 
-    @unittest_run_loop
     async def test_tools_and_skills_endpoint(self):
         resp = await self.client.get("/ext/agents/tools-skills")
         self.assertEqual(resp.status, 200)
@@ -99,7 +97,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         self.assertIn("run_bash", data["tools"])
         self.assertIn("create_plan", data["skills"])
 
-    @unittest_run_loop
     async def test_read_and_write_file_for_user_profile(self):
         # Read file
         resp = await self.client.get("/ext/agents/custom_assistant/files/IDENTITY.md")
@@ -116,7 +113,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         resp = await self.client.get("/ext/agents/custom_assistant/files/IDENTITY.md")
         self.assertEqual(await resp.text(), new_content)
 
-    @unittest_run_loop
     async def test_builtin_profile_write_forbidden(self):
         # Updating a built-in profile file should return 403 Forbidden
         resp = await self.client.put("/ext/agents/chat/files/SYSTEM.md", data="Hack")
@@ -126,7 +122,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         resp = await self.client.post("/ext/agents/chat/config", json={"name": "Hacked Chat"})
         self.assertEqual(resp.status, 403)
 
-    @unittest_run_loop
     async def test_update_user_profile_config(self):
         update_data = {
             "name": "Renamed Assistant",
@@ -141,14 +136,12 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         self.assertEqual(json_data["name"], "Renamed Assistant")
         self.assertEqual(json_data["onlyTools"], ["run_bash"])
 
-    @unittest_run_loop
     async def test_upload_avatar_for_user_profile(self):
         resp = await self.client.post("/ext/agents/custom_assistant/avatar", data=b"fake-image-data", headers={"Content-Type": "image/png"})
         self.assertEqual(resp.status, 200)
         json_data = await resp.json()
         self.assertEqual(json_data["status"], "ok")
 
-    @unittest_run_loop
     async def test_create_profile(self):
         resp = await self.client.post("/ext/agents", json={"name": "Code Reviewer"})
         self.assertEqual(resp.status, 200)
@@ -168,7 +161,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         self.assertIn("<svg", svg_text)
         self.assertIn(">C<", svg_text)
 
-    @unittest_run_loop
     async def test_delete_profile(self):
         # Attempt to delete built-in profile should fail with 403
         resp = await self.client.delete("/ext/agents/chat")
@@ -184,7 +176,6 @@ class TestAgentsProfileManager(AioHTTPTestCase):
         profile_dir = os.path.join(self.user_dir, "profiles", "custom_assistant")
         self.assertFalse(os.path.exists(profile_dir))
 
-    @unittest_run_loop
     async def test_system_template_and_md_renaming(self):
         # Create a new profile (starts with empty SYSTEM.md)
         await self.client.post("/ext/agents", json={"name": "Rename Test"})

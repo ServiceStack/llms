@@ -73,6 +73,7 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         self.provider = self.app.get_providers().get("google") or g_handlers.get("google")
 
     def tearDown(self):
+        self.app.shutdown()
         self.temp_dir.cleanup()
 
     async def test_google_streaming_thread_updates(self):

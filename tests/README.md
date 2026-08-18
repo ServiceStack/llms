@@ -13,9 +13,9 @@ This directory contains unit and integration tests for the llms-py package.
   - Price formatting (`price_to_string`)
   - Chat summarization (`chat_summary`, `gemini_chat_summary`)
 
-- **test_config.py** - Tests for configuration and provider management:
+- **test_config.py** - Tests for configuration management:
   - Home directory path utilities (`home_llms_path`)
-  - Provider initialization (`init_llms`)
+  - Provider initialization boundaries (`init_llms`)
   - Configuration validation
   - Environment variable substitution
 
@@ -28,6 +28,8 @@ This directory contains unit and integration tests for the llms-py package.
   - Module imports and structure
   - Configuration file handling
   - Module constants (image/audio extensions)
+
+Provider tests must be deterministic and run without external credentials or network access. Live API smoke checks, mutable model-catalog counts, provider implementation class names, and local diagnostic scripts do not belong in the automated `test_*.py` suite.
 
 ## Running Tests
 
@@ -109,4 +111,3 @@ Tests use Python's built-in `unittest` framework and require:
 ## Continuous Integration
 
 These tests are designed to run in CI/CD pipelines and should all pass before merging code changes.
-
