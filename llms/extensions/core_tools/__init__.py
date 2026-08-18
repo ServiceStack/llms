@@ -1,9 +1,11 @@
 """
-Core System Tools providing essential file operations, memory persistence, math expression evaluation, and code execution
+Core System Tools providing essential search, web fetching, time, math expression evaluation, and code execution
 """
 
 import ast
 import contextlib
+import fnmatch
+from html.parser import HTMLParser
 import json
 import math
 import operator
@@ -13,9 +15,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from statistics import mean, median, stdev, variance
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 from aiohttp import web
 
@@ -331,6 +335,284 @@ def run_csharp(code: str) -> Dict[str, Any]:
 
 
 # -----------------------------
+# Web & URL fetching tools
+# -----------------------------
+
+
+class HTMLToMarkdownParser(HTMLParser):
+    """Zero-dependency HTML to Markdown parser using Python standard library."""
+
+    def __init__(self, base_url: str = ""):
+        super().__init__()
+        self.base_url = base_url
+        self.result = []
+        self.skip_tags = {
+            "script",
+            "style",
+            "head",
+            "svg",
+            "noscript",
+            "iframe",
+            "canvas",
+            "template",
+            "nav",
+            "footer",
+            "aside",
+        }
+        self.skip_depth = 0
+        self.current_href = None
+        self.link_text = []
+        self.in_pre = False
+
+    def handle_starttag(self, tag, attrs):
+        tag_lower = tag.lower()
+        if tag_lower in self.skip_tags:
+            self.skip_depth += 1
+            return
+        if self.skip_depth > 0:
+            return
+
+        attrs_dict = dict(attrs)
+
+        if tag_lower in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            level = int(tag_lower[1])
+            self.result.append(f"\n\n{'#' * level} ")
+        elif tag_lower in ("p", "div", "section", "article"):
+            self.result.append("\n\n")
+        elif tag_lower == "blockquote":
+            self.result.append("\n\n> ")
+        elif tag_lower == "br":
+            self.result.append("\n")
+        elif tag_lower == "hr":
+            self.result.append("\n\n---\n\n")
+        elif tag_lower == "li":
+            self.result.append("\n- ")
+        elif tag_lower == "pre":
+            self.in_pre = True
+            self.result.append("\n```\n")
+        elif tag_lower == "code" and not self.in_pre:
+            self.result.append("`")
+        elif tag_lower in ("b", "strong"):
+            self.result.append("**")
+        elif tag_lower in ("i", "em"):
+            self.result.append("*")
+        elif tag_lower == "a":
+            self.current_href = attrs_dict.get("href")
+            self.link_text = []
+        elif tag_lower == "img":
+            alt = attrs_dict.get("alt", "")
+            src = attrs_dict.get("src", "")
+            if src:
+                full_src = urllib.parse.urljoin(self.base_url, src) if self.base_url else src
+                self.result.append(f"![{alt}]({full_src})")
+        elif tag_lower == "tr":
+            self.result.append("\n| ")
+
+    def handle_endtag(self, tag):
+        tag_lower = tag.lower()
+        if tag_lower in self.skip_tags:
+            self.skip_depth = max(0, self.skip_depth - 1)
+            return
+        if self.skip_depth > 0:
+            return
+
+        if tag_lower == "pre":
+            self.in_pre = False
+            self.result.append("\n```\n")
+        elif tag_lower == "code" and not self.in_pre:
+            self.result.append("`")
+        elif tag_lower in ("b", "strong"):
+            self.result.append("**")
+        elif tag_lower in ("i", "em"):
+            self.result.append("*")
+        elif tag_lower == "a":
+            text = "".join(self.link_text).strip()
+            if text and self.current_href:
+                full_href = urllib.parse.urljoin(self.base_url, self.current_href) if self.base_url else self.current_href
+                self.result.append(f"[{text}]({full_href})")
+            elif text:
+                self.result.append(text)
+            self.current_href = None
+            self.link_text = []
+        elif tag_lower in ("td", "th"):
+            self.result.append(" | ")
+        elif tag_lower == "tr":
+            self.result.append("\n")
+
+    def handle_data(self, data):
+        if self.skip_depth > 0:
+            return
+        if self.current_href is not None:
+            self.link_text.append(data)
+        else:
+            if self.in_pre:
+                self.result.append(data)
+            else:
+                self.result.append(re.sub(r"[ \t]+", " ", data))
+
+    def get_markdown(self) -> str:
+        text = "".join(self.result)
+        # Collapse excessive newlines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+
+def fetch_url(
+    url: Annotated[str, "The HTTP/HTTPS URL to fetch content from"],
+    max_length: Annotated[int, "Maximum character length of content to return (default: 20000)"] = 20000,
+) -> str:
+    """
+    Fetch content from a URL via HTTP request and convert HTML to clean, structured Markdown.
+    Non-HTML content (JSON, plain text) is returned as raw text.
+    """
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+
+    if g_ctx:
+        g_ctx.dbg(f"fetch_url ({url})")
+
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            content_type = response.headers.get("Content-Type", "").lower()
+            raw_bytes = response.read(2 * 1024 * 1024)  # Read at most 2MB
+            charset = response.headers.get_content_charset() or "utf-8"
+            raw_text = raw_bytes.decode(charset, errors="replace")
+
+            if "html" in content_type or "<html" in raw_text[:500].lower() or "<!doctype html" in raw_text[:500].lower():
+                parser = HTMLToMarkdownParser(base_url=url)
+                parser.feed(raw_text)
+                content = parser.get_markdown()
+            else:
+                content = raw_text.strip()
+
+            if len(content) > max_length:
+                remaining = len(content) - max_length
+                return content[:max_length] + f"\n\n... [Truncated: {remaining} additional characters]"
+            return content or "No content found on page."
+    except Exception as e:
+        return f"Error fetching URL '{url}': {e}"
+
+
+# -----------------------------
+# File search & grep tools
+# -----------------------------
+
+_IGNORED_SEARCH_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    ".env",
+    "node_modules",
+    "__pycache__",
+    "dist",
+    "build",
+    "bin",
+    "obj",
+    "target",
+    "vendor",
+    ".next",
+    ".nuxt",
+    ".cache",
+    ".tox",
+}
+
+
+def grep_search(
+    query: Annotated[str, "Text or regular expression to search for across files"],
+    path: Annotated[Optional[str], "Directory or file path to search (default is current working directory)"] = None,
+    is_regex: Annotated[bool, "Whether to treat query as a regular expression (default: False)"] = False,
+    case_sensitive: Annotated[bool, "Whether the search is case-sensitive (default: False)"] = False,
+    file_pattern: Annotated[Optional[str], "Optional glob pattern to filter filenames (e.g. '*.py', '*.ts')"] = None,
+    max_matches: Annotated[int, "Maximum number of matching lines to return (default: 50)"] = 50,
+) -> str:
+    """
+    Search for exact text or regex patterns across files within a directory tree.
+    Returns matched file paths, line numbers, and matching line content.
+    """
+    search_dir = path
+    if not search_dir:
+        if g_ctx and hasattr(g_ctx, "resolve_allowed_directories"):
+            allowed = g_ctx.resolve_allowed_directories()
+            search_dir = allowed[0] if allowed else os.getcwd()
+        else:
+            search_dir = os.getcwd()
+
+    search_path = os.path.abspath(os.path.expanduser(search_dir))
+    if not os.path.exists(search_path):
+        return f"Error: Path '{search_dir}' does not exist."
+
+    flags = 0 if case_sensitive else re.IGNORECASE
+    try:
+        pattern = re.compile(query if is_regex else re.escape(query), flags)
+    except re.error as e:
+        return f"Error: Invalid regular expression '{query}': {e}"
+
+    if g_ctx:
+        g_ctx.dbg(f"grep_search ('{query}' in {search_path})")
+
+    matches = []
+    base_dir = search_path if os.path.isdir(search_path) else os.path.dirname(search_path)
+
+    def search_file(file_path: str):
+        try:
+            with open(file_path, "rb") as f:
+                header = f.read(1024)
+                if b"\x00" in header:
+                    return  # Skip binary file
+                f.seek(0)
+                line_no = 0
+                for raw_line in f:
+                    line_no += 1
+                    try:
+                        line = raw_line.decode("utf-8", errors="ignore")
+                    except Exception:
+                        continue
+                    if pattern.search(line):
+                        rel_path = os.path.relpath(file_path, base_dir)
+                        matches.append(f"{rel_path}:{line_no}: {line.rstrip()}")
+                        if len(matches) >= max_matches:
+                            return
+        except (OSError, PermissionError):
+            pass
+
+    if os.path.isfile(search_path):
+        search_file(search_path)
+    else:
+        for root, dirs, files in os.walk(search_path):
+            # Prune ignored directories
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in _IGNORED_SEARCH_DIRS]
+            for file in sorted(files):
+                if file_pattern and not fnmatch.fnmatch(file, file_pattern):
+                    continue
+                file_path = os.path.join(root, file)
+                search_file(file_path)
+                if len(matches) >= max_matches:
+                    break
+            if len(matches) >= max_matches:
+                break
+
+    if not matches:
+        return f"No matches found for '{query}'."
+
+    output = "\n".join(matches)
+    if len(matches) >= max_matches:
+        output += f"\n\n... [Capped at {max_matches} matches]"
+    return output
+
+
+# -----------------------------
 # Time tool
 # -----------------------------
 
@@ -391,6 +673,8 @@ def install(ctx):
     g_ctx = ctx
     group = "core_tools"
     # Examples of registering tools using automatic definition generation
+    ctx.register_tool(fetch_url, group=group)
+    ctx.register_tool(grep_search, group=group)
     ctx.register_tool(get_current_time, group=group)
     ctx.register_tool(calc, group=group)
     ctx.register_tool(run_python, group=group)
