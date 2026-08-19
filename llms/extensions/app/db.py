@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from contextlib import suppress
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
@@ -253,11 +254,17 @@ class AppDB:
 
     def import_date(self, date):
         # "1765794035" or "2025-12-31T05:41:46.686Z" or "2026-01-02 05:00:16"
+        # or "2026-01-02T05:00:16.123456+08:00" (the offset-bearing form DTOs emit)
         str = date or datetime.now().isoformat()
         if isinstance(str, int):
             return datetime.fromtimestamp(str)
         if isinstance(str, float):
             return datetime.fromtimestamp(str)
+        with suppress(ValueError):
+            parsed = datetime.fromisoformat(str.replace("Z", "+00:00"))
+            # Stored timestamps are naive server-local; keep an offset-bearing input in that
+            # shape so the column stays uniform and string comparisons keep sorting.
+            return parsed.astimezone().replace(tzinfo=None) if parsed.tzinfo else parsed
         return (
             datetime.strptime(str, "%Y-%m-%dT%H:%M:%S.%fZ")
             if "T" in str

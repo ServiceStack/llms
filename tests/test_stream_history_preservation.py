@@ -2,12 +2,16 @@
 """
 The durable conversation must survive anything that happens to a streaming response.
 
-Two independent mechanisms are tested here:
+Four independent mechanisms are tested here:
 
 1. `StreamCheckpointWriter` writes only the thread's `streamingMessage`, so the
    streaming path structurally cannot touch `messages`.
 2. `AppDB.guard_messages` refuses to shrink `messages` unless the caller explicitly
    opted in with `truncate`, so no request - however malformed - can erase a thread.
+3. `merge_streaming_message` presents the in-flight message to clients without
+   duplicating the turn once it has been committed to history.
+4. `to_wire_date` gives a timestamp an offset, so a browser in a different timezone
+   to the server reads the instant the server meant.
 """
 
 import asyncio
@@ -17,6 +21,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ["MOCK"] = "0"
@@ -24,6 +29,7 @@ os.environ["OPENROUTER_API_KEY"] = "test-api-key"
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from llms.extensions.app import merge_streaming_message, to_wire_date
 from llms.extensions.app.db import AppDB
 from llms.main import OpenAiCompatible, StreamCheckpointWriter, cli, g_handlers, get_app, get_client_timeout
 
@@ -259,6 +265,57 @@ class TestGuardMessages(unittest.TestCase):
         asyncio.run(self.db.update_thread_async(self.thread_id, {"streamingMessage": {"role": "assistant", "content": "partial"}}))
         self.assertEqual(len(self.stored()), 5)
         self.assertEqual(json.loads(self.db.get_thread(self.thread_id)["streamingMessage"])["content"], "partial")
+
+
+class TestMergeStreamingMessage(unittest.TestCase):
+    """The in-flight message is merged for clients, but only while it is still in flight."""
+
+    def committed(self):
+        return [
+            {"role": "user", "content": "hi", "timestamp": 41},
+            {"role": "assistant", "content": "Submitting", "timestamp": 42,
+             "tool_calls": [{"id": "call_1"}]},
+        ]
+
+    def test_in_flight_message_is_merged_and_flagged(self):
+        merged = merge_streaming_message(
+            self.committed(), {"role": "assistant", "content": "half a re", "timestamp": 43})
+        self.assertEqual(len(merged), 3)
+        self.assertTrue(merged[-1]["streaming"])
+
+    def test_committed_turn_is_not_rendered_twice(self):
+        """The tool loop commits the turn while its checkpoint is still the thread's."""
+        merged = merge_streaming_message(self.committed(), {
+            "role": "assistant", "content": "Submitting", "timestamp": 42, "model": "test",
+            "tool_calls": [{"id": "call_1"}],
+        })
+        self.assertEqual(len(merged), 2)
+        self.assertFalse(any(m.get("streaming") for m in merged))
+
+    def test_no_streaming_message_is_a_no_op(self):
+        self.assertEqual(merge_streaming_message(self.committed(), None), self.committed())
+
+
+class TestWireDates(unittest.TestCase):
+    """A naive timestamp names a wall clock; the client needs an instant."""
+
+    def test_naive_timestamp_gains_the_servers_offset(self):
+        wire = to_wire_date("2026-08-10 04:36:18.614061")
+        parsed = datetime.fromisoformat(wire)
+        self.assertIsNotNone(parsed.tzinfo, "a browser in another timezone reads naive as its own")
+        self.assertEqual(parsed.replace(tzinfo=None),
+                         datetime(2026, 8, 10, 4, 36, 18, 614061),
+                         "the wall clock it was written at must not shift")
+        self.assertEqual(parsed.utcoffset(),
+                         datetime(2026, 8, 10, 4, 36, 18).astimezone().utcoffset())
+
+    def test_offset_bearing_timestamp_is_left_alone(self):
+        self.assertEqual(to_wire_date("2026-08-10T04:36:18.614061+08:00"),
+                         "2026-08-10T04:36:18.614061+08:00")
+
+    def test_non_dates_pass_through(self):
+        for value in ("", None, "not-a-date", 42):
+            self.assertEqual(to_wire_date(value), value)
 
 
 class TestProviderBaseHelpers(unittest.TestCase):

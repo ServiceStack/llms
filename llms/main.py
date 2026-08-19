@@ -3776,8 +3776,9 @@ class AppExtensions:
             "21:9": "1536×672",
         }
         self.import_maps = {
-            "vue-prod": "/ui/lib/vue.min.mjs",
-            "vue": "/ui/lib/vue.mjs",
+            # The production build by default: the dev build ships Vue's warning machinery and
+            # keeps template comments as DOM nodes. DEBUG=1 swaps it back in (see index_handler).
+            "vue": "/ui/lib/vue.min.mjs",
             "vue-router": "/ui/lib/vue-router.min.mjs",
             "@servicestack/client": "/ui/lib/servicestack-client.mjs",
             "@servicestack/vue": "/ui/lib/servicestack-vue.mjs",
@@ -5634,7 +5635,12 @@ def cli_exec(cli_args, extra_args):
             await g_app.on_request(request)
             index_content = read_resource_file_bytes("index.html")
 
-            importmaps = {"imports": g_app.import_maps}
+            # Resolved per request, not at construction: `--debug` is parsed after g_app exists,
+            # so reading DEBUG in __init__ would latch whatever it was at import time.
+            imports = dict(g_app.import_maps)
+            if DEBUG:
+                imports["vue"] = "/ui/lib/vue.mjs"
+            importmaps = {"imports": imports}
             importmaps_script = '<script type="importmap">\n' + json.dumps(importmaps, indent=4) + "\n</script>"
             index_content = index_content.replace(
                 b'<script type="importmap"></script>',

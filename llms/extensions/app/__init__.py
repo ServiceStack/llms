@@ -182,6 +182,57 @@ def notify_thread_update(thread_id):
         event.set()
 
 
+# Timestamps are stored naive (that is what `datetime.now()` writes), which names a wall clock
+# rather than an instant. A browser in a different timezone to the server parses a naive value as
+# *its* local time, so every relative and elapsed label reads wrong by the offset between the two
+# (a run started seconds ago reports hours). Attaching the server's offset on the way out keeps the
+# value sortable and string-comparable while making it mean the same instant to every reader.
+WIRE_DATE_FIELDS = ("createdAt", "updatedAt", "startedAt", "completedAt", "publishedAt", "resolvedAt")
+
+
+def to_wire_date(value):
+    if not isinstance(value, str) or not value:
+        return value
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    # astimezone() on a naive value attaches the offset in effect at that timestamp without
+    # shifting its wall clock, so historical rows keep the time they were written at.
+    return (parsed if parsed.tzinfo else parsed.astimezone()).isoformat()
+
+
+def to_wire_dates(dto):
+    if isinstance(dto, dict):
+        for field in WIRE_DATE_FIELDS:
+            if field in dto:
+                dto[field] = to_wire_date(dto[field])
+    return dto
+
+
+def merge_streaming_message(messages, streaming):
+    """
+    Append the in-flight message to a client-facing messages list, skipping it when the turn it
+    belongs to has already been committed to history.
+
+    A streaming checkpoint outlives the commit that ends its turn: the tool loop persists the
+    assistant message that requested the tools and only overwrites `streamingMessage` when the
+    next turn produces its first chunk. Merging unconditionally in that window renders the same
+    message twice — the committed copy plus the stale partial — until the run completes and
+    clears it. Both copies carry the timestamp the provider assigned, so that is the identity
+    to match on.
+    """
+    if not isinstance(messages, list) or not isinstance(streaming, dict):
+        return messages
+    timestamp = streaming.get("timestamp")
+    role = streaming.get("role")
+    already_committed = timestamp is not None and any(
+        m.get("timestamp") == timestamp and m.get("role") == role
+        for m in messages if isinstance(m, dict)
+    )
+    return messages if already_committed else messages + [{**streaming, "streaming": True}]
+
+
 def get_thread_signature(thread: Dict[str, Any]):
     if not thread:
         return ""
@@ -270,17 +321,20 @@ def install(ctx):
             ],
         )
         if dto:
+            to_wire_dates(dto)
             # The in-flight message is stored separately so a failed stream can't damage
             # `messages`, but clients read one list, so present it merged on the way out.
+            # `streamingMessage` is popped either way: a projected query (the sidebar) selects it
+            # without selecting `messages`, and it must not reach the client as its own field.
             streaming = dto.pop("streamingMessage", None)
-            if isinstance(streaming, dict) and isinstance(dto.get("messages"), list):
-                dto["messages"] = dto["messages"] + [{**streaming, "streaming": True}]
+            if isinstance(dto.get("messages"), list):
+                dto["messages"] = merge_streaming_message(dto["messages"], streaming)
             dto["sig"] = get_thread_signature(dto)
             # Ownership was enforced by the thread query; include its active run even
             # when a projected thread query omitted the user column.
             run = g_db.get_active_agent_run(dto["id"], user="all")
             if run:
-                dto["run"] = run
+                dto["run"] = to_wire_dates(run)
         return dto
 
     def message_ranges(messages):
@@ -346,7 +400,9 @@ def install(ctx):
         }
 
     def request_dto(row):
-        return row if isinstance(row, (str, int, float)) else (row and g_db.to_dto(row, ["usage"]))
+        if isinstance(row, (str, int, float)):
+            return row
+        return row and to_wire_dates(g_db.to_dto(row, ["usage"]))
 
     def prompt_to_title(prompt):
         return prompt[:100] + ("..." if len(prompt) > 100 else "") if prompt else None
@@ -1040,8 +1096,9 @@ def install(ctx):
         run = g_db.get_agent_run(run_id, user=ctx.get_username(request))
         if not run:
             raise web.HTTPNotFound(text="Run not found")
-        run["steps"] = g_db.get_agent_steps(run_id, after=int(request.query.get("after", 0)))
-        return web.json_response(run)
+        run["steps"] = [to_wire_dates(step)
+                        for step in g_db.get_agent_steps(run_id, after=int(request.query.get("after", 0)))]
+        return web.json_response(to_wire_dates(run))
 
     ctx.add_get("runs/{id}", get_run)
 
@@ -1626,7 +1683,13 @@ def install(ctx):
             canonical = [m for m in (stored.get("messages") or []) if not m.get("streaming")]
             await g_db.update_thread_async(
                 thread_id,
-                {"messages": canonical + new_messages, "status": ctx.next_loading_message()},
+                {
+                    "messages": canonical + new_messages,
+                    "status": ctx.next_loading_message(),
+                    # the turn that produced these messages has finished streaming and is
+                    # now durable, so its checkpoint is a stale duplicate of it
+                    "streamingMessage": None,
+                },
                 user=user,
             )
             g_db.annotate_chat_messages(
@@ -1638,6 +1701,7 @@ def install(ctx):
             {
                 "messages": messages,
                 "status": ctx.next_loading_message(),
+                "streamingMessage": None,  # the streamed turn is committed, its partial is stale
             },
             user=user,
         )
