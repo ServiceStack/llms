@@ -63,21 +63,39 @@ jobs:
 
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@v5
+        uses: Wandalen/wretry.action@v3
         with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          action: docker/build-push-action@v6
+          with: |
+            context: .
+            push: ${{ github.event_name != 'pull_request' }}
+            tags: |
+              ${{ steps.meta.outputs.tags }}
+            labels: |
+              ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+            platforms: linux/amd64,linux/arm64
+          attempt_limit: 3
+          attempt_delay: 60000
+
+      - name: Extract build digest
+        id: digest
+        if: github.event_name != 'pull_request'
+        env:
+          BUILD_OUTPUTS: ${{ steps.build.outputs.outputs }}
+        run: |
+          DIGEST=$(printf '%s' "$BUILD_OUTPUTS" | jq -r '.digest')
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "null" ]; then
+            echo "ERROR: Could not extract image digest from build outputs"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Generate artifact attestation
         if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
           push-to-registry: true
-
