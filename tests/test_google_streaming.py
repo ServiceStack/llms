@@ -76,6 +76,50 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         self.app.shutdown()
         self.temp_dir.cleanup()
 
+    async def test_file_search_omits_function_declarations(self):
+        """Gemini rejects built-in File Search combined with client-side functions."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.content = DummyStreamReader([
+            'data: {"candidates":[{"content":{"parts":[{"text":"Found it"}],"role":"model"},"finishReason":"STOP","index":0}]}\n',
+            'data: [DONE]\n',
+        ])
+        mock_post = MagicMock()
+        mock_post.__aenter__.return_value = mock_response
+        mock_post.__aexit__.return_value = None
+        mock_session = MagicMock()
+        mock_session.post.return_value = mock_post
+        mock_session.__aenter__.return_value = mock_session
+        mock_session.__aexit__.return_value = None
+
+        chat_data = {
+            "model": "gemini-2.0-flash",
+            "messages": [{"role": "user", "content": "Find authentication docs"}],
+            "stream": True,
+            "tools": [
+                {
+                    "type": "file_search",
+                    "file_search": {"file_search_store_names": ["fileSearchStores/docs"]},
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "some_global_tool",
+                        "description": "A globally injected function",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                },
+            ],
+        }
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            await self.provider.chat(chat_data, context={})
+
+        payload = json.loads(mock_session.post.call_args.kwargs["data"])
+        self.assertEqual(payload["tools"], [{
+            "file_search": {"file_search_store_names": ["fileSearchStores/docs"]}
+        }])
+
     async def test_google_streaming_thread_updates(self):
         """Test streaming mode parses Google Gemini SSE events, updates thread, and returns response."""
         sse_lines = [

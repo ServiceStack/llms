@@ -835,6 +835,11 @@ async def process_chat(chat, provider_id=None):
 
     for message in chat["messages"]:
         if message.get("role") == "assistant":
+            # The citations rendered under an answer are a UI concern, not conversation
+            # history: they'd be rejected as an unknown field by strict providers and are
+            # dead weight in the context window for the rest.
+            message.pop("groundingMetadata", None)
+
             # Extract any thinking/reasoning value
             thinking_val = None
             for key in ["reasoning_content", "reasoning", "thinking", "reasoning_details"]:

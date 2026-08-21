@@ -64,6 +64,105 @@ def install_google(ctx):
                 to[k] = v
         return to
 
+    def grounding_chunk_key(chunk):
+        """Identity of a retrieved source, used to union chunks arriving across stream chunks."""
+        src = chunk.get("retrievedContext") or chunk.get("web") or chunk.get("maps") or {}
+        return (
+            src.get("uri"),
+            src.get("title"),
+            src.get("documentName"),
+            src.get("fileSearchStore"),
+            (src.get("text") or "")[:200],
+        )
+
+    def merge_grounding_metadata(acc, gm):
+        """
+        Merge one candidate's `groundingMetadata` into an accumulator.
+
+        Gemini repeats and extends groundingMetadata as a response streams, so sources are
+        unioned on their identity (rather than appended, which would duplicate every source
+        once per chunk) and each payload's `groundingChunkIndices` are remapped onto the
+        merged list. Spans are validated later by `finalize_grounding_metadata()`.
+        """
+        if not isinstance(gm, dict):
+            return acc
+        if acc is None:
+            acc = {
+                "groundingChunks": [],
+                "groundingSupports": [],
+                "_chunkKeys": {},
+                "_supportKeys": set(),
+            }
+
+        index_map = {}
+        for i, chunk in enumerate(gm.get("groundingChunks") or []):
+            key = grounding_chunk_key(chunk)
+            if key in acc["_chunkKeys"]:
+                index_map[i] = acc["_chunkKeys"][key]
+            else:
+                index_map[i] = len(acc["groundingChunks"])
+                acc["_chunkKeys"][key] = index_map[i]
+                acc["groundingChunks"].append(chunk)
+
+        for support in gm.get("groundingSupports") or []:
+            segment = support.get("segment") or {}
+            end = segment.get("endIndex")
+            if end is None:
+                continue
+            start = segment.get("startIndex") or 0
+            indices = [index_map[i] for i in (support.get("groundingChunkIndices") or []) if i in index_map]
+            if not indices:
+                continue
+            key = (start, end, tuple(indices))
+            if key in acc["_supportKeys"]:
+                continue
+            acc["_supportKeys"].add(key)
+            acc["groundingSupports"].append(
+                {
+                    "segment": {"startIndex": start, "endIndex": end, "text": segment.get("text")},
+                    "groundingChunkIndices": indices,
+                }
+            )
+
+        for key in ("webSearchQueries", "searchEntryPoint", "retrievalMetadata"):
+            if gm.get(key):
+                acc[key] = gm[key]
+
+        return acc
+
+    def finalize_grounding_metadata(acc, text, trust_spans=True):
+        """
+        Drop the merge bookkeeping and any span that can't be placed in the final answer.
+
+        `segment.startIndex/endIndex` are byte offsets into the UTF-8 answer text. A span
+        past the end of what we actually received (a truncated or cancelled stream, or a
+        payload whose offsets were relative to something else) can't be rendered as an
+        inline citation, and placing it anyway would attribute the wrong sentence to a
+        source. Sources themselves are always kept - only the inline markers are lost.
+        """
+        if not acc:
+            return None
+        acc.pop("_chunkKeys", None)
+        acc.pop("_supportKeys", None)
+        if not acc.get("groundingChunks"):
+            return None
+
+        supports = []
+        if trust_spans:
+            max_bytes = len(text.encode("utf-8")) if text else 0
+            for support in acc.get("groundingSupports") or []:
+                segment = support.get("segment") or {}
+                start = segment.get("startIndex") or 0
+                end = segment.get("endIndex") or 0
+                if 0 <= start < end <= max_bytes:
+                    supports.append(support)
+        dropped = len(acc.get("groundingSupports") or []) - len(supports)
+        if dropped > 0:
+            reason = "unplaceable" if trust_spans else "unreliable across multiple text parts"
+            ctx.dbg(f"Dropped {dropped} {reason} grounding span(s); {len(acc['groundingChunks'])} source(s) kept")
+        acc["groundingSupports"] = supports
+        return acc
+
     def sanitize_parameters(params):
         """Sanitize tool parameters for Google provider."""
 
@@ -162,6 +261,7 @@ def install_google(ctx):
             tool_calls_dict = {}
             finish_reason = None
             usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            grounding_acc = None
             writer = self.stream_writer(context)
 
             try:
@@ -205,6 +305,14 @@ def install_google(ctx):
                         for candidate in candidates:
                             if candidate.get("finishReason"):
                                 finish_reason = candidate["finishReason"]
+
+                            # File Search / Search grounding: the sources for the answer arrive
+                            # alongside the text they support and are merged as they stream, so a
+                            # streamed answer keeps its citations instead of silently losing them.
+                            if candidate.get("groundingMetadata"):
+                                grounding_acc = merge_grounding_metadata(
+                                    grounding_acc, candidate["groundingMetadata"]
+                                )
 
                             raw_content = candidate.get("content", {})
                             parts = raw_content.get("parts", [])
@@ -266,6 +374,8 @@ def install_google(ctx):
                 ctx.log(f"Stream cancelled for thread {writer.thread_id}")
                 return None
 
+            grounding = finalize_grounding_metadata(grounding_acc, content_acc)
+
             assistant_msg = {
                 "role": "assistant",
                 "content": content_acc,
@@ -275,6 +385,8 @@ def install_google(ctx):
                 assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
             if tool_calls_dict:
                 assistant_msg["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+            if grounding:
+                assistant_msg["groundingMetadata"] = grounding
 
             await writer.write(assistant_msg, final=True)
 
@@ -286,6 +398,11 @@ def install_google(ctx):
                 message_obj[reasoning_field or "reasoning"] = reasoning_acc
             if tool_calls_dict:
                 message_obj["tool_calls"] = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+            # Carried on the message, not the thread: `providerResponse` holds only the last
+            # response, so scrolling back through a conversation would show every answer
+            # sourced from the newest one's citations.
+            if grounding:
+                message_obj["groundingMetadata"] = grounding
 
             choice_obj = {
                 "index": 0,
@@ -347,7 +464,11 @@ def install_google(ctx):
                     elif tool["type"] == "file_search":
                         gemini_tools["file_search"] = tool["file_search"]
 
-                if function_declarations:
+                # Gemini built-in tools (including File Search) cannot be combined with
+                # client-side function calling unless server-side tool invocations are
+                # explicitly enabled. File-search threads are retrieval-only, so retain
+                # the built-in tool and omit globally injected function declarations.
+                if function_declarations and "file_search" not in gemini_tools:
                     gemini_tools["function_declarations"] = function_declarations
 
                 tools = [gemini_tools] if gemini_tools else None
@@ -713,9 +834,9 @@ def install_google(ctx):
                     images = []
                     audios = []
                     tool_calls = []
+                    text_parts = []
 
                     if "content" in candidate and "parts" in candidate["content"]:
-                        text_parts = []
                         reasoning_parts = []
                         for part in candidate["content"]["parts"]:
                             if "text" in part:
@@ -796,6 +917,15 @@ def install_google(ctx):
                         content = " ".join(text_parts)
                         reasoning = " ".join(reasoning_parts)
 
+                    # Grounding spans are byte offsets into a single text part. Joining several
+                    # parts with " " shifts everything after the first join, so the sources are
+                    # kept but the inline spans are dropped rather than pointing at the wrong words.
+                    grounding = finalize_grounding_metadata(
+                        merge_grounding_metadata(None, candidate.get("groundingMetadata")),
+                        content,
+                        trust_spans=len(text_parts) <= 1,
+                    )
+
                     choice = {
                         "index": i,
                         "finish_reason": candidate.get("finishReason", "stop"),
@@ -806,6 +936,8 @@ def install_google(ctx):
                     }
                     if reasoning:
                         choice["message"]["reasoning"] = reasoning
+                    if grounding:
+                        choice["message"]["groundingMetadata"] = grounding
                     if len(images) > 0:
                         choice["message"]["images"] = images
                     if len(audios) > 0:

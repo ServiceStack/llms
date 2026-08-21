@@ -1715,7 +1715,12 @@ def install(ctx):
 
     ctx.register_chat_tool_filter(tool_request)
 
-    def truncate_long_strings(obj, max_length=10000):
+    # Subtrees that are displayed to the user rather than kept for diagnostics. A long string
+    # in here is content, so replacing it with its length would blank out what the UI renders
+    # (e.g. the excerpt shown under a citation); it gets a readable prefix instead.
+    displayed_keys = ("groundingMetadata",)
+
+    def truncate_long_strings(obj, max_length=10000, displayed=False):
         """
         Recursively traverse a dictionary/list structure and replace
         string values longer than max_length with their length indicator.
@@ -1723,17 +1728,23 @@ def install(ctx):
         Args:
             obj: The object to process (dict, list, or other value)
             max_length: Maximum string length before truncation (default 10000)
+            displayed: True inside a subtree that is rendered in the UI, where an
+                over-long string is elided to a prefix instead of its length
 
         Returns:
-            A new object with long strings replaced by "({length})"
+            A new object with long strings replaced by "({length})", or by a
+            truncated prefix within displayed subtrees
         """
         if isinstance(obj, dict):
-            return {key: truncate_long_strings(value, max_length) for key, value in obj.items()}
+            return {
+                key: truncate_long_strings(value, max_length, displayed or key in displayed_keys)
+                for key, value in obj.items()
+            }
         elif isinstance(obj, list):
-            return [truncate_long_strings(item, max_length) for item in obj]
+            return [truncate_long_strings(item, max_length, displayed) for item in obj]
         elif isinstance(obj, str):
             if len(obj) > max_length:
-                return f"({len(obj)})"
+                return obj[:max_length] + "…" if displayed else f"({len(obj)})"
             return obj
         else:
             return obj
