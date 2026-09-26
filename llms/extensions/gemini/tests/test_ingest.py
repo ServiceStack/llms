@@ -318,6 +318,16 @@ class TestExtraction(unittest.TestCase):
             self.assertNotIn(noise, text)
         self.assertTrue(text.startswith("# Documentation"))
 
+    def test_razor_is_stripped_then_converted_to_markdown(self):
+        razor = b"""@page \"/add-servicestack-reference\"\n@model DocsPage\n<div>\n<h1>Visible docs</h1>\n@if (Model.Internal)\n{\n  <p>Hidden Razor content</p>\n}\n<p>This public documentation has enough useful words for readers.</p>\n</div>"""
+        text, front, skip = ig.extract(razor, "index.cshtml", {"minWords": 0})
+        self.assertIsNone(skip)
+        self.assertEqual(front["route"], "/add-servicestack-reference")
+        self.assertIn("# Visible docs", text)
+        self.assertIn("public documentation", text)
+        self.assertNotIn("@page", text)
+        self.assertNotIn("Hidden Razor content", text)
+
     def test_frontmatter_is_parsed_and_removed_from_body(self):
         meta, body = ig.parse_frontmatter(FILES["docs/guides/auth/jwt.md"])
         self.assertEqual(meta["docType"], "guide")
@@ -671,7 +681,7 @@ class SourceUrlTemplateTests(unittest.TestCase):
         )
 
     def test_every_placeholder(self):
-        v = ig.template_values("docs/guides/auth.md", "guides", "Auth", "docs")
+        v = ig.template_values("docs/guides/auth.md", "guides", "Auth", "docs", "/auth")
         self.assertEqual(v["fullpath"], "docs/guides/auth.md")
         self.assertEqual(v["path"], "guides/auth.md")
         self.assertEqual(v["pathnoext"], "guides/auth")
@@ -681,6 +691,22 @@ class SourceUrlTemplateTests(unittest.TestCase):
         self.assertEqual(v["ext"], "md")
         self.assertEqual(v["category"], "guides")
         self.assertEqual(v["title"], "Auth")
+        self.assertEqual(v["route"], "/auth")
+
+    def test_razor_route_builds_the_source_url(self):
+        values = ig.template_values("Pages/Docs.cshtml", route="/add-servicestack-reference")
+        self.assertEqual(ig.expand_template("https://docs.example{route}", values),
+                         "https://docs.example/add-servicestack-reference")
+        self.assertEqual(ig.expand_template("https://docs.example/{route}", values),
+                         "https://docs.example/add-servicestack-reference")
+        self.assertEqual(ig.extract_razor_route('\ufeff@page "/pdf"\n<h1>PDF</h1>'), "/pdf")
+        self.assertIsNone(ig.extract_razor_route('@page "/products/{id}"'))
+        self.assertIsNone(ig.extract_razor_route('@page "/products/{id:int?}"'))
+
+        warnings = []
+        self.assertIsNone(ig.expand_template(
+            "https://docs.example{route}", ig.template_values("guide.md"), warnings.append))
+        self.assertIn("{route}", warnings[0])
 
     def test_path_without_a_category_root_is_the_full_path(self):
         self.assertEqual(ig.template_values("guides/auth.md")["path"], "guides/auth.md")
@@ -782,6 +808,20 @@ class SourceUrlTemplateTests(unittest.TestCase):
                          "https://servicestack.net/posts/servicestack-pdf")
         self.assertNotIn("sourceUrl", docs["authors.md"])
         self.assertIn("authors.md", warnings[0])
+
+    def test_build_plan_can_require_a_resolved_source_url(self):
+        source_row = {
+            "config": {"requireSourceUrl": True},
+            "rules": {"defaults": {"sourceUrl": "https://docs.example{route}"}},
+        }
+        source = _FakeSource([
+            ("Routed.cshtml", '@page "/routed"\n<h1>Routed</h1>\n' + "word " * 60),
+            ("Partial.cshtml", '<h1>Partial</h1>\n' + "word " * 60),
+        ])
+        plan = ig.build_plan(source_row, source, {})
+        self.assertEqual([d["sourceKey"] for d in plan.add], ["Routed.cshtml"])
+        self.assertEqual(plan.add[0]["sourceUrl"], "https://docs.example/routed")
+        self.assertEqual(plan.skipped, [{"sourceKey": "Partial.cshtml", "reason": "Source URL is required"}])
 
     def test_build_plan_passes_the_category_root_to_path(self):
         source_row = {

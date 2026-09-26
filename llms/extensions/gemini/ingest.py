@@ -29,7 +29,7 @@ TEXT_EXTS = {
     "md", "mdx", "markdown", "txt", "rst", "adoc", "asciidoc", "csv", "tsv",
     "json", "yaml", "yml", "toml", "ini", "cfg", "log", "sql",
 }
-HTML_EXTS = {"html", "htm", "xhtml"}
+HTML_EXTS = {"html", "htm", "xhtml", "cshtml"}
 CODE_EXTS = {
     "py", "js", "mjs", "ts", "tsx", "jsx", "cs", "java", "go", "rs", "rb", "php", "kt", "swift",
     "c", "h", "cpp", "hpp", "sh", "ps1", "css", "scss", "vue", "svelte",
@@ -387,6 +387,38 @@ def _selector_matches(tag, attrs, selector):
     return False
 
 
+def strip_razor_code(text):
+    """Remove line-oriented Razor directives/code blocks before treating .cshtml as HTML."""
+    output = []
+    block_indent = None
+    for line in str(text or "").splitlines():
+        expanded = line.expandtabs(4)
+        stripped = expanded.lstrip()
+        indent = len(expanded) - len(stripped)
+        if block_indent is not None:
+            if stripped.startswith("}") and indent <= block_indent:
+                block_indent = None
+            continue
+        if stripped.startswith("@"):
+            continue
+        if stripped.startswith("{"):
+            # A self-contained brace line has no following block to suppress.
+            if "}" not in stripped[1:]:
+                block_indent = indent
+            continue
+        output.append(line)
+    return "\n".join(output)
+
+
+def extract_razor_route(text):
+    """Extract the route declared by a leading ``@page \"/route\"`` Razor directive."""
+    match = re.search(r'''(?m)^\s*\ufeff?\s*@page\s+["'](?P<route>/[^"']*)["']''', str(text or ""))
+    if not match:
+        return None
+    route = match.group("route")
+    return None if "{" in route or "}" in route else route
+
+
 def ext_of(name):
     return name.rsplit(".", 1)[1].lower() if "." in name else ""
 
@@ -414,6 +446,11 @@ def extract(content, filename, opts=None):
 
     front = {}
     if ext in HTML_EXTS:
+        if ext == "cshtml":
+            route = extract_razor_route(text)
+            if route is not None:
+                front["route"] = route
+            text = strip_razor_code(text)
         text = _HtmlText.convert(text, opts.get("selector"))
     elif ext in TEXT_EXTS or ext in CODE_EXTS or ext == "":
         front, text = parse_frontmatter(text)
@@ -446,7 +483,7 @@ LIST_FIELDS = ("versions", "tags")
 
 _TEMPLATE_RE = re.compile(r"\{(?P<name>\w+)(?::/(?P<pattern>(?:\\.|[^/])*)/)?\}")
 _TEMPLATE_KEYS = {
-    "category", "fullpath", "path", "pathnoext", "dir", "name", "filename", "ext", "title",
+    "category", "fullpath", "path", "pathnoext", "dir", "name", "filename", "ext", "title", "route",
 }
 
 
@@ -469,7 +506,7 @@ def validate_template(template):
         raise ValueError("Source URL contains an invalid or unmatched variable")
 
 
-def template_values(source_key, category=None, title=None, root=None):
+def template_values(source_key, category=None, title=None, root=None, route=None):
     """
     What a `sourceUrl` template can interpolate, all derived from where the document came from.
 
@@ -501,6 +538,7 @@ def template_values(source_key, category=None, title=None, root=None):
         "ext": ext,
         "category": category or "",
         "title": title or name,
+        "route": route or "",
     }
 
 
@@ -528,6 +566,9 @@ def expand_template(template, values, on_warning=None):
         nonlocal unmatched
         name = match.group("name")
         value = str(values.get(name.lower(), match.group(0)) or "")
+        if name.lower() == "route" and not value:
+            unmatched = "Source URL variable '{route}' is unavailable for this document; omitting Source URL"
+            return ""
         pattern = match.group("pattern")
         if pattern is None:
             return value
@@ -911,19 +952,27 @@ def build_plan(source_row, source, existing, override=None, on_progress=None, on
         # path rule - because by here they've all resolved to one string.
         if meta.get("sourceUrl"):
             expanded_url = expand_template(
-                meta["sourceUrl"], template_values(key, category, item.title, cat_cfg.get("root")),
+                meta["sourceUrl"], template_values(
+                    key, category, item.title, cat_cfg.get("root"), front.get("route")),
                 lambda warning: on_warning(f"{key}: {warning}") if on_warning else None,
             )
             if expanded_url is None:
                 meta.pop("sourceUrl", None)
             else:
                 meta["sourceUrl"] = expanded_url
+        if (source_row.get("config") or {}).get("requireSourceUrl") and not str(meta.get("sourceUrl") or "").strip():
+            seen.discard(key)
+            plan.skipped.append({"sourceKey": key, "reason": "Source URL is required"})
+            continue
         c_hash = content_hash(text, volatile)
         m_hash = metadata_hash(meta)
 
+        display_name = front.get("title") or item.title
+        if ext_of(key) in HTML_EXTS and not front.get("title"):
+            display_name = re.sub(r"\.[^.]+$", ".md", str(display_name), flags=re.I)
         entry = {
             "sourceKey": key,
-            "displayName": front.get("title") or item.title,
+            "displayName": display_name,
             "size": len(raw),
             "text": text,
             "contentHash": c_hash,

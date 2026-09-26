@@ -11,6 +11,7 @@ import {
 } from './explorer.mjs'
 import { initImport, ImportPanel } from './import.mjs'
 import { initAssistants, AssistantsPanel } from './assistants.mjs'
+import { initSearches, SearchesPanel } from './searches.mjs'
 
 let ext = null
 let ctx = null
@@ -166,7 +167,7 @@ const IssueCard = {
 const SyncReport = {
     components: { IssueCard },
     props: ['syncResult', 'syncing', 'pruning'],
-    emits: ['sync', 'prune'],
+    emits: ['sync', 'prune', 'add-source-documents'],
     template: `
         <div data-tag="SyncReport" class="mb-8">
             <div class="flex justify-between items-start mb-4">
@@ -225,27 +226,70 @@ const SyncReport = {
                     <IssueCard name="Metadata Mismatch" :issue="syncResult['Metadata Mismatch']" />
                     <IssueCard name="Unmatched Fields" :issue="syncResult['Unmatched Fields']" />
                     <IssueCard name="Duplicate Documents" :issue="syncResult['Duplicate Documents']" />
+                    <IssueCard name="Source Changes" :issue="syncResult['Source Changes']" />
+                    <IssueCard name="New Source Documents" :issue="syncResult['New Source Documents']" />
                 </div>
 
-                <!-- Duplicates are the one finding here with a one-click fix, because their cause
-                     is known: an upload adds a copy rather than replacing one. -->
-                <div v-if="duplicates" class="rounded-lg p-4 border flex flex-wrap items-center justify-between gap-3"
+                <div v-if="newSourceDocuments.length" class="rounded-lg border p-4 space-y-3" :class="[$styles.chromeBorder]">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold">Choose new documents to add</p>
+                            <p class="text-xs mt-0.5" :class="[$styles.muted]">
+                                Existing documents are synchronized automatically. Newly discovered files require your approval.
+                            </p>
+                        </div>
+                        <label class="inline-flex items-center gap-2 text-xs cursor-pointer select-none">
+                            <input type="checkbox" class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+                                :checked="allNewSelected" @change="selectAllNew($event.target.checked)">
+                            Select all
+                        </label>
+                    </div>
+                    <div class="max-h-72 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
+                        <label v-for="doc in newSourceDocuments" :key="doc.key"
+                            class="flex items-start gap-3 py-2.5 cursor-pointer">
+                            <input type="checkbox" class="mt-0.5 size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+                                :checked="selectedNew.has(doc.key)" @change="toggleNew(doc.key, $event.target.checked)">
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-medium truncate">{{ doc.displayName || doc.sourceKey }}</span>
+                                <span class="block text-xs truncate" :class="[$styles.muted]">
+                                    {{ doc.sourceName }} · {{ doc.sourceKey }}
+                                    <template v-if="doc.docType"> · {{ doc.docType }}</template>
+                                    <template v-if="doc.status"> · {{ doc.status }}</template>
+                                </span>
+                                <span v-if="doc.sourceUrl" class="block text-xs truncate text-blue-600 dark:text-blue-400">{{ doc.sourceUrl }}</span>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" class="px-3 py-1.5 rounded-md text-xs border font-semibold"
+                            :class="[$styles.secondaryButton]" :disabled="syncing"
+                            @click="$emit('add-source-documents', { addAllSourceDocuments: true })">Add all</button>
+                        <button type="button" class="px-3 py-1.5 rounded-md text-xs font-semibold disabled:opacity-50"
+                            :class="[$styles.primaryButton]" :disabled="syncing || !selectedNew.size"
+                            @click="$emit('add-source-documents', { sourceDocuments: [...selectedNew] })">
+                            Add selected ({{ selectedNew.size }})
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="prunable" class="rounded-lg p-4 border flex flex-wrap items-center justify-between gap-3"
                     :class="[$styles.chromeBorder]">
                     <div class="text-sm min-w-0">
-                        <p class="font-semibold">{{ duplicates.toLocaleString() }} document{{ duplicates === 1 ? ' has' : 's have' }} more than one copy in Gemini</p>
+                        <p class="font-semibold">Store cleanup available</p>
                         <p class="text-xs mt-0.5" :class="[$styles.muted]">
-                            Left over from re-indexing before an upload removed the copy it replaced. Keeps the
-                            newest copy of each and deletes the rest; nothing local changes.
+                            <template v-if="duplicates">Removes {{ duplicates.toLocaleString() }} extra Gemini cop{{ duplicates === 1 ? 'y' : 'ies' }}.</template>
+                            <template v-if="duplicates && missingRemote"> </template>
+                            <template v-if="missingRemote">Removes {{ missingRemote.toLocaleString() }} stale local record{{ missingRemote === 1 ? '' : 's' }} whose Gemini document no longer exists.</template>
                         </p>
                     </div>
                     <button type="button" @click="$emit('prune')" :disabled="pruning"
                         class="px-4 py-2 rounded-md text-sm font-semibold border shrink-0" :class="[$styles.chromeBorder]">
-                        {{ pruning ? 'Removing…' : 'Remove extra copies' }}
+                        {{ pruning ? 'Pruning…' : 'Prune Store' }}
                     </button>
                 </div>
 
                 <!-- Success Message -->
-                <div v-else class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                <div v-if="!hasIssues" class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
                     <p class="text-sm font-semibold text-green-900 dark:text-green-100">Perfect Sync!</p>
                     <p class="text-xs text-green-700 dark:text-green-300 mt-1">All documents are properly synchronized.</p>
                 </div>
@@ -261,15 +305,40 @@ const SyncReport = {
                 (props.syncResult['Missing Metadata']?.count || 0) > 0 ||
                 (props.syncResult['Metadata Mismatch']?.count || 0) > 0 ||
                 (props.syncResult['Unmatched Fields']?.count || 0) > 0 ||
-                (props.syncResult['Duplicate Documents']?.count || 0) > 0
+                (props.syncResult['Duplicate Documents']?.count || 0) > 0 ||
+                (props.syncResult['Source Changes']?.count || 0) > 0 ||
+                (props.syncResult['New Source Documents']?.count || 0) > 0
             )
         })
 
         const duplicates = computed(() => props.syncResult?.['Duplicate Documents']?.count || 0)
+        const missingRemote = computed(() => props.syncResult?.['Missing from Gemini']?.count || 0)
+        const prunable = computed(() => duplicates.value + missingRemote.value)
+        const newSourceDocuments = computed(() => props.syncResult?.newSourceDocuments
+            || props.syncResult?.['New Source Documents']?.items || [])
+        const selectedNew = ref(new Set())
+        const allNewSelected = computed(() => newSourceDocuments.value.length > 0
+            && selectedNew.value.size === newSourceDocuments.value.length)
+        function toggleNew(key, checked) {
+            const next = new Set(selectedNew.value)
+            if (checked) next.add(key); else next.delete(key)
+            selectedNew.value = next
+        }
+        function selectAllNew(checked) {
+            selectedNew.value = checked ? new Set(newSourceDocuments.value.map(x => x.key)) : new Set()
+        }
+        watch(() => props.syncResult, () => { selectedNew.value = new Set() })
 
         return {
             hasIssues,
             duplicates,
+            missingRemote,
+            prunable,
+            newSourceDocuments,
+            selectedNew,
+            allNewSelected,
+            toggleNew,
+            selectAllNew,
         }
     }
 }
@@ -766,6 +835,22 @@ const DeleteStoreDialog = {
                                 <b>{{ Number(summary.assistants || 0).toLocaleString() }}</b>
                             </div>
                             <div class="flex items-center justify-between gap-4 border-b px-3 py-2.5" :class="[$styles.chromeBorder]">
+                                <span>Search widgets <small v-if="summary.publishedSearchWidgets" class="text-red-600 dark:text-red-400">({{ summary.publishedSearchWidgets }} published)</small></span>
+                                <b>{{ Number(summary.searchWidgets || 0).toLocaleString() }}</b>
+                            </div>
+                            <div class="flex items-center justify-between gap-4 border-b px-3 py-2.5" :class="[$styles.chromeBorder]">
+                                <span>Local search sections</span><b>{{ Number(summary.searchSections || 0).toLocaleString() }}</b>
+                            </div>
+                            <div class="flex items-center justify-between gap-4 border-b px-3 py-2.5" :class="[$styles.chromeBorder]">
+                                <span>Customer searches</span><b>{{ Number(summary.searches || 0).toLocaleString() }}</b>
+                            </div>
+                            <div class="flex items-center justify-between gap-4 border-b px-3 py-2.5" :class="[$styles.chromeBorder]">
+                                <span>Search result clicks</span><b>{{ Number(summary.searchClicks || 0).toLocaleString() }}</b>
+                            </div>
+                            <div class="flex items-center justify-between gap-4 border-b px-3 py-2.5" :class="[$styles.chromeBorder]">
+                                <span>Website page views</span><b>{{ Number(summary.searchPageViews || 0).toLocaleString() }}</b>
+                            </div>
+                            <div class="flex items-center justify-between gap-4 border-b px-3 py-2.5" :class="[$styles.chromeBorder]">
                                 <span>Customer conversations</span><b>{{ Number(summary.conversations || 0).toLocaleString() }}</b>
                             </div>
                             <div class="flex items-center justify-between gap-4 px-3 py-2.5">
@@ -811,7 +896,7 @@ const DeleteStoreDialog = {
 const FileStoreDetails = {
     components: {
         SyncReport, GeminiModelSelector, CoverageStrip, SelectionBar, BulkEditDialog, MetadataDialog,
-        MetaChip, ConfirmDialog, SourcesPanel, ImportPanel, AssistantsPanel, RunReport, TrustedFolders,
+        MetaChip, ConfirmDialog, SourcesPanel, ImportPanel, AssistantsPanel, SearchesPanel, RunReport, TrustedFolders,
         Popover, Breadcrumb, FilterChips, CategoryTree, FacetPicker, Modal, SyncState, CheckBox,
         DeleteStoreDialog
     },
@@ -820,7 +905,7 @@ const FileStoreDetails = {
     template: `
         <!-- Room for the docked selection bar, so the last row isn't the one it covers. -->
         <div data-tag="FileStoreDetails" class="mx-auto px-4 sm:px-6 lg:px-8 py-8"
-            :class="[bulkCount ? 'pb-24' : '', view === 'assistants' ? 'max-w-7xl' : 'max-w-5xl']" v-if="store">
+            :class="[bulkCount ? 'pb-24' : '', ['assistants','search'].includes(view) ? 'max-w-7xl' : 'max-w-5xl']" v-if="store">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                  <div class="flex items-center gap-4">
                      <button type="button"
@@ -872,6 +957,13 @@ const FileStoreDetails = {
                                                   : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'">
                     Assistants
                     <span v-if="assistantCount" class="ml-1 text-xs tabular-nums" :class="[$styles.muted]">{{ assistantCount }}</span>
+                </button>
+                <button type="button" @click="selectView('search')"
+                    class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+                    :class="view === 'search' ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                              : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'">
+                    Search
+                    <span v-if="searchCount" class="ml-1 text-xs tabular-nums" :class="[$styles.muted]">{{ searchCount }}</span>
                 </button>
             </div>
 
@@ -945,9 +1037,17 @@ const FileStoreDetails = {
                        <span v-if="searching" class="text-xs" :class="[$styles.muted]">
                            Searching {{ ext.prefs.category ? 'this folder and below' : 'all folders' }}
                        </span>
-                       <span v-else-if="folderCount" class="text-xs tabular-nums" :class="[$styles.muted]">
-                           {{ folderCount }} folder{{ folderCount === 1 ? '' : 's' }}
-                       </span>
+                       <div v-else-if="ext.prefs.category" class="flex items-center gap-3">
+                           <span class="text-xs tabular-nums" :class="[$styles.muted]">
+                               {{ folderCount }} folder{{ folderCount === 1 ? '' : 's' }}
+                           </span>
+                           <button type="button" @click="openCategoryDelete(ext.prefs.category, currentCategoryTotal)"
+                               class="px-2.5 py-1 rounded-md border text-xs font-medium inline-flex items-center gap-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                               :class="[$styles.chromeBorder]" :title="'Recursively delete /' + ext.prefs.category">
+                               <svg class="size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2z"/></svg>
+                               Delete category
+                           </button>
+                       </div>
                    </div>
 
                    <!-- Select, then filter state, then the two panels that produce it. Filters
@@ -1031,9 +1131,9 @@ const FileStoreDetails = {
                                 <span :class="[$styles.muted]">{{ parentCategory == null ? (store?.displayName || 'Top level') : parentCategory }}</span>
                             </button>
                         </li>
-                       <li v-for="f in (searching ? [] : childFolders)" :key="f.path" class="px-4 sm:px-6">
+                       <li v-for="f in (searching ? [] : childFolders)" :key="f.path" class="px-4 sm:px-6 flex items-center gap-2">
                            <button type="button" @click="selectCategory(f.path)"
-                               class="w-full py-2.5 flex items-center justify-between gap-3 text-sm text-left">
+                               class="min-w-0 flex-1 py-2.5 flex items-center justify-between gap-3 text-sm text-left">
                                 <span class="flex items-center gap-2 min-w-0">
                                     <svg class="size-4 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1046,6 +1146,11 @@ const FileStoreDetails = {
                                    :title="f.own + ' here, ' + f.total + ' including subfolders'">
                                    {{ f.total.toLocaleString() }}
                                </span>
+                           </button>
+                           <button type="button" @click.stop="openCategoryDelete(f.path, f.total)"
+                               class="shrink-0 p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                               :title="'Recursively delete ' + f.path + ' and its ' + f.total + ' document' + (f.total === 1 ? '' : 's')">
+                               <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2z"/></svg>
                            </button>
                        </li>
                        <li v-for="doc in docs" :key="doc.id">
@@ -1120,8 +1225,8 @@ const FileStoreDetails = {
                                     <span v-if="doc.startedAt && !doc.uploadedAt && !doc.error" class="p-1 text-blue-600" title="Uploading to Gemini...">
                                         <svg class="size-5 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"/></svg>
                                     </span>
-                                    <!-- Show re-upload button only if document has been uploaded -->
-                                    <button v-else-if="doc.uploadedAt || doc.error" type="button" @click.stop="reuploadDocument(doc)" :disabled="reuploadingDocs.has(doc.id)" class="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Re-upload document to Gemini">
+                                    <!-- Uploaded, failed and orphaned local documents can all be queued again -->
+                                    <button v-else-if="doc.uploadedAt || doc.error || doc.state === 'MISSING_FROM_REMOTE'" type="button" @click.stop="reuploadDocument(doc)" :disabled="reuploadingDocs.has(doc.id)" class="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Upload document to Gemini">
                                         <svg v-if="!reuploadingDocs.has(doc.id)" class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="m346.231 284.746l-90.192-90.192l-90.192 90.192l22.627 22.627l51.565-51.565V496h32V255.808l51.565 51.565z"/><path fill="currentColor" d="M400 161.453V160c0-79.4-64.6-144-144-144S112 80.6 112 160v2.491A122.3 122.3 0 0 0 49.206 195.2A109.4 109.4 0 0 0 16 273.619c0 31.119 12.788 60.762 36.01 83.469C74.7 379.275 105.338 392 136.07 392H200v-32h-63.93C89.154 360 48 319.635 48 273.619c0-42.268 35.64-77.916 81.137-81.155L144 191.405V160a112 112 0 0 1 224 0v32.04l15.8.2c46.472.588 80.2 34.813 80.2 81.379C464 322.057 428.346 360 382.83 360H312v32h70.83a109.75 109.75 0 0 0 81.14-35.454c20.655-22.207 32.03-51.657 32.03-82.927c0-58.437-40.284-104.227-96-112.166"/></svg>
                                         <svg v-else class="size-5 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"/></svg>
                                     </button>
@@ -1199,6 +1304,11 @@ const FileStoreDetails = {
                     @count="assistantCount = $event" />
             </div>
 
+            <div v-show="view === 'search'" class="border-b border-gray-200 dark:border-gray-700 mb-8">
+                <SearchesPanel :storeId="storeId" :facets="facets" :route-search="routeQuery.search"
+                    @navigate="onSearchNavigate" @count="searchCount = $event" />
+            </div>
+
             <Modal :open="coverageOpen" title="Coverage & filters"
                 subtitle="What metadata your documents carry, what you can filter on, and what Gemini currently holds."
                 @close="coverageOpen = false">
@@ -1256,17 +1366,20 @@ const FileStoreDetails = {
                 @update:modelValue="saveDocument" @close="editDoc = null" />
 
             <ConfirmDialog :open="bulkDeleteOpen" :busy="bulkDeleting"
-                :title="'Delete ' + bulkCount.toLocaleString() + ' document' + (bulkCount === 1 ? '' : 's') + '?'"
-                :confirm-label="'Delete ' + bulkCount.toLocaleString()" busy-label="Deleting…"
-                @confirm="confirmBulkDelete" @close="bulkDeleteOpen = false">
+                :title="deleteTargetLabel || ('Delete ' + deleteSelectionCount.toLocaleString() + ' document' + (deleteSelectionCount === 1 ? '' : 's') + '?')"
+                :confirm-label="'Delete ' + deleteSelectionCount.toLocaleString()" busy-label="Deleting…"
+                @confirm="confirmBulkDelete" @close="closeBulkDelete">
                 <p>They are removed from Gemini as well as from here. This cannot be undone.</p>
+                <p v-if="deleteTargetLabel" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                    This includes every nested category. A recurring import can add these documents again unless its include or exclude rules are also changed.
+                </p>
                 <ul v-if="deleteSample.length" class="mt-3 space-y-0.5 text-xs" :class="[$styles.muted]">
                     <li v-for="name in deleteSample" :key="name" class="truncate">{{ name }}</li>
-                    <li v-if="bulkCount > deleteSample.length">and {{ (bulkCount - deleteSample.length).toLocaleString() }} more</li>
+                    <li v-if="deleteSelectionCount > deleteSample.length">and {{ (deleteSelectionCount - deleteSample.length).toLocaleString() }} more</li>
                 </ul>
             </ConfirmDialog>
             <SyncReport :syncResult="syncResult" :syncing="syncing" :pruning="pruning"
-                @sync="syncStore" @prune="pruneStore" />
+                @sync="syncStore" @prune="pruneStore" @add-source-documents="syncStore" />
 
             <div class="flex justify-between items-center dark:border-gray-700">
                 <div>
@@ -1343,10 +1456,13 @@ const FileStoreDetails = {
             if (api.error) return
             pending.value = api.response || { count: 0 }
             pendingWorker.value = api.response?.worker || {}
+            // Reflect per-document completions while the rest of the batch is still running.
+            // Waiting for the aggregate pending count to reach zero leaves completed rows
+            // spinning indefinitely when one stale queue record survives.
+            await loadDocuments()
             clearTimeout(pendingTimer)
             // Only poll while something is in flight; an idle store shouldn't be chatty.
             if (pendingWorker.value.running || pending.value.uploading) pendingTimer = setTimeout(refreshPending, 3000)
-            else loadDocuments()   // the worker finished: pick up uploadedAt so spinners stop
         }
 
         async function pushToGemini() {
@@ -1448,6 +1564,13 @@ const FileStoreDetails = {
             return find(roots)?.children || []
         })
         const folderCount = computed(() => childFolders.value.length)
+        const currentCategoryTotal = computed(() => {
+            const category = ext.prefs.category
+            if (!category) return 0
+            const find = nodes => (nodes || []).reduce((hit, node) =>
+                hit || (node.path === category ? node : find(node.children)), null)
+            return find(facets.value?.category?.tree)?.total || 0
+        })
         const folderTotal = computed(() => {
             let n = 0
             const walk = nodes => (nodes || []).forEach(x => { n++; walk(x.children) })
@@ -1560,6 +1683,9 @@ const FileStoreDetails = {
         const bulkDeleteOpen = ref(false)
         const bulkDeleting = ref(false)
         const deleteSample = ref([])
+        const bulkDeleteSelector = ref(null)
+        const deleteSelectionCount = ref(0)
+        const deleteTargetLabel = ref('')
         const editDoc = ref(null)
 
         async function onBulkApplied() {
@@ -1609,21 +1735,49 @@ const FileStoreDetails = {
 
         async function openBulkDelete() {
             deleteSample.value = []
+            bulkDeleteSelector.value = bulkSelector.value
+            deleteSelectionCount.value = bulkCount.value
+            deleteTargetLabel.value = ''
             bulkDeleteOpen.value = true
             // Named documents, from the same selector the delete will use. "Delete 412 documents"
             // is otherwise a number taken on trust - and a filter selection has no rows on screen
             // to check it against.
-            const api = await ext.postJson('/documents/summary', { ...bulkSelector.value, fields: [] })
-            if (!api.error) deleteSample.value = api.response?.sample || []
+            const api = await ext.postJson('/documents/summary', { ...bulkDeleteSelector.value, fields: [] })
+            if (!api.error) {
+                deleteSample.value = api.response?.sample || []
+                deleteSelectionCount.value = api.response?.count ?? deleteSelectionCount.value
+            }
+        }
+
+        async function openCategoryDelete(path, count) {
+            deleteSample.value = []
+            bulkDeleteSelector.value = { filter: { filestoreId: Number(props.storeId), categoryUnder: path } }
+            deleteSelectionCount.value = Number(count || 0)
+            deleteTargetLabel.value = `Delete /${path} and all nested categories?`
+            bulkDeleteOpen.value = true
+            const api = await ext.postJson('/documents/summary', { ...bulkDeleteSelector.value, fields: [] })
+            if (!api.error) {
+                deleteSample.value = api.response?.sample || []
+                deleteSelectionCount.value = api.response?.count ?? deleteSelectionCount.value
+            }
+        }
+
+        function closeBulkDelete() {
+            if (bulkDeleting.value) return
+            bulkDeleteOpen.value = false
+            bulkDeleteSelector.value = null
+            deleteTargetLabel.value = ''
         }
 
         async function confirmBulkDelete() {
             bulkDeleting.value = true
             try {
-                const api = await ext.postJson('/documents/delete', bulkSelector.value)
+                const api = await ext.postJson('/documents/delete', bulkDeleteSelector.value || bulkSelector.value)
                 if (api.error) return ext.setError(api.error)
                 const failed = api.response?.errors || []
                 bulkDeleteOpen.value = false
+                bulkDeleteSelector.value = null
+                deleteTargetLabel.value = ''
                 clearSelection()
                 await loadFilestores()
                 await refresh()
@@ -1652,13 +1806,14 @@ const FileStoreDetails = {
         // A preview is always shown before anything is indexed, so the operator sees the cost
         // (and which rules matched) before committing.
         const importPreview = ref(null)
-        const pageViews = ['explore', 'import', 'assistants']
+        const pageViews = ['explore', 'import', 'assistants', 'search']
         const importViews = ['upload', 'folder', 'crawl']
         const view = computed({
             get: () => {
                 const explicit = queryValue(routeQuery.value.view)
                 if (pageViews.includes(explicit)) return explicit
                 if (routeQuery.value.assistant || routeQuery.value.conversations || routeQuery.value.conversation) return 'assistants'
+                if (routeQuery.value.search) return 'search'
                 if (routeQuery.value.import || routeQuery.value.crawl) return 'import'
                 return 'explore'
             },
@@ -1691,24 +1846,30 @@ const FileStoreDetails = {
                 patch.conversations = null
                 patch.conversation = null
             }
+            if (next !== 'search') patch.search = null
             ext.setPrefs({ view: next })
             updateNavigation(patch)
         }
         function onImportNavigate(patch) {
-            updateNavigation({ view: 'import', assistant: null, conversations: null, conversation: null, ...patch })
+            updateNavigation({ view: 'import', assistant: null, conversations: null, conversation: null, search: null, ...patch })
         }
         function onAssistantNavigate(patch) {
-            updateNavigation({ view: 'assistants', import: null, crawl: null, ...patch })
+            updateNavigation({ view: 'assistants', import: null, crawl: null, search: null, ...patch })
+        }
+        function onSearchNavigate(patch) {
+            updateNavigation({ view: 'search', import: null, crawl: null, assistant: null,
+                conversations: null, conversation: null, ...patch })
         }
         function updateExploreCategory(category) {
             updateNavigation({
                 view: 'explore', category, import: null, crawl: null,
-                assistant: null, conversations: null, conversation: null
+                assistant: null, conversations: null, conversation: null, search: null
             })
         }
         const importCategory = ref(null)
         const sourceCount = ref(0)
         const assistantCount = ref(0)
+        const searchCount = ref(0)
         const sourceListVersion = ref(0)
         const importPanel = ref(null)
         const uploadProgress = ref(null)
@@ -2132,14 +2293,14 @@ const FileStoreDetails = {
             } finally { pruning.value = false }
         }
 
-        async function syncStore() {
+        async function syncStore(options = {}) {
             if (!store.value) return
 
             syncing.value = true
             syncResult.value = null
 
             try {
-                const api = await ext.postJson(`/filestores/${store.value.id}/sync`)
+                const api = await ext.postJson(`/filestores/${store.value.id}/sync`, options)
                 if (api.error) {
                     ext.setError(api.error)
                 } else {
@@ -2212,7 +2373,11 @@ const FileStoreDetails = {
             bulkDeleteOpen,
             bulkDeleting,
             deleteSample,
+            deleteSelectionCount,
+            deleteTargetLabel,
             openBulkDelete,
+            openCategoryDelete,
+            closeBulkDelete,
             confirmBulkDelete,
             editDoc,
             editDocument,
@@ -2224,12 +2389,12 @@ const FileStoreDetails = {
             pending, pendingWorker, pushing, coverageOpen, pushToGemini, cancelPush,
             filterChips, removeFilter, availableQuickFilters, quickFilterLabel,
             matchCount,
-            searching, browsingRoot, parentCategory, childFolders, folderCount, folderTotal,
+            searching, browsingRoot, parentCategory, childFolders, folderCount, currentCategoryTotal, folderTotal,
             clearFilters, reviewPending, facetFields: FACET_FIELDS,
             docMeta,
             reload,
-            view, routeQuery, selectView, onImportNavigate, onAssistantNavigate,
-            sourceCount, assistantCount, sourceListVersion, importPanel, uploadProgress, uploadStatus,
+            view, routeQuery, selectView, onImportNavigate, onAssistantNavigate, onSearchNavigate,
+            sourceCount, assistantCount, searchCount, sourceListVersion, importPanel, uploadProgress, uploadStatus,
             importCategory,
             importInto,
             onImported, onUploadImported, viewUploads,
@@ -2542,6 +2707,7 @@ export default {
         initSources(ext)
         initImport(ext)
         initAssistants(ext, ctx, { GeminiModelSelector })
+        initSearches(ext, ctx)
         initExplorer(ext)
 
         ctx.setLeftIcons({

@@ -32,7 +32,7 @@ export const META_LIST_FIELDS = [
     { key: 'tags', label: 'Tags', placeholder: 'security, report' },
 ]
 
-export const SOURCE_URL_VARIABLES = ['category', 'fullPath', 'path', 'pathNoExt', 'dir', 'name', 'filename', 'ext', 'title']
+export const SOURCE_URL_VARIABLES = ['category', 'fullPath', 'path', 'pathNoExt', 'dir', 'name', 'filename', 'ext', 'route']
 const SOURCE_URL_VARIABLE_KEYS = new Set(SOURCE_URL_VARIABLES.map(x => x.toLowerCase()))
 
 export function sourceUrlTemplateError(value) {
@@ -64,7 +64,7 @@ export const IMPORT_FIELDS = META_FIELDS.map(f => f.key === 'sourceUrl' ? {
     ...f,
     variables: SOURCE_URL_VARIABLES,
     placeholder: 'https://docs.acme.com/{category}/{name}',
-    hint: 'Build the URL per document. Supports regex with {name:/pattern/} - where first capture group is used.',
+    hint: 'Build the URL per document. Use {route} for a Razor @page route; regex {name:/pattern/} uses first capture group.',
 } : f)
 
 /**
@@ -405,7 +405,7 @@ export const MetadataListInput = {
 /** Category tree with own/total counts — a parent whose docs are all in subfolders isn't empty. */
 export const FacetRail = {
     name: 'FacetRail',
-    components: { },
+    components: {},
     template: `
         <div data-tag="FacetRail" class="space-y-4">
             <div>
@@ -602,9 +602,9 @@ export const MetadataFields = {
         function opsFor(f) {
             return f.list
                 ? [{ value: 'add', label: 'Add to list' }, { value: 'remove', label: 'Remove from list' },
-                   { value: 'set', label: 'Replace list' }, { value: 'clear', label: 'Clear' }]
+                { value: 'set', label: 'Replace list' }, { value: 'clear', label: 'Clear' }]
                 : [{ value: 'fill', label: 'Set where empty' }, { value: 'set', label: 'Overwrite' },
-                   { value: 'clear', label: 'Clear' }]
+                { value: 'clear', label: 'Clear' }]
         }
         // The safe default in both shapes: neither one destroys what's already there.
         const defaultOp = f => (f.list ? 'add' : 'fill')
@@ -677,14 +677,14 @@ export const MetadataDialog = {
                         </button>
                         <div v-if="rulesOpen" class="mt-2 space-y-2">
                             <div v-for="(rule, i) in draft.rules" :key="i" class="flex flex-wrap items-center gap-2">
-                                <input v-model="rule.match" placeholder="**/reference/**"
+                                <input type="text" v-model="rule.match" placeholder="**/reference/**"
                                     class="w-48 px-2 py-1 rounded-md text-xs font-mono border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]">
                                 <select v-model="rule.field" class="pl-2 pr-8 py-1 rounded-md text-xs border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]">
                                     <option value="">skip these files</option>
                                     <option v-for="f in [...fields, ...listFields]" :key="f.key" :value="f.key">{{ f.label }}</option>
                                 </select>
                                 <div v-if="rule.field" class="w-40">
-                                    <input v-model="rule.value" placeholder="value"
+                                    <input type="text" v-model="rule.value" placeholder="value"
                                         class="w-full px-2 py-1 rounded-md text-xs border-2 bg-white dark:bg-gray-900"
                                         :class="rule.field === 'sourceUrl' && sourceUrlTemplateError(rule.value)
                                             ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : $styles.chromeBorder">

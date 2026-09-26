@@ -129,10 +129,10 @@ const BUTTON_COLOR_FIELDS = [
 
 const defaults = () => ({
     model: '',
-    identity: { title: 'Ask our assistant', description: 'Answers grounded in our documentation.', welcome: 'Hi! How can I help you today?', suggestions: ['What can you help me with?'] },
+    identity: { title: 'Ask our assistant', description: 'Answers grounded in our documentation.', welcome: 'Hi! How can I help you today?', tooltip: '', suggestions: ['What can you help me with?'] },
     scope: {},
-    behavior: { template: 'documentation', systemPrompt: PROMPTS.documentation, grounded: true, citations: true, responseStyle: 'balanced', openMode: '', keyboardShortcut: true, fallback: "I couldn't find that in the available documents.", notice: 'Conversations may be reviewed to improve support.' },
-    appearance: { theme: 'auto', colors: {}, fonts: {}, position: 'bottom-right', icon: 'sparkles', button: {...DEFAULT_BUTTON}, panelSize: 'standard' },
+    behavior: { template: 'documentation', systemPrompt: PROMPTS.documentation, grounded: true, citations: true, strictGrounding: true, minCitations: 1, responseStyle: 'balanced', openMode: '', keyboardShortcut: true, fallback: "I couldn't find that in the available documents.", notice: 'Conversations may be reviewed to improve support.' },
+    appearance: { theme: 'auto', colors: {}, fonts: {}, position: 'bottom-right', mount: '', icon: 'sparkles', button: {...DEFAULT_BUTTON}, panelSize: 'standard' },
     hosting: { allowedOrigins: [], requestsPerMinute: 30 },
 })
 const clone = value => JSON.parse(JSON.stringify(value))
@@ -150,7 +150,7 @@ const RIGHT_COLOR_GROUPS = [
     colorGroup('Text colors', [['primary-text','Primary'], ['muted-text','Muted'], ['link-text','Link'], ['error-text','Error'], ['warning-text','Warning']]),
 ]
 const LOWER_COLOR_COLUMNS = [LEFT_COLOR_GROUPS, RIGHT_COLOR_GROUPS]
-const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+const SYSTEM_FONT = "Inter, 'Inter Fallback', system-ui, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
 const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
 const FONT_PRESETS = { light:SYSTEM_FONT, dark:SYSTEM_FONT, nord:SYSTEM_FONT, matrix:MONO_FONT, 'soft-pink':SYSTEM_FONT }
 const LAUNCHER_ICONS = {
@@ -379,6 +379,10 @@ export const AssistantsPanel = {
                     <textarea v-model="config.identity.welcome" rows="2" class="mt-1 w-full rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"></textarea>
                   </div>
                   <div>
+                    <label class="block text-xs font-semibold">Button tooltip <span class="font-normal" :class="$styles.muted">(optional)</span></label>
+                    <input type="text" v-model.trim="config.identity.tooltip" maxlength="200" placeholder="No tooltip" class="mt-1 w-full rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
+                  </div>
+                  <div>
                     <div class="flex items-center justify-between gap-2">
                       <label class="block text-xs font-semibold">Suggested questions</label>
                       <button type="button" @click="addSuggestion()" :disabled="config.identity.suggestions.length >= 6" title="Add suggested question" class="size-7 grid place-items-center rounded-md border border-transparent text-lg leading-none text-gray-400 hover:text-gray-700 hover:border-gray-300 focus-visible:border-gray-300 dark:text-gray-500 dark:hover:text-gray-200 dark:hover:border-gray-600 dark:focus-visible:border-gray-600 disabled:opacity-40">+</button>
@@ -427,7 +431,7 @@ export const AssistantsPanel = {
                     </div>
                     <div class="flex flex-col justify-end pb-1">
                       <label class="inline-flex items-center gap-2 text-sm"><CheckBox v-model="config.behavior.keyboardShortcut"/> Open with Ctrl/⌘+K</label>
-                      <span class="mt-1 text-xs" :class="$styles.muted">The shortcut opens and focuses the Assistant.</span>
+                      <span class="mt-1 text-xs" :class="$styles.muted">Uses Ctrl/⌘+Shift+K when a Search widget is on the same page.</span>
                     </div>
                   </div>
                   <div class="grid sm:grid-cols-2 gap-3">
@@ -460,7 +464,9 @@ export const AssistantsPanel = {
                   <div class="flex flex-wrap gap-5">
                     <label class="inline-flex items-center gap-2 text-sm"><CheckBox v-model="config.behavior.grounded"/> Require grounded answers</label>
                     <label class="inline-flex items-center gap-2 text-sm"><CheckBox v-model="config.behavior.citations"/> Include citations</label>
+                    <label v-if="config.behavior.grounded" class="inline-flex items-center gap-2 text-sm"><CheckBox v-model="config.behavior.strictGrounding"/> Require retrieved evidence</label>
                   </div>
+                  <label v-if="config.behavior.grounded && config.behavior.strictGrounding" class="block text-xs font-semibold">Minimum citations<select v-model.number="config.behavior.minCitations" class="mt-1 w-full rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"><option v-for="n in 5" :key="n" :value="n">{{n}}</option></select><span class="mt-1 block font-normal" :class="$styles.muted">Below this threshold the Assistant returns the fallback message instead of an unsupported answer.</span></label>
                   <div>
                     <label class="block text-xs font-semibold">Fallback message</label>
                     <input type="text" v-model="config.behavior.fallback" class="mt-1 w-full rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]">
@@ -555,6 +561,7 @@ export const AssistantsPanel = {
                     <div><label class="text-xs font-semibold">Shadow</label><select v-model="config.appearance.button.shadow" class="mt-1 w-full rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"><option value="none">None</option><option value="subtle">Subtle</option><option value="medium">Medium</option><option value="strong">Strong</option></select></div>
                     <div><label class="text-xs font-semibold">Border width</label><input v-model.number="config.appearance.button.borderWidth" type="number" min="0" max="8" class="mt-1 w-full rounded-md" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"><span class="block mt-1 text-xs" :class="$styles.muted">0–8 px</span></div>
                     <div v-for="color in buttonColorFields" :key="color.key" class="text-xs"><span class="font-semibold">{{ color.label }}</span><div class="mt-1 flex items-center gap-2"><input type="color" :value="buttonColorValue(color.key)" @input="setButtonColor(color.key, $event.target.value)" :aria-label="'Choose ' + color.label + ' color'" class="size-9 shrink-0 rounded border cursor-pointer" :class="$styles.chromeBorder"><input type="text" :value="buttonColorValue(color.key)" @change="setButtonColorText(color.key, $event)" @keydown.enter.prevent="$event.target.blur()" maxlength="7" pattern="#[0-9a-fA-F]{6}" spellcheck="false" :aria-label="color.label + ' hex color'" class="min-w-0 w-24 rounded-md border px-2 py-1.5 text-xs font-mono font-normal bg-white dark:bg-gray-900" :class="$styles.chromeBorder"><button v-if="hasButtonColorOverride(color.key)" type="button" @click="resetButtonColor(color.key)" class="text-xs underline" :class="$styles.muted">reset</button></div></div>
+                    <div class="sm:col-span-2"><label class="text-xs font-semibold">Mount element <span class="font-normal" :class="$styles.muted">(optional CSS selector)</span></label><input type="text" v-model.trim="config.appearance.mount" maxlength="300" placeholder="#assistant-slot" spellcheck="false" class="mt-1 w-full rounded-md font-mono text-xs" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"><span class="block mt-1 text-xs" :class="$styles.muted">Renders the launcher inside this element (e.g. a nav bar) instead of a floating corner button, and anchors the panel to it. The panel still overlays the page. The host page can override it with <code>data-mount</code> on the script tag.</span></div>
                     <div><label class="text-xs font-semibold">Built-in icon</label><select v-model="config.appearance.icon" :disabled="!!launcherDataUri" class="mt-1 w-full rounded-md disabled:opacity-50" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"><option value="sparkles">Sparkles</option><option value="chat">Chat</option><option value="help">Help</option></select></div>
                   </div>
                   <div><label class="text-xs font-semibold">Custom icon Data URI</label><textarea v-model.trim="config.appearance.button.iconDataUri" rows="3" maxlength="200000" placeholder="data:image/svg+xml,... or data:image/png;base64,..." class="mt-1 w-full rounded-md font-mono text-xs" :class="[$styles.bgInput, $styles.textInput, $styles.borderInput]"></textarea><span class="block mt-1 text-xs" :class="$styles.muted">Supports PNG, JPEG, GIF, WebP, and SVG images. When set, it replaces the built-in icon.</span></div>
@@ -579,7 +586,7 @@ export const AssistantsPanel = {
 
                 <section v-if="selected" class="rounded-lg border p-4 space-y-3" :class="$styles.chromeBorder"><div class="flex items-center justify-between"><div><h3 class="font-semibold">Deployment</h3><p class="text-xs" :class="$styles.muted">Only appearance can be overridden by data attributes.</p></div><span class="text-xs font-medium" :class="archived ? 'text-orange-600 dark:text-orange-400' : selected.published ? 'text-green-600' : $styles.muted">{{ archived ? 'Archived' : selected.published ? 'Published' : 'Draft' }}</span></div>
                   <template v-if="selected.published"><div class="relative"><textarea readonly rows="3" :value="selected.embedCode" class="w-full px-2.5 py-1.5 pr-9 rounded-md text-xs font-normal border font-mono bg-gray-50 dark:bg-gray-950" :class="$styles.chromeBorder"></textarea><button type="button" @click="copyEmbed" class="absolute top-2 right-2 p-1 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10" :title="copiedEmbed ? 'Copied to clipboard' : 'Copy embed code'"><svg v-if="copiedEmbed" class="size-4 text-green-600 dark:text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 18l-5.7-5.7l1.425-1.425L9.55 15.15l9.175-9.175L20.15 7.4z"/></svg><svg v-else xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z"/></svg></button></div><div class="flex gap-2"><button @click="save(false)" class="px-3 py-1.5 rounded-md text-sm border hover:bg-gray-50 dark:hover:bg-gray-800" :class="$styles.secondaryButton">Unpublish</button><button @click="regenerate" class="px-3 py-1.5 rounded-md border border-red-600 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">Regenerate ID</button></div></template>
-                  <div class="flex flex-wrap gap-2"><button v-if="archived" type="button" @click="restore" :disabled="busy" class="px-3 py-1.5 rounded-md text-sm font-medium disabled:opacity-50" :class="$styles.secondaryButton">Restore Assistant</button><button v-else type="button" @click="archive" :disabled="busy" class="px-3 py-1.5 rounded-md border border-red-600 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">Archive assistant</button><button type="button" @click="openDelete" :disabled="busy" class="px-3 py-1.5 rounded-md border border-red-600 bg-red-600 text-sm font-semibold text-white hover:bg-red-700 hover:border-red-700 disabled:opacity-50">Delete permanently</button></div>
+                  <button type="button" @click="copyEmbed(true)" class="rounded-md border px-3 py-1.5 text-sm" :class="$styles.secondaryButton">Run diagnostics</button><div v-if="selected.diagnostics" class="overflow-hidden rounded-md border text-xs" :class="$styles.chromeBorder"><div v-for="check in selected.diagnostics.checks" :key="check.name" class="flex gap-2 border-b px-3 py-2 last:border-b-0" :class="$styles.chromeBorder"><span class="mt-1 size-2 shrink-0 rounded-full" :class="check.status === 'pass' ? 'bg-green-500' : check.status === 'warn' ? 'bg-amber-500' : 'bg-red-500'"></span><div><b>{{check.name}}</b><div :class="$styles.muted">{{check.message}}</div></div></div></div><div class="flex flex-wrap gap-2"><button v-if="archived" type="button" @click="restore" :disabled="busy" class="px-3 py-1.5 rounded-md text-sm font-medium disabled:opacity-50" :class="$styles.secondaryButton">Restore Assistant</button><button v-else type="button" @click="archive" :disabled="busy" class="px-3 py-1.5 rounded-md border border-red-600 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">Archive assistant</button><button type="button" @click="openDelete" :disabled="busy" class="px-3 py-1.5 rounded-md border border-red-600 bg-red-600 text-sm font-semibold text-white hover:bg-red-700 hover:border-red-700 disabled:opacity-50">Delete permanently</button></div>
                 </section>
                 <div class="flex flex-wrap items-center justify-end gap-2 border-t pt-4" :class="$styles.chromeBorder">
                   <button v-if="!archived && !selected?.published" type="button" @click="save(false)" :disabled="busy || !canSaveDraft" class="px-4 py-2 rounded-md text-sm border font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50" :class="$styles.secondaryButton">Save draft</button>
@@ -749,7 +756,7 @@ export const AssistantsPanel = {
                 if (target) conversationPane.value.scrollTo({ top:Math.max(0, target.offsetTop - 12), behavior:'smooth' })
             })
         }
-        async function copyEmbed() { await navigator.clipboard.writeText(selected.value.embedCode); copiedEmbed.value = true; setTimeout(() => copiedEmbed.value = false, 2000) }
+        async function copyEmbed(diagnostics = false) { if (diagnostics === true) { const api = await ext.getJson(`/assistants/${selected.value.id}/diagnostics`); if (api.error) return ext.setError(api.error); selected.value.diagnostics = api.response; return } await navigator.clipboard.writeText(selected.value.embedCode); copiedEmbed.value = true; setTimeout(() => copiedEmbed.value = false, 2000) }
         async function regenerate() { if (confirm('Regenerate the public ID? Existing embed codes will stop working.')) await save(true, { regeneratePublicId:true }) }
         async function archive() {
             if (!selected.value || archived.value || !confirm('Archive this Assistant? Its public widget will stop working, but customer conversations will be retained.')) return

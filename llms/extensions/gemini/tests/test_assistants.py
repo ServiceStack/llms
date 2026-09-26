@@ -22,6 +22,18 @@ except ImportError:
 
 
 class AssistantTests(unittest.TestCase):
+    def test_strict_grounding_requires_configured_evidence(self):
+        behavior = assistants.normalize_config()["behavior"]
+        self.assertTrue(behavior["strictGrounding"])
+        self.assertEqual(behavior["minCitations"], 1)
+        answer, citations = assistants.enforce_grounding("An unsupported answer", [], behavior)
+        self.assertEqual(answer, behavior["fallback"])
+        self.assertEqual(citations, [])
+        found = [{"title": "Guide", "url": "https://docs.example/guide"}]
+        answer, citations = assistants.enforce_grounding("Supported", found, behavior)
+        self.assertEqual(answer, "Supported")
+        self.assertEqual(citations, found)
+
     def test_specialist_templates_and_shared_rag_contract(self):
         expected = {
             "documentation", "troubleshooting", "support", "developer",
@@ -95,6 +107,46 @@ class AssistantTests(unittest.TestCase):
         self.assertIn("document.scrollingElement", source)
         self.assertIn("requestAnimationFrame(() => setOpen(true))", source)
         self.assertIn("(!event.ctrlKey && !event.metaKey)", source)
+
+    def test_inline_mount_anchors_the_panel_without_reflowing_the_host_page(self):
+        self.assertEqual(assistants.normalize_config()["appearance"]["mount"], "")
+        self.assertEqual(assistants.normalize_config({"appearance": {"mount": "  #assistant-slot  "}})
+                         ["appearance"]["mount"], "#assistant-slot")
+        self.assertEqual(assistants.normalize_config({"appearance": {"mount": "#nav</style><script>a{}"}})
+                         ["appearance"]["mount"], "#nav/stylescripta")
+        source = (ROOT / "ui" / "assistant-widget.js").read_text(encoding="utf-8")
+        self.assertIn("'mount' in overrides ? overrides.mount : appearance.mount", source)
+        self.assertIn("data-gemini-assistant-launcher", source)
+        self.assertIn(":host([data-inline]) .root{position:static", source)
+        self.assertIn(":host([data-anchored]) .root{position:fixed", source)
+        self.assertIn("function positionPanel()", source)
+        # the panel always overlays from the body so an inline launcher cannot trap it
+        self.assertIn("document.body.appendChild(host)", source)
+
+    def test_launcher_tooltip_is_opt_in_and_hidden_while_the_panel_is_open(self):
+        self.assertEqual(assistants.normalize_config()["identity"]["tooltip"], "")
+        self.assertEqual(assistants.normalize_config({"identity": {"tooltip": "  Ask our assistant  "}})
+                         ["identity"]["tooltip"], "Ask our assistant")
+        self.assertEqual(assistants.public_config(
+            {"publicId": "p", "config": {"identity": {"tooltip": "Ask our assistant"}}},
+            "https://host.example")["tooltip"], "Ask our assistant")
+        source = (ROOT / "ui" / "assistant-widget.js").read_text(encoding="utf-8")
+        self.assertIn("const tooltipText = String(CONFIG.tooltip || '').trim();", source)
+        self.assertIn("launcher.setAttribute('aria-describedby', tooltip.id);", source)
+        self.assertIn("tooltip?.classList.toggle('suppressed', open);", source)
+        self.assertNotIn("launcher.title", source)
+        self.assertIn("launcherShadow.querySelector('.root').append(launcherWrap);", source)
+
+    def test_auto_theme_follows_the_host_pages_saved_color_scheme(self):
+        source = (ROOT / "ui" / "assistant-widget.js").read_text(encoding="utf-8")
+        self.assertIn("localStorage.getItem('color-scheme')", source)
+        self.assertIn("savedColorScheme() || (colorScheme?.matches ? 'dark' : 'light')", source)
+        self.assertIn("element.dataset.theme = theme", source)
+        self.assertIn("addEventListener('storage', syncAutoTheme)", source)
+        self.assertIn("document.addEventListener('visibilitychange', syncAutoTheme)", source)
+        self.assertIn("new MutationObserver(syncAutoTheme)", source)
+        # data-theme always carries the resolved theme, so the auto media rule would be dead
+        self.assertNotIn(':host([data-theme="auto"])', source)
 
     def test_conversation_notice_can_be_customized_or_hidden(self):
         custom = assistants.normalize_config({"behavior": {"notice": "Chats are retained for support."}})
@@ -325,6 +377,13 @@ class AssistantPersistenceTests(unittest.IsolatedAsyncioTestCase):
             conversation = db.get_assistant_conversation(conversation_id)
             await db.add_assistant_message_async(conversation, "user", "Where is the guide?")
             await db.add_assistant_message_async(conversation, "assistant", "Here it is.")
+            search_id = await db.create_search_widget_async({
+                "filestoreId": store_id, "name": "Docs Search", "publicId": "docs-search",
+                "enabled": 1, "publishedAt": "now", "config": {},
+            }, user=user)
+            await db.record_search_query_async(
+                search_id, "integration tests", origin="https://docs.example",
+                result_count=3, document_count=1, duration_ms=5)
 
             # An unrelated store proves the cascade follows relationships instead of clearing tables.
             await db.create_document_async({
@@ -342,6 +401,8 @@ class AssistantPersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summary["publishedAssistants"], 1)
             self.assertEqual(summary["conversations"], 1)
             self.assertEqual(summary["messages"], 2)
+            self.assertEqual(summary["searchWidgets"], 1)
+            self.assertEqual(summary["searches"], 1)
 
             deleted = db.delete_filestore(store_id, user=user)
             self.assertEqual(deleted, summary)
@@ -354,6 +415,8 @@ class AssistantPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 "SELECT COUNT(*) FROM assistant_conversation WHERE assistantId = ?", (assistant_id,)), 0)
             self.assertEqual(db.db.scalar(
                 "SELECT COUNT(*) FROM assistant_message WHERE conversationId = ?", (conversation_id,)), 0)
+            self.assertEqual(db.db.scalar(
+                "SELECT COUNT(*) FROM search_query WHERE searchWidgetId = ?", (search_id,)), 0)
             self.assertIsNotNone(db.get_filestore(other_store_id, user=user))
             self.assertEqual(db.db.scalar(
                 "SELECT COUNT(*) FROM document WHERE filestoreId = ?", (other_store_id,)), 1)

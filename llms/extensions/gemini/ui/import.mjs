@@ -16,12 +16,12 @@ const cloneJson = value => JSON.parse(JSON.stringify(value ?? null))
 export const IMPORT_TABS = [
     {
         id: 'upload', label: 'Upload files',
-        blurb: 'Drop files in, including a .zip archive - which are expanded and individually imported with its folder structure becoming the category.',
+        blurb: 'Drop files in, including a .zip archive - which are expanded and individually imported with its folder structure becoming the category. HTML and Razor .cshtml files are converted to Markdown.',
         recurring: false, fields: [],
     },
     {
         id: 'folder', label: 'Folder', sourceType: 'folder',
-        blurb: 'Index a folder on this machine and keep it in sync.',
+        blurb: 'Index a folder on this machine and keep it in sync. HTML and Razor .cshtml files are converted to Markdown before import.',
         recurring: true,
         // A `pair` shares one grid cell, so the two settings that both shape the category sit
         // together and the glob fields get a row of their own.
@@ -93,10 +93,10 @@ export const ImportPanel = {
                     <div v-if="tab === 'crawl'" class="space-y-4">
                         <div class="grid sm:grid-cols-[1fr_14rem_7rem] gap-3">
                             <div><label class="block text-xs font-semibold mb-1">Start URL</label>
-                                <input v-model="crawlForm.url" @input="deriveCrawlName" placeholder="https://docs.example.org/"
+                                <input type="url" v-model="crawlForm.url" @input="deriveCrawlName" placeholder="https://docs.example.org/"
                                     class="w-full px-2.5 py-1.5 rounded-md text-sm border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]"></div>
                             <div><label class="block text-xs font-semibold mb-1">Import folder</label>
-                                <input v-model="crawlForm.name" @input="crawlNameEdited = true" placeholder="docs.example.org"
+                                <input type="text" v-model="crawlForm.name" @input="crawlNameEdited = true" placeholder="docs.example.org"
                                     class="w-full px-2.5 py-1.5 rounded-md text-sm border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]"></div>
                             <div><label class="block text-xs font-semibold mb-1">Max pages</label>
                                 <input v-model.number="crawlForm.maxPages" type="number" min="1" max="10000"
@@ -104,10 +104,10 @@ export const ImportPanel = {
                         </div>
                         <div class="grid sm:grid-cols-2 gap-3">
                             <div><label class="block text-xs font-semibold mb-1">Include paths</label>
-                                <input v-model="crawlForm.includeText" placeholder="/** — comma or newline separated"
+                                <input type="text" v-model="crawlForm.includeText" placeholder="/** — comma or newline separated"
                                     class="w-full px-2.5 py-1.5 rounded-md text-sm font-mono border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]"></div>
                             <div><label class="block text-xs font-semibold mb-1">Exclude paths</label>
-                                <input v-model="crawlForm.excludeText" placeholder="e.g. /archives/**, /account/**"
+                                <input type="text" v-model="crawlForm.excludeText" placeholder="e.g. /archives/**, /account/**"
                                     class="w-full px-2.5 py-1.5 rounded-md text-sm font-mono border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]"></div>
                             <div class="grid grid-cols-[10rem_1fr] gap-2">
                                 <div><label class="block text-xs font-semibold mb-1">Query strings</label>
@@ -115,7 +115,7 @@ export const ImportPanel = {
                                         <option value="ignore">Ignore</option><option value="allow">Allow selected</option><option value="all">Include all</option>
                                     </select></div>
                                 <div><label class="block text-xs font-semibold mb-1">Allowed parameters</label>
-                                    <input v-model="crawlForm.queryAllowText" :disabled="crawlForm.queryMode !== 'allow'" placeholder="version, lang"
+                                    <input type="text" v-model="crawlForm.queryAllowText" :disabled="crawlForm.queryMode !== 'allow'" placeholder="version, lang"
                                         class="w-full px-2.5 py-1.5 rounded-md text-sm font-mono border-2 bg-white dark:bg-gray-900 disabled:opacity-50" :class="[$styles.chromeBorder]"></div>
                             </div>
                             <div class="grid grid-cols-[7rem_1fr] gap-2">
@@ -123,7 +123,7 @@ export const ImportPanel = {
                                     <input v-model.number="crawlForm.maxDepth" type="number" min="0" max="100"
                                         class="w-full px-2.5 py-1.5 rounded-md text-sm border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]"></div>
                                 <div><label class="block text-xs font-semibold mb-1">Additional hosts</label>
-                                    <input v-model="crawlForm.allowedHostsText" placeholder="cdn.example.org"
+                                    <input type="text" v-model="crawlForm.allowedHostsText" placeholder="cdn.example.org"
                                         class="w-full px-2.5 py-1.5 rounded-md text-sm font-mono border-2 bg-white dark:bg-gray-900" :class="[$styles.chromeBorder]"></div>
                             </div>
                         </div>
@@ -288,6 +288,16 @@ export const ImportPanel = {
                         </div>
                     </div>
 
+                    <label v-if="tab !== 'crawl'" class="flex items-start gap-2.5 text-sm cursor-pointer">
+                        <CheckBox v-model="requireSourceUrl" class="mt-0.5" />
+                        <span>
+                            <span class="font-medium">Require a Source URL</span>
+                            <span class="block text-xs" :class="[$styles.muted]">
+                                Skip documents whose Source URL is empty or cannot be resolved, such as Razor pages without an @page route.
+                            </span>
+                        </span>
+                    </label>
+
                     <!-- Only offered where re-running actually means something -->
                     <label v-if="active.recurring" class="flex items-start gap-2.5 text-sm cursor-pointer">
                         <CheckBox v-model="saveSource" class="mt-0.5" />
@@ -374,6 +384,7 @@ export const ImportPanel = {
         const tab = ref(saved)
         const config = ref({})
         const metadata = ref({ defaults: {}, rules: [] })
+        const requireSourceUrl = ref(false)
         const saveSource = ref(false)
         const name = ref('')
         const files = ref([])
@@ -496,6 +507,7 @@ export const ImportPanel = {
         function select(id) {
             tab.value = id
             config.value = {}
+            requireSourceUrl.value = false
             ext.setPrefs({ importTab: id })
             emit('navigate', { import:id, crawl:id === 'crawl' ? selectedImport.value?.name || null : null })
         }
@@ -683,6 +695,7 @@ export const ImportPanel = {
                 if (v === '' || v == null) continue
                 form.append(k, Array.isArray(v) ? v.join(',') : v)
             }
+            form.append('requireSourceUrl', requireSourceUrl.value ? 'true' : 'false')
             for (const f of files.value) form.append('file', f)
             // Use the extension scope so uploads respect the host's configured route prefix
             // (e.g. /chat/ext/gemini instead of assuming /ext/gemini is mounted at the root).
@@ -715,6 +728,7 @@ export const ImportPanel = {
                     exclude: cfg.exclude ? [cfg.exclude] : null,
                     metadataSpecified: !!(Object.keys(metadata.value.defaults || {}).length
                         || (metadata.value.rules || []).length),
+                    requireSourceUrl: requireSourceUrl.value,
                 },
                 category: {
                     root: cfg.root || null,
@@ -740,7 +754,7 @@ export const ImportPanel = {
         }
 
         return {
-            tabs, tab, active, config, metadata, saveSource, name, files, dragover, dialogOpen,
+            tabs, tab, active, config, metadata, requireSourceUrl, saveSource, name, files, dragover, dialogOpen,
             busy, fileInput, hasArchive, formCells, summary, canSubmit,
             crawlForm, crawlNameEdited, crawlRuleSchema, crawlRules, crawlError, crawlImports, selectedImport,
             transformSchema, transforms, transformError, transformMessage,

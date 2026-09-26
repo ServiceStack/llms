@@ -194,6 +194,7 @@ DEFAULT_CONFIG = {
         "title": "Ask our assistant",
         "description": "Answers grounded in our documentation.",
         "welcome": "Hi! What can I help you find?",
+        "tooltip": "",
         "suggestions": ["What can you help me with?"],
     },
     "scope": {},
@@ -202,6 +203,8 @@ DEFAULT_CONFIG = {
         "systemPrompt": PROMPT_TEMPLATES["documentation"],
         "grounded": True,
         "citations": True,
+        "strictGrounding": True,
+        "minCitations": 1,
         "responseStyle": "balanced",
         "openMode": "",
         "keyboardShortcut": True,
@@ -213,6 +216,7 @@ DEFAULT_CONFIG = {
         "colors": {},
         "fonts": {},
         "position": "bottom-right",
+        "mount": "",
         "icon": "sparkles",
         "button": {
             "size": 50,
@@ -232,6 +236,11 @@ DEFAULT_CONFIG = {
         "requestsPerMinute": 30,
     },
 }
+
+
+def clean_selector(value):
+    """Sanitize a host-page CSS selector used to mount a widget launcher inline."""
+    return re.sub(r"[\x00-\x1f<>{};\\]", "", str(value or "")).strip()[:300]
 
 
 def new_public_id():
@@ -265,6 +274,7 @@ def normalize_config(value=None):
     identity = config["identity"]
     for key in ("title", "description", "welcome"):
         identity[key] = str(identity.get(key) or "").strip()[:1000]
+    identity["tooltip"] = str(identity.get("tooltip") or "").strip()[:200]
     suggestions = identity.get("suggestions") or []
     if not isinstance(suggestions, list):
         suggestions = [suggestions]
@@ -283,6 +293,11 @@ def normalize_config(value=None):
     behavior["systemPrompt"] = str(prompt or PROMPT_TEMPLATES[template]).strip()[:12000]
     behavior["grounded"] = bool(behavior.get("grounded", True))
     behavior["citations"] = bool(behavior.get("citations", True))
+    behavior["strictGrounding"] = bool(behavior.get("strictGrounding", True))
+    try:
+        behavior["minCitations"] = min(max(int(behavior.get("minCitations", 1)), 1), 5)
+    except (TypeError, ValueError):
+        behavior["minCitations"] = 1
     behavior["responseStyle"] = behavior.get("responseStyle") \
         if behavior.get("responseStyle") in ("concise", "balanced", "detailed") else "balanced"
     behavior["openMode"] = behavior.get("openMode") \
@@ -295,6 +310,7 @@ def normalize_config(value=None):
     appearance = config["appearance"]
     appearance["theme"] = appearance.get("theme") if appearance.get("theme") in ("auto", "light", "dark", "nord", "matrix", "soft-pink") else "auto"
     appearance["position"] = appearance.get("position") if appearance.get("position") in ("bottom-left", "bottom-right") else "bottom-right"
+    appearance["mount"] = clean_selector(appearance.get("mount"))
     appearance["icon"] = appearance.get("icon") if appearance.get("icon") in ("sparkles", "chat", "help") else "sparkles"
     appearance["panelSize"] = appearance.get("panelSize") if appearance.get("panelSize") in ("compact", "standard") else "standard"
     button = appearance.get("button") if isinstance(appearance.get("button"), dict) else {}
@@ -365,6 +381,16 @@ def normalize_config(value=None):
         rpm = 30
     hosting["requestsPerMinute"] = min(max(rpm, 1), 1000)
     return config
+
+
+def enforce_grounding(answer, citations, behavior):
+    """Apply the server-owned evidence threshold and citation visibility policy."""
+    found = list(citations or [])
+    strict = bool(behavior.get("grounded", True) and behavior.get("strictGrounding", True))
+    if strict and len(found) < int(behavior.get("minCitations", 1)):
+        return behavior.get("fallback") or DEFAULT_CONFIG["behavior"]["fallback"], []
+    return answer or behavior.get("fallback") or DEFAULT_CONFIG["behavior"]["fallback"], \
+        found if behavior.get("citations", True) else []
 
 
 def system_instruction(behavior):
@@ -458,6 +484,7 @@ def public_config(assistant, base_url):
         "title": config["identity"]["title"],
         "description": config["identity"]["description"],
         "welcome": config["identity"]["welcome"],
+        "tooltip": config["identity"]["tooltip"],
         "suggestions": config["identity"]["suggestions"],
         "notice": config["behavior"]["notice"],
         "launch": {

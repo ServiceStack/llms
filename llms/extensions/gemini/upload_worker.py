@@ -46,6 +46,7 @@ class UploadWorker:
         self.db = db.clone()
         self.client = client
         self.cancelled = threading.Event()
+        self.restart_requested = False
         self._local = threading.local()
         self.progress = {"total": 0, "done": 0, "failed": 0, "startedAt": None}
 
@@ -62,10 +63,13 @@ class UploadWorker:
 
     def start(self):
         with self.lock:
+            # Do this even while running: it closes the window where the worker has observed an
+            # empty queue but has not yet changed `running` back to false.
+            self.restart_requested = True
+            self.cancelled.clear()
             if self.running:
                 return
             self.running = True
-            self.cancelled.clear()
             self.progress = {"total": 0, "done": 0, "failed": 0, "startedAt": time.time()}
             threading.Thread(target=self.run, daemon=True).start()
 
@@ -101,11 +105,25 @@ class UploadWorker:
 
             with ThreadPoolExecutor(max_workers=GEMINI_UPLOAD_CONCURRENCY) as pool:
                 while self.running and not self.cancelled.is_set():
-                    docs = self.db.get_pending_documents(limit=GEMINI_UPLOAD_CONCURRENCY * 4)
+                    with self.lock:
+                        self.restart_requested = False
+                    try:
+                        docs = self.db.get_pending_documents(limit=GEMINI_UPLOAD_CONCURRENCY * 4)
+                    except Exception as e:
+                        # A transient database failure must not kill the only worker and strand
+                        # every queued row until a later request happens to call start().
+                        self.ctx.err("UploadWorker failed to read its queue; retrying", e)
+                        if self.cancelled.wait(5):
+                            break
+                        continue
                     # Reads can lag a just-committed update, so a document already processed in
                     # this pass can reappear; `completed` keeps it from being uploaded twice.
                     batch = [d for d in docs if d.get("id") not in completed]
                     if not batch:
+                        with self.lock:
+                            if self.restart_requested:
+                                continue
+                            self.running = False
                         break
 
                     self.progress["total"] += len(batch)
@@ -186,6 +204,29 @@ class UploadWorker:
             if not store_name:
                 raise Exception("Filestore has no name (not created in Gemini?)")
 
+            # Recover the crash window where Gemini committed the upload but UploadedAt was not
+            # persisted locally. Only adopt it when the remote metadata proves it is this exact
+            # cached content; a genuine replacement must still be uploaded.
+            if doc.get("name"):
+                try:
+                    store_doc = self.client.file_search_stores.documents.get(name=doc.get("name"))
+                    remote_hash = next(
+                        (m.string_value for m in (store_doc.custom_metadata or [])
+                         if m.key == "hash" and m.string_value), None)
+                    if str(store_doc.state).endswith("STATE_ACTIVE") and remote_hash == doc.get("hash"):
+                        db.update_document(doc_id, {
+                            "uploadedAt": datetime.now(), "startedAt": None,
+                            "name": store_doc.name, "displayName": store_doc.display_name,
+                            "sizeBytes": store_doc.size_bytes, "mimeType": store_doc.mime_type,
+                            "createTime": store_doc.create_time, "updateTime": store_doc.update_time,
+                            "state": store_doc.state,
+                            "customMetadata": db.custom_metadata_dto(store_doc.custom_metadata),
+                        }, user=user)
+                        self.ctx.log(f"Recovered completed Gemini upload for {doc.get('displayName')}")
+                        return
+                except Exception as e:
+                    self.ctx.err(f"Could not verify prior Gemini upload for {doc.get('displayName')}", e)
+
             url = doc.get("url")  # /~cache/xx/xxxx.ext
             if not url or not url.startswith("/~cache/"):
                 raise Exception("Invalid URL")
@@ -235,7 +276,7 @@ class UploadWorker:
                 raise Exception(operation.error.message)
 
             document_name = operation.response.document_name
-            db.update_document(doc_id, {"uploadedAt": datetime.now(), "name": document_name}, user=user)
+            db.update_document(doc_id, {"uploadedAt": datetime.now(), "startedAt": None, "name": document_name}, user=user)
 
             # After the new copy is in and the row points at it, never before: deleting first
             # would take the document out of the store for the length of the upload, and lose it
@@ -249,25 +290,32 @@ class UploadWorker:
                     # and a leftover is a sync finding rather than a broken document.
                     self.ctx.err(f"Could not remove superseded copy {prior_name}", e)
 
-            store_doc = self.client.file_search_stores.documents.get(name=document_name)
-            db.update_document(
-                doc_id,
-                {
-                    "name": store_doc.name,
-                    "displayName": store_doc.display_name,
-                    "sizeBytes": store_doc.size_bytes,
-                    "mimeType": store_doc.mime_type,
-                    "createTime": store_doc.create_time,
-                    "updateTime": store_doc.update_time,
-                    "state": store_doc.state,
-                    "customMetadata": db.custom_metadata_dto(store_doc.custom_metadata),
-                },
-                user=user,
-            )
+            try:
+                store_doc = self.client.file_search_stores.documents.get(name=document_name)
+                db.update_document(
+                    doc_id,
+                    {
+                        "name": store_doc.name,
+                        "displayName": store_doc.display_name,
+                        "sizeBytes": store_doc.size_bytes,
+                        "mimeType": store_doc.mime_type,
+                        "createTime": store_doc.create_time,
+                        "updateTime": store_doc.update_time,
+                        "state": store_doc.state,
+                        "customMetadata": db.custom_metadata_dto(store_doc.custom_metadata),
+                    },
+                    user=user,
+                )
+            except Exception as e:
+                # The operation succeeded and UploadedAt/name are already durable. A transient
+                # enrichment GET should not turn a completed upload into a failed document.
+                self.ctx.err(f"Uploaded {document_name}, but could not refresh remote fields", e)
 
         except Exception as e:
             self.ctx.err(f"Failed to upload doc {doc.get('id')}", e)
-            if doc_id:
+            # A deliberate cancellation or process shutdown leaves the row queued so the next
+            # worker (including the next app instance) can resume it automatically.
+            if doc_id and not self.cancelled.is_set():
                 db.update_document(doc_id, {"error": self.ctx.error_message(e)}, user=user)
             raise
 

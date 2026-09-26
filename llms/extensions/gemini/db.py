@@ -1,7 +1,8 @@
 import json
 import os
+import re
 import struct
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 from urllib.parse import urlsplit
 
@@ -331,6 +332,107 @@ class GeminiDB:
                 "citations": "JSON",
                 "error": "TEXT",
             },
+            "search_widget": {
+                "id": "INTEGER",
+                "filestoreId": "INTEGER",
+                "user": "TEXT",
+                "createdAt": "TIMESTAMP",
+                "updatedAt": "TIMESTAMP",
+                "name": "TEXT",
+                "publicId": "TEXT",
+                "enabled": "INTEGER",
+                "publishedAt": "TIMESTAMP",
+                "config": "JSON",
+            },
+            "search_query": {
+                "id": "INTEGER",
+                "searchWidgetId": "INTEGER",
+                "createdAt": "TIMESTAMP",
+                "query": "TEXT",
+                "normalizedQuery": "TEXT",
+                "groupKey": "TEXT",
+                "origin": "TEXT",
+                "pageUrl": "TEXT",
+                "userAgent": "TEXT",
+                "resultCount": "INTEGER",
+                "documentCount": "INTEGER",
+                "durationMs": "INTEGER",
+            },
+            "search_click": {
+                "id": "INTEGER",
+                "searchQueryId": "INTEGER",
+                "searchWidgetId": "INTEGER",
+                "documentId": "INTEGER",
+                "sectionId": "INTEGER",
+                "createdAt": "TIMESTAMP",
+                "position": "INTEGER",
+                "documentTitle": "TEXT",
+                "sourceUrl": "TEXT",
+                "resultType": "TEXT",
+            },
+            "search_page_view": {
+                "id": "INTEGER",
+                "searchWidgetId": "INTEGER",
+                "createdAt": "TIMESTAMP",
+                "hourKey": "TEXT",
+                "dayKey": "TEXT",
+                "clientId": "TEXT",
+                "sessionId": "TEXT",
+                "firstVisit": "INTEGER",
+                "origin": "TEXT",
+                "pageUrl": "TEXT",
+                "pagePath": "TEXT",
+                "pageTitle": "TEXT",
+                "referrer": "TEXT",
+                "userAgent": "TEXT",
+                "language": "TEXT",
+                "languages": "TEXT",
+                "timezone": "TEXT",
+                "platform": "TEXT",
+                "deviceType": "TEXT",
+                "screenWidth": "INTEGER",
+                "screenHeight": "INTEGER",
+                "viewportWidth": "INTEGER",
+                "viewportHeight": "INTEGER",
+                "devicePixelRatio": "REAL",
+                "colorDepth": "INTEGER",
+                "touchPoints": "INTEGER",
+                "connectionType": "TEXT",
+                "downlink": "REAL",
+                "rtt": "INTEGER",
+                "saveData": "INTEGER",
+                "navigationType": "TEXT",
+                "durationMs": "INTEGER",
+                "domContentLoadedMs": "INTEGER",
+                "loadMs": "INTEGER",
+                "utmSource": "TEXT",
+                "utmMedium": "TEXT",
+                "utmCampaign": "TEXT",
+                "utmTerm": "TEXT",
+                "utmContent": "TEXT",
+            },
+            "search_section": {
+                "id": "INTEGER",
+                "documentId": "INTEGER",
+                "filestoreId": "INTEGER",
+                "user": "TEXT",
+                "ordinal": "INTEGER",
+                "documentTitle": "TEXT",
+                "heading": "TEXT",
+                "headingLevel": "INTEGER",
+                "hierarchy": "JSON",
+                "anchor": "TEXT",
+                "url": "TEXT",
+                "kind": "TEXT",
+                "content": "TEXT",
+                "category": "TEXT",
+                "docType": "TEXT",
+                "status": "TEXT",
+                "locale": "TEXT",
+                "product": "TEXT",
+                "versions": "JSON",
+                "tags": "JSON",
+            },
             "document": {
                 "id": "INTEGER",
                 "filestoreId": "INTEGER",
@@ -375,11 +477,19 @@ class GeminiDB:
                 "tags": "JSON",  # {"bug": 0.9706085920333862, "mask": 0.9348311424255371, "glowing": 0.8394700884819031}
                 "startedAt": "TIMESTAMP",
                 "uploadedAt": "TIMESTAMP",
+                # Local search has its own durable desired/actual state. It must not share the
+                # Gemini upload error or timestamp: either side can fail while the other works.
+                "searchHash": "TEXT",
+                "searchIndexedHash": "TEXT",
+                "searchStartedAt": "TIMESTAMP",
+                "searchIndexedAt": "TIMESTAMP",
+                "searchError": "TEXT",
                 "metadata": "JSON",
                 "error": "TEXT",
                 "ref": "TEXT",
             },
         }
+        self.fts5_enabled = clone.fts5_enabled if clone else False
         if not clone:
             conn = self.db.create_writer_connection()
             try:
@@ -454,7 +564,10 @@ class GeminiDB:
             "ON document(filestoreId, IFNULL(sourceId,0), sourceKey) WHERE sourceKey IS NOT NULL",
         )
 
-        for table in ("source", "source_run", "assistant", "assistant_conversation", "assistant_message"):
+        for table in (
+            "source", "source_run", "assistant", "assistant_conversation", "assistant_message",
+            "search_widget", "search_query", "search_click", "search_page_view", "search_section",
+        ):
             cols = ",".join([f"{col} {overrides.get(col, dtype)}" for col, dtype in self.columns[table].items()])
             self.db.exec(conn, f"CREATE TABLE IF NOT EXISTS {table} ({cols})")
             self.add_missing_columns(conn, table)
@@ -467,6 +580,76 @@ class GeminiDB:
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_assistant_conversation ON assistant_conversation(assistantId,updatedAt)")
         self.db.exec(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uniq_assistant_session ON assistant_conversation(assistantId,sessionId)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_assistant_message ON assistant_message(conversationId,id)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_widget_filestore ON search_widget(filestoreId,user)")
+        self.db.exec(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uniq_search_widget_public ON search_widget(publicId)")
+        self.db.exec(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uniq_search_widget_name "
+                           "ON search_widget(IFNULL(user,''),filestoreId,name) WHERE enabled != 0")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_query_widget_created "
+                           "ON search_query(searchWidgetId,createdAt)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_query_widget_group "
+                           "ON search_query(searchWidgetId,groupKey)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_click_widget_created "
+                           "ON search_click(searchWidgetId,createdAt)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_click_query "
+                           "ON search_click(searchQueryId)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_click_widget_document "
+                           "ON search_click(searchWidgetId,documentId)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_page_view_widget_created "
+                           "ON search_page_view(searchWidgetId,createdAt)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_page_view_widget_day "
+                           "ON search_page_view(searchWidgetId,dayKey)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_page_view_widget_client "
+                           "ON search_page_view(searchWidgetId,clientId)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_page_view_widget_session "
+                           "ON search_page_view(searchWidgetId,sessionId)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_section_document ON search_section(documentId)")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_search_section_store ON search_section(filestoreId,user)")
+
+        # FTS5 is optional in SQLite builds. The ordinary section table remains the source of
+        # truth and the query path falls back to LIKE when this capability probe fails.
+        try:
+            existed = self.db.one(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='search_section_fts'",
+                connection=conn,
+            ) is not None
+            self.db.exec(conn, """
+                CREATE VIRTUAL TABLE IF NOT EXISTS search_section_fts USING fts5(
+                    documentTitle, heading, content,
+                    content='search_section', content_rowid='id',
+                    tokenize='unicode61 remove_diacritics 2'
+                )
+            """)
+            self.db.exec(conn, """
+                CREATE TRIGGER IF NOT EXISTS search_section_ai AFTER INSERT ON search_section BEGIN
+                    INSERT INTO search_section_fts(rowid,documentTitle,heading,content)
+                    VALUES (new.id,new.documentTitle,new.heading,new.content);
+                END
+            """)
+            self.db.exec(conn, """
+                CREATE TRIGGER IF NOT EXISTS search_section_ad AFTER DELETE ON search_section BEGIN
+                    INSERT INTO search_section_fts(search_section_fts,rowid,documentTitle,heading,content)
+                    VALUES ('delete',old.id,old.documentTitle,old.heading,old.content);
+                END
+            """)
+            self.db.exec(conn, """
+                CREATE TRIGGER IF NOT EXISTS search_section_au AFTER UPDATE ON search_section BEGIN
+                    INSERT INTO search_section_fts(search_section_fts,rowid,documentTitle,heading,content)
+                    VALUES ('delete',old.id,old.documentTitle,old.heading,old.content);
+                    INSERT INTO search_section_fts(rowid,documentTitle,heading,content)
+                    VALUES (new.id,new.documentTitle,new.heading,new.content);
+                END
+            """)
+            self.db.exec(conn, """
+                CREATE TRIGGER IF NOT EXISTS document_search_ad AFTER DELETE ON document BEGIN
+                    DELETE FROM search_section WHERE documentId = old.id;
+                END
+            """)
+            if not existed:
+                self.db.exec(conn, "INSERT INTO search_section_fts(search_section_fts) VALUES('rebuild')")
+            self.fts5_enabled = True
+        except Exception as e:
+            self.fts5_enabled = False
+            self.ctx.log(f"gemini: SQLite FTS5 unavailable, using LIKE search ({e})")
 
     def to_dto(self, row, json_columns):
         return to_dto(self.ctx, row, json_columns)
@@ -629,7 +812,17 @@ class GeminiDB:
                     WHERE conversationId IN (
                         SELECT id FROM assistant_conversation
                         WHERE assistantId IN (SELECT id FROM assistant WHERE filestoreId = :id)
-                    )) AS messages
+                    )) AS messages,
+                (SELECT COUNT(*) FROM search_widget WHERE filestoreId = :id) AS searchWidgets,
+                (SELECT COUNT(*) FROM search_widget
+                    WHERE filestoreId = :id AND enabled != 0 AND publishedAt IS NOT NULL) AS publishedSearchWidgets,
+                (SELECT COUNT(*) FROM search_section WHERE filestoreId = :id) AS searchSections,
+                (SELECT COUNT(*) FROM search_query
+                    WHERE searchWidgetId IN (SELECT id FROM search_widget WHERE filestoreId = :id)) AS searches,
+                (SELECT COUNT(*) FROM search_click
+                    WHERE searchWidgetId IN (SELECT id FROM search_widget WHERE filestoreId = :id)) AS searchClicks,
+                (SELECT COUNT(*) FROM search_page_view
+                    WHERE searchWidgetId IN (SELECT id FROM search_widget WHERE filestoreId = :id)) AS searchPageViews
             """,
             {"id": filestore_id},
             connection=connection,
@@ -671,6 +864,14 @@ class GeminiDB:
                 "DELETE FROM assistant_conversation WHERE assistantId IN ("
                 "SELECT id FROM assistant WHERE filestoreId = :id)",
                 "DELETE FROM assistant WHERE filestoreId = :id",
+                "DELETE FROM search_click WHERE searchWidgetId IN ("
+                "SELECT id FROM search_widget WHERE filestoreId = :id)",
+                "DELETE FROM search_page_view WHERE searchWidgetId IN ("
+                "SELECT id FROM search_widget WHERE filestoreId = :id)",
+                "DELETE FROM search_query WHERE searchWidgetId IN ("
+                "SELECT id FROM search_widget WHERE filestoreId = :id)",
+                "DELETE FROM search_widget WHERE filestoreId = :id",
+                "DELETE FROM search_section WHERE filestoreId = :id",
                 "DELETE FROM source_run WHERE sourceId IN (SELECT id FROM source WHERE filestoreId = :id)",
                 "DELETE FROM document WHERE filestoreId = :id "
                 "OR sourceId IN (SELECT id FROM source WHERE filestoreId = :id)",
@@ -689,6 +890,654 @@ class GeminiDB:
         if callback:
             callback(None, 1)
         return impact
+
+    # --- Local search index + published Search widgets --------------------------------
+
+    def search_widget_dto(self, row):
+        return self.to_dto(row, ["config"]) if row else None
+
+    def get_search_widget(self, id, user=None):
+        sql_where, params = self.get_user_filter(user, {"id": int(id)})
+        row = self.db.one(
+            f"SELECT w.*,(SELECT COUNT(*) FROM search_query q WHERE q.searchWidgetId=w.id) AS searchCount,"
+            f"(SELECT COUNT(*) FROM search_page_view p WHERE p.searchWidgetId=w.id) AS pageViewCount "
+            f"FROM search_widget w {sql_where} AND id = :id", params)
+        return self.search_widget_dto(row)
+
+    def get_public_search_widget(self, public_id):
+        row = self.db.one(
+            "SELECT * FROM search_widget WHERE publicId = :publicId AND enabled = 1 AND publishedAt IS NOT NULL",
+            {"publicId": public_id},
+        )
+        return self.search_widget_dto(row)
+
+    def query_search_widgets(self, filestore_id, user=None, include_archived=False):
+        sql_where, params = self.get_user_filter(user, {"filestoreId": int(filestore_id)})
+        archived = "" if include_archived else " AND enabled != 0"
+        rows = self.db.all(
+            f"SELECT w.*,(SELECT COUNT(*) FROM search_query q WHERE q.searchWidgetId=w.id) AS searchCount,"
+            f"(SELECT COUNT(*) FROM search_page_view p WHERE p.searchWidgetId=w.id) AS pageViewCount "
+            f"FROM search_widget w {sql_where} AND filestoreId = :filestoreId{archived} "
+            "ORDER BY updatedAt DESC,id DESC", params,
+        ) or []
+        return [self.search_widget_dto(row) for row in rows]
+
+    def search_widget_name_exists(self, filestore_id, name, user=None, exclude_id=None):
+        sql_where, params = self.get_user_filter(user, {"filestoreId": int(filestore_id), "name": name})
+        sql = (f"SELECT id FROM search_widget {sql_where} AND filestoreId = :filestoreId "
+               "AND name = :name AND enabled != 0")
+        if exclude_id is not None:
+            sql += " AND id != :excludeId"
+            params["excludeId"] = int(exclude_id)
+        return self.db.one(sql, params) is not None
+
+    async def create_search_widget_async(self, widget, user=None):
+        now = datetime.now()
+        data = with_user({**widget, "createdAt": now, "updatedAt": now}, user)
+        return await self.db.insert_async("search_widget", self.columns["search_widget"], data)
+
+    async def update_search_widget_async(self, id, widget, user=None):
+        data = with_user({**widget, "id": int(id), "updatedAt": datetime.now()}, user)
+        return await self.db.update_async("search_widget", self.columns["search_widget"], data)
+
+    async def archive_search_widget_async(self, id, user=None):
+        if not self.get_search_widget(id, user=user):
+            return False
+        await self.update_search_widget_async(id, {"enabled": 0, "publishedAt": None}, user=user)
+        return True
+
+    async def restore_search_widget_async(self, id, user=None):
+        widget = self.get_search_widget(id, user=user)
+        if not widget:
+            return None
+        if self.search_widget_name_exists(
+            widget["filestoreId"], widget["name"], user=user, exclude_id=widget["id"]
+        ):
+            raise ValueError(f"An active Search widget named '{widget['name']}' already exists")
+        await self.update_search_widget_async(id, {"enabled": 1, "publishedAt": None}, user=user)
+        return self.get_search_widget(id, user=user)
+
+    def delete_search_widget(self, id, user=None, confirmation=None):
+        widget = self.get_search_widget(id, user=user)
+        if not widget:
+            return None
+        if confirmation is not None and confirmation != widget["name"]:
+            raise ValueError(f'Type "{widget["name"]}" to confirm permanent deletion')
+        conn = self.db.create_writer_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            self.db.exec(conn, "DELETE FROM search_click WHERE searchWidgetId=:id", {"id": int(id)})
+            self.db.exec(conn, "DELETE FROM search_page_view WHERE searchWidgetId=:id", {"id": int(id)})
+            self.db.exec(conn, "DELETE FROM search_query WHERE searchWidgetId=:id", {"id": int(id)})
+            sql_where, params = self.get_user_filter(user, {"id": int(id)})
+            self.db.exec(conn, f"DELETE FROM search_widget {sql_where} AND id = :id", params)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return widget
+
+    def clear_search_analytics(self, id, user=None, before=None):
+        if not self.get_search_widget(id, user=user):
+            return None
+        conn = self.db.create_writer_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            suffix = " AND createdAt < :before" if before else ""
+            params = {"id": int(id), "before": before}
+            counts = {}
+            for key, table in (("clicks", "search_click"), ("pageViews", "search_page_view"),
+                               ("searches", "search_query")):
+                cursor = self.db.exec(conn, f"DELETE FROM {table} WHERE searchWidgetId=:id{suffix}", params)
+                counts[key] = max(int(cursor.rowcount or 0), 0)
+            conn.commit()
+            return counts
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    async def record_search_query_async(self, search_widget_id, query, origin=None, page_url=None,
+                                        user_agent=None, result_count=0, document_count=0,
+                                        duration_ms=0):
+        from llms.extensions.gemini import search
+        query = str(query or "").strip()[:200]
+        normalized = search.normalize_search_query(query)
+        return await self.db.insert_async("search_query", self.columns["search_query"], {
+            "searchWidgetId": int(search_widget_id),
+            "createdAt": datetime.now(),
+            "query": query,
+            "normalizedQuery": normalized,
+            "groupKey": search.search_query_group_key(normalized),
+            "origin": str(origin or "")[:500] or None,
+            "pageUrl": str(page_url or "")[:2000] or None,
+            "userAgent": str(user_agent or "")[:1000] or None,
+            "resultCount": max(int(result_count or 0), 0),
+            "documentCount": max(int(document_count or 0), 0),
+            "durationMs": max(int(duration_ms or 0), 0),
+        })
+
+    async def record_search_click_async(self, search_widget_id, filestore_id, search_query_id,
+                                        document_id, section_id=None, position=0,
+                                        document_title=None, source_url=None, result_type=None,
+                                        user=None):
+        query = self.db.one(
+            "SELECT id FROM search_query WHERE id=:queryId AND searchWidgetId=:widgetId",
+            {"queryId": int(search_query_id), "widgetId": int(search_widget_id)},
+        )
+        document = self.get_document(int(document_id), user=user)
+        if (not query or not document
+                or int(document.get("filestoreId") or 0) != int(filestore_id)):
+            return None
+        section = None
+        if section_id:
+            section = self.db.one(
+                "SELECT id,documentId,documentTitle,url,kind FROM search_section "
+                "WHERE id=:id AND documentId=:documentId AND filestoreId=:filestoreId",
+                {"id": int(section_id), "documentId": int(document_id),
+                 "filestoreId": int(filestore_id)},
+            )
+        title = str((section or {}).get("documentTitle") or document_title
+                    or document.get("displayName") or document.get("sourceKey") or "Document")[:500]
+        url = str((section or {}).get("url") or document.get("sourceUrl") or source_url or "").strip()
+        if not url.startswith(("http://", "https://")):
+            url = ""
+        kind = str((section or {}).get("kind") or result_type or "content")[:50]
+        return await self.db.insert_async("search_click", self.columns["search_click"], {
+            "searchQueryId": int(search_query_id),
+            "searchWidgetId": int(search_widget_id),
+            "documentId": int(document_id),
+            "sectionId": int(section_id) if section_id else None,
+            "createdAt": datetime.now(),
+            "position": min(max(int(position or 0), 1), 1000),
+            "documentTitle": title,
+            "sourceUrl": url or None,
+            "resultType": kind,
+        })
+
+    def prepare_search_page_view(self, search_widget_id, values):
+        """Normalize one anonymous page view before it enters the write queue."""
+        now = datetime.now()
+
+        def text(name, limit):
+            value = str((values or {}).get(name) or "").strip()
+            return value[:limit] or None
+
+        def integer(name, minimum=0, maximum=1000000):
+            try:
+                return min(max(int(float((values or {}).get(name) or 0)), minimum), maximum)
+            except (TypeError, ValueError):
+                return 0
+
+        def number(name, minimum=0, maximum=1000):
+            try:
+                return min(max(float((values or {}).get(name) or 0), minimum), maximum)
+            except (TypeError, ValueError):
+                return 0
+
+        return {
+            "searchWidgetId": int(search_widget_id),
+            "createdAt": now,
+            "hourKey": now.strftime("%Y-%m-%dT%H"),
+            "dayKey": now.strftime("%Y-%m-%d"),
+            "clientId": text("clientId", 100),
+            "sessionId": text("sessionId", 100),
+            "firstVisit": 1 if (values or {}).get("firstVisit") else 0,
+            "origin": text("origin", 500),
+            "pageUrl": text("pageUrl", 2000),
+            "pagePath": text("pagePath", 2000),
+            "pageTitle": text("pageTitle", 500),
+            "referrer": text("referrer", 2000),
+            "userAgent": text("userAgent", 1000),
+            "language": text("language", 50),
+            "languages": text("languages", 500),
+            "timezone": text("timezone", 100),
+            "platform": text("platform", 100),
+            "deviceType": text("deviceType", 20),
+            "screenWidth": integer("screenWidth", 0, 20000),
+            "screenHeight": integer("screenHeight", 0, 20000),
+            "viewportWidth": integer("viewportWidth", 0, 20000),
+            "viewportHeight": integer("viewportHeight", 0, 20000),
+            "devicePixelRatio": number("devicePixelRatio", 0, 20),
+            "colorDepth": integer("colorDepth", 0, 128),
+            "touchPoints": integer("touchPoints", 0, 100),
+            "connectionType": text("connectionType", 50),
+            "downlink": number("downlink", 0, 100000),
+            "rtt": integer("rtt", 0, 3600000),
+            "saveData": 1 if (values or {}).get("saveData") else 0,
+            "navigationType": text("navigationType", 50),
+            "durationMs": integer("durationMs", 0, 3600000),
+            "domContentLoadedMs": integer("domContentLoadedMs", 0, 3600000),
+            "loadMs": integer("loadMs", 0, 3600000),
+            "utmSource": text("utmSource", 300),
+            "utmMedium": text("utmMedium", 300),
+            "utmCampaign": text("utmCampaign", 300),
+            "utmTerm": text("utmTerm", 300),
+            "utmContent": text("utmContent", 300),
+        }
+
+    async def record_search_page_view_async(self, search_widget_id, values):
+        """Persist one anonymous page view from an analytics-enabled Search deployment."""
+        return await self.db.insert_async(
+            "search_page_view", self.columns["search_page_view"],
+            self.prepare_search_page_view(search_widget_id, values),
+        )
+
+    def search_traffic_analytics(self, search_widget_id, user=None, period="30d",
+                                 recent_skip=0, recent_take=10):
+        if not self.get_search_widget(search_widget_id, user=user):
+            return None
+        recent_skip = max(int(recent_skip or 0), 0)
+        recent_take = min(max(int(recent_take or 10), 1), 100)
+        periods = {"1d": (24, "hour"), "7d": (7, "day"),
+                   "30d": (30, "day"), "90d": (90, "day")}
+        count, bucket = periods.get(str(period or "30d").lower(), periods["30d"])
+        now = datetime.now()
+        if bucket == "hour":
+            end = now.replace(minute=0, second=0, microsecond=0)
+            start = end - timedelta(hours=count - 1)
+            key_column = "hourKey"
+            keys = [(start + timedelta(hours=i)).strftime("%Y-%m-%dT%H") for i in range(count)]
+        else:
+            end = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            start = end - timedelta(days=count - 1)
+            key_column = "dayKey"
+            keys = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(count)]
+        params = {"id": int(search_widget_id), "since": start}
+        totals = self.db.one("""
+            SELECT COUNT(*) AS pageViews,COUNT(DISTINCT clientId) AS visitors,
+                COUNT(DISTINCT sessionId) AS sessions,AVG(NULLIF(loadMs,0)) AS averageLoadMs,
+                SUM(CASE WHEN firstVisit!=0 THEN 1 ELSE 0 END) AS newVisitors
+            FROM search_page_view WHERE searchWidgetId=:id AND createdAt>=:since
+        """, params) or {}
+        session_summary = self.db.one("""
+            SELECT COUNT(*) AS sessions,SUM(CASE WHEN views=1 THEN 1 ELSE 0 END) AS bounced
+            FROM (SELECT sessionId,COUNT(*) AS views FROM search_page_view
+                  WHERE searchWidgetId=:id AND createdAt>=:since AND sessionId IS NOT NULL
+                  GROUP BY sessionId)
+        """, params) or {}
+        timeline_rows = self.db.all(f"""
+            SELECT {key_column} AS bucket,COUNT(*) AS pageViews,
+                COUNT(DISTINCT clientId) AS visitors,COUNT(DISTINCT sessionId) AS sessions
+            FROM search_page_view WHERE searchWidgetId=:id AND createdAt>=:since
+            GROUP BY {key_column} ORDER BY {key_column}
+        """, params) or []
+        timeline_lookup = {row.get("bucket"): row for row in timeline_rows}
+        timeline = [{
+            "bucket": key,
+            "pageViews": int((timeline_lookup.get(key) or {}).get("pageViews") or 0),
+            "visitors": int((timeline_lookup.get(key) or {}).get("visitors") or 0),
+            "sessions": int((timeline_lookup.get(key) or {}).get("sessions") or 0),
+        } for key in keys]
+
+        def distribution(field, take=20, where=""):
+            rows = self.db.all(f"""
+                SELECT {field} AS value,COUNT(*) AS count FROM search_page_view
+                WHERE searchWidgetId=:id AND createdAt>=:since AND {field} IS NOT NULL
+                    AND {field}!='' {where}
+                GROUP BY {field} ORDER BY count DESC LIMIT :take
+            """, {**params, "take": take}) or []
+            return [{"value": row.get("value"), "count": int(row.get("count") or 0)} for row in rows]
+
+        top_pages = self.db.all("""
+            SELECT pagePath AS path,COUNT(*) AS views,COUNT(DISTINCT clientId) AS visitors
+            FROM search_page_view WHERE searchWidgetId=:id AND createdAt>=:since
+                AND pagePath IS NOT NULL AND pagePath!=''
+            GROUP BY pagePath ORDER BY views DESC LIMIT 50
+        """, params) or []
+
+        def most_used_page_value(field):
+            rows = self.db.all(f"""
+                SELECT pagePath AS path,{field} AS value,COUNT(*) AS usageCount,
+                    MAX(createdAt) AS lastSeen
+                FROM search_page_view WHERE searchWidgetId=:id AND createdAt>=:since
+                    AND pagePath IS NOT NULL AND pagePath!=''
+                    AND {field} IS NOT NULL AND {field}!=''
+                GROUP BY pagePath,{field}
+                ORDER BY pagePath,usageCount DESC,lastSeen DESC,value
+            """, params) or []
+            values = {}
+            for row in rows:
+                values.setdefault(row.get("path"), row.get("value"))
+            return values
+
+        page_titles = most_used_page_value("pageTitle")
+        page_urls = most_used_page_value("pageUrl")
+        for page in top_pages:
+            page["views"] = int(page.get("views") or 0)
+            page["visitors"] = int(page.get("visitors") or 0)
+            page["title"] = page_titles.get(page.get("path"))
+            page["url"] = page_urls.get(page.get("path"))
+        recent_page_views = self.db.all("""
+            SELECT createdAt,pageUrl,pagePath,pageTitle
+            FROM search_page_view WHERE searchWidgetId=:id AND createdAt>=:since
+            ORDER BY createdAt DESC,id DESC LIMIT :take OFFSET :skip
+        """, {**params, "take": recent_take, "skip": recent_skip}) or []
+        page_views = int(totals.get("pageViews") or 0)
+        sessions = int(totals.get("sessions") or 0)
+        bounced = int(session_summary.get("bounced") or 0)
+        return {
+            "period": period if period in periods else "30d",
+            "bucket": bucket,
+            "from": start.isoformat(),
+            "to": now.isoformat(),
+            "pageViews": page_views,
+            "visitors": int(totals.get("visitors") or 0),
+            "newVisitors": int(totals.get("newVisitors") or 0),
+            "sessions": sessions,
+            "pagesPerSession": round(page_views / sessions, 2) if sessions else 0,
+            "bounceRate": round(bounced * 100 / sessions, 1) if sessions else 0,
+            "averageLoadMs": round(float(totals.get("averageLoadMs") or 0)),
+            "recentTotal": page_views,
+            "recentSkip": recent_skip,
+            "recentTake": recent_take,
+            "recentPageViews": recent_page_views,
+            "timeline": timeline,
+            "topPages": top_pages,
+            "topReferrers": distribution("referrer"),
+            "languages": distribution("language"),
+            "timezones": distribution("timezone"),
+            "devices": distribution("deviceType"),
+            "platforms": distribution("platform"),
+            "connections": distribution("connectionType"),
+            "campaigns": distribution("utmCampaign"),
+        }
+
+    def search_analytics(self, search_widget_id, user=None, group_take=50, recent_take=100):
+        widget = self.get_search_widget(search_widget_id, user=user)
+        if not widget:
+            return None
+        group_take = min(max(int(group_take), 1), 200)
+        recent_take = min(max(int(recent_take), 1), 500)
+        params = {"id": int(search_widget_id)}
+        variants = self.db.all("""
+            SELECT groupKey,normalizedQuery,MIN(query) AS query,COUNT(*) AS frequency,
+                SUM(CASE WHEN resultCount=0 THEN 1 ELSE 0 END) AS noResultCount,
+                SUM(resultCount) AS resultTotal,MAX(createdAt) AS lastSearchedAt
+            FROM search_query WHERE searchWidgetId=:id
+            GROUP BY groupKey,normalizedQuery
+            ORDER BY frequency DESC,lastSearchedAt DESC
+        """, params) or []
+        related = {}
+        for variant in variants:
+            key = variant.get("groupKey") or variant.get("normalizedQuery") or variant.get("query") or ""
+            group = related.setdefault(key, {
+                "key": key, "query": variant.get("query"), "count": 0, "noResultCount": 0,
+                "resultTotal": 0, "lastSearchedAt": variant.get("lastSearchedAt"), "variants": [],
+            })
+            frequency = int(variant.get("frequency") or 0)
+            group["count"] += frequency
+            group["noResultCount"] += int(variant.get("noResultCount") or 0)
+            group["resultTotal"] += int(variant.get("resultTotal") or 0)
+            if variant.get("lastSearchedAt") and (not group["lastSearchedAt"]
+                    or variant["lastSearchedAt"] > group["lastSearchedAt"]):
+                group["lastSearchedAt"] = variant["lastSearchedAt"]
+            group["variants"].append({"query": variant.get("query"), "count": frequency})
+        groups = list(related.values())
+        for group in groups:
+            group["variants"].sort(key=lambda x: (-x["count"], str(x["query"] or "")))
+            group["query"] = group["variants"][0]["query"] if group["variants"] else group["query"]
+            group["averageResults"] = round(group.pop("resultTotal") / group["count"], 1) if group["count"] else 0
+        groups.sort(key=lambda x: str(x["lastSearchedAt"] or ""), reverse=True)
+        groups.sort(key=lambda x: x["count"], reverse=True)
+        groups = groups[:group_take]
+        group_clicks = {
+            row.get("groupKey") or "": row
+            for row in (self.db.all("""
+                SELECT q.groupKey,COUNT(c.id) AS clickCount,
+                    COUNT(DISTINCT c.searchQueryId) AS clickedSearches
+                FROM search_click c
+                INNER JOIN search_query q ON q.id=c.searchQueryId
+                WHERE c.searchWidgetId=:id
+                GROUP BY q.groupKey
+            """, params) or [])
+        }
+        for group in groups:
+            clicks = group_clicks.get(group["key"], {})
+            group["clickCount"] = int(clicks.get("clickCount") or 0)
+            group["clickedSearches"] = int(clicks.get("clickedSearches") or 0)
+            group["clickThroughRate"] = round(
+                group["clickedSearches"] * 100 / group["count"], 1) if group["count"] else 0
+        recent = self.db.all("""
+            SELECT id,query,createdAt,resultCount,documentCount,durationMs,origin,pageUrl
+            FROM search_query WHERE searchWidgetId=:id ORDER BY createdAt DESC,id DESC LIMIT :take
+        """, {**params, "take": recent_take}) or []
+        total = sum(int(x.get("frequency") or 0) for x in variants)
+        no_results = sum(int(x.get("noResultCount") or 0) for x in variants)
+        result_total = sum(int(x.get("resultTotal") or 0) for x in variants)
+        click_summary = self.db.one("""
+            SELECT COUNT(*) AS totalClicks,COUNT(DISTINCT searchQueryId) AS clickedSearches
+            FROM search_click WHERE searchWidgetId=:id
+        """, params) or {}
+        total_clicks = int(click_summary.get("totalClicks") or 0)
+        clicked_searches = int(click_summary.get("clickedSearches") or 0)
+        popular_documents = self.db.all("""
+            SELECT documentId,MAX(documentTitle) AS title,MAX(sourceUrl) AS sourceUrl,
+                COUNT(*) AS clickCount,COUNT(DISTINCT searchQueryId) AS uniqueSearches,
+                AVG(position) AS averagePosition,MAX(createdAt) AS lastClickedAt
+            FROM search_click WHERE searchWidgetId=:id
+            GROUP BY documentId ORDER BY clickCount DESC,lastClickedAt DESC LIMIT 50
+        """, params) or []
+        for document in popular_documents:
+            document["clickCount"] = int(document.get("clickCount") or 0)
+            document["uniqueSearches"] = int(document.get("uniqueSearches") or 0)
+            document["averagePosition"] = round(float(document.get("averagePosition") or 0), 1)
+        return {
+            "total": total,
+            "uniqueQueries": len(variants),
+            "relatedGroups": len(related),
+            "noResults": no_results,
+            "averageResults": round(result_total / total, 1) if total else 0,
+            "totalClicks": total_clicks,
+            "clickedSearches": clicked_searches,
+            "clickThroughRate": round(clicked_searches * 100 / total, 1) if total else 0,
+            "popularDocuments": popular_documents,
+            "groups": groups,
+            "recent": recent,
+        }
+
+    def replace_search_sections(self, document, sections, desired_hash):
+        """Atomically replace one document's rows and advance its durable indexed hash."""
+        doc_id = int(document["id"])
+        user = document.get("user")
+        conn = self.db.create_writer_connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            self.db.exec(conn, "UPDATE document SET searchStartedAt=:now,searchError=NULL WHERE id=:id", {
+                "now": datetime.now(), "id": doc_id,
+            })
+            self.db.exec(conn, "DELETE FROM search_section WHERE documentId=:id", {"id": doc_id})
+            columns = self.columns["search_section"].keys()
+            insert_columns = [c for c in columns if c != "id"]
+            sql = (f"INSERT INTO search_section ({','.join(insert_columns)}) VALUES "
+                   f"({','.join(':'+c for c in insert_columns)})")
+            for section in sections:
+                row = {
+                    **section,
+                    "documentId": doc_id,
+                    "filestoreId": document.get("filestoreId"),
+                    "user": user,
+                    "category": document.get("category"),
+                    "docType": document.get("docType"),
+                    "status": document.get("status"),
+                    "locale": document.get("locale"),
+                    "product": document.get("product"),
+                    "versions": document.get("versions"),
+                    "tags": document.get("tags"),
+                }
+                for key in ("hierarchy", "versions", "tags"):
+                    if isinstance(row.get(key), (list, dict)):
+                        row[key] = json.dumps(row[key], separators=(",", ":"))
+                self.db.exec(conn, sql, {c: row.get(c) for c in insert_columns})
+            now = datetime.now()
+            self.db.exec(conn, """
+                UPDATE document SET searchHash=:hash,searchIndexedHash=:hash,
+                    searchIndexedAt=:now,searchStartedAt=NULL,searchError=NULL WHERE id=:id
+            """, {"hash": desired_hash, "now": now, "id": doc_id})
+            conn.commit()
+            return len(sections)
+        except Exception as e:
+            conn.rollback()
+            try:
+                self.db.write(
+                    "UPDATE document SET searchHash=:hash,searchStartedAt=NULL,searchError=:error WHERE id=:id",
+                    {"hash": desired_hash, "error": str(e)[:4000], "id": doc_id},
+                )
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
+
+    def mark_search_started(self, document_id):
+        """Record an in-flight attempt synchronously so completion cannot be reordered before it."""
+        conn = self.db.create_writer_connection()
+        try:
+            self.db.exec(conn, """
+                UPDATE document SET searchStartedAt=:now,searchError=NULL WHERE id=:id
+            """, {"now": datetime.now(), "id": int(document_id)})
+            conn.commit()
+        finally:
+            conn.close()
+
+    def pending_search_documents(self, filestore_id=None, user=None, limit=100):
+        sql_where, params = self.get_user_filter(user, {})
+        sql_where += " AND tombstonedAt IS NULL AND searchHash IS NOT NULL "
+        sql_where += "AND (searchIndexedHash IS NULL OR searchIndexedHash != searchHash)"
+        if filestore_id is not None:
+            sql_where += " AND filestoreId=:filestoreId"
+            params["filestoreId"] = int(filestore_id)
+        return self.db.all(
+            f"SELECT * FROM document {sql_where} ORDER BY id LIMIT :take",
+            {**params, "take": min(max(int(limit), 1), 1000)},
+        ) or []
+
+    def get_search_candidates(self, limit=100):
+        """Worker queue across user partitions, including pre-search-schema documents."""
+        return self.db.all(
+            """SELECT * FROM document WHERE tombstonedAt IS NULL
+               AND (searchHash IS NULL OR searchIndexedHash IS NULL OR searchIndexedHash != searchHash)
+               ORDER BY id LIMIT :take""",
+            {"take": min(max(int(limit), 1), 1000)},
+        ) or []
+
+    def remove_search_document(self, document_id):
+        self.db.write("DELETE FROM search_section WHERE documentId=:id", {"id": int(document_id)})
+
+    def search_stats(self, filestore_id, user=None):
+        sql_where, params = self.get_user_filter(user, {"id": int(filestore_id)})
+        docs = self.db.one(
+            f"""SELECT COUNT(*) AS documents,
+                SUM(CASE WHEN searchIndexedHash=searchHash AND searchHash IS NOT NULL THEN 1 ELSE 0 END) AS indexed,
+                SUM(CASE WHEN searchHash IS NOT NULL AND (searchIndexedHash IS NULL OR searchIndexedHash!=searchHash) THEN 1 ELSE 0 END) AS pending,
+                SUM(CASE WHEN searchError IS NOT NULL THEN 1 ELSE 0 END) AS failed,
+                SUM(CASE WHEN searchIndexedHash IS NOT NULL AND searchHash IS NOT NULL AND searchIndexedHash!=searchHash THEN 1 ELSE 0 END) AS stale,
+                MAX(searchIndexedAt) AS lastIndexedAt,
+                MIN(CASE WHEN searchHash IS NOT NULL AND (searchIndexedHash IS NULL OR searchIndexedHash!=searchHash) THEN COALESCE(searchStartedAt,createdAt) END) AS oldestPendingAt
+                FROM document {sql_where} AND filestoreId=:id AND tombstonedAt IS NULL""",
+            params,
+        ) or {}
+        errors = self.db.all(
+            f"""SELECT id AS documentId,COALESCE(displayName,sourceKey) AS name,searchError AS error,COALESCE(searchStartedAt,createdAt) AS updatedAt
+                FROM document {sql_where} AND filestoreId=:id AND tombstonedAt IS NULL
+                AND searchError IS NOT NULL ORDER BY COALESCE(searchStartedAt,createdAt) DESC LIMIT 5""", params) or []
+        sections = self.db.scalar(
+            f"SELECT COUNT(*) FROM search_section {sql_where} AND filestoreId=:id", params,
+        ) or 0
+        return {
+            **{key: (0 if value is None and key in ("documents", "indexed", "pending", "failed", "stale") else value)
+               for key, value in docs.items()},
+            "sections": int(sections),
+            "provider": "sqlite-fts5" if self.fts5_enabled else "sqlite-like",
+            "errors": errors,
+        }
+
+    @staticmethod
+    def _search_scope(scope, alias="s"):
+        clauses, params = [], {}
+        for field in ("category", "docType", "status", "locale", "product"):
+            value = (scope or {}).get(field)
+            if value in (None, ""):
+                continue
+            clauses.append(f"{alias}.{field} = :scope_{field}")
+            params[f"scope_{field}"] = value
+        for field in ("versions", "tags"):
+            value = (scope or {}).get(field)
+            if value in (None, ""):
+                continue
+            clauses.append(
+                f"EXISTS (SELECT 1 FROM json_each({alias}.{field}) WHERE value = :scope_{field})"
+            )
+            params[f"scope_{field}"] = value
+        return clauses, params
+
+    def search_sections(self, filestore_id, query, user=None, scope=None, take=30, ranking=None, skip=0):
+        """Search via FTS5, then degrade to bounded LIKE for missing/short-token results."""
+        text = str(query or "").strip()[:200]
+        take = min(max(int(take), 1), 101)
+        skip = min(max(int(skip), 0), 1000)
+        if not text:
+            return []
+        user_clause = "s.user IS NULL" if user is None else "s.user = :user"
+        candidate_take = 1000
+        params = {"filestoreId": int(filestore_id), "take": candidate_take}
+        if user is not None:
+            params["user"] = user
+        scope_clauses, scope_params = self._search_scope(scope)
+        params.update(scope_params)
+        base = ["s.filestoreId=:filestoreId", user_clause, *scope_clauses]
+
+        rows = []
+        tokens = re.findall(r"[\w]+", text, flags=re.UNICODE)
+        if self.fts5_enabled and tokens:
+            expression = " AND ".join(f'"{token.replace(chr(34), chr(34)*2)}"*' for token in tokens[:10])
+            fts_params = {**params, "query": expression}
+            try:
+                rows = self.db.all(f"""
+                    SELECT s.*,bm25(search_section_fts,8.0,5.0,1.0) AS score,
+                        snippet(search_section_fts,2,char(1),char(2),'…',24) AS snippet
+                    FROM search_section_fts
+                    JOIN search_section s ON s.id=search_section_fts.rowid
+                    WHERE search_section_fts MATCH :query AND {' AND '.join(base)}
+                    ORDER BY score,s.documentId,s.ordinal LIMIT :take
+                """, fts_params) or []
+            except Exception as e:
+                self.ctx.err("FTS5 search failed; falling back to LIKE", e)
+
+        # Native tokenizers intentionally omit some short technical terms. LIKE is also the
+        # capability fallback, so use it when FTS returns nothing rather than hiding valid rows.
+        if not rows:
+            like_clauses = []
+            for i, token in enumerate(tokens[:10] or [text]):
+                key = f"term_{i}"
+                escaped = token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                params[key] = f"%{escaped}%"
+                like_clauses.append(
+                    f"(s.documentTitle LIKE :{key} ESCAPE '\\' OR s.heading LIKE :{key} ESCAPE '\\' "
+                    f"OR s.content LIKE :{key} ESCAPE '\\')"
+                )
+            rows = self.db.all(f"""
+                SELECT s.*,0.0 AS score,s.content AS snippet FROM search_section s
+                WHERE {' AND '.join(base + like_clauses)}
+                ORDER BY CASE WHEN s.documentTitle LIKE :title THEN 0
+                              WHEN s.heading LIKE :title THEN 1 ELSE 2 END,
+                         s.documentId,s.ordinal LIMIT :take
+            """, {**params, "title": f"%{text}%"}) or []
+
+        if not rows:
+            return []
+        document_ids = sorted({int(row.get("documentId") or 0) for row in rows if row.get("documentId")})
+        documents = {}
+        if document_ids:
+            found = self.db.all(
+                f"SELECT id,sourceUpdatedAt,uploadedAt,createdAt,docType FROM document WHERE id IN ({','.join(map(str, document_ids))})"
+            ) or []
+            documents = {int(row["id"]): row for row in found}
+        from llms.extensions.gemini import search
+        return search.rank_results(rows, text, documents, ranking)[skip:skip + take]
 
     # --- Published assistants ---------------------------------------------------------
 
@@ -1108,11 +1957,10 @@ class GeminiDB:
         )
 
     def get_pending_documents(self, limit=10):
-        try:
-            return self.db.all(f"SELECT * FROM document WHERE uploadedAt IS NULL AND error IS NULL LIMIT {limit}")
-        except Exception as e:
-            self.ctx.err("get_pending_documents", e)
-            return []
+        return self.db.all(
+            f"SELECT * FROM document WHERE uploadedAt IS NULL AND error IS NULL "
+            f"AND tombstonedAt IS NULL ORDER BY id LIMIT {limit}"
+        )
 
     def delete_document(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})

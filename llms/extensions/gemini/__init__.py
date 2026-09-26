@@ -9,20 +9,24 @@ import posixpath
 import re
 import time
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from aiohttp import web
 from . import ingest
 from . import crawl
 from . import assistants
+from . import search
 from . import db as g_db_module
 from .db import GeminiDB, category_ancestors
 from .client import GeminiApiError, GeminiClient
 from .upload_worker import UploadWorker
+from .search_worker import SearchWorker
 
 g_db = None
 g_client = None
 g_worker = None
+g_search_worker = None
 
 # Checked in order, first one set wins. Mirrors the `google` provider's precedence in
 # providers.json, so a deployment that configured chat with GOOGLE_API_KEY doesn't
@@ -55,7 +59,7 @@ def metadata_from(values):
 
 
 def install(ctx):
-    global g_client, g_worker
+    global g_client, g_worker, g_search_worker
 
     api_key = next((os.getenv(name) for name in API_KEY_ENV if os.getenv(name)), None)
     if not api_key:
@@ -79,6 +83,7 @@ def install(ctx):
 
     g_client = GeminiClient(api_key=api_key)
     g_worker = UploadWorker(ctx, g_db, g_client)
+    g_search_worker = SearchWorker(ctx, g_db)
 
     # Which role a caller needs for write operations. Unset (the default) means any signed-in
     # user, which is what a single-team deployment wants; set it to e.g. "Admin" or a custom
@@ -476,7 +481,8 @@ def install(ctx):
             ["config", "category", "rules", "include", "exclude", "extract", "chunking", "volatile", "cursor"],
         )
 
-    async def run_source_pipeline(source_row, user, dry_run=True, override=None, confirm_deletes=False):
+    async def run_source_pipeline(source_row, user, dry_run=True, override=None, confirm_deletes=False,
+                                  selected_adds=None, add_all=True):
         """
         discover -> fetch -> extract -> derive -> diff, then (unless dry run) apply.
 
@@ -508,7 +514,25 @@ def install(ctx):
             if hasattr(source, "close"):
                 source.close()
 
+        new_source_documents = []
+        if not add_all:
+            selected_adds = set(selected_adds or [])
+            retained = []
+            for entry in plan.add:
+                key = f"{source_row.get('id')}:{entry['sourceKey']}"
+                if key in selected_adds:
+                    retained.append(entry)
+                else:
+                    new_source_documents.append({
+                        **{k: v for k, v in entry.items() if k != "text"},
+                        "key": key, "sourceId": source_row.get("id"),
+                        "sourceName": source_row.get("name"),
+                    })
+            plan.add = retained
+
         summary = plan.summary()
+        summary["newSourceDocuments"] = new_source_documents
+        summary["newSourceCount"] = len(new_source_documents)
         refusal = None if confirm_deletes else ingest.check_delete_rails(plan, len(existing))
         if refusal:
             summary["deleteRefused"] = refusal
@@ -525,7 +549,8 @@ def install(ctx):
         g_db.update_source(source_row.get("id"), {"lastRunId": run_id, "lastRunAt": datetime.now(),
                                                   "error": None}, user=user)
         g_worker.start()
-        return {"runId": run_id, "dryRun": False, **summary, **applied}
+        return {"runId": run_id, "dryRun": False, **summary, **applied,
+                "newSourceDocuments": new_source_documents}
 
     async def apply_plan(plan, source_row, filestore_id, user):
         """Write the plan locally and queue it; nothing reaches Gemini until the worker runs."""
@@ -557,7 +582,7 @@ def install(ctx):
                 "url": f"/~cache/{relative_path}",
                 "hash": sha256_hash,
                 "size": len(content),
-                "mimeType": ctx.get_file_mime_type(entry["sourceKey"]),
+                "mimeType": "text/markdown" if ext == "md" else ctx.get_file_mime_type(entry["sourceKey"]),
                 "contentHash": entry.get("contentHash"),
                 "metadataHash": entry.get("metadataHash"),
                 "extractorVer": entry.get("extractorVer"),
@@ -572,6 +597,7 @@ def install(ctx):
                     # an empty string, so query/facet compatibility remains in db.py, but new rows
                     # are NULL and naturally participate in the uncategorised filter.
                     doc[field] = None if field == "category" and not entry[field] else entry[field]
+            doc["searchHash"] = search.desired_hash(doc)
 
             existing_id = entry.get("id")
             if existing_id:
@@ -608,13 +634,15 @@ def install(ctx):
             if on_delete == "remove":
                 g_db.delete_document(doc.get("id"), user=user)
             else:
+                g_db.remove_search_document(doc.get("id"))
                 g_db.update_document(
                     doc.get("id"), {"tombstonedAt": datetime.now(), "name": None, "state": "REMOVED_UPSTREAM"},
                     user=user,
                 )
             removed += 1
 
-        return {"queued": queued, "removedApplied": removed}
+        g_search_worker.start()
+        return {"queued": queued, "searchQueued": queued, "removedApplied": removed}
 
     def document_dto(row):
         # SQLite stores list metadata as JSON text. Decode it at the API boundary so the UI gets
@@ -864,7 +892,7 @@ def install(ctx):
                     continue
                 else:
                     payload = text.encode("utf-8")
-                    name = key[:-len(key.split(".")[-1]) - 1] + ".md" if key.lower().endswith((".html", ".htm")) else key
+                    name = key[:-len(key.split(".")[-1]) - 1] + ".md" if ingest.ext_of(key) in ingest.HTML_EXTS else key
 
                 folder = posixpath.dirname(key)
                 inherited = {}
@@ -880,6 +908,7 @@ def install(ctx):
                     "content": payload,
                     "category": "/".join(parts) or None,
                     "metadata": page_meta or {},
+                    "route": front.get("route"),
                 })
         return entries
 
@@ -894,6 +923,7 @@ def install(ctx):
         # backfill afterwards - the same rule that makes ingest the place metadata comes from.
         meta = metadata_from(request.query)
         category = meta.pop("category", None)
+        require_source_url = str(request.query.get("requireSourceUrl") or "").lower() in ("1", "true", "yes", "on")
 
         filestore = g_db.get_filestore(id, user=user)
         if not filestore:
@@ -918,6 +948,11 @@ def install(ctx):
                 field = await reader.next()
                 continue
 
+            if field.name == "requireSourceUrl":
+                require_source_url = (await field.read(decode=True)).decode("utf-8").strip().lower() in ("1", "true", "yes", "on")
+                field = await reader.next()
+                continue
+
             if (field.name != "file" and not field.name.startswith("file")) or not field.filename:
                 field = await reader.next()
                 continue
@@ -929,8 +964,20 @@ def install(ctx):
                 entries = expand_zip_with_metadata(content, category, meta)
                 ctx.log(f"Expanded {filename} into {len(entries)} document(s)")
             else:
-                entries = [{"key": filename, "displayName": filename, "content": content,
-                            "category": category}]
+                ext = ingest.ext_of(filename)
+                if ext in ingest.HTML_EXTS:
+                    text, front, skip = ingest.extract(content, filename, {"minWords": 0})
+                    if skip:
+                        ctx.log(f"Skipping {filename}: {skip}")
+                        entries = []
+                    else:
+                        markdown_name = filename.rsplit(".", 1)[0] + ".md"
+                        entries = [{"key": markdown_name, "displayName": front.get("title") or markdown_name,
+                                    "content": text.encode("utf-8"), "category": category,
+                                    "route": front.get("route")}]
+                else:
+                    entries = [{"key": filename, "displayName": filename, "content": content,
+                                "category": category}]
 
             for entry in entries:
                 mimetype = ctx.get_file_mime_type(entry["displayName"])
@@ -958,13 +1005,18 @@ def install(ctx):
                 if doc.get("sourceUrl"):
                     expanded_url = ingest.expand_template(
                         doc["sourceUrl"],
-                        ingest.template_values(entry["key"], entry["category"], entry["displayName"]),
+                        ingest.template_values(entry["key"], entry["category"], entry["displayName"],
+                                               route=entry.get("route")),
                         lambda warning: ctx.log(f"Warning: {entry['key']}: {warning}"),
                     )
                     if expanded_url is None:
                         doc.pop("sourceUrl", None)
                     else:
                         doc["sourceUrl"] = expanded_url
+                if require_source_url and not str(doc.get("sourceUrl") or "").strip():
+                    ctx.log(f"Skipping {entry['key']}: Source URL is required")
+                    continue
+                doc["searchHash"] = search.desired_hash(doc)
                 # Re-uploading the same path replaces in place. Identity is the source key, so a
                 # second upload of the same archive updates rather than duplicating - and the
                 # unique index would reject an insert anyway.
@@ -989,6 +1041,7 @@ def install(ctx):
 
         docs = g_db.query_documents({"ids_in": doc_ids}, user=user) if doc_ids else []
         g_worker.start()
+        g_search_worker.start()
 
         return web.json_response(docs)
 
@@ -1143,6 +1196,31 @@ def install(ctx):
         filestore = g_db.get_filestore(int(id), user=user)
         if not filestore:
             raise Exception("Filestore does not exist")
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        selected_adds = set(body.get("sourceDocuments") or [])
+        add_all = bool(body.get("addAllSourceDocuments"))
+
+        # Re-run recurring imports first, so Store Sync detects and queues changes to the
+        # original files as well as reconciling the resulting local catalogue with Gemini.
+        source_changes = []
+        source_change_count = 0
+        new_source_documents = []
+        for source_row in g_db.query_sources({"filestoreId": int(id)}, user=user):
+            if not source_row.get("lastRunId"):
+                continue
+            try:
+                result = await run_source_pipeline(source_dto(source_row), user, dry_run=False,
+                                                   selected_adds=selected_adds, add_all=add_all)
+                source_change_count += sum(int(result.get(k) or 0) for k in ("added", "changed", "metadataOnly", "removed"))
+                samples = result.get("samples") or {}
+                for key in ("added", "changed", "removed"):
+                    source_changes.extend(samples.get(key) or [])
+                new_source_documents.extend(result.get("newSourceDocuments") or [])
+            except Exception as e:
+                ctx.err(f"Could not sync saved import {source_row.get('id')}", e)
 
         # Build hash lookup for all local documents
         local_doc_hashes = {}
@@ -1158,6 +1236,7 @@ def install(ctx):
 
         local_missing = []
         remote_missing = []
+        pending_uploads = []
         missing_metadata = []
         metadata_mismatch = []
         unmatched = []
@@ -1217,6 +1296,9 @@ def install(ctx):
                 "state": doc.state,
                 "customMetadata": json.dumps(g_db.custom_metadata_dto(doc.custom_metadata)),
             }
+            if doc.state == "STATE_ACTIVE" and not local_doc.get("uploadedAt"):
+                new_dto["uploadedAt"] = datetime.now()
+                new_dto["startedAt"] = None
             unmatched_fields = []
             for key, value in new_dto.items():
                 local_value = local_doc.get(key)
@@ -1246,7 +1328,13 @@ def install(ctx):
         for local_doc in local_docs:
             local_hash = local_doc.get("hash")
             if local_hash and local_hash not in seen_remote_hashes:
-                remote_missing.append(local_doc)
+                # A document which has never completed an upload is queued work, not remote
+                # drift. Keep its queue state intact and make sure the worker is awake below.
+                if (not local_doc.get("uploadedAt") and not local_doc.get("error")
+                        and not local_doc.get("tombstonedAt")):
+                    pending_uploads.append(local_doc)
+                else:
+                    remote_missing.append(local_doc)
 
         total_remote = matched_by_hash + len(local_missing)
 
@@ -1289,6 +1377,14 @@ def install(ctx):
         ctx.log(
             f"Sync complete: total_remote={total_remote}, local_docs={len(local_docs)}, matched={matched_by_hash}, missing_metadata={len(missing_metadata)}, unmatched={len(local_missing)}"
         )
+        # Store sync also repairs the independent local index. The worker derives signatures for
+        # documents created before Search existed and resumes any interrupted section rebuilds.
+        g_search_worker.start()
+        if pending_uploads:
+            ctx.log(f"Store sync found {len(pending_uploads)} queued Gemini uploads; "
+                    "ensuring UploadWorker is running")
+            g_worker.start()
+        search_status = g_db.search_stats(int(id), user=user)
 
         def doc_filename(doc):
             if isinstance(doc, dict):
@@ -1327,10 +1423,31 @@ def install(ctx):
                     "count": len(duplicate_docs),
                     "docs": [doc_filename(d) for d in duplicate_docs[:5]],
                 },
+                "Source Changes": {
+                    "count": source_change_count,
+                    "docs": source_changes[:5],
+                },
+                "Pending Uploads": {
+                    "count": len(pending_uploads),
+                    "docs": [doc_filename(d) for d in pending_uploads[:5]],
+                },
+                "New Source Documents": {
+                    "count": len(new_source_documents),
+                    "docs": [d.get("sourceKey") for d in new_source_documents[:5]],
+                    "items": new_source_documents,
+                },
+                "newSourceDocuments": new_source_documents,
                 "Summary": {
                     "Local Documents": len(local_docs),
                     "Remote Documents": remote_docs,
                     "Matched Documents": matched_by_hash,
+                },
+                "Local Search": {
+                    "Indexed Documents": int(search_status.get("indexed") or 0),
+                    "Pending Documents": int(search_status.get("pending") or 0),
+                    "Failed Documents": int(search_status.get("failed") or 0),
+                    "Sections": int(search_status.get("sections") or 0),
+                    "Provider": search_status.get("provider"),
                 },
             }
         )
@@ -1351,8 +1468,8 @@ def install(ctx):
         one whose metadata is current. The local row is pointed at it, because sync adopts the
         name of whichever copy it saw last and that may be one about to be deleted.
 
-        `?dryRun=1` reports what it would remove. Nothing local is deleted either way - the
-        document stays exactly where it is, with one copy in Gemini instead of several.
+        Local rows marked MISSING_FROM_REMOTE are stale references to Gemini documents that no
+        longer exist and are removed as well. `?dryRun=1` reports everything without changing it.
         """
         denied = auth_error(request)
         if denied:
@@ -1397,7 +1514,15 @@ def install(ctx):
                 except Exception as e:
                     errors.append({"name": doc.name, "error": ctx.error_message(e)})
 
-        if removed and not dry_run:
+        stale = [
+            doc for doc in g_db.query_documents_all({"filestoreId": id}, user=user)
+            if doc.get("state") == "MISSING_FROM_REMOTE" and doc.get("uploadedAt")
+        ]
+        if not dry_run:
+            for doc in stale:
+                g_db.delete_document(doc.get("id"), user=user)
+
+        if (removed or stale) and not dry_run:
             refresh_filestore_stats(id, user=user)
         ctx.log(f"Prune {'(dry run) ' if dry_run else ''}{filestore.get('displayName')}: "
                 f"{len(removed)} extra copies across {documents} documents")
@@ -1405,6 +1530,7 @@ def install(ctx):
             "dryRun": dry_run,
             "documents": documents,
             "removed": len(removed),
+            "staleRemoved": len(stale),
             "samples": removed[:5],
             "errors": errors,
         })
@@ -1492,7 +1618,19 @@ def install(ctx):
             return web.json_response({**preview, "dryRun": True})
 
         changed = g_db.bulk_update(docs, changes, user=user)
-        return web.json_response({**preview, "changed": len(changed), "ids": changed})
+        if changed:
+            # bulk_update deliberately batches on the DB writer thread. Search signatures must be
+            # computed after those metadata writes commit or a fast read can hash the old row.
+            await asyncio.get_running_loop().run_in_executor(None, g_db.db.task_queue.join)
+        for document_id in changed:
+            document = g_db.get_document(document_id, user=user)
+            if document:
+                await g_db.update_document_async(
+                    document_id, {"searchHash": search.desired_hash(document)}, user=user)
+        if changed:
+            g_search_worker.start()
+        return web.json_response({**preview, "changed": len(changed), "ids": changed,
+                                  "searchQueued": len(changed)})
 
     ctx.add_post("documents/bulk", bulk_documents)
 
@@ -1589,16 +1727,31 @@ def install(ctx):
         ids = body.get("ids")
 
         rows = g_db.pending_documents(id, user=user)
+        missing_uploads = [
+            row for row in g_db.query_documents_all({"filestoreId": id}, user=user)
+            if row.get("state") == "MISSING_FROM_REMOTE" and not row.get("tombstonedAt")
+        ]
         if ids:
             wanted = {int(i) for i in ids}
             rows = [r for r in rows if r.get("id") in wanted]
+            missing_uploads = [r for r in missing_uploads if r.get("id") in wanted]
 
         for row in rows:
             # Clearing uploadedAt is what puts it back in the worker's queue. The worker removes
             # the copy each upload supersedes - an upload on its own only ever adds.
             await g_db.update_document_async(row.get("id"), {"error": None, "uploadedAt": None}, user=user)
+        for row in missing_uploads:
+            await g_db.update_document_async(row.get("id"), {
+                "error": None, "uploadedAt": None, "startedAt": None, "state": "STATE_PENDING",
+            }, user=user)
+        queued_ids = list(dict.fromkeys(
+            [r.get("id") for r in rows] + [r.get("id") for r in missing_uploads]
+        ))
         g_worker.start()
-        return web.json_response({"queued": len(rows), "ids": [r.get("id") for r in rows]})
+        ctx.log(f"Queued {len(queued_ids)} Gemini documents for upload "
+                f"({len(missing_uploads)} recovered from MISSING_FROM_REMOTE)")
+        return web.json_response({"queued": len(queued_ids), "recovered": len(missing_uploads),
+                                  "ids": queued_ids})
 
     ctx.add_post("filestores/{id}/reindex", reindex_documents)
 
@@ -1907,12 +2060,617 @@ def install(ctx):
 
     ctx.add_post("sources/{id}/run", run_source)
 
+    # --- Local Search + published Search widgets --------------------------------------
+
+    search_limiter = assistants.MinuteLimiter()
+    search_click_limiter = assistants.MinuteLimiter()
+    search_page_view_limiter = assistants.MinuteLimiter()
+    search_widget_path = os.path.join(os.path.dirname(__file__), "ui", "search-widget.js")
+    marked_path = os.path.join(os.path.dirname(inspect.getfile(ctx.__class__)), "ui", "lib", "marked.min.mjs")
+
+    def search_analytics_excluded(config, request, page_url=None):
+        analytics = config["analytics"]
+        user_agent = request.headers.get("User-Agent")
+        return bool(
+            (analytics["excludeBots"] and search.is_bot(user_agent))
+            or search.is_denied_user_agent(user_agent, analytics["deniedUserAgents"])
+            or search.is_denied_ip(request.remote, analytics["deniedIpRanges"])
+            or search.is_excluded_path(page_url, analytics["excludedPaths"])
+        )
+
+    def search_widget_dto(row, request):
+        if not row:
+            return None
+        dto = dict(row)
+        dto["config"] = search.normalize_config(dto.get("config"))
+        dto["published"] = bool(dto.get("publishedAt") and dto.get("enabled"))
+        dto["requestIp"] = request.remote
+        src = f"{request_base_url(request)}/ext/gemini/public/searches/widget.js?g={dto['publicId']}"
+        dto["scriptUrl"] = src
+        dto["embedCode"] = f'<script src="{src}" async></script>'
+        return dto
+
+    async def list_search_widgets(request):
+        denied = signed_in_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        filestore_id = int(request.match_info["id"])
+        if not g_db.get_filestore(filestore_id, user=user):
+            raise web.HTTPNotFound(text="File Store does not exist")
+        rows = g_db.query_search_widgets(filestore_id, user=user, include_archived=True)
+        return web.json_response([search_widget_dto(row, request) for row in rows])
+
+    ctx.add_get("filestores/{id}/searches", list_search_widgets)
+
+    async def create_search_widget(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        filestore_id = int(request.match_info["id"])
+        if not g_db.get_filestore(filestore_id, user=user):
+            raise web.HTTPNotFound(text="File Store does not exist")
+        body = await request.json()
+        name = str(body.get("name") or "").strip()[:200]
+        if not name:
+            return web.json_response(ctx.create_error_response("Name is required", "ValidationError"), status=400)
+        if g_db.search_widget_name_exists(filestore_id, name, user=user):
+            return web.json_response(ctx.create_error_response(
+                f"A Search widget named '{name}' already exists", "AlreadyExists"), status=409)
+        try:
+            config = search.validate_config(body.get("config"))
+        except ValueError as error:
+            return web.json_response(ctx.create_error_response(str(error), "ValidationError"), status=400)
+        publish = bool(body.get("published"))
+        widget_id = await g_db.create_search_widget_async({
+            "filestoreId": filestore_id,
+            "name": name,
+            "publicId": search.new_public_id(),
+            "enabled": 1,
+            "publishedAt": datetime.now() if publish else None,
+            "config": config,
+        }, user=user)
+        if publish:
+            await g_db.update_filestore_async(filestore_id, {"visibility": "public"}, user=user)
+        return web.json_response(search_widget_dto(g_db.get_search_widget(widget_id, user=user), request))
+
+    ctx.add_post("filestores/{id}/searches", create_search_widget)
+
+    async def get_search_widget(request):
+        denied = signed_in_error(request)
+        if denied:
+            return denied
+        row = g_db.get_search_widget(int(request.match_info["id"]), user=ctx.get_username(request))
+        if not row:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        return web.json_response(search_widget_dto(row, request))
+
+    ctx.add_get("searches/{id}", get_search_widget)
+
+    async def search_diagnostics(request):
+        denied = signed_in_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        widget = g_db.get_search_widget(int(request.match_info["id"]), user=user)
+        if not widget:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        store = g_db.get_filestore(widget["filestoreId"], user=widget.get("user"))
+        stats = g_db.search_stats(widget["filestoreId"], user=widget.get("user"))
+        config = search.normalize_config(widget.get("config"))
+        published = bool(widget.get("enabled") and widget.get("publishedAt"))
+        checks = [
+            {"name":"Published", "status":"pass" if published else "fail", "message":"The public Search deployment is enabled." if published else "Publish this Search before embedding it."},
+            {"name":"Public File Store", "status":"pass" if store and store.get("visibility") == "public" else "fail", "message":"Anonymous read access is enabled." if store and store.get("visibility") == "public" else "The File Store must be public."},
+            {"name":"Search index", "status":"warn" if stats.get("failed") else "pass" if stats.get("indexed") else "fail", "message":f"{stats.get('indexed', 0)} indexed, {stats.get('pending', 0)} pending, {stats.get('failed', 0)} failed documents."},
+            {"name":"Allowed origins", "status":"pass" if config["hosting"]["allowedOrigins"] else "warn", "message":f"Restricted to {len(config['hosting']['allowedOrigins'])} configured origin(s)." if config["hosting"]["allowedOrigins"] else "All origins are currently allowed."},
+            {"name":"Widget endpoint", "status":"pass" if published else "fail", "message":f"{request_base_url(request)}/ext/gemini/public/searches/widget.js?g={widget['publicId']}"},
+        ]
+        return web.json_response({"ready": all(x["status"] != "fail" for x in checks), "checks": checks})
+
+    ctx.add_get("searches/{id}/diagnostics", search_diagnostics)
+
+    async def search_analytics(request):
+        denied = signed_in_error(request)
+        if denied:
+            return denied
+        widget = g_db.get_search_widget(
+            int(request.match_info["id"]), user=ctx.get_username(request))
+        if not widget:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        config = search.normalize_config(widget.get("config"))
+        g_db.clear_search_analytics(
+            int(request.match_info["id"]), user=ctx.get_username(request),
+            before=datetime.now() - timedelta(days=config["analytics"]["retentionDays"]))
+        result = g_db.search_analytics(
+            int(request.match_info["id"]), user=ctx.get_username(request),
+            group_take=request.query.get("groupTake", 50), recent_take=request.query.get("recentTake", 100),
+        )
+        if result is None:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        result["trafficEnabled"] = config["analytics"]["enabled"]
+        result["requestIp"] = request.remote
+        result["traffic"] = g_db.search_traffic_analytics(
+            int(request.match_info["id"]), user=ctx.get_username(request),
+            period=request.query.get("period", "30d"),
+            recent_skip=request.query.get("visitorSkip", 0),
+            recent_take=request.query.get("visitorTake", 10))
+        return web.json_response(result)
+
+    ctx.add_get("searches/{id}/analytics", search_analytics)
+
+    async def clear_search_analytics(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        result = g_db.clear_search_analytics(
+            int(request.match_info["id"]), user=ctx.get_username(request))
+        if result is None:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        return web.json_response(result)
+
+    ctx.add_post("searches/{id}/analytics/clear", clear_search_analytics)
+
+    async def update_search_widget(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        widget_id = int(request.match_info["id"])
+        current = g_db.get_search_widget(widget_id, user=user)
+        if not current:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        if current.get("enabled") == 0:
+            return web.json_response(ctx.create_error_response(
+                "Restore this Search widget before editing or publishing it", "SearchArchived"), status=409)
+        body = await request.json()
+        name = str(body.get("name", current.get("name")) or "").strip()[:200]
+        if not name:
+            return web.json_response(ctx.create_error_response("Name is required", "ValidationError"), status=400)
+        if g_db.search_widget_name_exists(current["filestoreId"], name, user=user, exclude_id=widget_id):
+            return web.json_response(ctx.create_error_response(
+                f"A Search widget named '{name}' already exists", "AlreadyExists"), status=409)
+        try:
+            config = search.validate_config(body.get("config", current.get("config")))
+        except ValueError as error:
+            return web.json_response(ctx.create_error_response(str(error), "ValidationError"), status=400)
+        published = bool(body.get("published", current.get("publishedAt") is not None))
+        public_id = search.new_public_id() if body.get("regeneratePublicId") else current["publicId"]
+        await g_db.update_search_widget_async(widget_id, {
+            "name": name,
+            "publicId": public_id,
+            "enabled": current.get("enabled", 1),
+            "publishedAt": current.get("publishedAt") or datetime.now() if published else None,
+            "config": config,
+        }, user=user)
+        if published:
+            await g_db.update_filestore_async(current["filestoreId"], {"visibility": "public"}, user=user)
+        return web.json_response(search_widget_dto(g_db.get_search_widget(widget_id, user=user), request))
+
+    ctx.add_put("searches/{id}", update_search_widget)
+
+    async def archive_search_widget(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        found = await g_db.archive_search_widget_async(
+            int(request.match_info["id"]), user=ctx.get_username(request))
+        if not found:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        return web.json_response({"archived": True})
+
+    ctx.add_delete("searches/{id}", archive_search_widget)
+
+    async def restore_search_widget(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        try:
+            restored = await g_db.restore_search_widget_async(
+                int(request.match_info["id"]), user=ctx.get_username(request))
+        except ValueError as error:
+            return web.json_response(ctx.create_error_response(str(error), "AlreadyExists"), status=409)
+        if not restored:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        return web.json_response(search_widget_dto(restored, request))
+
+    ctx.add_post("searches/{id}/restore", restore_search_widget)
+
+    async def delete_search_widget(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        widget = g_db.get_search_widget(int(request.match_info["id"]), user=user)
+        if not widget:
+            raise web.HTTPNotFound(text="Search widget does not exist")
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if body.get("confirm") != widget["name"]:
+            return web.json_response(ctx.create_error_response(
+                f'Type "{widget["name"]}" to confirm permanent deletion',
+                "ConfirmationRequired"), status=400)
+        g_db.delete_search_widget(widget["id"], user=user, confirmation=body.get("confirm"))
+        return web.json_response({"deleted": True})
+
+    ctx.add_delete("searches/{id}/permanent", delete_search_widget)
+
+    def search_result_parts(value, query, marked=False):
+        value = str(value or "")
+        if marked and "\x01" in value:
+            parts, matched = [], False
+            for piece in re.split(r"([\x01\x02])", value):
+                if piece == "\x01":
+                    matched = True
+                elif piece == "\x02":
+                    matched = False
+                elif piece:
+                    parts.append({"text": piece, "match": matched})
+            return parts
+        tokens = [re.escape(x) for x in re.findall(r"[\w]+", str(query or ""), re.UNICODE)[:10]]
+        if not tokens:
+            return [{"text": value, "match": False}]
+        split = re.split(f"({'|'.join(tokens)})", value, flags=re.I)
+        wanted = re.compile(f"^(?:{'|'.join(tokens)})$", re.I)
+        return [{"text": piece, "match": bool(wanted.match(piece))} for piece in split if piece]
+
+    def grouped_search_results(rows, query, group_limit=8, preview_url=None):
+        groups, ordered = {}, []
+        for row in rows:
+            raw_url = str(row.get("url") or "")
+            cached = raw_url.startswith("/~cache/")
+            url = None if cached else raw_url or None
+            can_preview = cached and re.search(r"\.md(?:#|$)", raw_url, re.I) is not None
+            document_preview_url = preview_url(row) if can_preview and preview_url else None
+            key = row.get("documentId")
+            group = groups.get(key)
+            if group is None:
+                group = groups[key] = {
+                    "documentId": key,
+                    "title": row.get("documentTitle") or "Document",
+                    "url": url,
+                    "previewUrl": document_preview_url,
+                    "items": [],
+                }
+                ordered.append(group)
+            if len(group["items"]) >= group_limit:
+                continue
+            snippet = row.get("snippet") or row.get("content") or ""
+            group["items"].append({
+                "id": row.get("id"),
+                "type": row.get("kind") or "content",
+                "title": row.get("heading") or row.get("documentTitle"),
+                "titleParts": search_result_parts(row.get("heading") or row.get("documentTitle"), query),
+                "snippet": snippet.replace("\x01", "").replace("\x02", ""),
+                "snippetParts": search_result_parts(snippet, query, marked=True),
+                "url": url,
+                "previewUrl": document_preview_url,
+                "anchor": row.get("anchor"),
+                "score": row.get("score"),
+            })
+        return ordered
+
+    async def search_filestore(request):
+        user = ctx.get_username(request)
+        filestore_id = int(request.match_info["id"])
+        if not g_db.get_filestore(filestore_id, user=user):
+            raise web.HTTPNotFound(text="File Store does not exist")
+        query = request.query.get("q", "")
+        take = min(max(int(request.query.get("take", 30)), 1), 100)
+        skip = min(max(int(request.query.get("skip", 0)), 0), 1000)
+        try:
+            ranking = json.loads(request.query.get("ranking", "{}"))
+        except (TypeError, ValueError):
+            ranking = None
+        rows = g_db.search_sections(
+            filestore_id, query, user=user, take=take + 1, ranking=ranking, skip=skip)
+        has_more = len(rows) > take
+        rows = rows[:take]
+        return web.json_response({
+            "query": query,
+            "hasMore": has_more,
+            "nextSkip": skip + len(rows),
+            "groups": grouped_search_results(
+                rows, query, preview_url=lambda row:
+                    f"{request_base_url(request)}/ext/gemini/filestores/{filestore_id}"
+                    f"/search-documents/{row.get('documentId')}",
+            ),
+        })
+
+    ctx.add_get("filestores/{id}/search", search_filestore)
+
+    def markdown_document_payload(document):
+        url = str(document.get("url") or "")
+        filename = (document.get("filename") or document.get("sourceKey")
+                    or document.get("displayName") or "document.md")
+        if (not url.startswith("/~cache/")
+                or not (re.search(r"\.md$", filename, re.I) or re.search(r"\.md(?:#|$)", url, re.I))):
+            raise web.HTTPNotFound(text="Markdown preview is unavailable")
+        path = ctx.get_cache_path(url[len("/~cache/"):].split("#", 1)[0])
+        if not os.path.exists(path):
+            raise web.HTTPNotFound(text="Cached document content is missing")
+        with open(path, "rb") as handle:
+            text, frontmatter, skip = ingest.extract(handle.read(), filename, {"minWords": 0})
+        if skip:
+            raise web.HTTPNotFound(text="Markdown preview is unavailable")
+        title = ((frontmatter or {}).get("title") or document.get("displayName")
+                 or document.get("sourceKey") or "Document")
+        title = re.sub(r"\.(?:md|mdx|markdown)$", "", str(title), flags=re.I)
+        return {"title": title, "markdown": text or ""}
+
+    async def search_document(request):
+        denied = signed_in_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        filestore_id = int(request.match_info["id"])
+        document = g_db.get_document(int(request.match_info["documentId"]), user=user)
+        if not document or int(document.get("filestoreId") or 0) != filestore_id:
+            raise web.HTTPNotFound(text="Document does not exist")
+        return web.json_response(markdown_document_payload(document))
+
+    ctx.add_get("filestores/{id}/search-documents/{documentId}", search_document)
+
+    async def search_index_status(request):
+        user = ctx.get_username(request)
+        filestore_id = int(request.match_info["id"])
+        if not g_db.get_filestore(filestore_id, user=user):
+            raise web.HTTPNotFound(text="File Store does not exist")
+        return web.json_response({**g_db.search_stats(filestore_id, user=user),
+                                  "worker": g_search_worker.status()})
+
+    ctx.add_get("filestores/{id}/search-index", search_index_status)
+
+    async def rebuild_search_index(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        filestore_id = int(request.match_info["id"])
+        documents = list(g_db.query_documents_all({"filestoreId": filestore_id}, user=user))
+        for document in documents:
+            await g_db.update_document_async(document["id"], {
+                "searchHash": search.desired_hash(document),
+                "searchIndexedHash": None,
+                "searchError": None,
+            }, user=user)
+        g_search_worker.start()
+        return web.json_response({"queued": len(documents), "worker": g_search_worker.status()})
+
+    ctx.add_post("filestores/{id}/search-index/rebuild", rebuild_search_index)
+
+    def public_search_or_error(request):
+        public_id = request.match_info.get("publicId") or request.query.get("g") or ""
+        widget = g_db.get_public_search_widget(public_id)
+        store = g_db.get_filestore(widget["filestoreId"], user=widget.get("user")) if widget else None
+        if not widget or not store or store.get("visibility") != "public":
+            raise web.HTTPNotFound(text="Search is unavailable")
+        return widget, store
+
+    async def public_search_script(request):
+        headers = {"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
+        try:
+            widget, _ = public_search_or_error(request)
+            with open(search_widget_path, encoding="utf-8") as handle:
+                source = handle.read()
+            try:
+                markdown = bundled_markdown_source()
+            except Exception as error:
+                ctx.err("Failed embedding the bundled Marked renderer for Search", error)
+                markdown = 'console.warn("Gemini Search Markdown renderer is unavailable; using plain text.");return null;'
+            config = search.public_config(widget, request_base_url(request))
+            script = (f"(()=>{{const CONFIG={json.dumps(config, separators=(',', ':'))};"
+                      f"const SCRIPT=document.currentScript;const MARKDOWN=(()=>{{\n{markdown}\n}})();"
+                      f"const mount=()=>{{\n{source}\n}};"
+                      "if(document.readyState!=='loading')mount();"
+                      "else addEventListener('DOMContentLoaded',mount,{once:true});})();")
+        except web.HTTPNotFound:
+            script = 'console.error("Gemini Search widget failed to load: Search is unavailable (404)");'
+        except Exception as error:
+            ctx.err("Failed generating Gemini Search widget script", error)
+            script = 'console.error("Gemini Search widget failed to load. Check the server logs for details.");'
+        return web.Response(text=script, content_type="application/javascript", headers=headers)
+
+    ctx.add_get("public/searches/widget.js", public_search_script)
+
+    async def public_search_results(request):
+        widget, store = public_search_or_error(request)
+        config = search.normalize_config(widget.get("config"))
+        origin = request.headers.get("Origin")
+        allowed = assistants.origin_allowed(origin, config["hosting"]["allowedOrigins"])
+        headers = {"Vary": "Origin"}
+        if allowed:
+            headers["Access-Control-Allow-Origin"] = origin or "*"
+        if not allowed:
+            return web.json_response(ctx.create_error_response(
+                "This website is not allowed to use this Search widget", "OriginNotAllowed"),
+                status=403, headers=headers)
+        if not search_limiter.allow(
+            (widget["id"], request.remote or "unknown"), config["hosting"]["requestsPerMinute"]
+        ):
+            return web.json_response(ctx.create_error_response(
+                "Too many searches. Please wait a moment and try again.", "RateLimited"),
+                status=429, headers={**headers, "Retry-After": "60"})
+        query = str(request.query.get("q") or "").strip()[:200]
+        skip = min(max(int(request.query.get("skip", 0)), 0), 1000)
+        if len(query) < config["behavior"]["minChars"]:
+            return web.json_response({
+                "query": query, "groups": [], "hasMore": False, "nextSkip": 0,
+            }, headers=headers)
+        started = time.perf_counter()
+        take = config["behavior"]["maxResults"]
+        rows = g_db.search_sections(
+            store["id"], query, user=widget.get("user"), scope=config["scope"],
+            take=take + 1, ranking=config["ranking"], skip=skip,
+        )
+        has_more = len(rows) > take
+        rows = rows[:take]
+        groups = grouped_search_results(
+            rows, query, config["behavior"]["groupLimit"],
+            preview_url=lambda row:
+                f"{request_base_url(request)}/ext/gemini/public/searches/{widget['publicId']}"
+                f"/documents/{row.get('documentId')}",
+        )
+        search_event_id = None
+        if not skip and not search_analytics_excluded(
+                config, request, request.headers.get("Referer")):
+            try:
+                g_db.clear_search_analytics(
+                    widget["id"], user=widget.get("user"), before=datetime.now() - timedelta(
+                        days=config["analytics"]["retentionDays"]))
+                search_event_id = await g_db.record_search_query_async(
+                    widget["id"], query, origin=origin, page_url=request.headers.get("Referer"),
+                    user_agent=request.headers.get("User-Agent"), result_count=len(rows),
+                    document_count=len(groups), duration_ms=round((time.perf_counter() - started) * 1000),
+                )
+            except Exception as error:
+                ctx.err("Failed recording Search analytics", error)
+        return web.json_response({
+            "query": query,
+            "groups": groups,
+            "hasMore": has_more,
+            "nextSkip": skip + len(rows),
+            "searchEventId": search_event_id,
+        }, headers=headers)
+
+    ctx.add_get("public/searches/{publicId}/results", public_search_results)
+
+    async def public_search_click(request):
+        widget, store = public_search_or_error(request)
+        config = search.normalize_config(widget.get("config"))
+        origin = request.headers.get("Origin")
+        allowed = assistants.origin_allowed(origin, config["hosting"]["allowedOrigins"])
+        headers = {"Vary": "Origin"}
+        if allowed:
+            headers["Access-Control-Allow-Origin"] = origin or "*"
+        if not allowed:
+            return web.json_response(ctx.create_error_response(
+                "This website is not allowed to use this Search widget", "OriginNotAllowed"),
+                status=403, headers=headers)
+        if search_analytics_excluded(config, request, request.headers.get("Referer")):
+            return web.Response(status=204, headers=headers)
+        click_limit = max(int(config["hosting"]["requestsPerMinute"]) * 4, 120)
+        if not search_click_limiter.allow((widget["id"], request.remote or "unknown"), click_limit):
+            return web.json_response(ctx.create_error_response(
+                "Too many Search interactions. Please wait a moment and try again.", "RateLimited"),
+                status=429, headers={**headers, "Retry-After": "60"})
+        try:
+            body = json.loads(await request.text())
+            search_event_id = int(body.get("searchEventId") or 0)
+            document_id = int(body.get("documentId") or 0)
+            section_id = int(body.get("sectionId") or 0) or None
+            position = int(body.get("position") or 0)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return web.json_response(ctx.create_error_response("Invalid click event", "ValidationError"),
+                                     status=400, headers=headers)
+        if search_event_id <= 0 or document_id <= 0 or position <= 0:
+            return web.json_response(ctx.create_error_response("Invalid click event", "ValidationError"),
+                                     status=400, headers=headers)
+        try:
+            await g_db.record_search_click_async(
+                widget["id"], store["id"], search_event_id, document_id,
+                section_id=section_id, position=position,
+                document_title=str(body.get("documentTitle") or "")[:500],
+                source_url=str(body.get("sourceUrl") or "")[:2000],
+                result_type=str(body.get("resultType") or "")[:50],
+                user=widget.get("user"),
+            )
+        except Exception as error:
+            ctx.err("Failed recording Search result click", error)
+        return web.Response(status=204, headers=headers)
+
+    ctx.add_post("public/searches/{publicId}/clicks", public_search_click)
+
+    async def public_search_page_view(request):
+        widget, _ = public_search_or_error(request)
+        config = search.normalize_config(widget.get("config"))
+        origin = request.headers.get("Origin")
+        allowed = assistants.origin_allowed(origin, config["hosting"]["allowedOrigins"])
+        headers = {"Vary": "Origin"}
+        if allowed:
+            headers["Access-Control-Allow-Origin"] = origin or "*"
+        if not allowed:
+            return web.json_response(ctx.create_error_response(
+                "This website is not allowed to use this Search widget", "OriginNotAllowed"),
+                status=403, headers=headers)
+        if not config["analytics"]["enabled"]:
+            return web.Response(status=204, headers=headers)
+        if (config["analytics"]["respectDoNotTrack"] and request.headers.get("DNT") == "1"):
+            return web.Response(status=204, headers=headers)
+        if search_analytics_excluded(config, request):
+            return web.Response(status=204, headers=headers)
+        page_view_limit = max(int(config["hosting"]["requestsPerMinute"]) * 10, 600)
+        if not search_page_view_limiter.allow(
+            (widget["id"], request.remote or "unknown"), page_view_limit
+        ):
+            return web.json_response(ctx.create_error_response(
+                "Too many Analytics events. Please wait a moment and try again.", "RateLimited"),
+                status=429, headers={**headers, "Retry-After": "60"})
+        try:
+            body = json.loads(await request.text())
+            if not isinstance(body, dict):
+                raise ValueError("Page view must be an object")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return web.json_response(ctx.create_error_response("Invalid page view", "ValidationError"),
+                                     status=400, headers=headers)
+        page_url = str(body.get("pageUrl") or request.headers.get("Referer") or "").strip()[:2000]
+        try:
+            parsed = urlsplit(page_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError("Invalid page URL")
+            page_path = str(body.get("pagePath") or parsed.path or "/")[:2000]
+        except ValueError:
+            return web.json_response(ctx.create_error_response("Invalid page URL", "ValidationError"),
+                                     status=400, headers=headers)
+        if search.is_excluded_path(parsed.path, config["analytics"]["excludedPaths"]):
+            return web.Response(status=204, headers=headers)
+        try:
+            g_db.clear_search_analytics(
+                widget["id"], user=widget.get("user"), before=datetime.now() - timedelta(
+                    days=config["analytics"]["retentionDays"]))
+            await g_db.record_search_page_view_async(widget["id"], {
+                **body,
+                "origin": origin,
+                "pageUrl": page_url,
+                "pagePath": page_path,
+                # The POST Referer is the page currently hosting the widget, not the
+                # previous page that led the visitor there. Only document.referrer
+                # from the collector represents referral traffic.
+                "referrer": str(body.get("referrer") or "")[:2000],
+                "userAgent": request.headers.get("User-Agent"),
+            })
+        except Exception as error:
+            ctx.err("Failed recording Search page view", error)
+        return web.Response(status=204, headers=headers)
+
+    ctx.add_post("public/searches/{publicId}/pageviews", public_search_page_view)
+
+    async def public_search_document(request):
+        widget, store = public_search_or_error(request)
+        config = search.normalize_config(widget.get("config"))
+        origin = request.headers.get("Origin")
+        allowed = assistants.origin_allowed(origin, config["hosting"]["allowedOrigins"])
+        headers = {"Vary": "Origin"}
+        if allowed:
+            headers["Access-Control-Allow-Origin"] = origin or "*"
+        if not allowed:
+            return web.json_response(ctx.create_error_response(
+                "This website is not allowed to use this Search widget", "OriginNotAllowed"),
+                status=403, headers=headers)
+        document = g_db.get_document(int(request.match_info["documentId"]), user=widget.get("user"))
+        if not document or int(document.get("filestoreId") or 0) != int(store["id"]):
+            raise web.HTTPNotFound(text="Document does not exist")
+        return web.json_response(markdown_document_payload(document), headers=headers)
+
+    ctx.add_get("public/searches/{publicId}/documents/{documentId}", public_search_document)
+
     # --- Published assistants ----------------------------------------------------------
 
     assistant_limiter = assistants.MinuteLimiter()
     widget_path = os.path.join(os.path.dirname(__file__), "ui", "assistant-widget.js")
-    marked_path = os.path.join(os.path.dirname(inspect.getfile(ctx.__class__)), "ui", "lib", "marked.min.mjs")
-
     def bundled_markdown_source():
         with open(marked_path, encoding="utf-8") as f:
             source = f.read()
@@ -1996,6 +2754,33 @@ def install(ctx):
         return web.json_response(assistant_dto(row, request))
 
     ctx.add_get("assistants/{id}", get_assistant)
+
+    async def assistant_diagnostics(request):
+        denied = signed_in_error(request)
+        if denied:
+            return denied
+        user = ctx.get_username(request)
+        row = g_db.get_assistant(int(request.match_info["id"]), user=user)
+        if not row:
+            raise web.HTTPNotFound(text="Assistant does not exist")
+        store = g_db.get_filestore(row["filestoreId"], user=row.get("user"))
+        documents = list(g_db.query_documents_all({"filestoreId":row["filestoreId"]}, user=row.get("user")))
+        config = assistants.normalize_config(row.get("config"))
+        published = bool(row.get("enabled") and row.get("publishedAt"))
+        active = sum(1 for x in documents if x.get("state") == "STATE_ACTIVE")
+        failed = sum(1 for x in documents if x.get("state") == "STATE_FAILED" or x.get("error"))
+        origins = config["hosting"]["allowedOrigins"]
+        checks = [
+            {"name":"Published", "status":"pass" if published else "fail", "message":"The public Assistant deployment is enabled." if published else "Publish this Assistant before embedding it."},
+            {"name":"Public File Store", "status":"pass" if store and store.get("visibility") == "public" else "fail", "message":"Anonymous retrieval is enabled." if store and store.get("visibility") == "public" else "The File Store must be public."},
+            {"name":"Gemini knowledge", "status":"warn" if active and failed else "pass" if active else "fail", "message":f"{active} active and {failed} failed documents."},
+            {"name":"Model", "status":"pass", "message":assistants.resolve_model(config, os.getenv("GEMINI_ASSISTANT_MODEL", "gemini-flash-latest"))},
+            {"name":"Allowed origins", "status":"pass" if origins else "warn", "message":f"Restricted to {len(origins)} configured origin(s)." if origins else "All origins are currently allowed."},
+            {"name":"Widget endpoint", "status":"pass" if published else "fail", "message":f"{request_base_url(request)}/ext/gemini/public/assistants/widget.js?g={row['publicId']}"},
+        ]
+        return web.json_response({"ready": all(x["status"] != "fail" for x in checks), "checks": checks})
+
+    ctx.add_get("assistants/{id}/diagnostics", assistant_diagnostics)
 
     async def update_assistant(request):
         denied = auth_error(request)
@@ -2170,7 +2955,8 @@ def install(ctx):
             source = (f"(()=>{{const CONFIG={json.dumps(config, separators=(',', ':'))};"
                       f"const SCRIPT=document.currentScript;const MARKDOWN=(()=>{{\n{markdown}\n}})();"
                       f"const mount=()=>{{\n{widget}\n}};"
-                      "if(document.body)mount();else addEventListener('DOMContentLoaded',mount,{once:true});})();")
+                      "if(document.readyState!=='loading')mount();"
+                      "else addEventListener('DOMContentLoaded',mount,{once:true});})();")
         except Exception as error:
             ctx.err("Failed generating Gemini Assistant widget script", error)
             source = 'console.error("Gemini Assistant widget failed to load. Check the server logs for details.");'
@@ -2244,10 +3030,11 @@ def install(ctx):
     def assistant_answer(row, store, messages):
         behavior, request = assistant_generation(row, store, messages)
         result = g_client.models.generate_content(**request)
-        text = (getattr(result, "text", None) or "").strip() or behavior["fallback"]
+        text = (getattr(result, "text", None) or "").strip()
+        strict = behavior["grounded"] and behavior["strictGrounding"]
         citations = resolve_citation_urls(
-            result_citations(result, behavior["citations"]), store, row.get("user"))
-        return text, citations
+            result_citations(result, behavior["citations"] or strict), store, row.get("user"))
+        return assistants.enforce_grounding(text, citations, behavior)
 
     async def public_assistant_chat(request):
         row = public_assistant_or_error(request)
@@ -2298,13 +3085,14 @@ def install(ctx):
             def produce():
                 try:
                     behavior, generation = assistant_generation(row, store, history)
+                    strict = behavior["grounded"] and behavior["strictGrounding"]
                     for chunk in g_client.models.generate_content_stream(**generation):
                         try:
                             delta = getattr(chunk, "text", None) or ""
                         except Exception:
                             delta = ""
                         loop.call_soon_threadsafe(queue.put_nowait, ("chunk", delta, result_citations(
-                            chunk, behavior["citations"])))
+                            chunk, behavior["citations"] or strict)))
                     loop.call_soon_threadsafe(queue.put_nowait, ("done", behavior, None))
                 except Exception as error:
                     loop.call_soon_threadsafe(queue.put_nowait, ("error", error, None))
@@ -2316,7 +3104,8 @@ def install(ctx):
                 if kind == "chunk":
                     if value:
                         chunks.append(value)
-                        if connected:
+                        if connected and not (config["behavior"]["grounded"] and
+                                              config["behavior"]["strictGrounding"]):
                             try:
                                 await response.write((json.dumps({"delta": value}) + "\n").encode())
                             except ConnectionResetError:
@@ -2341,11 +3130,12 @@ def install(ctx):
                 if connected:
                     await response.write((json.dumps({"error": "The Assistant could not answer right now."}) + "\n").encode())
             else:
-                answer = "".join(chunks).strip() or behavior["fallback"]
+                answer = "".join(chunks).strip()
                 citations = resolve_citation_urls(citations, store, row.get("user"))
+                answer, citations = assistants.enforce_grounding(answer, citations, behavior)
                 await g_db.add_assistant_message_async(conversation, "assistant", answer, citations=citations)
                 if connected:
-                    if not chunks:
+                    if (behavior["grounded"] and behavior["strictGrounding"]) or not chunks:
                         await response.write((json.dumps({"delta": answer}) + "\n").encode())
                     await response.write((json.dumps({"done": True, "citations": citations,
                                                       "conversationId": conversation["id"]}) + "\n").encode())
@@ -2399,6 +3189,10 @@ def install(ctx):
         g_worker.start()
     except Exception as e:
         ctx.err("Failed to start UploadWorker", e)
+    try:
+        g_search_worker.start()
+    except Exception as e:
+        ctx.err("Failed to start SearchWorker", e)
 
 
 __install__ = install

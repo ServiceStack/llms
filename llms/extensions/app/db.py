@@ -3,6 +3,7 @@ import os
 import time
 from contextlib import suppress
 from datetime import datetime, timedelta
+from threading import Lock, RLock
 from typing import Any, Dict
 
 from llms.db import DbManager, count_tokens_approx, order_by, select_columns, to_dto, valid_columns
@@ -26,6 +27,8 @@ class AppDB:
         self.ctx = ctx
         self.db_path = str(db_path)
         self._closed = False
+        self._message_sync_locks = {}
+        self._message_sync_locks_lock = Lock()
 
         dirname = os.path.dirname(self.db_path)
         if dirname:
@@ -169,6 +172,10 @@ class AppDB:
 
     def create_writer_connection(self):
         return self.db.create_writer_connection()
+
+    def _message_sync_lock(self, thread_id):
+        with self._message_sync_locks_lock:
+            return self._message_sync_locks.setdefault(thread_id, RLock())
 
     # Check for missing columns and migrate if necessary
     def add_missing_columns(self, conn, table):
@@ -573,6 +580,10 @@ class AppDB:
         """
         if not isinstance(messages, list):
             return
+        with self._message_sync_lock(thread_id):
+            self._sync_chat_messages(thread_id, messages, run_id, step_id)
+
+    def _sync_chat_messages(self, thread_id, messages, run_id=None, step_id=None):
         with self.create_writer_connection() as conn:
             existing = self.db.exec(
                 conn, "SELECT sequence, timestamp FROM chat_message WHERE threadId = :threadId AND active=1 ORDER BY sequence",
@@ -709,11 +720,12 @@ class AppDB:
 
     def rewrite_chat_messages(self, thread_id, messages):
         """Start a new active history branch while preserving prior rows for audit."""
-        with self.create_writer_connection() as conn:
-            self.db.exec(conn, "UPDATE chat_message SET active=0 WHERE threadId=:threadId AND active=1", {"threadId": thread_id})
-            self.db.exec(conn, "DELETE FROM context_snapshot WHERE threadId=:threadId", {"threadId": thread_id})
-            conn.commit()
-        self.sync_chat_messages(thread_id, messages)
+        with self._message_sync_lock(thread_id):
+            with self.create_writer_connection() as conn:
+                self.db.exec(conn, "UPDATE chat_message SET active=0 WHERE threadId=:threadId AND active=1", {"threadId": thread_id})
+                self.db.exec(conn, "DELETE FROM context_snapshot WHERE threadId=:threadId", {"threadId": thread_id})
+                conn.commit()
+            self._sync_chat_messages(thread_id, messages)
 
     def annotate_chat_messages(self, thread_id, messages, run_id=None, step_id=None):
         timestamps = [m.get("timestamp") for m in messages if isinstance(m, dict) and m.get("timestamp") is not None]

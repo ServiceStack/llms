@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from threading import Event, Thread
 
 from llms.extensions.app import install, resolve_events_config
 
@@ -316,6 +317,35 @@ class TestAppDbProvider(unittest.IsolatedAsyncioTestCase):
         )
         rows = self.app_db.get_chat_messages(thread_id)
         self.assertEqual([x["sequence"] for x in rows], [1, 2, 3])
+
+    def test_concurrent_message_syncs_allocate_unique_sequences(self):
+        thread_id = self.app_db.create_thread(
+            {"model": "test-model", "messages": []}, user="test_user"
+        )
+        start = Event()
+        errors = []
+
+        def sync_message(i):
+            try:
+                start.wait()
+                self.app_db.sync_chat_messages(thread_id, [{
+                    "role": "user", "content": f"message {i}", "timestamp": i,
+                }])
+            except Exception as e:
+                errors.append(e)
+
+        threads = [Thread(target=sync_message, args=(i,)) for i in range(1, 21)]
+        for thread in threads:
+            thread.start()
+        start.set()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        rows = self.app_db.get_chat_messages(thread_id)
+        self.assertEqual(len(rows), 20)
+        self.assertEqual([x["sequence"] for x in rows], list(range(1, 21)))
+        self.assertEqual(len({x["timestamp"] for x in rows}), 20)
 
     async def test_agent_run_and_steps_are_durable(self):
         thread_id = await self.app_db.create_thread_async(
