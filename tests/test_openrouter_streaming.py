@@ -143,7 +143,7 @@ class TestOpenRouterStreaming(unittest.IsolatedAsyncioTestCase):
         """Test non-streaming fallback when stream=False."""
         chat_data = {
             "model": "openai/gpt-4o",
-            "messages": [{"role": "user", "content": "Hi"}],
+            "messages": [{"role": "user", "content": "Hi", "timestamp": 12345}],
             "stream": False,
         }
         response_json_payload = {
@@ -174,6 +174,8 @@ class TestOpenRouterStreaming(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(res["id"], "gen-2")
         self.assertEqual(res["choices"][0]["message"]["content"], "Non-stream response")
+        self.assertEqual(chat_data["messages"][0]["timestamp"], 12345)
+        self.assertNotIn("timestamp", json.loads(mock_session.post.call_args.kwargs["data"])["messages"][0])
 
     async def test_openrouter_streaming_cancellation(self):
         """Test that streaming returns None immediately when cancelled."""

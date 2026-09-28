@@ -77,6 +77,7 @@ def install(ctx):
 
     # Adding an Auth Provider forces Authentication to be enabled
     auth_provider = GitHubAuthProvider(g_app)
+    auth_provider.redirect_uri = redirect_uri
     ctx.set_auth_provider(auth_provider)
 
     # OAuth handlers

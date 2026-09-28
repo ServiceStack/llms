@@ -15,7 +15,7 @@ from typing import Any
 from aiohttp import web
 
 from llms.db import count_tokens_approx
-from llms.main import AgentSliceYield, remove_avatar_files
+from llms.main import AgentSliceYield, ToolApprovalPending, remove_avatar_files
 
 from .db import AppDB
 
@@ -273,6 +273,14 @@ def install(ctx):
     if not get_db():
         return
 
+    if hasattr(ctx, "app"):
+        ctx.app.agent_db = g_db
+        ctx.app.notify_thread_update = notify_thread_update
+    # Live requests are only an in-process authorization aid. Restarted remote runs
+    # require the host's reauthorizeBackgroundRequest hook; persisted usernames alone
+    # are never treated as an authorization grant.
+    agent_requests = {}
+
     thread_fields = [
         "id",
         "threadId",
@@ -330,11 +338,14 @@ def install(ctx):
             if isinstance(dto.get("messages"), list):
                 dto["messages"] = merge_streaming_message(dto["messages"], streaming)
             dto["sig"] = get_thread_signature(dto)
-            # Ownership was enforced by the thread query; include its active run even
-            # when a projected thread query omitted the user column.
-            run = g_db.get_active_agent_run(dto["id"], user="all")
-            if run:
-                dto["run"] = to_wire_dates(run)
+            # The thread can become terminal just before its run record is completed.
+            # Do not expose that transient run as still active to the sidebar.
+            if not (dto.get("completedAt") or dto.get("error")):
+                # Ownership was enforced by the thread query; include its active run even
+                # when a projected thread query omitted the user column.
+                run = g_db.get_active_agent_run(dto["id"], user="all")
+                if run:
+                    dto["run"] = to_wire_dates(run)
         return dto
 
     def message_ranges(messages):
@@ -769,6 +780,8 @@ def install(ctx):
             "stepId": step_id, "metadata": metadata, "tools": metadata.get("tools", "all"),
             "projectedContext": True, "projectedPersistedCount": len(chat["messages"]),
         }
+        if run_id in agent_requests:
+            context["request"] = agent_requests[run_id]
         try:
             response = await ctx.chat_completion(chat, context=context)
             g_db.update_agent_step(step_id, {
@@ -779,6 +792,18 @@ def install(ctx):
                 "status": "completed", "nextAction": None, "completedAt": datetime.now(),
                 "leaseOwner": None, "leaseExpiresAt": None,
             })
+            notify_thread_update(thread_id)
+            agent_requests.pop(run_id, None)
+        except ToolApprovalPending:
+            g_db.update_agent_step(step_id, {
+                "status": "completed", "output": {"awaitingApproval": True}, "completedAt": datetime.now(),
+            })
+            g_db.update_agent_run(run_id, {
+                "status": "waiting_approval", "nextAction": "tools", "leaseOwner": None, "leaseExpiresAt": None,
+            })
+            mcp = getattr(getattr(ctx, "app", None), "mcp_client", None)
+            if mcp:
+                await mcp.approvals.wake_ready(user or "default", thread_id)
             notify_thread_update(thread_id)
         except AgentSliceYield as yielded:
             g_db.update_agent_step(step_id, {
@@ -804,6 +829,10 @@ def install(ctx):
                 "leaseOwner": None, "leaseExpiresAt": None,
             })
             raise
+        finally:
+            current = g_db.get_agent_run(run_id, user=user)
+            if not current or current.get("status") not in ("running", "queued", "waiting_approval"):
+                agent_requests.pop(run_id, None)
 
     agent_defaults = (ctx.config.get("defaults") or {}).get("agent") or {}
     scheduler = AgentScheduler(
@@ -815,6 +844,9 @@ def install(ctx):
         poll_seconds=agent_defaults.get("pollSeconds", 1),
         lease_seconds=agent_defaults.get("leaseSeconds", 300),
     )
+    if hasattr(ctx, "app"):
+        ctx.app.agent_scheduler = scheduler
+        ctx.app.agent_requests = agent_requests
 
     async def start_agent_scheduler():
         scheduler.start()
@@ -946,6 +978,7 @@ def install(ctx):
         run_id = g_db.create_agent_run(
             id, user, thread.get("model"), max_steps=int(metadata.get("maxSteps", 250))
         )
+        agent_requests[run_id] = request
         scheduler.wake()
         thread["run"] = g_db.get_agent_run(run_id, user=user)
 
@@ -1082,6 +1115,7 @@ def install(ctx):
         if run:
             g_db.update_agent_run(run["id"], {"status": "cancelled", "completedAt": datetime.now()})
             scheduler.cancel(run["id"])
+            agent_requests.pop(run["id"], None)
         await g_db.update_thread_async(
             id, {"completedAt": datetime.now(), "error": "Request was canceled"}, user=user
         )

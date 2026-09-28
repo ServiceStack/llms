@@ -6,10 +6,17 @@ from aiohttp import web
 
 def install(ctx):
     async def tools_handler(request):
+        groups = {k: list(v) for k, v in ctx.app.tool_groups.items()}
+        definitions = list(ctx.app.tool_definitions)
+        if getattr(ctx.app, "contextual_tool_providers", None):
+            context = {"request": request, "user": ctx.get_username(request)}
+            for name, handle in (await ctx.app.resolve_contextual_tools(context, "__list")).items():
+                definitions.append(handle["definition"])
+                groups.setdefault(handle["tool"]["group"], []).append(name)
         return web.json_response(
             {
-                "groups": ctx.app.tool_groups,
-                "definitions": ctx.app.tool_definitions,
+                "groups": groups,
+                "definitions": definitions,
             }
         )
 
@@ -18,6 +25,20 @@ def install(ctx):
     async def exec_handler(request):
         name = request.match_info.get("name")
         args = await request.json()
+
+        if name.startswith("mcp_") and getattr(ctx.app, "mcp_client", None):
+            from llms.extensions.mcp_client.common import McpError
+            try:
+                ctx.app.mcp_client.mutation(request)
+                context = {"request": request, "user": ctx.get_username(request)}
+                handles = await ctx.app.resolve_contextual_tools(context, name)
+                handle = handles.get(name)
+                if not handle:
+                    raise McpError("access_denied", "Remote tool is unavailable")
+                result = await handle["provider"].invoke(handle, args, context)
+                return web.json_response([{"type": "text", "text": json.dumps(result)}, *result.get("resources", [])])
+            except McpError as exc:
+                return web.json_response({"responseStatus": {"errorCode": exc.code, "message": str(exc)}}, status=403)
 
         tool_def = ctx.get_tool_definition(name)
         if not tool_def:

@@ -2440,8 +2440,18 @@ def get_tool_property(function_name, prop_name):
 
 async def g_exec_tool(function_name, function_args, context=None):
     _log(f"g_exec_tool: {function_name}")
+    context = context or {}
+    if function_name.startswith("mcp_") and g_app and getattr(g_app, "mcp_client", None):
+        from llms.extensions.mcp_client.common import McpError, dumps
+        handle = context.get("contextualTools", {}).get(function_name)
+        if not handle:
+            raise McpError("access_denied", "Remote tool is not selected or available")
+        result = await handle["provider"].invoke(handle, function_args, context)
+        return dumps(result), result.get("resources", [])
     if g_app and function_name in g_app.tools:
         try:
+            if "user" in context and get_tool_property(function_name, "user"):
+                function_args = {**function_args, "user": context["user"]}
             # Type conversion based on tool definition
             function_args = convert_tool_args(function_name, function_args)
 
@@ -2493,6 +2503,18 @@ class AgentSliceYield(Exception):
         self.iterations = iterations
 
 
+class ContextualToolError(Exception):
+    """Stable error contract across dynamically loaded extension module names."""
+
+    def __init__(self, code, message=None):
+        self.code = code
+        super().__init__(message or code.replace("_", " "))
+
+
+class ToolApprovalPending(Exception):
+    """A persisted tool batch awaits user action; release the scheduler lease."""
+
+
 async def g_chat_completion(chat, context=None):
     try:
         model = chat.get("model")
@@ -2540,6 +2562,17 @@ async def g_chat_completion(chat, context=None):
         for filter_func in g_app.chat_request_filters:
             await filter_func(base_chat, context)
 
+    # Remote catalogs and call handles belong to this principal and turn, never the
+    # global tool registry. Discard client-supplied remote schemas before resolution.
+    if g_app and getattr(g_app, "contextual_tool_providers", None):
+        base_chat["tools"] = [t for t in base_chat.get("tools", [])
+                              if not t.get("function", {}).get("name", "").startswith("mcp_")]
+        context["contextualTools"] = await g_app.resolve_contextual_tools(
+            context, "none" if "response_format" in base_chat else context.get("tools", "all"))
+        base_chat["tools"].extend(h["definition"] for h in context["contextualTools"].values())
+        if getattr(g_app, "mcp_client", None):
+            await g_app.mcp_client.approvals.resume(base_chat, context)
+
     attempt_round = 0
     candidate_index = 0
 
@@ -2561,6 +2594,8 @@ async def g_chat_completion(chat, context=None):
             context["modelInfo"] = model_info
 
             # Deep copy chat context and reset tool history per provider attempt
+            if g_app and getattr(g_app, "mcp_client", None):
+                g_app.mcp_client.validate_model(context, provider)
             current_chat = copy.deepcopy(base_chat)
             tool_history = []
             final_response = None
@@ -2613,6 +2648,17 @@ async def g_chat_completion(chat, context=None):
                     if g_app:
                         await g_app.on_chat_tool(current_chat, context)
 
+                    mcp = getattr(g_app, "mcp_client", None) if g_app else None
+                    batch_id = await mcp.approvals.prepare(message, context) if mcp else None
+                    if batch_id:
+                        outputs = await mcp.approvals.execute(batch_id, context)
+                        current_chat["messages"].extend(outputs)
+                        tool_history.extend(outputs)
+                        await g_app.on_chat_tool(current_chat, context)
+                        mcp.store.complete_batch(batch_id, context.get("user") or "default")
+                        context["remoteToolsDispatched"] = True
+                        continue
+
                     # Execute tool calls (concurrently if multiple)
                     async def _exec_single_tool(tc):
                         fn_name = tc["function"]["name"]
@@ -2623,7 +2669,7 @@ async def g_chat_completion(chat, context=None):
                         else:
                             if "user" in context and get_tool_property(fn_name, "user"):
                                 fn_args["user"] = context["user"]
-                            tool_result, resources = await g_exec_tool(fn_name, fn_args)
+                            tool_result, resources = await g_exec_tool(fn_name, fn_args, context=context)
                             return tc["id"], tool_result, resources
 
                     if len(tool_calls) == 1:
@@ -2692,9 +2738,15 @@ async def g_chat_completion(chat, context=None):
 
             return final_response
 
-        except AgentSliceYield:
+        except (AgentSliceYield, ToolApprovalPending):
             raise
         except Exception as e:
+            # Never restart a provider turn after a remote side effect. A new model
+            # response can invent a new call id and otherwise repeat the mutation.
+            if context.get("remoteToolsDispatched"):
+                if g_app:
+                    await g_app.on_chat_error(e, context)
+                raise
             if first_exception is None:
                 first_exception = e
                 context["stackTrace"] = traceback.format_exc()
@@ -3748,6 +3800,7 @@ class AppExtensions:
         self.tools = {}
         self.tool_definitions = []
         self.tool_groups = {}
+        self.contextual_tool_providers = []
         self.index_headers = []
         self.index_footers = []
         self.aliased_directories = {}
@@ -4015,6 +4068,8 @@ class AppExtensions:
     def create_chat_with_tools(self, chat: Dict[str, Any], use_tools: str = "all") -> Dict[str, Any]:
         # Inject global tools if present
         current_chat = chat.copy()
+        if isinstance(current_chat.get("tools"), list):
+            current_chat["tools"] = list(current_chat["tools"])
 
         if "messages" not in current_chat:
             current_chat["messages"] = []
@@ -4050,6 +4105,12 @@ class AppExtensions:
                     if name not in existing_tools and (include_all_tools or name in only_tools_list):
                         current_chat["tools"].append(tool_def)
         return current_chat
+
+    async def resolve_contextual_tools(self, context, selector):
+        handles = {}
+        for provider in self.contextual_tool_providers:
+            handles.update(await provider.resolve(context, selector))
+        return handles
 
     def get_tool_definition(self, name: str) -> Optional[Dict[str, Any]]:
         for tool_def in self.tool_definitions:
@@ -4646,7 +4707,9 @@ def install_extensions():
     Calls the `__install__(ctx)` function in the extension module.
     """
 
-    extension_dirs = get_extensions_dirs()
+    # MCP checks the installed host authentication provider during setup, so
+    # load it after auth extensions regardless of filesystem enumeration order.
+    extension_dirs = sorted(get_extensions_dirs(), key=lambda path: os.path.basename(path) == "mcp_client")
     ext_count = len(list(extension_dirs))
     if ext_count == 0:
         _log("No extensions found")
@@ -5276,6 +5339,8 @@ def cli_exec(cli_args, extra_args):
                 context["nostore"] = nostore
                 response = await g_app.chat_completion(chat, context)
                 return web.json_response(response)
+            except ToolApprovalPending:
+                return web.json_response({"threadId": context.get("threadId"), "status": "Approval required"}, status=202)
             except Exception as e:
                 return web.json_response(to_error_response(e), status=500)
 

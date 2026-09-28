@@ -1,4 +1,5 @@
 import base64
+import copy
 import io
 import json
 import mimetypes
@@ -383,7 +384,9 @@ def install_openrouter(ctx):
 
             self.init_chat(chat)
 
-            chat = await self.process_chat(chat, provider_id=self.id)
+            # Provider formatting removes timestamps and may reshape messages.
+            # Keep the agent's working history intact for durable tool checkpoints.
+            chat = await self.process_chat(copy.deepcopy(chat), provider_id=self.id)
 
             ctx.log(f"POST {self.chat_url} (stream={is_stream})")
             ctx.log(self.chat_summary(chat))
