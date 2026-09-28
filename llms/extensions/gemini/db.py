@@ -484,6 +484,7 @@ class GeminiDB:
                 "searchStartedAt": "TIMESTAMP",
                 "searchIndexedAt": "TIMESTAMP",
                 "searchError": "TEXT",
+                "searchRetries": "INTEGER",
                 "metadata": "JSON",
                 "error": "TEXT",
                 "ref": "TEXT",
@@ -1375,7 +1376,7 @@ class GeminiDB:
             now = datetime.now()
             self.db.exec(conn, """
                 UPDATE document SET searchHash=:hash,searchIndexedHash=:hash,
-                    searchIndexedAt=:now,searchStartedAt=NULL,searchError=NULL WHERE id=:id
+                    searchIndexedAt=:now,searchStartedAt=NULL,searchError=NULL,searchRetries=NULL WHERE id=:id
             """, {"hash": desired_hash, "now": now, "id": doc_id})
             conn.commit()
             return len(sections)
@@ -1403,25 +1404,34 @@ class GeminiDB:
         finally:
             conn.close()
 
-    def pending_search_documents(self, filestore_id=None, user=None, limit=100):
+    def pending_search_documents(self, filestore_id=None, user=None, limit=100, max_retries=None):
         sql_where, params = self.get_user_filter(user, {})
         sql_where += " AND tombstonedAt IS NULL AND searchHash IS NOT NULL "
         sql_where += "AND (searchIndexedHash IS NULL OR searchIndexedHash != searchHash)"
         if filestore_id is not None:
             sql_where += " AND filestoreId=:filestoreId"
             params["filestoreId"] = int(filestore_id)
+        if max_retries is not None:
+            sql_where += " AND (searchRetries IS NULL OR searchRetries < :maxRetries)"
+            params["maxRetries"] = int(max_retries)
         return self.db.all(
             f"SELECT * FROM document {sql_where} ORDER BY id LIMIT :take",
             {**params, "take": min(max(int(limit), 1), 1000)},
         ) or []
 
-    def get_search_candidates(self, limit=100):
+    def get_search_candidates(self, limit=100, max_retries=None):
         """Worker queue across user partitions, including pre-search-schema documents."""
+        where = [
+            "tombstonedAt IS NULL",
+            "(searchHash IS NULL OR searchIndexedHash IS NULL OR searchIndexedHash != searchHash)",
+        ]
+        params = {"take": min(max(int(limit), 1), 1000)}
+        if max_retries is not None:
+            where.append("(searchRetries IS NULL OR searchRetries < :maxRetries)")
+            params["maxRetries"] = int(max_retries)
         return self.db.all(
-            """SELECT * FROM document WHERE tombstonedAt IS NULL
-               AND (searchHash IS NULL OR searchIndexedHash IS NULL OR searchIndexedHash != searchHash)
-               ORDER BY id LIMIT :take""",
-            {"take": min(max(int(limit), 1), 1000)},
+            f"SELECT * FROM document WHERE {' AND '.join(where)} ORDER BY id LIMIT :take",
+            params,
         ) or []
 
     def remove_search_document(self, document_id):

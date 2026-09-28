@@ -2436,6 +2436,7 @@ def install(ctx):
                 "searchHash": search.desired_hash(document),
                 "searchIndexedHash": None,
                 "searchError": None,
+                "searchRetries": None,
             }, user=user)
         g_search_worker.start()
         return web.json_response({"queued": len(documents), "worker": g_search_worker.status()})

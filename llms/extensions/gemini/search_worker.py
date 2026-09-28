@@ -7,13 +7,19 @@ import time
 from . import ingest
 from . import search
 
+try:
+    GEMINI_SEARCH_MAX_RETRIES = max(1, int(os.getenv("GEMINI_SEARCH_MAX_RETRIES", "3")))
+except ValueError:
+    GEMINI_SEARCH_MAX_RETRIES = 3
+
 
 class SearchWorker:
     retry_delay = 5
 
-    def __init__(self, ctx, db):
+    def __init__(self, ctx, db, max_retries=None):
         self.ctx = ctx
         self.db = db.clone()
+        self.max_retries = max(1, int(max_retries if max_retries is not None else GEMINI_SEARCH_MAX_RETRIES))
         self.running = False
         self.lock = threading.Lock()
         self.cancelled = threading.Event()
@@ -63,13 +69,13 @@ class SearchWorker:
                 desired = search.desired_hash(document)
                 if document.get("searchHash") != desired:
                     self.db.update_document(
-                        document["id"], {"searchHash": desired}, user=document.get("user"))
+                        document["id"], {"searchHash": desired, "searchRetries": None}, user=document.get("user"))
             self.db.db.task_queue.join()
             while not self.cancelled.is_set():
                 with self.lock:
                     self.restart_requested = False
                 try:
-                    candidates = [d for d in self.db.get_search_candidates(100)
+                    candidates = [d for d in self.db.get_search_candidates(100, max_retries=self.max_retries)
                                   if (d.get("id"), search.desired_hash(d)) not in completed]
                 except Exception as error:
                     self.ctx.err("SearchWorker failed reading its queue; retrying", error)
@@ -94,12 +100,30 @@ class SearchWorker:
                         self.progress["done"] += 1
                     except Exception as error:
                         self.progress["failed"] += 1
-                        self.ctx.err(f"Failed indexing document {document.get('id')} for Search", error)
+                        retries = (document.get("searchRetries") or 0) + 1
+                        updates = {
+                            "searchError": self.ctx.error_message(error),
+                            "searchStartedAt": None,
+                            "searchRetries": retries,
+                        }
+                        if retries >= self.max_retries:
+                            self.ctx.err(
+                                f"Failed indexing document {document.get('id')} for Search "
+                                f"(attempt {retries}/{self.max_retries}, abandoning)",
+                                error,
+                            )
+                            # Keep the desired hash pending so status never reports a failed
+                            # document as indexed. The retry count excludes it from future runs.
+                            self.db.remove_search_document(document["id"])
+                        else:
+                            self.ctx.err(
+                                f"Failed indexing document {document.get('id')} for Search "
+                                f"(attempt {retries}/{self.max_retries})",
+                                error,
+                            )
                         self.db.update_document(
-                            document.get("id"), {
-                                "searchError": self.ctx.error_message(error),
-                                "searchStartedAt": None,
-                            },
+                            document.get("id"),
+                            updates,
                             user=document.get("user"),
                         )
         except Exception as error:
@@ -115,7 +139,7 @@ class SearchWorker:
         desired = search.desired_hash(document)
         self.db.mark_search_started(document["id"])
         if document.get("searchHash") != desired:
-            self.db.update_document(document["id"], {"searchHash": desired}, user=document.get("user"))
+            self.db.update_document(document["id"], {"searchHash": desired, "searchRetries": None}, user=document.get("user"))
         url = document.get("url") or ""
         if not url.startswith("/~cache/"):
             raise ValueError("Document has no local cached content")
@@ -127,16 +151,17 @@ class SearchWorker:
         filename = document.get("filename") or document.get("sourceKey") or document.get("displayName") or "document.txt"
         text, frontmatter, skip = ingest.extract(content, filename, {"minWords": 0})
         if skip:
-            # Source imports cache their already-extracted HTML as Markdown. Direct binary uploads
-            # remain Gemini-only until a dependency-free local extractor exists.
-            if ingest.ext_of(filename) in ingest.BINARY_DOC_EXTS:
-                self.db.replace_search_sections(document, [], desired)
-                self.db.update_document(
-                    document["id"], {"searchError": f"Not locally searchable: {skip}"},
-                    user=document.get("user"),
-                )
-                return
-            raise ValueError(skip)
+            # Document cannot be extracted locally for text search (e.g. binary formats, unsupported
+            # text types, or short content). Mark as processed with empty sections and record reason.
+            self.db.replace_search_sections(document, [], desired)
+            self.db.update_document(
+                document["id"], {
+                    "searchError": f"Not locally searchable: {skip}",
+                    "searchRetries": None,
+                },
+                user=document.get("user"),
+            )
+            return
         sections = search.split_sections(
             text or "", document, document_title=(frontmatter or {}).get("title"))
         self.db.replace_search_sections(document, sections, desired)

@@ -417,7 +417,7 @@ class SearchWorkerTests(unittest.TestCase):
             self.entered = threading.Event()
             self.release = threading.Event()
         def clone(self): return self
-        def get_search_candidates(self, _take):
+        def get_search_candidates(self, _take, max_retries=None):
             self.reads += 1
             if self.block_first and self.reads == 1:
                 self.entered.set()
@@ -455,6 +455,62 @@ class SearchWorkerTests(unittest.TestCase):
         self.assertTrue(self.wait_until(lambda: not worker.running))
         self.assertGreaterEqual(db.reads, 2)
         self.assertTrue(any("retrying" in str(error) for error in context.errors))
+
+    def test_unsupported_document_type_is_marked_not_locally_searchable(self):
+        from llms.extensions.gemini.search_worker import SearchWorker
+        context = self.Context()
+        replaced = []
+        updated = []
+
+        class MockDb:
+            def clone(self): return self
+            def mark_search_started(self, _id): pass
+            def update_document(self, doc_id, doc, user=None):
+                updated.append((doc_id, doc))
+            def replace_search_sections(self, doc, sections, desired):
+                replaced.append((doc, sections, desired))
+
+        with tempfile.NamedTemporaryFile(suffix=".l") as tmp:
+            tmp.write(b"%% rules %%")
+            tmp.flush()
+            context.get_cache_path = lambda rel: tmp.name
+            worker = SearchWorker(context, MockDb())
+            doc = {"id": 657, "filename": "test.l", "url": "/~cache/test.l"}
+            worker.index_document(doc)
+            self.assertEqual(len(replaced), 1)
+            self.assertEqual(replaced[0][1], [])  # empty sections
+            self.assertTrue(any("Not locally searchable" in str(u[1].get("searchError")) for u in updated))
+
+    def test_worker_stops_retrying_failed_document_without_marking_it_indexed(self):
+        from llms.extensions.gemini import search
+        from llms.extensions.gemini.search_worker import SearchWorker
+        context = self.Context()
+        context.error_message = str
+        doc = {"id": 1, "url": "invalid", "searchRetries": None}
+        doc["searchHash"] = search.desired_hash(doc)
+
+        class MockDb:
+            def __init__(self):
+                self.db = SearchWorkerTests.InnerDb()
+                self.removed = 0
+            def clone(self): return self
+            def get_search_candidates(self, _take, max_retries=None):
+                return [dict(doc)] if (doc["searchRetries"] or 0) < max_retries else []
+            def mark_search_started(self, _id): pass
+            def update_document(self, _id, updates, user=None): doc.update(updates)
+            def remove_search_document(self, _id): self.removed += 1
+
+        db = MockDb()
+        worker = SearchWorker(context, db, max_retries=2)
+        worker.run(object())
+        self.assertEqual(doc["searchRetries"], 1)
+        self.assertEqual(db.removed, 0)
+        for _ in range(2):
+            worker.run(object())
+        self.assertEqual(doc["searchRetries"], 2)
+        self.assertNotEqual(doc.get("searchIndexedHash"), doc["searchHash"])
+        self.assertEqual(db.removed, 1)
+        self.assertIn("no local cached content", doc["searchError"])
 
 
 @unittest.skipUnless(search_db, "llms.db is only available in the llms-py workspace")
@@ -628,6 +684,28 @@ class SearchPersistenceTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM search_click WHERE searchWidgetId=?", (widget_id,)), 0)
             self.assertEqual(db.db.scalar(
                 "SELECT COUNT(*) FROM search_page_view WHERE searchWidgetId=?", (widget_id,)), 0)
+
+    def test_search_candidates_filter_by_max_retries(self):
+        with tempfile.TemporaryDirectory() as root:
+            db = search_db.GeminiDB(self.Context(), os.path.join(root, "gemini.sqlite"))
+            self.addCleanup(db.db.close)
+            store_id = self.insert(db, "filestore", db.prepare_filestore({
+                "displayName": "Docs", "visibility": "public",
+            }))
+            doc1_id = self.insert(db, "document", db.prepare_document({
+                "filestoreId": store_id, "displayName": "Doc1.md", "searchHash": "h1", "searchRetries": 1,
+            }))
+            doc2_id = self.insert(db, "document", db.prepare_document({
+                "filestoreId": store_id, "displayName": "Doc2.md", "searchHash": "h2", "searchRetries": 3,
+            }))
+            candidates = db.get_search_candidates(100, max_retries=3)
+            candidate_ids = [d["id"] for d in candidates]
+            self.assertIn(doc1_id, candidate_ids)
+            self.assertNotIn(doc2_id, candidate_ids)
+            pending = db.pending_search_documents(store_id, max_retries=3)
+            pending_ids = [d["id"] for d in pending]
+            self.assertIn(doc1_id, pending_ids)
+            self.assertNotIn(doc2_id, pending_ids)
 
 
 if __name__ == "__main__":
