@@ -184,6 +184,17 @@ class ThreadContracts(unittest.TestCase):
         self.assertEqual((thread['title'], thread['titleSource'], thread['titleStatus']),
                          ('Generated title', 'generated', 'complete'))
 
+    def test_missing_summarize_uses_packaged_template(self):
+        # configs created before titles existed have no defaults.summarize
+        self.ctx.config['defaults'].pop('summarize', None)
+        template = TitleWorker(self.db, self.ctx, lambda _: None).template()
+        self.assertEqual(template['model'], 'openai/gpt-oss-120b')
+        template['model'] = 'changed'  # callers get their own copy
+        self.assertEqual(TitleWorker(self.db, self.ctx, lambda _: None).template()['model'], 'openai/gpt-oss-120b')
+        # an explicit null still disables titles
+        self.ctx.config['defaults']['summarize'] = None
+        self.assertIsNone(TitleWorker(self.db, self.ctx, lambda _: None).template())
+
     def test_title_normalization(self):
         self.assertEqual(normalize_title('Title: "A\n useful title"'), 'A useful title')
         self.assertIsNone(normalize_title(''))

@@ -127,7 +127,8 @@ refresh queues one more refresh. The current chat stays visible even when it's b
 ## Titles
 
 `defaults.summarize` in `llms.json` is a normal chat request template (default model `openai/gpt-oss-120b`,
-resolved through configured providers; set to `null` to disable). On the first accepted turn the server sets
+resolved through configured providers; set to `null` to disable). Configs without the key (created before
+titles existed, since upgrades don't add new keys) fall back to the packaged `llms.json` template. On the first accepted turn the server sets
 a prompt-prefix title (`fallback`, or `Image attachment` for attachment-only prompts). `TitleWorker.enqueue`
 claims generation with a conditional `idle → pending` update, then runs a background task: at most two at
 once, only the bounded first prompt, no chat filters/tools/persistence, 15s timeout, one retry for

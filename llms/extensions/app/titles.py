@@ -16,6 +16,21 @@ def prompt_text(messages):
     return ""
 
 
+_packaged_summarize = []
+
+
+def packaged_summarize_template():
+    """defaults.summarize from the llms.json shipped with this version, or None"""
+    if not _packaged_summarize:
+        try:
+            from importlib.resources import files
+            config = json.loads(files("llms").joinpath("llms.json").read_text(encoding="utf-8"))
+            _packaged_summarize.append((config.get("defaults") or {}).get("summarize"))
+        except Exception:
+            _packaged_summarize.append(None)
+    return copy.deepcopy(_packaged_summarize[0])
+
+
 def normalize_title(value):
     if not isinstance(value, str):
         return None
@@ -35,7 +50,11 @@ class TitleWorker:
         self.semaphore = asyncio.Semaphore(concurrency)
 
     def template(self):
-        return (self.ctx.config.get("defaults") or {}).get("summarize")
+        defaults = self.ctx.config.get("defaults") or {}
+        if "summarize" in defaults:
+            return defaults["summarize"]  # an explicit null disables titles
+        # Configs created before titles existed don't have the key: use the packaged default
+        return packaged_summarize_template()
 
     def set_status(self, thread_id, status, where="titleStatus='idle'"):
         with self.db.create_writer_connection() as conn:
