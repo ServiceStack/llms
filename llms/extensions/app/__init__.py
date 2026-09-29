@@ -176,10 +176,32 @@ def resolve_events_config(config):
     return events
 
 
+class SidebarSignal:
+    """
+    In-memory change signal for the project sidebar. Writes that may change what it shows call
+    notify(); waiters recompute a user's revision only after a signal, and revisions are cached
+    until the next one, so an idle sidebar costs no database queries.
+    """
+
+    def __init__(self):
+        self.event = asyncio.Event()
+        self.revisions = {}
+
+    def notify(self):
+        self.revisions.clear()
+        event, self.event = self.event, asyncio.Event()
+        event.set()
+
+
+sidebar_signal = SidebarSignal()
+
+
 def notify_thread_update(thread_id):
     event = thread_update_events.get(str(thread_id))
     if event:
         event.set()
+    # title, membership, activity and run changes all arrive here
+    sidebar_signal.notify()
 
 
 # Timestamps are stored naive (that is what `datetime.now()` writes), which names a wall clock
@@ -250,7 +272,7 @@ def get_thread_signature(thread: Dict[str, Any]):
     completed = str(thread.get("completedAt") or "")
     error = str(thread.get("error") or "")
 
-    raw = f"{msg_len}:{msg_tail}:{status}:{completed}:{error}"
+    raw = f"{msg_len}:{msg_tail}:{status}:{completed}:{error}:{thread.get('metadataVersion', 0)}"
     h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
     return f"{msg_len}:{h}"
 
@@ -287,6 +309,8 @@ def install(ctx):
         "createdAt",
         "updatedAt",
         "title",
+        "projectId", "lastActivityAt", "metadataVersion", "membershipVersion",
+        "titleSource", "titleStatus", "titleVersion", "titlePromptSequence",
         "model",
         "modelInfo",
         "modalities",
@@ -457,9 +481,119 @@ def install(ctx):
 
     ctx.add_get("threads", query_threads)
 
+    def resolve_workspace(project_id, user):
+        projects = getattr(ctx, "projects", None)
+        if projects and hasattr(projects, "resolve_workspace"):
+            try:
+                return projects.resolve_workspace(project_id, user)
+            except ValueError as ex:
+                raise web.HTTPBadRequest(text=str(ex)) from ex
+        if project_id is not None:
+            raise web.HTTPBadRequest(text="Projects are unavailable")
+        return {"projectId": None, "directories": []}
+
+    def project_headers(user):
+        projects = getattr(ctx, "projects", None)
+        return projects.get_user_projects(user) if projects else []
+
+    def sidebar_revision(user):
+        key = user or ""
+        revision = sidebar_signal.revisions.get(key)
+        if revision is None:
+            revision = hashlib.sha256((g_db.sidebar_revision(user) + json.dumps(
+                [(p.get("id"), p.get("name"), p.get("showInSidebar", True)) for p in project_headers(user)],
+                sort_keys=True)).encode()).hexdigest()[:24]
+            sidebar_signal.revisions[key] = revision
+        return revision
+
+    # For other extensions (e.g. projects) whose changes affect the sidebar
+    ctx.notify_sidebar = sidebar_signal.notify
+    # Coalesce bursts of changes (e.g. a streaming response) into at most one check per second
+    sidebar_throttle = 1
+
+    async def wait_for_sidebar_change(event, timeout):
+        try:
+            await asyncio.wait_for(event.wait(), timeout)
+        except TimeoutError:
+            return False
+        await asyncio.sleep(sidebar_throttle)
+        return True
+
+    async def thread_sidebar(request):
+        user = ctx.get_username(request)
+        headers = project_headers(user)
+        if g_db.reconcile_projects([p["id"] for p in headers if p.get("id")], user):
+            sidebar_signal.notify()
+        active_projects = g_db.project_ids_with_messages(user)
+        return web.json_response({
+            "revision": sidebar_revision(user),
+            "projects": [{"id": p["id"], "name": p["name"], **g_db.sidebar_page(user, p["id"], 5)}
+                         for p in headers if p.get("id") in active_projects and p.get("showInSidebar", True)],
+            "unassigned": g_db.sidebar_page(user, None, 30),
+        })
+
+    async def sidebar_threads(request):
+        query = request.query
+        project = query.get("projectId")
+        if (project is not None and "scope" in query) or (project is None and query.get("scope") != "unassigned"):
+            raise web.HTTPBadRequest(text="Specify projectId or scope=unassigned")
+        user = ctx.get_username(request)
+        resolve_workspace(project, user)
+        try:
+            page = g_db.sidebar_page(user, project, query.get("limit", "10"), query.get("cursor"))
+        except ValueError as ex:
+            raise web.HTTPBadRequest(text=str(ex)) from ex
+        return web.json_response(page)
+
+    async def sidebar_updates(request):
+        user = ctx.get_username(request)
+        signature = request.query.get("sig")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 25
+        while True:
+            # capture the signal before reading, so a change can't slip between the two
+            event = sidebar_signal.event
+            revision = sidebar_revision(user)
+            remaining = deadline - loop.time()
+            if revision != signature or remaining <= 0 or not await wait_for_sidebar_change(event, remaining):
+                return web.json_response({"revision": revision})
+
+    async def sidebar_stream(request):
+        user = ctx.get_username(request)
+        response = web.StreamResponse(headers={
+            "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        await response.prepare(request)
+        signature = request.query.get("sig")
+        try:
+            while True:
+                event = sidebar_signal.event
+                revision = sidebar_revision(user)
+                if revision != signature:
+                    await response.write(("data: " + json.dumps({"revision": revision}) + "\n\n").encode())
+                    signature = revision
+                while not await wait_for_sidebar_change(event, 15):
+                    await response.write(b": heartbeat\n\n")
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        return response
+
+    ctx.add_get("thread-sidebar/updates/stream", sidebar_stream)
+    ctx.add_get("thread-sidebar/updates", sidebar_updates)
+    ctx.add_get("thread-sidebar", thread_sidebar)
+    ctx.add_get("thread-sidebar/threads", sidebar_threads)
+
+    protected_thread_fields = {
+        "metadataVersion", "membershipVersion", "titleSource", "titleStatus", "titleVersion",
+        "titlePromptSequence", "lastActivityAt", "lastSubmissionId", "user",
+    }
+
     async def create_thread(request):
         thread = await request.json()
+        for key in protected_thread_fields:
+            thread.pop(key, None)
+        resolve_workspace(thread.get("projectId"), ctx.get_username(request))
         id = await g_db.create_thread_async(thread, user=ctx.get_username(request))
+        sidebar_signal.notify()
         row = g_db.get_thread(id, user=ctx.get_username(request))
         return web.json_response(thread_window_dto(row) if row else "")
 
@@ -511,13 +645,40 @@ def install(ctx):
             row = g_db.get_thread(id, user="all")
             if row:
                 user = row.get("user") or "all"
-        update_count = await g_db.update_thread_async(id, thread, user=user)
+        if not row:
+            raise web.HTTPNotFound(text="Thread not found")
+        if "projectId" in thread:
+            resolve_workspace(thread["projectId"], user)
+            version = thread.get("membershipVersion")
+            if type(version) is not int:
+                raise web.HTTPBadRequest(text="membershipVersion is required")
+            if not g_db.move_thread(id, thread.pop("projectId"), version, user):
+                raise web.HTTPConflict(text="Thread changed or has an active run; refresh and retry")
+        if "title" in thread:
+            try:
+                g_db.rename_thread(id, thread.pop("title"), user)
+            except ValueError as ex:
+                raise web.HTTPBadRequest(text=str(ex)) from ex
+        for key in protected_thread_fields:
+            thread.pop(key, None)
+        update_count = await g_db.update_thread_async(id, thread, user=user) if thread else 1
+        notify_thread_update(id)
         if update_count == 0:
             raise Exception("Thread not found")
         row = g_db.get_thread(id, user=user)
         return web.json_response(thread_window_dto(row) if row else "")
 
-    ctx.add_patch("threads/{id}", update_thread)
+    thread_mutation_locks = {}
+
+    def serialized_thread_mutation(handler):
+        async def locked(request):
+            key = str(request.match_info["id"])
+            lock = thread_mutation_locks.setdefault(key, asyncio.Lock())
+            async with lock:
+                return await handler(request)
+        return locked
+
+    ctx.add_patch("threads/{id}", serialized_thread_mutation(update_thread))
 
     def truncate_compaction_value(value, max_chars):
         if isinstance(value, str) and len(value) > max_chars:
@@ -723,6 +884,29 @@ def install(ctx):
         return projected
 
     async def execute_agent_slice(run):
+        from llms.execution_context import workspace_scope
+        workspace = run.get("workspace")
+        if isinstance(workspace, str):
+            workspace = json.loads(workspace)
+        if workspace is None:
+            thread = g_db.get_thread(run["threadId"], user=run.get("user"))
+            workspace = resolve_workspace(thread.get("projectId") if thread else None, run.get("user"))
+            g_db.update_agent_run(run["id"], {"workspace": workspace})
+        if workspace.get("projectId"):
+            current = resolve_workspace(workspace["projectId"], run.get("user"))
+            if current != workspace or any(not os.path.isdir(p) for p in workspace["directories"]):
+                raise ValueError("The run's project workspace is no longer available")
+        token = workspace_scope.set({**workspace, "user": run.get("user"), "runId": run["id"]})
+        try:
+            await execute_scoped_agent_slice(run)
+        finally:
+            workspace_scope.reset(token)
+            current = g_db.get_agent_run(run["id"], user=run.get("user"))
+            if not current or current.get("status") not in ("queued", "running", "waiting_approval"):
+                from llms.extensions.computer.bash import release_run_shell
+                await release_run_shell(run["id"])
+
+    async def execute_scoped_agent_slice(run):
         """Execute one bounded durable slice claimed by the scheduler."""
         run_id = int(run["id"])
         thread_id = run["threadId"]
@@ -848,11 +1032,19 @@ def install(ctx):
         ctx.app.agent_scheduler = scheduler
         ctx.app.agent_requests = agent_requests
 
+    from .titles import TitleWorker
+    title_worker = TitleWorker(g_db, ctx, notify_thread_update)
+
     async def start_agent_scheduler():
         scheduler.start()
+        title_worker.start()
 
     async def stop_agent_scheduler():
+        await title_worker.stop()
         await scheduler.stop()
+        from llms.extensions.computer.bash import release_run_shell, run_tools
+        for run_id in list(run_tools):
+            await release_run_shell(run_id)
 
     if hasattr(ctx, "register_startup_handler"):
         ctx.register_startup_handler(start_agent_scheduler)
@@ -868,9 +1060,10 @@ def install(ctx):
             if row:
                 user = row.get("user") or "all"
         g_db.delete_thread(id, user=user)
+        sidebar_signal.notify()
         return web.json_response({})
 
-    ctx.add_delete("threads/{id}", delete_thread)
+    ctx.add_delete("threads/{id}", serialized_thread_mutation(delete_thread))
 
     async def queue_chat_handler(request):
         # Check authentication if enabled
@@ -897,13 +1090,18 @@ def install(ctx):
         thread = thread_dto(row)
         if not thread:
             raise Exception("Thread not found")
+        submission_id = chat.get("submissionId")
+        if submission_id and submission_id == thread.get("lastSubmissionId"):
+            return web.json_response(thread_window_dto(row))
         active_run = g_db.get_active_agent_run(id, user=user)
         if active_run:
             raise web.HTTPConflict(text="An agent run is already active for this thread")
 
+        workspace = resolve_workspace(thread.get("projectId"), user)
         tools = chat.get("tools", thread.get("tools", []))
         update_thread = {
             "messages": messages,
+            "lastSubmissionId": submission_id,
             # editing/redoing a message deliberately rewrites history, everything else
             # may only extend it (see AppDB.guard_messages)
             "truncate": bool(chat.get("truncate")),
@@ -932,15 +1130,14 @@ def install(ctx):
                 args[k] = v
         update_thread["args"] = args
 
-        # allow chat to override thread title
-        title = chat.get("title")
-        if title:
-            update_thread["title"] = title
-        else:
-            # only update thread title if it's not already set
-            title = thread.get("title")
-            if not title:
-                update_thread["title"] = title = prompt_to_title(ctx.last_user_prompt(chat))
+        # Only the first accepted turn owns an automatic fallback title.
+        if thread.get("titleSource") == "placeholder":
+            from .titles import prompt_text
+            prompt = prompt_text(messages)
+            update_thread["titlePromptSequence"] = next((i + 1 for i, m in enumerate(messages) if m.get("role") == "user"), None)
+            update_thread["title"] = prompt_to_title(prompt) if prompt else "Image attachment"
+            update_thread["titleSource"] = "fallback"
+            update_thread["metadataVersion"] = (thread.get("metadataVersion") or 0) + 1
 
         user = ctx.get_username(request)
         await g_db.update_thread_async(
@@ -976,15 +1173,17 @@ def install(ctx):
         }
 
         run_id = g_db.create_agent_run(
-            id, user, thread.get("model"), max_steps=int(metadata.get("maxSteps", 250))
+            id, user, thread.get("model"), max_steps=int(metadata.get("maxSteps", 250)), workspace=workspace
         )
+        title_worker.enqueue(thread, messages, user)
+        sidebar_signal.notify()  # new activity and an active run
         agent_requests[run_id] = request
         scheduler.wake()
         thread["run"] = g_db.get_agent_run(run_id, user=user)
 
         return web.json_response(thread_window_dto(g_db.get_thread(id, user=user)))
 
-    ctx.add_post("threads/{id}/chat", queue_chat_handler)
+    ctx.add_post("threads/{id}/chat", serialized_thread_mutation(queue_chat_handler))
 
     async def get_thread_updates(request):
         id = request.match_info["id"]
@@ -1013,7 +1212,7 @@ def install(ctx):
             remaining = max(0.1, end_time - time.time())
             try:
                 await asyncio.wait_for(event.wait(), timeout=remaining)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 break
             finally:
                 event.clear()
@@ -1083,7 +1282,7 @@ def install(ctx):
                 try:
                     await asyncio.wait_for(event.wait(), timeout=heartbeat)
                     event.clear()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     await send_event("heartbeat", {"sig": current_sig})
                     continue
 
@@ -1209,7 +1408,7 @@ def install(ctx):
         users_file = os.path.join(ctx.get_user_path(), "users.json")
         if os.path.exists(users_file):
             try:
-                with open(users_file, "r") as f:
+                with open(users_file) as f:
                     users_data = json.load(f)
                     for uname in users_data.keys():
                         db_users.add(uname)

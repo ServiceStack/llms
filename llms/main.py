@@ -2183,7 +2183,7 @@ def g_chat_request(template=None, text=None, model=None, system_prompt=None):
     if not chat_template:
         raise Exception(f"Chat template '{template}' not found")
 
-    chat = chat_template.copy()
+    chat = copy.deepcopy(chat_template)
     if model:
         chat["model"] = model
     if system_prompt is not None:
@@ -3901,11 +3901,13 @@ class AppExtensions:
         if abs_path not in self.allowed_directories[user]:
             self.allowed_directories[user].append(abs_path)
 
-    def get_allowed_directories(self, user: Optional[str] = None) -> List[str]:
-        """Get the list of allowed directories."""
-        if not user:
-            user = "default"
-        return self.allowed_directories.get(user, [])
+    def get_allowed_directories(self, user: str | None = None) -> list[str]:
+        """Resolve task-local policy before the legacy standalone workspace."""
+        from llms.execution_context import workspace_scope
+        scope = workspace_scope.get()
+        if scope is not None and (user is None or (scope.get("user") or "default") == (user or "default")):
+            return list(scope["directories"])
+        return self.allowed_directories.get(user or "default", [])
 
     def resolve_directory(self, dir: str):
         """Resolve alias or return absolute path if not an alias"""
@@ -5663,60 +5665,56 @@ def cli_exec(cli_args, extra_args):
 
         app.router.add_get("/favicon.ico", not_found_handler)
 
+        async def run_extension_handler(request, handler_fn):
+            try:
+                await g_app.on_request(request)
+                return await handler_fn(request)
+            except web.HTTPException as e:
+                # Redirects and other non-error responses pass through unchanged
+                if e.status < 400:
+                    raise
+                # Keep the status (400, 404, 409, ...) and its text so clients can show why
+                return web.json_response(
+                    create_error_response(e.text if e.text and e.text != f"{e.status}: {e.reason}" else e.reason,
+                                          error_code=e.reason.replace(" ", "")),
+                    status=e.status)
+            except Exception as e:
+                return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+
         # go through and register all g_app extensions
         for handler in g_app.server_add_get:
             handler_fn = handler[1]
 
             async def managed_handler(request, handler_fn=handler_fn):
-                try:
-                    await g_app.on_request(request)
-                    return await handler_fn(request)
-                except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+                return await run_extension_handler(request, handler_fn)
 
             app.router.add_get(handler[0], managed_handler, **handler[2])
         for handler in g_app.server_add_post:
             handler_fn = handler[1]
 
             async def managed_handler(request, handler_fn=handler_fn):
-                try:
-                    await g_app.on_request(request)
-                    return await handler_fn(request)
-                except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+                return await run_extension_handler(request, handler_fn)
 
             app.router.add_post(handler[0], managed_handler, **handler[2])
         for handler in g_app.server_add_put:
             handler_fn = handler[1]
 
             async def managed_handler(request, handler_fn=handler_fn):
-                try:
-                    await g_app.on_request(request)
-                    return await handler_fn(request)
-                except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+                return await run_extension_handler(request, handler_fn)
 
             app.router.add_put(handler[0], managed_handler, **handler[2])
         for handler in g_app.server_add_delete:
             handler_fn = handler[1]
 
             async def managed_handler(request, handler_fn=handler_fn):
-                try:
-                    await g_app.on_request(request)
-                    return await handler_fn(request)
-                except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+                return await run_extension_handler(request, handler_fn)
 
             app.router.add_delete(handler[0], managed_handler, **handler[2])
         for handler in g_app.server_add_patch:
             handler_fn = handler[1]
 
             async def managed_handler(request, handler_fn=handler_fn):
-                try:
-                    await g_app.on_request(request)
-                    return await handler_fn(request)
-                except Exception as e:
-                    return web.json_response(to_error_response(e, stacktrace=g_verbose), status=500)
+                return await run_extension_handler(request, handler_fn)
 
             app.router.add_patch(handler[0], managed_handler, **handler[2])
 

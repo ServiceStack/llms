@@ -78,6 +78,16 @@ Registers icons for the top header bar.
 Registers icons for the left sidebar.
 *   **icons**: `Object` - Map of icon definitions.
 
+#### `setLeftTop(components)`
+Adds components to the left side of the header bar.
+*   **components**: `Object` - Map of `{ id: { component, isVisible?() } }`.
+
+#### `setComposerTop(components)`
+Adds compact controls to the chat prompt's chip row, after the project chip and before the model chip
+(e.g. the agents extension's profile selector). Keep them chip-sized and open any popup upward, since the
+prompt sits at the bottom of the screen.
+*   **components**: `Object` - Map of `{ id: { component, isVisible?() } }`.
+
 #### `component(name, component?)`
 Registers or retrieves a global component.
 *   **name**: `string` - Component name.

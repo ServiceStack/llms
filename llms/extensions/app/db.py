@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import time
@@ -42,6 +43,15 @@ class AppDB:
                 "createdAt": "TIMESTAMP",
                 "updatedAt": "TIMESTAMP",
                 "title": "TEXT",
+                "projectId": "TEXT",
+                "lastSubmissionId": "TEXT",
+                "lastActivityAt": "TIMESTAMP",
+                "metadataVersion": "INTEGER DEFAULT 0",
+                "membershipVersion": "INTEGER DEFAULT 0",
+                "titleSource": "TEXT",
+                "titleStatus": "TEXT DEFAULT 'idle'",
+                "titleVersion": "INTEGER DEFAULT 0",
+                "titlePromptSequence": "INTEGER",
                 "systemPrompt": "TEXT",
                 "model": "TEXT",
                 "modelInfo": "JSON",
@@ -104,6 +114,7 @@ class AppDB:
                 "user": "TEXT",
                 "status": "TEXT",
                 "nextAction": "TEXT",
+                "workspace": "JSON",
                 "model": "TEXT",
                 "stepCount": "INTEGER",
                 "sliceCount": "INTEGER",
@@ -207,6 +218,9 @@ class AppDB:
             """,
         )
         self.add_missing_columns(conn, "thread")
+        self.db.exec(conn, "UPDATE thread SET lastActivityAt=COALESCE(updatedAt,createdAt) WHERE lastActivityAt IS NULL")
+        self.db.exec(conn, "UPDATE thread SET titleSource='legacy' WHERE titleSource IS NULL")
+        self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_thread_sidebar ON thread(user,projectId,lastActivityAt DESC,id DESC)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_thread_user ON thread(user)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_thread_createdat ON thread(createdAt)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_thread_updatedat ON thread(updatedAt)")
@@ -445,6 +459,115 @@ class AppDB:
             self.ctx.err(f"query_threads ({take}, {skip})", e)
             return []
 
+    def reconcile_projects(self, project_ids, user=None):
+        where, params = self.get_user_filter(user)
+        condition = "projectId IS NOT NULL"
+        if project_ids:
+            placeholders = []
+            for i, project_id in enumerate(project_ids):
+                key = f"project{i}"
+                placeholders.append(":" + key)
+                params[key] = project_id
+            condition += " AND projectId NOT IN (" + ",".join(placeholders) + ")"
+        with self.create_writer_connection() as conn:
+            changed = self.db.exec(conn, "UPDATE thread SET projectId=NULL,"
+                "membershipVersion=COALESCE(membershipVersion,0)+1,metadataVersion=COALESCE(metadataVersion,0)+1 "
+                f"{where or 'WHERE 1=1'} AND {condition}", params).rowcount
+            conn.commit()
+        return changed
+
+    def sidebar_revision(self, user=None):
+        import hashlib
+        where, params = self.get_user_filter(user)
+        rows = self.db.all("SELECT projectId,count(*) AS n,sum(id) AS ids,"
+            "sum(COALESCE(metadataVersion,0)) AS versions,max(lastActivityAt) AS activity,"
+            "max(completedAt) AS completed FROM thread "
+            f"{where} GROUP BY projectId", params)
+        runs = self.db.all("SELECT status,count(*) AS n,sum(id) AS ids FROM agent_run "
+                           f"{where} GROUP BY status", params)
+        return hashlib.sha256(json.dumps([rows, runs], default=str, sort_keys=True).encode()).hexdigest()[:24]
+
+    def project_ids_with_messages(self, user=None):
+        """Return project IDs with a persisted conversation, without loading histories."""
+        where, params = self.get_user_filter(user)
+        rows = self.db.all(
+            "SELECT DISTINCT projectId FROM thread "
+            f"{where or 'WHERE 1=1'} AND projectId IS NOT NULL AND ("
+            "EXISTS (SELECT 1 FROM chat_message WHERE chat_message.threadId=thread.id AND active=1) "
+            "OR CASE WHEN json_valid(messages) THEN json_array_length(messages)>0 ELSE 0 END)",
+            params,
+        )
+        return {row["projectId"] for row in rows}
+
+    def sidebar_page(self, user=None, project_id=None, limit=10, cursor=None):
+        """Compact, ownership-scoped keyset page. Never hydrate conversation history."""
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid sidebar limit") from None
+        if not 1 <= limit <= 100:
+            raise ValueError("Sidebar limit must be between 1 and 100")
+        where, params = self.get_user_filter(user, {"take": limit + 1, "project": project_id})
+        where = where or "WHERE 1=1"
+        where += " AND projectId IS NULL" if project_id is None else " AND projectId=:project"
+        if project_id is not None:
+            where += (" AND (EXISTS (SELECT 1 FROM chat_message WHERE chat_message.threadId=thread.id "
+                      "AND active=1) OR CASE WHEN json_valid(messages) "
+                      "THEN json_array_length(messages)>0 ELSE 0 END)")
+        if cursor:
+            try:
+                decoded = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+                scope, activity, row_id = decoded
+                if scope != project_id or not isinstance(activity, str) or type(row_id) is not int:
+                    raise ValueError()
+            except Exception:
+                raise ValueError("Invalid sidebar cursor") from None
+            where += " AND (lastActivityAt < :activity OR (lastActivityAt = :activity AND id < :id))"
+            params.update(activity=activity, id=row_id)
+        rows = self.db.all(
+            "SELECT id,title,projectId,lastActivityAt,metadataVersion,membershipVersion,status,completedAt,error,"
+            "model,stats,inputTokens,outputTokens,cost,"
+            "(SELECT status FROM agent_run WHERE threadId=thread.id "
+            "AND status IN ('queued','running','waiting_approval') ORDER BY id DESC LIMIT 1) AS runStatus,"
+            "CASE WHEN EXISTS (SELECT 1 FROM chat_message WHERE threadId=thread.id) "
+            "THEN (SELECT count(*) FROM chat_message WHERE threadId=thread.id AND active=1) "
+            "ELSE CASE WHEN json_valid(messages) THEN json_array_length(messages) ELSE 0 END END AS messageCount "
+            f"FROM thread {where} ORDER BY lastActivityAt DESC,id DESC LIMIT :take", params)
+        more = len(rows) > limit
+        rows = rows[:limit]
+        next_cursor = None
+        if more:
+            last = rows[-1]
+            next_cursor = base64.urlsafe_b64encode(json.dumps(
+                [project_id, str(last["lastActivityAt"]), last["id"]]).encode()).decode()
+        return {"items": rows, "nextCursor": next_cursor, "hasMore": more}
+
+    def rename_thread(self, thread_id, title, user=None):
+        title = " ".join(str(title).split())[:200]
+        if not title:
+            raise ValueError("Title is required")
+        where, params = self.get_user_filter(user, {"id": thread_id, "title": title})
+        with self.create_writer_connection() as conn:
+            result = self.db.exec(conn,
+                "UPDATE thread SET title=:title,titleSource='manual',titleStatus='skipped',"
+                "titleVersion=COALESCE(titleVersion,0)+1,metadataVersion=COALESCE(metadataVersion,0)+1 "
+                f"{where or 'WHERE 1=1'} AND id=:id", params).rowcount
+            conn.commit()
+        return result
+
+    def move_thread(self, thread_id, project_id, version, user=None):
+        where, params = self.get_user_filter(user, {
+            "id": thread_id, "project": project_id, "version": version})
+        with self.create_writer_connection() as conn:
+            result = self.db.exec(conn,
+                "UPDATE thread SET projectId=:project,membershipVersion=COALESCE(membershipVersion,0)+1,"
+                "metadataVersion=COALESCE(metadataVersion,0)+1 "
+                f"{where or 'WHERE 1=1'} AND id=:id AND COALESCE(membershipVersion,0)=:version "
+                "AND NOT EXISTS (SELECT 1 FROM agent_run WHERE threadId=:id "
+                "AND status IN ('queued','running','waiting_approval'))", params).rowcount
+            conn.commit()
+        return result
+
     def stored_message_count(self, id):
         """Message count without shipping the (potentially MBs of) messages to Python."""
         try:
@@ -511,7 +634,11 @@ class AppDB:
         else:
             thread.pop("truncate", None)
             thread["createdAt"] = now
+            thread.setdefault("titleSource", "placeholder" if not thread.get("title") or thread.get("title") == "New Chat" else "manual")
+            thread["lastActivityAt"] = now
         thread["updatedAt"] = now
+        if "messages" in thread or "startedAt" in thread:
+            thread["lastActivityAt"] = now
         initial_timestamp = int(time.time() * 1000) + 1
         if "messages" in thread:
             context = {}
@@ -636,6 +763,7 @@ class AppDB:
         return rows
 
     def get_chat_message_page(self, thread_id, before=None, after=None, take=100):
+        self.ensure_legacy_chat_messages(thread_id)
         take = max(1, min(int(take), 200))
         params = {"threadId": thread_id, "take": take}
         if before is not None:
@@ -655,6 +783,7 @@ class AppDB:
         )
 
     def get_chat_message_window(self, thread_id, head=20, tail=100):
+        self.ensure_legacy_chat_messages(thread_id)
         head = max(0, min(int(head), 100))
         tail = max(0, min(int(tail), 200))
         head_rows = self.get_chat_message_page(thread_id, after=0, take=head) if head else []
@@ -671,6 +800,7 @@ class AppDB:
         return [by_sequence[key] for key in sorted(by_sequence)]
 
     def get_chat_message_bounds(self, thread_id):
+        self.ensure_legacy_chat_messages(thread_id)
         row = self.db.one(
             """SELECT count(*) AS messageCount, min(sequence) AS firstSequence,
                       max(sequence) AS lastSequence
@@ -739,18 +869,36 @@ class AppDB:
                     {"runId": run_id, "stepId": step_id, "threadId": thread_id, "timestamp": timestamp})
             conn.commit()
 
+    def ensure_legacy_chat_messages(self, thread_id):
+        # Normalize IDs so concurrent string/API and integer/internal reads share a lock.
+        thread_id = int(thread_id)
+        with self._message_sync_lock(thread_id):
+            # Inactive rows count: never resurrect deliberately removed history.
+            if self.db.scalar("SELECT EXISTS(SELECT 1 FROM chat_message WHERE threadId=:id)", {"id": thread_id}):
+                return
+            row = self.db.one("SELECT messages FROM thread WHERE id=:id", {"id": thread_id})
+            if not row or not row.get("messages"):
+                return
+            try:
+                messages = json.loads(row["messages"])
+            except (ValueError, TypeError):
+                return
+            if isinstance(messages, list) and messages:
+                self._sync_chat_messages(thread_id, messages)
+
     def backfill_chat_messages(self, thread_id):
         row = self.db.one("SELECT messages FROM thread WHERE id=:id", {"id": thread_id})
         if row and isinstance(row.get("messages"), str):
             self.sync_chat_messages(thread_id, json.loads(row["messages"]))
 
-    def create_agent_run(self, thread_id, user, model, max_steps=250):
+    def create_agent_run(self, thread_id, user, model, max_steps=250, workspace=None):
         now = datetime.now()
         with self.create_writer_connection() as conn:
             cur = self.db.exec(conn, """INSERT INTO agent_run
-                (threadId,user,status,nextAction,model,stepCount,sliceCount,maxSteps,nextAttemptAt,createdAt,updatedAt)
-                VALUES (:threadId,:user,'queued','model',:model,0,0,:maxSteps,:now,:now,:now)""",
-                {"threadId": thread_id, "user": user, "model": model, "maxSteps": max_steps, "now": now})
+                (threadId,user,status,nextAction,model,stepCount,sliceCount,maxSteps,nextAttemptAt,createdAt,updatedAt,workspace)
+                VALUES (:threadId,:user,'queued','model',:model,0,0,:maxSteps,:now,:now,:now,:workspace)""",
+                {"threadId": thread_id, "user": user, "model": model, "maxSteps": max_steps, "now": now,
+                 "workspace": self.db.value(workspace)})
             conn.commit()
             return cur.lastrowid
 

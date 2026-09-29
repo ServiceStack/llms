@@ -77,8 +77,8 @@ with a single click.
 
 ### How to Publish
 
-1. Switch to a workspace that has an **active project** (the project tab only appears when one
-   is active).
+1. Open a chat that belongs to the project (the project tab only appears for a chat in a project;
+   with no chat open it uses the project last selected in the project manager).
 2. Open the **Share** panel and select the **Publish Project** tab.
 3. The extension auto-detects your project's build/dist folder. You can change it manually or
    use the **Browse** button to pick a different folder.

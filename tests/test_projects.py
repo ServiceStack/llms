@@ -54,6 +54,7 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         self.save_projects_handler = None
         self.save_project_handler = None
         self.set_active_handler = None
+        self.set_sidebar_visibility_handler = None
 
         for args in self.mock_ctx.add_get.call_args_list:
             path, handler = args[0][0], args[0][1]
@@ -68,6 +69,9 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
                 self.save_project_handler = handler
             elif path == "active":
                 self.set_active_handler = handler
+        for args in self.mock_ctx.add_patch.call_args_list:
+            if args[0][0] == "sidebar/{id}":
+                self.set_sidebar_visibility_handler = args[0][1]
 
     def tearDown(self):
         os.chdir(self.initial_cwd)
@@ -101,7 +105,11 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         request = MagicMock()
         response = await self.get_projects_handler(request)
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.text), projects_data)
+        result = json.loads(response.text)
+        self.assertTrue(result[0]["id"])
+        self.assertEqual(json.loads((await self.get_projects_handler(request)).text), result)
+        self.assertEqual([{k:v for k,v in p.items() if k != "id"} for p in result],
+                         [{k:v for k,v in p.items() if k != "id"} for p in projects_data])
 
     async def test_save_projects(self):
         projects_data = [
@@ -118,7 +126,11 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
 
         response = await self.save_projects_handler(request)
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.text), projects_data)
+        result = json.loads(response.text)
+        self.assertTrue(result[0]["id"])
+        self.assertEqual(json.loads((await self.get_projects_handler(request)).text), result)
+        self.assertEqual([{k:v for k,v in p.items() if k != "id"} for p in result],
+                         [{k:v for k,v in p.items() if k != "id"} for p in projects_data])
 
         # Verify file is saved in the user's projects path
         projects_file = os.path.join(self.temp_dir, "projects", "projects.json")
@@ -210,13 +222,15 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
 
         expected_data = [{"name": "New Project", "folder": "new-project"}]
-        self.assertEqual(json.loads(response.text), expected_data)
+        result = json.loads(response.text)
+        self.assertTrue(result[0]["id"])
+        self.assertEqual([{k:v for k,v in p.items() if k != "id"} for p in result], expected_data)
 
         # Verify saved file contents
         projects_file = os.path.join(self.temp_dir, "projects", "projects.json")
         with open(projects_file, encoding="utf-8") as f:
             saved_data = json.load(f)
-        self.assertEqual(saved_data, expected_data)
+        self.assertEqual(saved_data, result)
 
         # Verify folder created
         self.assertTrue(os.path.exists(os.path.join(self.temp_dir, "projects", "new-project")))
@@ -244,18 +258,15 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
 
         response = await self.save_project_handler(request)
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.text), [
-            updated_project,
-            {"name": "Project Two", "folder": "project-two"},
-        ])
+        result = json.loads(response.text)
+        self.assertEqual(result[0], updated_project)
+        self.assertTrue(result[1]["id"])
+        self.assertEqual(result[1]["name"], "Project Two")
 
         # Verify merged file contents
         with open(projects_file, encoding="utf-8") as f:
             saved_data = json.load(f)
-        self.assertEqual(saved_data, [
-            updated_project,
-            {"name": "Project Two", "folder": "project-two"},
-        ])
+        self.assertEqual(saved_data, result)
 
     async def test_save_project_rename_active(self):
         # Setup existing projects & active project preference
@@ -287,6 +298,34 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
         # Verify preference and allowed directories are updated
         self.assertEqual(self.mock_ctx.get_user_pref("project", user="testuser"), "New Project Name")
         self.assertEqual(self.allowed_directories.get("testuser"), [expected_new_path])
+
+    async def test_sidebar_visibility_is_persistent_and_legacy_saves_preserve_it(self):
+        request = MagicMock()
+        request.match_info = {"name": "Visible"}
+        async def create():
+            return {"name": "Visible", "folder": "visible"}
+        request.json = create
+        project = json.loads((await self.save_project_handler(request)).text)[0]
+
+        request.match_info = {"id": project["id"]}
+        async def hide():
+            return {"showInSidebar": False}
+        request.json = hide
+        response = await self.set_sidebar_visibility_handler(request)
+        self.assertFalse(json.loads(response.text)[0]["showInSidebar"])
+
+        request.match_info = {"name": "Visible"}
+        request.json = create
+        response = await self.save_project_handler(request)
+        self.assertFalse(json.loads(response.text)[0]["showInSidebar"])
+
+        request.match_info = {"id": project["id"]}
+        async def show():
+            return {"showInSidebar": True}
+        request.json = show
+        response = await self.set_sidebar_visibility_handler(request)
+        self.assertTrue(json.loads(response.text)[0]["showInSidebar"])
+        self.assertTrue(json.loads((await self.get_projects_handler(request)).text)[0]["showInSidebar"])
 
     def test_sanitize_publish_path_absolute(self):
         from llms.extensions.projects import sanitize_publish_path

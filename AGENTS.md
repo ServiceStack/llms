@@ -25,12 +25,14 @@ ServiceStack/llms/
 ├── llms/                         # Main Python package
 │   ├── main.py                   # Single-file functional core (~6k lines)
 │   ├── db.py                     # Legacy / core database access helpers
+│   ├── execution_context.py      # workspace_scope ContextVar: a durable run's project directories
 │   ├── providers.json            # 530+ model definitions merged from models.dev
 │   ├── providers-extra.json      # Provider overrides and custom provider definitions
 │   ├── llms.json                 # User & default provider/model configuration
 │   ├── index.html                # Single-page application entry point
 │   ├── extensions/               # Pluggable modular feature extensions
-│   │   ├── app/                  # Durable AgentScheduler, canonical chat_message schema, thread store
+│   │   ├── app/                  # Durable AgentScheduler, canonical chat_message schema, thread store,
+│   │   │                         # project sidebar APIs, title generation (titles.py), DURABLE_AGENTS.md
 │   │   ├── agents/               # Agent profiles (SYSTEM.md, templates, dynamic memory, footer actions)
 │   │   ├── gemini/               # Gemini File Search Store RAG, bidirectional sync, assistants API
 │   │   ├── core_tools/           # Sandboxed code execution (Python, JS, TS, C#), calc, grep, fetch_url
@@ -41,7 +43,7 @@ ServiceStack/llms/
 │   │   ├── voice/                # Audio transcription (Whisper, Voxtral) and TTS support
 │   │   ├── pdf/                  # PDF Studio: live Typst (.typ) template editing and PDF compilation
 │   │   ├── gallery/              # Media gallery for generated images and audio
-│   │   ├── projects/             # Multi-project workspaces and publish paths
+│   │   ├── projects/             # Project identity (stable ids), workspaces, sidebar visibility, publish paths
 │   │   ├── publish/              # Public sharing of threads and media to ai.llmspy.org
 │   │   ├── credentials/          # API key & secrets management
 │   │   ├── github_auth/          # GitHub OAuth authentication & multi-user isolation
@@ -52,16 +54,19 @@ ServiceStack/llms/
 │       ├── ctx.mjs               # AppContext and ExtensionScope reactive state management
 │       ├── ai.mjs                # API client (chat completions, SSE streaming, file uploads)
 │       ├── modules/
-│       │   ├── chat/             # Chat interface (ChatBody.mjs, SettingsDialog, prompt box)
-│       │   ├── model-selector.mjs# Searchable, filterable modal for 530+ models
+│       │   ├── chat/             # Chat interface (ChatBody.mjs, ChatPrompt composer, draftStore.mjs,
+│       │   │                     # ComposerContextBar.mjs project picker, SettingsDialog)
+│       │   ├── model-selector.mjs# Composer model chip + searchable, filterable picker for 530+ models
 │       │   └── layout.mjs        # Responsive layout and panel states
+│       ├── components/           # Shared components usable by extensions (e.g. CheckBox.mjs)
 │       └── lib/                  # Vendored frontend libraries (Vue 3, marked, highlight.js, chart.js, idb)
 ├── tests/                        # Comprehensive test suite (asyncio, scheduler, streaming, tools)
 ├── docs/                         # Technical documentation and specs
 │   ├── AGENTS.md                 # Agent Profile directory and configuration specification
-│   ├── SKILLS.md                 # Agent Skills open standard specification
-│   ├── DURABLE_AGENTS.md         # Durable agent run engine architecture & invariants
-│   └── RAG_IMPROVEMENTS.md       # Knowledgebase & support assistant proposal
+│   ├── CHAT_THREADS.md           # Chat sidebar, projects, drafts, titles & composer: code map and invariants
+│   └── SKILLS.md                 # Agent Skills open standard specification
+│                                 # (durable agents: llms/extensions/app/DURABLE_AGENTS.md;
+│                                 #  RAG proposal: llms/extensions/gemini/RAG_IMPROVEMENTS.md)
 ├── pyproject.toml                # Package metadata, ruff linter configuration, entry points
 ├── Dockerfile                    # Container definition
 └── README.md                     # Project splash & quickstart
@@ -96,7 +101,17 @@ Located in `llms/extensions/app/__init__.py`:
 - Automatically initiates non-destructive context compaction when token thresholds are exceeded.
 - Communicates real-time progress via Server-Sent Events (SSE) with seamless long-polling fallback.
 
-### 3.3 Extension Architecture
+### 3.3 Project Chat Threads
+Conversations belong to projects (`thread.projectId`), shown as folders in the sidebar; the composer holds
+per-chat drafts and project · profile · model chips. Read [`docs/CHAT_THREADS.md`](docs/CHAT_THREADS.md)
+before changing the sidebar, composer, drafts, titles or thread metadata. Key rules:
+- A run executes in the workspace captured when it was queued (`agent_run.workspace`, applied via
+  `workspace_scope`), never the browser's or user's global project; moves are rejected during active runs.
+- Title/membership writes never touch message history or sidebar ordering (`lastActivityAt`).
+- Drafts are browser-only (IndexedDB) and async work (uploads, voice, sends) stays with its origin draft.
+- Sidebar updates are signalled in memory (`SidebarSignal`); don't reintroduce polling queries.
+
+### 3.4 Extension Architecture
 Extensions live in `llms/extensions/<name>/` and can define:
 - `__init__.py`:
   - `__install__(ctx)`: Registers routes (`ctx.add_get`, `ctx.add_post`), tools (`ctx.register_tool`), providers (`ctx.add_provider`), and UI script/CSS assets.
@@ -104,7 +119,7 @@ Extensions live in `llms/extensions/<name>/` and can define:
   - `__run__(ctx)`: Runs standalone CLI command logic.
 - `ui/index.mjs`:
   - Exports `{ install(ctx) }`.
-  - Injects Vue components into layout slots: `left` (sidebar), `top` (header), `leftTop` (above chat history), or overrides global components (`ctx.components({ MyComponent })`).
+  - Injects Vue components into layout slots: `left` (sidebar), `top` (header), `leftTop` (header, left side), `composerTop` (chip row of the chat prompt, via `ctx.setComposerTop`), or overrides global components (`ctx.components({ MyComponent })`).
 
 ---
 

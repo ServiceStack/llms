@@ -74,7 +74,7 @@ The `config.json` file controls the default preferences and restrictions of the 
 |---|---|---|---|
 | `name` | `string` | No | A custom display name for the agent (defaults to the folder name capitalized). |
 | `enabled` | `boolean` | No | Defaults to `true`. Set to `false` to disable loading of the agent. |
-| `theme` | `string` | No | The [theme](/docs/features/themes) to load when this agent is active (e.g. `nord`, `dark`, `light_slate`). |
+| `theme` | `string` | No | A [theme](/docs/features/themes) to apply while this agent is selected (e.g. `nord`, `dark`, `light_slate`). Omit it to keep the user's theme; switching to a profile without a theme restores the theme the user chose. The built-in Chat, Coder and Planner profiles don't set one. |
 | `model` | `string` | No | The default LLM model to select when starting conversations with this agent. |
 | `onlyTools` | `array` | No | Restricts the tools the agent is permitted to use to the listed tool names. Set to `[]` to exclude all tools. If omitted (or `null`), all tools are allowed. |
 | `onlySkills` | `array` | No | Restricts the skills the agent is permitted to use to the listed skill names. Set to `[]` to exclude all skills. If omitted (or `null`), all skills are allowed. |

@@ -34,6 +34,11 @@ class _BashSession:
 
         args = [self.command, "/D", "/Q"] if self._is_windows else [self.command]
         kwargs = {} if self._is_windows else {"start_new_session": True}
+        from llms.execution_context import workspace_scope
+        scope = workspace_scope.get()
+        directories = scope.get("directories", []) if scope else []
+        if directories:
+            kwargs["cwd"] = directories[0]
         self._process = await asyncio.create_subprocess_exec(
             *args,
             bufsize=0,
@@ -165,6 +170,14 @@ class BashTool20241022(BashTool20250124):
 
 
 g_tool = None
+run_tools = {}
+
+
+async def release_run_shell(run_id):
+    tool = run_tools.pop(run_id, None)
+    if tool and tool._session and tool._session._started:
+        tool._session.stop()
+        await tool._session._process.wait()
 
 
 async def run_bash(
@@ -175,10 +188,15 @@ async def run_bash(
     Run a command in a persistent native shell session.
     """
     global g_tool
-    if g_tool is None:
-        g_tool = BashTool20241022()
-
-    result = await g_tool(command=command, restart=restart)
+    from llms.execution_context import workspace_scope
+    scope = workspace_scope.get()
+    if scope is not None and scope.get("runId") is not None:
+        tool = run_tools.setdefault(scope["runId"], BashTool20241022())
+    else:
+        if g_tool is None:
+            g_tool = BashTool20241022()
+        tool = g_tool
+    result = await tool(command=command, restart=restart)
     if isinstance(result, Exception):
         raise result
     else:

@@ -161,7 +161,13 @@ def install(ctx):
         user = ctx.get_username(request)
         active_project = ctx.get_user_pref("project", user=user)
         user_projects = ctx.projects.get_user_projects(user) if hasattr(ctx, "projects") else []
-        proj = next((p for p in user_projects if p.get("name") == active_project), None) if active_project else None
+        if request.query.get("threadId"):
+            thread = ctx.threads.get_thread(request.query["threadId"], user)
+            if not thread:
+                raise web.HTTPNotFound(text="Thread not found")
+            proj = next((p for p in user_projects if p.get("id") == thread.get("projectId")), None)
+        else:
+            proj = next((p for p in user_projects if p.get("name") == active_project), None) if active_project else None
 
         if proj:
             folder = proj.get("folder") or kebab_case(proj.get("name", ""))
