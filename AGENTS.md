@@ -37,7 +37,6 @@ ServiceStack/llms/
 │   │   ├── gemini/               # Gemini File Search Store RAG, bidirectional sync, assistants API
 │   │   ├── core_tools/           # Sandboxed code execution (Python, JS, TS, C#), calc, grep, fetch_url
 │   │   ├── computer/             # Anthropic computer-use tools (bash, edit, filesystem, screen)
-│   │   ├── browser/              # Headless browser automation tools
 │   │   ├── skills/               # Agent Skills standard (SKILL.md progressive disclosure)
 │   │   ├── tools/                # Tool discovery, registry API, and function execution endpoint
 │   │   ├── voice/                # Audio transcription (Whisper, Voxtral) and TTS support
