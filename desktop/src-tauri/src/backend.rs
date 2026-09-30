@@ -30,10 +30,37 @@ pub struct BackendState {
     token: Mutex<Option<String>>,
     ready: AtomicBool,
     startup_error: Mutex<Option<String>>,
+    shutting_down: AtomicBool,
+    shutdown_complete: AtomicBool,
 }
 
 impl BackendState {
+    pub fn shutdown_complete(&self) -> bool {
+        self.shutdown_complete.load(Ordering::Acquire)
+    }
+
+    pub fn begin_shutdown(self: &Arc<Self>, on_complete: impl FnOnce() + Send + 'static) {
+        if self.shutting_down.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let state = Arc::clone(self);
+        thread::spawn(move || {
+            state.shutdown();
+            state.shutdown_complete.store(true, Ordering::Release);
+            on_complete();
+        });
+    }
+
     pub fn shutdown(&self) {
+        // No HTTP request is necessary when startup failed before spawning a child.
+        if self
+            .child
+            .lock()
+            .map(|child| child.is_none())
+            .unwrap_or(true)
+        {
+            return;
+        }
         let token = self.token.lock().ok().and_then(|value| value.clone());
         if let Some(token) = token {
             let _ = request_shutdown(&token);
@@ -99,6 +126,10 @@ pub fn start_backend(
     command
         .args(["--serve", &PORT.to_string()])
         .env("LLMS_DESKTOP_TOKEN", &token)
+        .env(
+            "LLMS_DESKTOP_PREFERENCES_PATH",
+            crate::preferences::preferences_path(app)?,
+        )
         .env("PYTHONUNBUFFERED", "1")
         .env("PATH", desktop_path())
         .stdout(Stdio::piped())
@@ -154,7 +185,9 @@ pub fn start_backend(
     thread::spawn(move || {
         let deadline = Instant::now() + READY_TIMEOUT;
         while Instant::now() < deadline {
-            if timeout_state.ready.load(Ordering::Acquire) {
+            if timeout_state.ready.load(Ordering::Acquire)
+                || timeout_state.shutting_down.load(Ordering::Acquire)
+            {
                 return;
             }
             if let Ok(mut child) = timeout_state.child.lock() {
@@ -312,6 +345,7 @@ fn raw_http_request(method: &str, path: &str, headers: &[(&str, &str)]) -> std::
     let address = SocketAddr::from(([127, 0, 0, 1], PORT));
     let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(1))?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
     let mut request =
         format!("{method} {path} HTTP/1.1\r\nHost: {HOST}:{PORT}\r\nConnection: close\r\n");
     for (name, value) in headers {
@@ -343,6 +377,33 @@ fn terminate_process(process: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shutdown_without_a_child_completes_once() {
+        let state = Arc::new(BackendState::default());
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let duplicate_sender = sender.clone();
+        state.begin_shutdown(move || sender.send(()).unwrap());
+        state.begin_shutdown(move || duplicate_sender.send(()).unwrap());
+        receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(state.shutdown_complete());
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unresponsive_child_shutdown_does_not_block_the_caller() {
+        let state = Arc::new(BackendState::default());
+        *state.child.lock().unwrap() = Some(Command::new("sleep").arg("30").spawn().unwrap());
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let started = Instant::now();
+        state.begin_shutdown(move || sender.send(()).unwrap());
+        let returned_after = started.elapsed();
+        receiver.recv_timeout(Duration::from_secs(12)).unwrap();
+        assert!(returned_after < Duration::from_millis(250));
+        assert!(state.shutdown_complete());
+        assert!(state.child.lock().unwrap().is_none());
+    }
 
     #[test]
     fn generated_tokens_have_256_bits_of_random_input() {

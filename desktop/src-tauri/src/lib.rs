@@ -1,9 +1,12 @@
 mod backend;
+mod preferences;
+#[cfg(target_os = "macos")]
 mod updates;
 
 use std::sync::Arc;
 
 use backend::{start_backend, BackendState};
+#[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -33,6 +36,7 @@ fn is_external_navigation(url: &tauri::Url) -> bool {
         && !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))
 }
 
+#[cfg(target_os = "macos")]
 fn install_menu(app: &tauri::App) -> tauri::Result<()> {
     let application = SubmenuBuilder::new(app, "llms.py")
         .about(None)
@@ -45,11 +49,6 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
         .hide_others()
         .separator()
         .quit()
-        .build()?;
-    let file = SubmenuBuilder::new(app, "File")
-        .text("open-log", "Open Desktop Log")
-        .separator()
-        .close_window()
         .build()?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .undo()
@@ -70,16 +69,11 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
         .maximize()
         .build()?;
     let menu = MenuBuilder::new(app)
-        .items(&[&application, &file, &edit, &view, &window])
+        .items(&[&application, &edit, &view, &window])
         .build()?;
     app.set_menu(menu)?;
 
     app.on_menu_event(|app, event| match event.id().as_ref() {
-        "open-log" => {
-            if let Ok(path) = backend::desktop_log_path(app) {
-                let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
-            }
-        }
         "reload" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.eval("window.location.reload()");
@@ -117,14 +111,18 @@ pub fn run() {
         }))
         .manage(managed_backend)
         .setup(|app| {
+            #[cfg(target_os = "macos")]
             install_menu(app)?;
             let opener_app = app.handle().clone();
             let dev_url = app.config().build.dev_url.clone();
+            let theme = preferences::color_scheme(app.handle());
             let window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("llms.py")
                     .decorations(!cfg!(target_os = "linux"))
-                    .background_color(tauri::webview::Color(17, 24, 39, 255))
+                    .visible(false)
+                    .theme(theme)
+                    .initialization_script(preferences::initialization_script(theme))
                     .inner_size(1280.0, 820.0)
                     .min_inner_size(720.0, 560.0)
                     .center()
@@ -143,8 +141,11 @@ pub fn run() {
                         false
                     })
                     .build()?;
-            #[cfg(target_os = "linux")]
-            window.hide_menu()?;
+            let background = match theme.or_else(|| window.theme().ok()) {
+                Some(tauri::Theme::Dark) => tauri::webview::Color(17, 24, 39, 255),
+                _ => tauri::webview::Color(255, 255, 255, 255),
+            };
+            window.set_background_color(Some(background))?;
             window.show()?;
 
             let state = app.state::<Arc<BackendState>>();
@@ -156,12 +157,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build llms.py desktop application");
 
-    app.run(move |_app_handle, event| {
-        if matches!(
-            event,
-            tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
-        ) {
-            backend.shutdown();
+    app.run(move |app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            if !backend.shutdown_complete() {
+                // Keep the event loop responsive while the server drains requests
+                // and saves its state. The worker requests exit again when done.
+                api.prevent_exit();
+                let app = app_handle.clone();
+                backend.begin_shutdown(move || app.exit(code.unwrap_or(0)));
+            }
         }
     });
 }

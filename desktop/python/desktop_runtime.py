@@ -13,6 +13,7 @@ import hmac
 import importlib
 import json
 import os
+from pathlib import Path
 import shutil
 import signal
 import sys
@@ -27,7 +28,12 @@ COOKIE = "llms_desktop_session"
 HEALTH_PATH = "/~desktop/health"
 CAPABILITIES_PATH = "/~desktop/capabilities"
 SHUTDOWN_PATH = "/~desktop/shutdown"
+PREFERENCES_PATH = "/~desktop/preferences"
+PREFERENCES_LOCK = web.AppKey("desktop_preferences_lock", asyncio.Lock)
 BOOTSTRAP_PREFIX = "/~desktop/bootstrap/"
+# The desktop UI is going away: do not wait aiohttp's default 60 seconds
+# for long-lived SSE/chat requests before cancelling them and running cleanup.
+SHUTDOWN_TIMEOUT = 1.0
 BOOTSTRAP_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -117,6 +123,33 @@ async def desktop_middleware(request: web.Request, handler: Callable) -> web.Str
     if request.path == CAPABILITIES_PATH:
         return secure(web.json_response(capabilities()))
 
+    if request.path == PREFERENCES_PATH and request.method == "POST":
+        try:
+            preferences = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            return secure(web.json_response({"error": "Invalid preferences"}, status=400))
+        color_scheme = preferences.get("colorScheme") if isinstance(preferences, dict) else None
+        if color_scheme not in ("light", "dark"):
+            return secure(web.json_response({"error": "Invalid color scheme"}, status=400))
+        path = os.getenv("LLMS_DESKTOP_PREFERENCES_PATH")
+        if not path:
+            return secure(web.json_response({"error": "Desktop preferences unavailable"}, status=503))
+
+        def save_preferences():
+            target = Path(path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"colorScheme": color_scheme}), encoding="utf-8")
+            temporary.replace(target)
+
+        # Serialize saves to prevent rapid theme changes from racing atomic replacements.
+        try:
+            async with request.app[PREFERENCES_LOCK]:
+                await asyncio.to_thread(save_preferences)
+        except OSError:
+            return secure(web.json_response({"error": "Could not save desktop preferences"}, status=500))
+        return secure(web.json_response({"colorScheme": color_scheme}))
+
     if request.path == SHUTDOWN_PATH and request.method == "POST":
         if _stop_event is not None:
             asyncio.get_running_loop().call_soon(_stop_event.set)
@@ -128,7 +161,8 @@ async def desktop_middleware(request: web.Request, handler: Callable) -> web.Str
 async def _serve(app: web.Application, port: int, loop: asyncio.AbstractEventLoop) -> None:
     global _stop_event
     _stop_event = asyncio.Event()
-    runner = web.AppRunner(app)
+    app[PREFERENCES_LOCK] = asyncio.Lock()
+    runner = web.AppRunner(app, shutdown_timeout=SHUTDOWN_TIMEOUT)
     installed_signals = []
 
     def request_stop() -> None:

@@ -1,8 +1,25 @@
 :root {
     color-scheme: light dark;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #fff;
+    color: #111827;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        background: #111827;
+        color: #f3f4f6;
+    }
+}
+
+:root[data-color-scheme="light"] {
+    background: #fff;
+    color: #111827;
+}
+
+:root[data-color-scheme="dark"] {
     background: #111827;
-    color: #e5e7eb;
+    color: #f3f4f6;
 }
 
 body {
@@ -15,24 +32,6 @@ body {
 main {
     width: min(34rem, calc(100vw - 4rem));
     text-align: center;
-}
-
-.mark {
-    display: grid;
-    width: 4.5rem;
-    height: 4.5rem;
-    margin: 0 auto 1.5rem;
-    border-radius: 1.35rem;
-    background: #2563eb;
-    color: white;
-    font-size: 1.8rem;
-    letter-spacing: .18rem;
-    place-items: center;
-}
-
-h1 {
-    margin: 0 0 .75rem;
-    font-size: 2rem;
 }
 
 p {

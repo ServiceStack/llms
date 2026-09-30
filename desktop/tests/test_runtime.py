@@ -2,11 +2,12 @@ import asyncio
 import importlib
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from aiohttp import web
+from aiohttp import ClientSession, web
 from aiohttp.test_utils import make_mocked_request
 
 
@@ -78,6 +79,37 @@ class TestDesktopRuntime(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertTrue(stop_event.is_set())
 
+    def test_color_scheme_preferences_are_authenticated_and_saved_atomically(self):
+        async def verify(path):
+            app = web.Application()
+            app[desktop_runtime.PREFERENCES_LOCK] = asyncio.Lock()
+            request = make_mocked_request(
+                "POST", desktop_runtime.PREFERENCES_PATH,
+                headers={"Host": HOST, "Cookie": f"{desktop_runtime.COOKIE}={TOKEN}"}, app=app,
+            )
+            request.json = AsyncMock(return_value={"colorScheme": "dark"})
+            response = await desktop_runtime.desktop_middleware(request, self.ok_handler)
+            self.assertEqual(response.status, 200)
+            self.assertEqual(path.read_text(), '{"colorScheme": "dark"}')
+            self.assertFalse(path.with_suffix(".tmp").exists())
+            request.json = AsyncMock(return_value={"colorScheme": "light"})
+            response = await desktop_runtime.desktop_middleware(request, self.ok_handler)
+            self.assertEqual(response.status, 200)
+            self.assertEqual(path.read_text(), '{"colorScheme": "light"}')
+            for value in [None, [], {"colorScheme": "other"}, {"colorScheme": True}]:
+                request.json = AsyncMock(return_value=value)
+                response = await desktop_runtime.desktop_middleware(request, self.ok_handler)
+                self.assertEqual(response.status, 400)
+                self.assertEqual(path.read_text(), '{"colorScheme": "light"}')
+            unauthenticated = self.request(desktop_runtime.PREFERENCES_PATH, method="POST")
+            response = await desktop_runtime.desktop_middleware(unauthenticated, self.ok_handler)
+            self.assertEqual(response.status, 401)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config" / "preferences.json"
+            with patch.dict(os.environ, {"LLMS_DESKTOP_PREFERENCES_PATH": str(path)}):
+                run(verify(path))
+
     def test_bootstrap_sets_private_session_cookie(self):
         response = run(
             desktop_runtime.desktop_middleware(
@@ -146,6 +178,59 @@ class TestDesktopRuntime(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(RuntimeError, desktop_runtime.TOKEN_ENV):
                 desktop_runtime.desktop_run_app(app, port=18000)
+
+
+class TestDesktopShutdown(unittest.IsolatedAsyncioTestCase):
+    async def test_active_event_stream_is_cancelled_before_cleanup(self):
+        ready = asyncio.Event()
+        cancelled = asyncio.Event()
+        cleaned_up = asyncio.Event()
+        sites = []
+        real_site = web.TCPSite
+
+        def create_site(*args, **kwargs):
+            site = real_site(*args, **kwargs)
+            sites.append(site)
+            return site
+
+        async def stream(request):
+            response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+            await response.prepare(request)
+            await response.write(b"data: connected\n\n")
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        async def cleanup(app):
+            self.assertTrue(cancelled.is_set())
+            cleaned_up.set()
+
+        app = web.Application(middlewares=[desktop_runtime.desktop_middleware])
+        app.router.add_get("/events", stream)
+        app.on_cleanup.append(cleanup)
+        with patch.object(desktop_runtime, "_token", TOKEN), \
+             patch.object(desktop_runtime, "_port", 0), \
+             patch.object(desktop_runtime, "_stop_event", None), \
+             patch("desktop_runtime.web.TCPSite", side_effect=create_site), \
+             patch("desktop_runtime.builtins.print", side_effect=lambda *a, **k: ready.set()):
+            task = asyncio.create_task(desktop_runtime._serve(app, 0, asyncio.get_running_loop()))
+            try:
+                await asyncio.wait_for(ready.wait(), 3)
+                desktop_runtime._port = sites[0]._server.sockets[0].getsockname()[1]
+                url = f"http://127.0.0.1:{desktop_runtime._port}"
+                async with ClientSession(headers={"X-LLMS-Desktop-Token": TOKEN}) as client:
+                    async with client.get(url + "/events") as response:
+                        self.assertEqual(await response.content.readline(), b"data: connected\n")
+                        async with client.post(url + desktop_runtime.SHUTDOWN_PATH) as stopped:
+                            self.assertEqual(stopped.status, 200)
+                            await stopped.read()
+                        await asyncio.wait_for(asyncio.shield(task), 3)
+                        self.assertTrue(cleaned_up.is_set())
+            finally:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
 
 
 if __name__ == "__main__":

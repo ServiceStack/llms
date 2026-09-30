@@ -22,6 +22,17 @@ Provider API keys and llms.py data remain in the existing browser-backed storage
 
 That runner seam receives the fully configured aiohttp application while keeping desktop behavior out of `llms/main.py`. It owns loopback binding, authentication, readiness, capabilities, graceful shutdown, and signal handling. There is intentionally no desktop flag, import, or optional dependency in the published package.
 
+On quit, backend cleanup runs on a worker thread while the desktop event loop stays responsive.
+The desktop server gives active requests one second to drain before cancelling long-lived streams
+and running extension cleanup. The shell retains its eight-second graceful-exit budget and terminates
+the backend if it still fails to exit; repeated quit requests do not start duplicate cleanup workers.
+
+The desktop loading screen inlines the UI's loading sprite, synchronized from `llms/index.html`
+by the Tauri build. The UI's `localStorage['color-scheme']` remains authoritative and is mirrored to
+`preferences.json` in Tauri's application config directory through an authenticated desktop-only
+endpoint. The shell reads that cache before creating the window so its background and loader match
+the saved theme; absent or invalid preferences fall back to the OS theme.
+
 The PyInstaller spec copies the current `llms/` tree into a private onedir runtime. This is generated during every native build, so no duplicate source file needs to be maintained or committed.
 
 ## Build prerequisites
