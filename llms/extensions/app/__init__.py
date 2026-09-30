@@ -2101,13 +2101,12 @@ def install(ctx):
                 "tools": tools,
                 "completedAt": completed_at,
                 "status": None,
+                "error": metadata.get("error"),
                 "streamingMessage": None,  # the in-flight message is now committed
             }
             tool_history = o.get("tool_history", None)
             if tool_history:
                 update_thread["toolHistory"] = tool_history
-            if "error" in metadata:
-                update_thread["error"] = metadata["error"]
             provider_response = context.get("providerResponse", None)
             if provider_response:
                 update_thread["providerResponse"] = truncate_long_strings(provider_response)

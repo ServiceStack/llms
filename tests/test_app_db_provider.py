@@ -281,6 +281,9 @@ class TestAppDbProvider(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(thread.get("model"), "test-model")
 
         # 2. Run the response filter (simulating completion of chat with a different provider if retried/fallback)
+        # Another process closing the shared database can leave a stale shutdown
+        # error while this process is still producing a successful response.
+        self.app_db.update_thread(thread_id, {"error": "Server Shutdown"}, user="test_user")
         context["provider"] = "fallback-provider"
         response = {
             "model": "test-model",
@@ -293,6 +296,7 @@ class TestAppDbProvider(unittest.IsolatedAsyncioTestCase):
         # Verify thread was updated with the actual completing provider
         updated_thread = self.app_db.get_thread(thread_id, user="test_user")
         self.assertEqual(updated_thread.get("provider"), "fallback-provider")
+        self.assertIsNone(updated_thread.get("error"))
 
     async def test_normalized_messages_are_append_only_and_idempotent(self):
         messages = [
