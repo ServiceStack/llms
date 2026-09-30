@@ -6,6 +6,8 @@ on:
       - desktop/**
       - llms/**
       - pyproject.toml
+      - publish.py
+      - tests/test_publish_version.py
       - requirements.txt
       - .github/workflows/desktop-ci.yml
   push:
@@ -14,6 +16,8 @@ on:
       - desktop/**
       - llms/**
       - pyproject.toml
+      - publish.py
+      - tests/test_publish_version.py
       - requirements.txt
       - .github/workflows/desktop-ci.yml
   workflow_dispatch:
@@ -59,7 +63,7 @@ jobs:
 
       - name: Test Python package and desktop adapter
         run: |
-          python -m unittest tests.test_integration tests.test_windows_compat
+          python -m unittest tests.test_integration tests.test_windows_compat tests.test_publish_version
           python -m unittest discover -s desktop/tests -p 'test_*.py'
           python desktop/scripts/check-version.py
 

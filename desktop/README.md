@@ -87,7 +87,7 @@ The updater private key must never be committed. Release CI generates an ignored
 
 ## Versioning
 
-The desktop release uses the llms-py version. Update `pyproject.toml`, `desktop/src-tauri/Cargo.toml`, and `desktop/src-tauri/tauri.conf.json` together; `scripts/check-version.py` enforces that invariant in local and CI builds.
+The desktop release uses the llms-py version. `python publish.py --bump` updates the Python version, `desktop/src-tauri/Cargo.toml`, the desktop package entry in `desktop/src-tauri/Cargo.lock`, and `desktop/src-tauri/tauri.conf.json` together. For manual version changes, keep these files aligned; `scripts/check-version.py` enforces that invariant in local and CI builds.
 
 ## Adding Windows
 

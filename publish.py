@@ -14,6 +14,29 @@ import subprocess
 import sys
 
 
+def update_desktop_version(version):
+    """Synchronize desktop metadata without changing dependency versions."""
+    import re
+    from pathlib import Path
+
+    patterns = {
+        "desktop/src-tauri/Cargo.toml": r'(\[package\]\s+name = "llms-desktop"\s+version = ")[^"]+(")',
+        "desktop/src-tauri/Cargo.lock": r'(\[\[package\]\]\s+name = "llms-desktop"\s+version = ")[^"]+(")',
+        "desktop/src-tauri/tauri.conf.json": r'("version"\s*:\s*")[^"]+(")',
+    }
+    for filename, pattern in patterns.items():
+        path = Path(filename)
+        content, count = re.subn(
+            pattern,
+            lambda match: f"{match[1]}{version}{match[2]}",
+            path.read_text(encoding="utf-8"),
+            count=1,
+        )
+        if count != 1:
+            raise ValueError(f"Could not find desktop version in {filename}")
+        path.write_text(content, encoding="utf-8")
+
+
 def run_command(cmd, check=True):
     """Run a shell command and return the result."""
     print(f"Running: {cmd}")
@@ -84,6 +107,7 @@ def bump_version():
         - llms/main.py
         - setup.py
         - pyproject.toml
+     - synchronize desktop Cargo manifests, lockfile, and Tauri config
     """
     print("Bumping package version...")
     import re
@@ -108,6 +132,7 @@ def bump_version():
             content = content.replace(version, new_version)
         with open(file, "w", encoding="utf-8") as f:
             f.write(content)
+    update_desktop_version(new_version)
     print("Version bumped successfully.")
     # Create git commit and tag
     run_command(f'git commit -am "Bump version to {new_version}"')

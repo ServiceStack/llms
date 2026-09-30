@@ -19,12 +19,17 @@ def main() -> int:
         package_version = tomllib.load(stream)["project"]["version"]
     with (DESKTOP_ROOT / "src-tauri" / "Cargo.toml").open("rb") as stream:
         rust_version = tomllib.load(stream)["package"]["version"]
+    with (DESKTOP_ROOT / "src-tauri" / "Cargo.lock").open("rb") as stream:
+        lock_version = next(
+            package["version"] for package in tomllib.load(stream)["package"] if package["name"] == "llms-desktop"
+        )
     with (DESKTOP_ROOT / "src-tauri" / "tauri.conf.json").open(encoding="utf-8") as stream:
         tauri_version = json.load(stream)["version"]
 
     versions = {
         "pyproject.toml": package_version,
         "desktop/src-tauri/Cargo.toml": rust_version,
+        "desktop/src-tauri/Cargo.lock": lock_version,
         "desktop/src-tauri/tauri.conf.json": tauri_version,
     }
     if len(set(versions.values())) != 1:
