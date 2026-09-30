@@ -9,7 +9,10 @@ Usage:
 """
 
 import argparse
+import glob
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 
@@ -38,9 +41,9 @@ def update_desktop_version(version):
 
 
 def run_command(cmd, check=True):
-    """Run a shell command and return the result."""
+    """Run a command (without shell interpretation) and return the result."""
     print(f"Running: {cmd}")
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    result = subprocess.run(shlex.split(cmd), shell=False, capture_output=True, text=True)
     if check and result.returncode != 0:
         print(f"Error running command: {cmd}")
         print(f"stdout: {result.stdout}")
@@ -52,7 +55,8 @@ def run_command(cmd, check=True):
 def clean_build():
     """Clean previous build artifacts."""
     print("Cleaning previous build artifacts...")
-    run_command("rm -rf build/ dist/ *.egg-info/", check=False)
+    for path in ["build", "dist", *glob.glob("*.egg-info")]:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def build_package():
