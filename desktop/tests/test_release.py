@@ -25,6 +25,46 @@ check_version = load_script("check-version")
 
 
 class TestReleaseConfig(unittest.TestCase):
+    def export_environment(self, environment):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "github-env"
+            with patch.dict(os.environ, {**environment, "GITHUB_ENV": str(path)}, clear=True):
+                release_config.export_signing_environment()
+            # Parse GitHub's multiline environment-file syntax like the runner does.
+            lines = iter(path.read_text().splitlines())
+            result = {}
+            for line in lines:
+                name, delimiter = line.split("<<", 1)
+                values = []
+                for value in lines:
+                    if value == delimiter:
+                        break
+                    values.append(value)
+                result[name] = "\n".join(values)
+            return result
+
+    def test_empty_signing_secrets_stay_unset_for_the_bundler(self):
+        environment = dict.fromkeys(release_config.SIGNING_VARIABLES, "")
+        self.assertEqual(self.export_environment(environment), {})
+        environment["APPLE_CERTIFICATE"] = "  \n"
+        self.assertEqual(self.export_environment(environment), {})
+
+    def test_configured_signing_secrets_are_preserved_without_exporting_other_variables(self):
+        environment = {
+            "APPLE_CERTIFICATE": "base64-certificate",
+            "APPLE_CERTIFICATE_PASSWORD": " password with spaces ",
+            "TAURI_SIGNING_PRIVATE_KEY": "first line\nsecond line",
+            "UNRELATED_SECRET": "not-exported",
+        }
+        expected = {key: value for key, value in environment.items() if key != "UNRELATED_SECRET"}
+        self.assertEqual(self.export_environment(environment), expected)
+
+    def test_passwordless_certificate_retains_its_empty_password(self):
+        self.assertEqual(
+            self.export_environment({"APPLE_CERTIFICATE": "base64-certificate"}),
+            {"APPLE_CERTIFICATE": "base64-certificate", "APPLE_CERTIFICATE_PASSWORD": ""},
+        )
+
     def generate(self, environment, *arguments):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

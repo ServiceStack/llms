@@ -96,7 +96,7 @@ Production macOS releases should configure these repository secrets:
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` for notarization
 
-The release job uses the `desktop-release` GitHub environment so approval and secrets can be managed separately from normal Python publishing. If that environment requires approval, the installer jobs wait for it. Linux and Windows bundles do not require Apple secrets. macOS signing and notarization are optional for generating installers; configure the Apple secrets for production distribution. Windows Authenticode signing can be configured through Tauri's Windows signing options.
+The release job uses the `desktop-release` GitHub environment so approval and secrets can be managed separately from normal Python publishing. If that environment requires approval, the installer jobs wait for it. Linux and Windows bundles do not require Apple secrets. macOS signing and notarization are optional for generating installers; configure the Apple secrets for production distribution. Unset signing secrets are omitted from the bundler environment so macOS builds do not try to import an empty certificate. Windows Authenticode signing can be configured through Tauri's Windows signing options.
 
 In-app updates are checked from the native application menu and use Tauri's signed updater artifacts. Generate the updater key pair once with `cargo tauri signer generate -w /secure/location/llms-desktop.key`, back up the private key, then configure:
 

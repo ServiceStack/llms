@@ -5,11 +5,36 @@ import argparse
 import json
 import os
 from pathlib import Path
+import uuid
 
 
 DESKTOP_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = DESKTOP_ROOT / "build" / "tauri.release.conf.json"
 DEFAULT_ENDPOINT = "https://github.com/ServiceStack/llms/releases/latest/download/latest.json"
+SIGNING_VARIABLES = (
+    "APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_SIGNING_IDENTITY",
+    "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID",
+    "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+)
+
+
+def export_signing_environment() -> None:
+    """Unset secrets must stay absent: Tauri treats empty Apple variables as configured."""
+    if not (environment_path := os.environ.get("GITHUB_ENV")):
+        return
+    with open(environment_path, "a", encoding="utf-8") as output:
+        for name in SIGNING_VARIABLES:
+            value = os.environ.get(name, "")
+            # An actual passwordless certificate still needs a present password
+            # variable for Tauri to import it. With no certificate, omit both.
+            passwordless_certificate = (
+                name == "APPLE_CERTIFICATE_PASSWORD"
+                and bool(os.environ.get("APPLE_CERTIFICATE", "").strip())
+            )
+            if not value.strip() and not passwordless_certificate:
+                continue
+            delimiter = f"llms_{uuid.uuid4().hex}"
+            output.write(f"{name}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def main() -> int:
@@ -41,6 +66,7 @@ def main() -> int:
     if output_path := os.environ.get("GITHUB_OUTPUT"):
         with open(output_path, "a", encoding="utf-8") as output:
             output.write(f"updater_enabled={'true' if public_key else 'false'}\n")
+    export_signing_environment()
     if not public_key:
         print("Updater keys are not configured; building installers without signed updates.")
     print(f"Release updater config: {OUTPUT}")

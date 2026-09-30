@@ -70,25 +70,24 @@ jobs:
           python desktop/scripts/build-sidecar.py
           python desktop/scripts/verify-sidecar.py
 
-      - name: Configure optional signed updates
+      - name: Configure optional signing and updates
         id: release-config
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: python desktop/scripts/prepare-release-config.py --allow-unsigned
-
-      - name: Build, sign, and publish native bundles
-        uses: tauri-apps/tauri-action@v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: python desktop/scripts/prepare-release-config.py --allow-unsigned
+
+      - name: Build, sign, and publish native bundles
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop
           releaseId: ${{ github.event.release.id }}
@@ -97,5 +96,5 @@ jobs:
           releaseBody: Native llms.py desktop installers for macOS, Linux, and Windows.
           releaseDraft: ${{ github.event_name == 'push' }}
           prerelease: ${{ github.event.release.prerelease || false }}
-          uploadUpdaterJson: ${{ steps.release-config.outputs.updater_enabled == 'true' }}
+          includeUpdaterJson: ${{ steps.release-config.outputs.updater_enabled == 'true' }}
           args: --config build/tauri.release.conf.json --bundles ${{ matrix.bundles }}
