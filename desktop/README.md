@@ -35,7 +35,7 @@ Create an isolated build environment from the repository root:
 
 ```sh
 uv venv --python 3.11 desktop/.venv
-desktop/.venv/bin/python -m pip install -r desktop/requirements-build.txt
+uv pip install --python desktop/.venv/bin/python -r desktop/requirements-build.txt
 ```
 
 Build and smoke-test only the frozen Python sidecar:
@@ -54,6 +54,8 @@ desktop/.venv/bin/python desktop/scripts/build-desktop.py
 On macOS, `--bundles app` is useful for a fast local build and `--bundles app,dmg` creates release formats. On Linux use `--bundles deb,appimage`.
 
 For development, build the sidecar once, then run `cargo tauri dev` from `desktop/`. The loading page remains visible until the backend emits a valid readiness event.
+
+On Linux, the desktop window omits the native title bar and menu so the window manager controls its chrome. On systems with the NVIDIA kernel module loaded, the app defaults to `WEBKIT_DISABLE_DMABUF_RENDERER=1` to avoid WebKitGTK's Wayland protocol error. An explicitly supplied value takes precedence. If a driver still renders a blank window, try `WEBKIT_DISABLE_COMPOSITING_MODE=1 cargo tauri dev`; see [Tauri's Linux graphics troubleshooting](https://v2.tauri.app/develop/debug/linux-graphics/).
 
 ## Tests
 

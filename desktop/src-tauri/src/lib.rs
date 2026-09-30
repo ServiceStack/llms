@@ -5,13 +5,22 @@ use std::sync::Arc;
 
 use backend::{start_backend, BackendState};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::webview::PageLoadEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 const DESKTOP_PORT: u16 = 18000;
 
-fn allowed_navigation(url: &tauri::Url) -> bool {
+fn allowed_navigation(url: &tauri::Url, dev_url: Option<&tauri::Url>) -> bool {
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
     if url.scheme() == "tauri" || url.host_str() == Some("tauri.localhost") {
+        return true;
+    }
+    // `cargo tauri dev` serves frontendDist from its own loopback port.
+    // Allow that configured origin, rather than arbitrary local servers.
+    if cfg!(debug_assertions) && dev_url.is_some_and(|dev_url| url.origin() == dev_url.origin()) {
         return true;
     }
     url.scheme() == "http"
@@ -83,6 +92,15 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
 }
 
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    if std::path::Path::new("/sys/module/nvidia").exists()
+        && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+    {
+        // WebKitGTK's NVIDIA DMABUF path can disconnect from Wayland (Error 71).
+        // Apply the workaround only in this process, before GTK creates threads.
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     let backend = Arc::new(BackendState::default());
     let managed_backend = Arc::clone(&backend);
 
@@ -101,14 +119,22 @@ pub fn run() {
         .setup(|app| {
             install_menu(app)?;
             let opener_app = app.handle().clone();
+            let dev_url = app.config().build.dev_url.clone();
             let window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("llms.py")
+                    .decorations(!cfg!(target_os = "linux"))
+                    .background_color(tauri::webview::Color(17, 24, 39, 255))
                     .inner_size(1280.0, 820.0)
                     .min_inner_size(720.0, 560.0)
                     .center()
+                    .on_page_load(|window, payload| {
+                        if payload.event() == PageLoadEvent::Finished {
+                            backend::show_pending_error(&window);
+                        }
+                    })
                     .on_navigation(move |url| {
-                        if allowed_navigation(url) {
+                        if allowed_navigation(url, dev_url.as_ref()) {
                             return true;
                         }
                         if is_external_navigation(url) {
@@ -117,6 +143,8 @@ pub fn run() {
                         false
                     })
                     .build()?;
+            #[cfg(target_os = "linux")]
+            window.hide_menu()?;
             window.show()?;
 
             let state = app.state::<Arc<BackendState>>();
@@ -145,20 +173,48 @@ mod tests {
     #[test]
     fn navigation_is_limited_to_packaged_ui_and_fixed_desktop_origin() {
         assert!(allowed_navigation(
-            &"tauri://localhost/index.html".parse().unwrap()
+            &"tauri://localhost/index.html".parse().unwrap(),
+            None,
         ));
         assert!(allowed_navigation(
-            &"http://127.0.0.1:18000/".parse().unwrap()
+            &"http://127.0.0.1:18000/".parse().unwrap(),
+            None,
         ));
         assert!(!allowed_navigation(
-            &"http://127.0.0.1:18000@evil.example/".parse().unwrap()
+            &"http://127.0.0.1:18000@evil.example/".parse().unwrap(),
+            None,
         ));
         assert!(!allowed_navigation(
-            &"http://127.0.0.1:8000/".parse().unwrap()
+            &"http://127.0.0.1:8000/".parse().unwrap(),
+            None,
         ));
         assert!(!allowed_navigation(
-            &"https://example.com/".parse().unwrap()
+            &"https://example.com/".parse().unwrap(),
+            None,
         ));
+    }
+
+    #[test]
+    fn development_navigation_allows_only_the_configured_origin() {
+        let dev_url = "http://127.0.0.1:1430/".parse().unwrap();
+        assert_eq!(
+            allowed_navigation(
+                &"http://127.0.0.1:1430/index.html".parse().unwrap(),
+                Some(&dev_url),
+            ),
+            cfg!(debug_assertions),
+        );
+        for blocked in [
+            "http://localhost:1430/",
+            "http://127.0.0.1:1431/",
+            "https://127.0.0.1:1430/",
+            "http://127.0.0.1:1430@evil.example/",
+        ] {
+            assert!(!allowed_navigation(
+                &blocked.parse().unwrap(),
+                Some(&dev_url)
+            ));
+        }
     }
 
     #[test]

@@ -29,6 +29,7 @@ pub struct BackendState {
     child: Mutex<Option<Child>>,
     token: Mutex<Option<String>>,
     ready: AtomicBool,
+    startup_error: Mutex<Option<String>>,
 }
 
 impl BackendState {
@@ -179,10 +180,25 @@ pub fn start_backend(
 }
 
 pub fn show_error(app: &AppHandle, message: &str) {
+    if let Ok(mut error) = app.state::<Arc<BackendState>>().startup_error.lock() {
+        *error = Some(message.to_string());
+    }
     if let Some(window) = app.get_webview_window("main") {
+        show_pending_error(&window);
+    }
+}
+
+pub fn show_pending_error(window: &tauri::WebviewWindow) {
+    let message = window
+        .state::<Arc<BackendState>>()
+        .startup_error
+        .lock()
+        .ok()
+        .and_then(|error| error.clone());
+    if let Some(message) = message {
         let encoded =
-            serde_json::to_string(message).unwrap_or_else(|_| "\"Desktop startup failed\"".into());
-        let _ = window.eval(format!("window.llmsDesktopShowError({encoded})"));
+            serde_json::to_string(&message).unwrap_or_else(|_| "\"Desktop startup failed\"".into());
+        let _ = window.eval(format!("window.llmsDesktopShowError?.({encoded})"));
     }
 }
 
