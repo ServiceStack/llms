@@ -1,0 +1,98 @@
+import contextlib
+import importlib.util
+import io
+import json
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+
+
+def load_script(name):
+    spec = importlib.util.spec_from_file_location(name.replace("-", "_"), SCRIPTS / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+release_config = load_script("prepare-release-config")
+check_version = load_script("check-version")
+
+
+class TestReleaseConfig(unittest.TestCase):
+    def generate(self, environment, *arguments):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "github-output"
+            with (
+                patch.object(release_config, "OUTPUT", root / "release.json"),
+                patch.dict(os.environ, {**environment, "GITHUB_OUTPUT": str(output)}, clear=True),
+                patch.object(sys, "argv", ["prepare-release-config.py", *arguments]),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(release_config.main(), 0)
+                return json.loads(release_config.OUTPUT.read_text()), output.read_text()
+
+    def test_installers_build_without_updater_keys(self):
+        config, output = self.generate({}, "--allow-unsigned")
+        self.assertFalse(config["bundle"]["createUpdaterArtifacts"])
+        self.assertEqual(config["plugins"]["updater"], {"pubkey": "", "endpoints": []})
+        self.assertEqual(output, "updater_enabled=false\n")
+
+    def test_both_keys_enable_signed_updates(self):
+        config, output = self.generate(
+            {"TAURI_UPDATER_PUBLIC_KEY": "public-key", "TAURI_SIGNING_PRIVATE_KEY": "private-key"},
+            "--allow-unsigned",
+        )
+        self.assertTrue(config["bundle"]["createUpdaterArtifacts"])
+        self.assertEqual(config["plugins"]["updater"]["pubkey"], "public-key")
+        self.assertEqual(config["plugins"]["updater"]["endpoints"], [release_config.DEFAULT_ENDPOINT])
+        self.assertEqual(output, "updater_enabled=true\n")
+        self.assertNotIn("private-key", json.dumps(config))
+
+    def test_partial_signing_configuration_fails(self):
+        for key in ("TAURI_UPDATER_PUBLIC_KEY", "TAURI_SIGNING_PRIVATE_KEY"):
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "both"):
+                self.generate({key: "configured-key"}, "--allow-unsigned")
+
+    def test_explicit_signed_build_still_requires_public_key(self):
+        with self.assertRaisesRegex(RuntimeError, "TAURI_UPDATER_PUBLIC_KEY is required"):
+            self.generate({})
+
+    def test_signed_updates_require_https(self):
+        with self.assertRaisesRegex(RuntimeError, "HTTPS"):
+            self.generate(
+                {
+                    "TAURI_UPDATER_PUBLIC_KEY": "public-key",
+                    "TAURI_SIGNING_PRIVATE_KEY": "private-key",
+                    "TAURI_UPDATER_ENDPOINT": "http://example.com/latest.json",
+                },
+                "--allow-unsigned",
+            )
+
+
+class TestReleaseVersion(unittest.TestCase):
+    def check(self, tag):
+        with (
+            patch.object(sys, "argv", ["check-version.py", "--tag", tag]),
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            return check_version.main()
+
+    def test_standard_and_desktop_release_tags_match_package(self):
+        import tomllib
+
+        with (SCRIPTS.parents[1] / "pyproject.toml").open("rb") as stream:
+            version = tomllib.load(stream)["project"]["version"]
+        for tag in (f"v{version}", f"desktop-v{version}"):
+            with self.subTest(tag=tag):
+                self.assertEqual(self.check(tag), 0)
+
+    def test_mismatched_release_tag_fails(self):
+        self.assertEqual(self.check("v0.0.0"), 1)

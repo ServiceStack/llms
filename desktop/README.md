@@ -12,7 +12,7 @@ The operating system WebView is used instead of bundling Chromium:
 
 - macOS uses the WebKit already included with macOS 11 or newer.
 - Linux needs WebKitGTK 4.1. The `.deb` declares its system dependencies; AppImage compatibility depends on the target distribution.
-- Windows can be added later using WebView2. The supervisor, sidecar filename handling, build scripts, and CI layout are already Windows-aware.
+- Windows uses WebView2. The NSIS installer installs the WebView2 runtime if it is missing.
 
 Provider API keys and llms.py data remain in the existing browser-backed storage. Optional extension tools such as `git`, `uv`, `ffmpeg`, `typst`, `dotnet`, and `bun` are detected from the GUI application `PATH`; they are not bundled. Optional SDK-backed extensions such as FastMCP, the Google GenAI SDK, and DDGS are not part of the base runtime. Extensions that install or launch arbitrary Python packages may still require an external Python/uv environment.
 
@@ -69,7 +69,15 @@ cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D wa
 
 ## Releases and signing
 
-`desktop-ci.yml` builds native artifacts on macOS and Linux in GitHub-hosted runners. `desktop-release.yml` runs for `desktop-v*` tags and publishes platform bundles through the Tauri GitHub Action.
+`desktop-ci.yml` builds native artifacts on macOS, Linux, and Windows in GitHub-hosted runners. Publishing a normal `v<version>` GitHub release automatically runs `desktop-release.yml` and attaches installers to that existing release. Each runner freezes its own Python runtime; no cross-compilation is needed.
+
+| Platform | Architecture | Release files |
+| --- | --- | --- |
+| Linux | x86_64 | `.deb`, `.AppImage` |
+| macOS | Apple Silicon (arm64), Intel (x86_64) | `.dmg`, `.app` archive |
+| Windows | x86_64 | NSIS setup `.exe` |
+
+The existing `desktop-v<version>` tag flow also builds all platforms and creates a separate draft desktop release. Publishing that draft does not build the installers a second time. The release tag must match the package and desktop versions.
 
 Production macOS releases should configure these repository secrets:
 
@@ -77,7 +85,7 @@ Production macOS releases should configure these repository secrets:
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` for notarization
 
-The release job uses the protected `desktop-release` GitHub environment so approval and secrets can be managed separately from normal Python publishing. Linux bundles do not require these Apple secrets.
+The release job uses the `desktop-release` GitHub environment so approval and secrets can be managed separately from normal Python publishing. If that environment requires approval, the installer jobs wait for it. Linux and Windows bundles do not require Apple secrets. macOS signing and notarization are optional for generating installers; configure the Apple secrets for production distribution. Windows Authenticode signing can be configured through Tauri's Windows signing options.
 
 In-app updates are checked from the native application menu and use Tauri's signed updater artifacts. Generate the updater key pair once with `cargo tauri signer generate -w /secure/location/llms-desktop.key`, back up the private key, then configure:
 
@@ -85,12 +93,12 @@ In-app updates are checked from the native application menu and use Tauri's sign
 - `TAURI_SIGNING_PRIVATE_KEY` with the private key or its file contents
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with its password
 
-The updater private key must never be committed. Release CI generates an ignored Tauri configuration overlay from the public key, signs the updater archives, and publishes `latest.json` beside the release artifacts. A local signed release build can use `desktop/scripts/build-desktop.py --release-updater` with the same environment variables.
+The updater private key must never be committed. When both updater keys are configured, release CI generates an ignored Tauri configuration overlay, signs the updater archives, and publishes `latest.json` beside the release artifacts. With neither key configured, it still publishes installers, with in-app updates disabled. A partially configured key pair fails explicitly. Updater signatures are separate from Apple and Windows code signing. A local signed release build can use `desktop/scripts/build-desktop.py --release-updater` with the same environment variables.
 
 ## Versioning
 
 The desktop release uses the llms-py version. `python publish.py --bump` updates the Python version, `desktop/src-tauri/Cargo.toml`, the desktop package entry in `desktop/src-tauri/Cargo.lock`, and `desktop/src-tauri/tauri.conf.json` together. For manual version changes, keep these files aligned; `scripts/check-version.py` enforces that invariant in local and CI builds.
 
-## Adding Windows
+## Windows builds
 
-Add a native `windows-latest` release matrix entry, build the PyInstaller sidecar on that runner, enable the Tauri NSIS target, and configure a Windows signing certificate. Do not cross-compile the Python sidecar: each architecture must be built on its target operating system.
+Build on Windows with Python 3.11, Rust, and the Tauri CLI installed, then run `python desktop/scripts/build-desktop.py --bundles nsis` from the repository root. Do not cross-compile the Python sidecar: each architecture must be built on its target operating system.

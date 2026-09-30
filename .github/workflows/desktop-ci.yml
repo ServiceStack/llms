@@ -10,6 +10,7 @@ on:
       - tests/test_publish_version.py
       - requirements.txt
       - .github/workflows/desktop-ci.yml
+      - .github/workflows/desktop-release.yml
   push:
     branches: [main]
     paths:
@@ -20,6 +21,7 @@ on:
       - tests/test_publish_version.py
       - requirements.txt
       - .github/workflows/desktop-ci.yml
+      - .github/workflows/desktop-release.yml
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,9 @@ jobs:
           - os: ubuntu-22.04
             bundles: deb,appimage
             artifact: linux
+          - os: windows-latest
+            bundles: nsis
+            artifact: windows
     runs-on: ${{ matrix.os }}
 
     steps:
