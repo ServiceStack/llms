@@ -1251,6 +1251,9 @@
   .min-h-\[2\.5rem\] {
     min-height: 2.5rem;
   }
+  .min-h-\[49px\] {
+    min-height: 49px;
+  }
   .min-h-\[50px\] {
     min-height: 50px;
   }
@@ -1559,6 +1562,9 @@
   }
   .min-w-\[24px\] {
     min-width: 24px;
+  }
+  .min-w-\[88px\] {
+    min-width: 88px;
   }
   .min-w-\[120px\] {
     min-width: 120px;

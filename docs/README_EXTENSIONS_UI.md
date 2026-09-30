@@ -4,6 +4,58 @@ The UI Extensions API starts from `AppContext` which is available via the `ctx` 
 
 The `ctx` object provides access to the application state, routing, AI client, formatting utilities, and UI layout controls. It is globally available in Vue components as `$ctx` and can be imported in other modules.
 
+## Startup and asynchronous loading
+
+The HTML loading screen paints before JavaScript initialization. `createContext({ deferExtensions: true })`
+prepares the built-in modules and router; the entry page mounts the Vue shell, then awaits `ctx.start()`.
+Existing hosts calling `createContext()` without this option still receive a fully initialized context.
+Extension imports
+begin after the shell has a paint opportunity. Imports run concurrently, while `install(ctx)` hooks run
+in ascending `order` and are awaited individually, including async installers. Equal orders preserve
+the extension manifest order. Failed imports/installers are logged without stopping other extensions.
+
+The bootstrap registers extension components, routes and navigation guards before running `load(ctx)`
+hooks concurrently. Chat and the rest of the application render when these hooks finish
+(`ctx.state.startupReady`), so a user cannot send a message before saved profile prompts, tools and
+request filters are ready. A `load` hook must return/await all work required for that readiness.
+`ctx.start()` returns the same promise on repeated calls. Deep links and modal query strings are
+resolved after extensions register their routes and components.
+
+Keep an extension's entry module small: register icons, chat filters and lazy views during installation,
+then import management pages, editors and chart libraries only when those views are opened. For example:
+
+```js
+import { lazyComponent, lazyModule } from '/ui/lazy.mjs'
+
+export default {
+    install(ctx) {
+        const load = lazyModule(() => import('./pages.mjs'), module => module.init(ctx))
+        ctx.components({ ReportDialog: lazyComponent(() => load().then(module => module.ReportDialog)) })
+        ctx.routes.push({
+            path: '/reports',
+            component: () => load().then(module => module.ReportPage),
+            meta: { title: 'Reports' },
+        })
+    },
+}
+```
+
+`lazyModule` shares one import/initialization across components and permits retry after a failed load.
+`lazyComponent` uses [Vue's async component API](https://vuejs.org/guide/components/async) with loading
+and error feedback. These are native browser ES modules; no bundler is required. Route components use
+the [router's lazy loading API](https://router.vuejs.org/guide/advanced/lazy-loading.html).
+
+For CodeMirror, await `loadCodeEditor(ctx)` from `/ui/lazy.mjs` before rendering an editor. It loads CSS,
+the editor global, then its modes/addons, with deduplication across extensions. It leaves the editor
+unloaded when `core_tools` is disabled; a consumer can retain its textarea fallback. Avoid parser-blocking
+editor/terminal scripts in `add_index_footer()`.
+
+Routes can set `meta: { header: false }` to hide the shared header icons and top panel. Page-specific
+toolbars remain inside the page. Header visibility follows the active route, so normal navigation
+restores it automatically; `ctx.toggleLayout('header', false)` can also hide it through layout state.
+
+See [UI startup performance](UI_STARTUP_PERFORMANCE.md) for measurements and remaining opportunities.
+
 ## AppContext
 
 The global application context, typically accessed as `ctx`.

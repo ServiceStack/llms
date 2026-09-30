@@ -30,6 +30,7 @@ import time
 import traceback
 from datetime import UTC, datetime
 from enum import Enum, IntEnum
+from html import escape as html_escape
 from importlib import resources  # Py≥3.9  (pip install importlib_resources for 3.7/3.8)
 from io import BytesIO
 from pathlib import Path
@@ -51,6 +52,7 @@ from typing import (
 from urllib.parse import parse_qs, urljoin
 
 from llms.db import count_tokens_approx
+from llms.web_assets import asset_response, compress_responses, is_text_asset
 import aiohttp
 from aiohttp import web
 
@@ -4408,6 +4410,9 @@ class ExtensionContext:
             path = request.match_info["path"]
             file_path = os.path.realpath(os.path.join(ext_dir, path))
             if path_is_within(file_path, ext_dir) and os.path.isfile(file_path):
+                content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+                if is_text_asset(content_type):
+                    return await asset_response(request, Path(file_path))
                 return web.FileResponse(file_path)
             return web.Response(status=404)
 
@@ -5321,7 +5326,7 @@ def cli_exec(cli_args, extra_args):
             "client_max_size", 20 * 1024 * 1024
         )  # 20MB max request size (to handle base64 encoding overhead)
         _log(f"client_max_size set to {client_max_size} bytes ({client_max_size / 1024 / 1024:.1f}MB)")
-        app = web.Application(client_max_size=client_max_size)
+        app = web.Application(client_max_size=client_max_size, middlewares=[compress_responses])
 
         async def chat_handler(request):
             await g_app.on_request(request)
@@ -5595,6 +5600,8 @@ def cli_exec(cli_args, extra_args):
 
         async def ui_static(request: web.Request) -> web.Response:
             path = Path(request.match_info["path"])
+            if path.is_absolute() or ".." in path.parts:
+                raise web.HTTPNotFound
 
             try:
                 # Handle both Path objects and importlib.resources Traversable objects
@@ -5603,7 +5610,6 @@ def cli_exec(cli_args, extra_args):
                     resource = _ROOT.joinpath("ui").joinpath(str(path))
                     if not resource.is_file():
                         raise web.HTTPNotFound
-                    content = resource.read_bytes()
                 else:
                     # Regular Path object
                     resource = _ROOT / "ui" / path
@@ -5613,12 +5619,9 @@ def cli_exec(cli_args, extra_args):
                         resource.relative_to(Path(_ROOT))  # basic directory-traversal guard
                     except ValueError as e:
                         raise web.HTTPBadRequest(text="Invalid path") from e
-                    content = resource.read_bytes()
-
-                content_type, _ = mimetypes.guess_type(str(path))
-                if content_type is None:
-                    content_type = "application/octet-stream"
-                return web.Response(body=content, content_type=content_type)
+                if isinstance(resource, Path) and not path_is_within(resource, Path(_ROOT) / "ui"):
+                    raise web.HTTPNotFound
+                return await asset_response(request, resource)
             except (OSError, PermissionError, AttributeError) as e:
                 raise web.HTTPNotFound from e
 
@@ -5734,6 +5737,12 @@ def cli_exec(cli_args, extra_args):
                 b'<script type="importmap"></script>',
                 importmaps_script.encode("utf-8"),
             )
+            # Preload the core dependencies using the resolved import map (including debug Vue).
+            preloads = "\n".join(
+                f'<link rel="modulepreload" href="{html_escape(imports[name], quote=True)}">'
+                for name in ("vue", "vue-router", "@servicestack/client", "@servicestack/vue")
+            )
+            index_content = index_content.replace(b"<!-- modulepreloads -->", preloads.encode("utf-8"))
 
             if len(g_app.index_headers) > 0:
                 html_header = ""
