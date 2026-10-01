@@ -26,6 +26,9 @@ On quit, backend cleanup runs on a worker thread while the desktop event loop st
 The desktop server gives active requests one second to drain before cancelling long-lived streams
 and running extension cleanup. The shell retains its eight-second graceful-exit budget and terminates
 the backend if it still fails to exit; repeated quit requests do not start duplicate cleanup workers.
+On macOS, menu Quit and ⌘Q request graceful shutdown through Tauri. Native termination paths
+such as Dock Quit also reap the backend before the shell exits, preventing an occupied port on relaunch.
+The application bundle is named `llms.app`.
 
 The desktop loading screen inlines the UI's loading sprite, synchronized from `llms/index.html`
 by the Tauri build. The UI's `localStorage['color-scheme']` remains authoritative and is mirrored to

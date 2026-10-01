@@ -23,10 +23,27 @@
 }
 
 body {
-    display: grid;
+    display: flex;
     min-height: 100vh;
     margin: 0;
-    place-items: center;
+    align-items: center;
+    justify-content: center;
+}
+
+#status {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#status[hidden] {
+    display: none;
+}
+
+#status svg {
+    display: block;
 }
 
 main {

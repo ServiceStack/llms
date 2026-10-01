@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use backend::{start_backend, BackendState};
 #[cfg(target_os = "macos")]
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
@@ -38,7 +38,12 @@ fn is_external_navigation(url: &tauri::Url) -> bool {
 
 #[cfg(target_os = "macos")]
 fn install_menu(app: &tauri::App) -> tauri::Result<()> {
-    let application = SubmenuBuilder::new(app, "llms.py")
+    // The predefined macOS Quit item calls NSApplication.terminate directly,
+    // bypassing ExitRequested and its asynchronous backend cleanup.
+    let quit = MenuItemBuilder::with_id("quit", "Quit llms")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
+    let application = SubmenuBuilder::new(app, "llms")
         .about(None)
         .separator()
         .text("check-updates", "Check for Updates…")
@@ -48,7 +53,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
         .hide()
         .hide_others()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .undo()
@@ -74,6 +79,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
     app.set_menu(menu)?;
 
     app.on_menu_event(|app, event| match event.id().as_ref() {
+        "quit" => app.exit(0),
         "reload" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.eval("window.location.reload()");
@@ -158,14 +164,18 @@ pub fn run() {
         .expect("failed to build llms.py desktop application");
 
     app.run(move |app_handle, event| {
-        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-            if !backend.shutdown_complete() {
+        match event {
+            tauri::RunEvent::ExitRequested { api, code, .. } if !backend.shutdown_complete() => {
                 // Keep the event loop responsive while the server drains requests
                 // and saves its state. The worker requests exit again when done.
                 api.prevent_exit();
                 let app = app_handle.clone();
                 backend.begin_shutdown(move || app.exit(code.unwrap_or(0)));
             }
+            // Dock Quit and OS termination can reach Exit without ExitRequested.
+            // A worker cannot outlive the shell, so reap any remaining child here.
+            tauri::RunEvent::Exit => backend.shutdown_now(),
+            _ => {}
         }
     });
 }

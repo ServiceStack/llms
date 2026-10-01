@@ -35,6 +35,20 @@ pub struct BackendState {
 }
 
 impl BackendState {
+    pub fn shutdown_now(&self) {
+        if let Ok(mut child) = self.child.lock() {
+            if let Some(mut process) = child.take() {
+                // Native macOS termination cannot be deferred. Do not leave the
+                // private server holding its port after the shell disappears.
+                if process.try_wait().ok().flatten().is_none() {
+                    let _ = process.kill();
+                }
+                let _ = process.wait();
+            }
+        }
+        self.shutdown_complete.store(true, Ordering::Release);
+    }
+
     pub fn shutdown_complete(&self) -> bool {
         self.shutdown_complete.load(Ordering::Acquire)
     }
@@ -377,6 +391,19 @@ fn terminate_process(process: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn native_exit_reaps_the_child_without_waiting_for_graceful_shutdown() {
+        let state = BackendState::default();
+        *state.child.lock().unwrap() = Some(Command::new("sleep").arg("30").spawn().unwrap());
+        let started = Instant::now();
+        state.shutdown_now();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(state.child.lock().unwrap().is_none());
+        assert!(state.shutdown_complete());
+        state.shutdown_now();
+    }
 
     #[test]
     fn shutdown_without_a_child_completes_once() {
