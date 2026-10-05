@@ -458,6 +458,7 @@ class GeminiDB:
                 "sourceUrl": "TEXT",
                 # --- ingest identity & change detection (INGEST.md §3) ---
                 "sourceId": "INTEGER",  # null for manual uploads
+                "sourceManifestPath": "TEXT",  # retained when a saved import is removed
                 "sourceKey": "TEXT",  # stable identity within the source, e.g. guides/auth/jwt.md
                 "sourceEtag": "TEXT",  # change token the source gave us (etag, blob sha, ...)
                 "contentHash": "TEXT",  # sha256 of normalised extracted text
@@ -559,10 +560,17 @@ class GeminiDB:
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_document_source ON document(sourceId)")
         self.db.exec(conn, "CREATE INDEX IF NOT EXISTS idx_document_category ON document(filestoreId,category)")
         # Identity is the document's stable key within its source and store.
+        self.db.exec(conn, "DROP INDEX IF EXISTS uniq_document_source_key")
         self.db.exec(
             conn,
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_document_source_key "
-            "ON document(filestoreId, IFNULL(sourceId,0), sourceKey) WHERE sourceKey IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_document_active_source_key "
+            "ON document(filestoreId, sourceId, sourceKey) WHERE sourceId IS NOT NULL AND sourceKey IS NOT NULL",
+        )
+        self.db.exec(
+            conn,
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_document_detached_source_key "
+            "ON document(filestoreId, IFNULL(user,''), IFNULL(sourceManifestPath,''), sourceKey) "
+            "WHERE sourceId IS NULL AND sourceKey IS NOT NULL",
         )
 
         for table in (
@@ -1966,15 +1974,21 @@ class GeminiDB:
             self.prepare_document(document, id, user=user),
         )
 
-    def get_pending_documents(self, limit=10):
+    def get_pending_documents(self, limit=10, exclude_ids=None):
+        exclude = ""
+        if exclude_ids:
+            exclude = f" AND id NOT IN ({','.join(str(int(id)) for id in exclude_ids)})"
         return self.db.all(
             f"SELECT * FROM document WHERE uploadedAt IS NULL AND error IS NULL "
-            f"AND tombstonedAt IS NULL ORDER BY id LIMIT {limit}"
+            f"AND tombstonedAt IS NULL{exclude} ORDER BY id LIMIT {int(limit)}"
         )
 
     def delete_document(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
         self.db.write(f"DELETE FROM document {sql_where} AND id = :id", params, callback)
+
+    async def delete_document_async(self, id, user=None):
+        return await self.db._await_write(lambda cb: self.delete_document(id, user=user, callback=cb), 1)
 
     def document_categories(self, id, user=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
@@ -2115,27 +2129,20 @@ class GeminiDB:
         """Resolve either {ids:[...]} or a column filter into the documents it selects."""
         q = dict(query or {})
         ids = q.pop("ids", None)
-        all_columns = self.columns["document"].keys()
-        uncategorised = q.get("category") == ""
-        if uncategorised:
-            q.pop("category")
-        sql_where, params = self.sql_filter(all_columns, q, args={}, user=user)
+        # Use the same subtree, search, and facet filters as the document list. In particular,
+        # categoryUnder is not a column: ignoring it turns a folder delete into a store delete.
+        sql_where, params = self.document_filter(q, user=user)
+        if sql_where is None:
+            raise ValueError("Could not resolve document selection")
         # A tombstoned document is hidden from an edit - its metadata is about to be irrelevant -
         # but not from a delete, which is exactly what you want to do with one.
         if not include_tombstoned:
             sql_where += " AND tombstonedAt IS NULL"
-        if ids:
+        if ids is not None:
             ints = to_ints(ids)
             if not ints:
                 return []
             sql_where += f" AND id IN ({','.join(str(int(i)) for i in ints)})"
-        if "null" in q:
-            null_columns = valid_columns(all_columns, q["null"])
-            uncategorised = uncategorised or "category" in null_columns
-            for col in (x for x in null_columns if x != "category"):
-                sql_where += f" AND {col} IS NULL"
-        if uncategorised:
-            sql_where += " AND (category IS NULL OR category = '')"
         return self.db.all(f"SELECT * FROM document {sql_where}", params) or []
 
     @staticmethod
@@ -2259,6 +2266,18 @@ class GeminiDB:
             "sample": [d.get("displayName") for d in docs[:sample]],
         }
 
+    def source_upload_counts(self, filestore_id, user=None):
+        """Upload progress by source, so one import does not count another import's queue."""
+        sql_where, params = self.get_user_filter(user, {"filestoreId": int(filestore_id)})
+        rows = self.db.all(
+            f"SELECT sourceId, COUNT(*) AS total, "
+            f"SUM(uploadedAt IS NULL AND error IS NULL) AS pending, "
+            f"SUM(uploadedAt IS NULL AND error IS NULL AND startedAt IS NOT NULL) AS uploading, "
+            f"SUM(error IS NOT NULL) AS failed "
+            f"FROM document {sql_where} AND filestoreId = :filestoreId AND tombstonedAt IS NULL "
+            f"GROUP BY sourceId", params)
+        return {str(row["sourceId"]): row for row in rows}
+
     def pending_documents(self, filestore_id=None, user=None, limit=None):
         """
         Documents whose local metadata differs from the copy Gemini holds.
@@ -2305,21 +2324,43 @@ class GeminiDB:
     def update_source(self, id, source, user=None):
         return self.db.update("source", self.columns["source"], self.prepare_source(source, id, user=user))
 
-    def detach_source_documents(self, id, user=None):
-        """
-        Keep the documents but forget which source produced them.
+    async def update_source_async(self, id, source, user=None):
+        return await self.db.update_async("source", self.columns["source"], self.prepare_source(source, id, user=user))
 
-        A one-off import deletes its source once it has run - the source row existed only to carry
-        the config through the same pipeline a recurring import uses - and the documents it brought
-        in have to survive that.
+    def detach_source_documents(self, id, user=None, manifest_path=None, callback=None):
         """
-        sql_where, params = self.get_user_filter(user, {"sourceId": int(id)})
-        self.db.write(f"UPDATE document SET sourceId = NULL {sql_where} AND sourceId = :sourceId", params)
+        Keep the documents and their manifest identity, without a registered source.
+
+        Removing a saved import stops syncing that source without removing its documents.
+        """
+        sql_where, params = self.get_user_filter(user, {"sourceId": int(id), "manifestPath": manifest_path})
+        self.db.write(f"UPDATE document SET sourceId = NULL, sourceManifestPath = "
+                      f"COALESCE(:manifestPath, sourceManifestPath) {sql_where} AND sourceId = :sourceId", params, callback)
+
+    async def detach_source_documents_async(self, id, user=None, manifest_path=None):
+        return await self.db._await_write(
+            lambda cb: self.detach_source_documents(id, user, manifest_path, cb), 1)
+
+    async def attach_source_documents_async(self, id, filestore_id, manifest_path, user=None):
+        sql_where, params = self.get_user_filter(user, {
+            "sourceId": int(id), "filestoreId": int(filestore_id), "manifestPath": manifest_path})
+        return await self.db._await_write(lambda cb: self.db.write(
+            f"UPDATE document SET sourceId = :sourceId {sql_where} AND filestoreId = :filestoreId "
+            "AND sourceId IS NULL AND sourceManifestPath = :manifestPath", params, cb), 1)
+
+    async def relocate_source_documents_async(self, original_path, manifest_path, user=None):
+        sql_where, params = self.get_user_filter(user, {"originalPath": original_path, "manifestPath": manifest_path})
+        return await self.db._await_write(lambda cb: self.db.write(
+            f"UPDATE document SET sourceManifestPath = :manifestPath {sql_where} "
+            "AND sourceManifestPath = :originalPath", params, cb), 1)
 
     def delete_source(self, id, user=None, callback=None):
         sql_where, params = self.get_user_filter(user, {"id": id})
         self.db.write(f"DELETE FROM source_run {sql_where} AND sourceId = :id", params)
         self.db.write(f"DELETE FROM source {sql_where} AND id = :id", params, callback)
+
+    async def delete_source_async(self, id, user=None):
+        return await self.db._await_write(lambda cb: self.delete_source(id, user, cb), 1)
 
     async def create_run_async(self, run, user=None):
         run = with_user(dict(run), user=user)
@@ -2361,7 +2402,11 @@ class GeminiDB:
             if meta.numeric_value is not None:
                 ret.append({"key": meta.key, "numeric_value": meta.numeric_value})
             elif meta.string_list_value is not None:
-                ret.append({"key": meta.key, "string_list_value": meta.string_list_value.values})
+                value = meta.string_list_value
+                # The stdlib client returns dictionaries; attribute access to `values`
+                # resolves to dict.values rather than the JSON field.
+                values = value.get("values") if isinstance(value, dict) else value.values
+                ret.append({"key": meta.key, "string_list_value": values or []})
             elif meta.string_value is not None:
                 ret.append({"key": meta.key, "string_value": meta.string_value})
         return ret

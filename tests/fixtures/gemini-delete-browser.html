@@ -1,0 +1,101 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/llms/ui/app.css">
+<link rel="stylesheet" href="/llms/ui/components/CheckBox.css">
+<style>body { background:#f9fafb } #result { display:none }</style>
+<script type="importmap">
+{"imports":{"vue":"/llms/ui/lib/vue.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs","@servicestack/vue":"/llms/ui/lib/servicestack-vue.mjs","/ui/":"/llms/ui/","chart.js":"/llms/ui/lib/chart.js","color.js":"/llms/ui/lib/color.js","/llms/extensions/ui/components/CheckBox.mjs":"/llms/ui/components/CheckBox.mjs"}}
+</script>
+</head><body><div id="app"></div><pre id="result">RUNNING</pre>
+<script type="module">
+import { createApp, ref, reactive, nextTick } from 'vue'
+import extension from '/llms/extensions/gemini/ui/index.mjs'
+const assert = (condition,message) => {if(!condition) throw Error(message)}
+const flush = async (ms=40) => {await new Promise(resolve=>setTimeout(resolve,ms));await nextTick()}
+let remaining=2, finishDelete, error, deleteRequests=0
+const store={id:1,name:'remote/store',displayName:'Deletion test',sizeBytes:0,activeDocumentsCount:3}
+const docs=[1,2].map(id=>({id,filestoreId:1,displayName:'Page '+id,category:'razor',size:10,uploadedAt:'2026-10-04'}))
+const ext={
+    prefs:reactive({page:1}),state:reactive({}),
+    getPrefs(){return this.prefs},setPrefs(patch){Object.assign(this.prefs,patch)},savePrefs(){},
+    setState(patch){Object.assign(this.state,patch)},setError(value){error=value},
+    async getJson(path){
+        if(path === '/filestores') return {response:[store]}
+        if(path.includes('/facets')) return {response:{total:remaining+1,facets:{category:{values:[{value:'razor',count:remaining},{value:'pages',count:1}],tree:[...(remaining?[{path:'razor',name:'razor',total:remaining,count:remaining,children:[]}]:[]),{path:'pages',name:'pages',total:1,count:1,children:[]}]}}}}
+        if(path.includes('/categories')) return {response:[...(remaining?[{category:'razor',count:remaining}]:[]),{category:'pages',count:1}]}
+        if(path.startsWith('/documents/count')) return {response:{count:remaining}}
+        if(path.startsWith('/documents/pending')) return {response:{count:0}}
+        if(path.startsWith('/documents?')) return {response:new URLSearchParams(path.split('?')[1]).get('category') === 'razor' ? docs.slice(0,remaining) : []}
+        if(path.startsWith('/sources?')) return {response:[]}
+        return {response:[]}
+    },
+    async postJson(path,body){
+        if(path === '/documents/summary') {
+            const scoped=body.filter?.categoryUnder === 'razor'
+            return {response:{count:scoped?remaining:remaining+1,deleteAllowed:scoped,
+                deleteError:scoped?null:'Cannot delete all documents. Delete the filestore using its confirmation dialog instead.',
+                sample:docs.slice(0,remaining).map(doc=>doc.displayName)}}
+        }
+        if(path === '/documents/delete') {
+            deleteRequests++
+            assert(body.filter.categoryUnder === 'razor', 'deletion must retain the selected folder')
+            remaining=1
+            return await new Promise(resolve=>{finishDelete=()=>{remaining=0;resolve({response:{selected:2,deleted:2,ids:[1,2],errors:[]}})}})
+        }
+        throw Error('Unexpected POST '+path)
+    },
+}
+const context={
+    routes:[],scope:()=>ext,state:reactive({models:[]}),
+    router:{currentRoute:ref({path:'/gemini/filestores/1',params:{id:'1'},query:{category:'razor'}}),push(route){this.currentRoute.value={...this.currentRoute.value,...route}}},
+    setLeftIcons(){},setThreadHeaders(){},setMessageFooters(){},addMessageContentFilter(){},setError:value=>error=value,
+}
+try {
+    extension.install(context)
+    ext.setState({filestores:[store],documentsCache:{}})
+    const app=createApp(context.routes[1].component)
+    app.provide('ctx',context)
+    app.component('ErrorViewer',{template:'<div></div>'})
+    app.config.globalProperties.$styles={muted:'text-gray-500',chromeBorder:'border-gray-200'}
+    app.config.globalProperties.$fmt={bytes:value=>value+' bytes',date:value=>value}
+    app.config.globalProperties.$ctx=context
+    app.config.errorHandler=value=>{error=value}
+    app.mount('#app')
+    await flush(200)
+    const host=document.querySelector('[data-tag="FileStoreDetails"]')
+    assert(host, 'file store view must load')
+    const vm=host.__vueParentComponent.proxy
+    await vm.openCategoryDelete('/',3)
+    assert(!vm.bulkDeleteOpen && error.message.includes('filestore root'), 'root deletion must never open a confirmation')
+    error=null
+    vm.toggleDoc(1);vm.toggleDoc(2);vm.toggleDoc(3)
+    await vm.openBulkDelete()
+    assert(!vm.bulkDeleteOpen && error.message.includes('confirmation dialog'), 'selecting all files must require store deletion')
+    assert(deleteRequests === 0, 'rejected deletion must not send a delete request')
+    error=null
+    vm.clearSelection()
+    await vm.openCategoryDelete('razor',2)
+    await flush()
+    const confirm=[...document.querySelectorAll('button')].find(b=>b.textContent.trim() === 'Delete 2')
+    assert(confirm, 'folder confirmation must appear')
+    confirm.click()
+    await flush(1700)
+    assert(vm.bulkDeleting && vm.bulkDeleteOpen, 'dialog must remain busy during remote deletion')
+    assert(vm.deleteProgress === 1, 'progress must reflect committed local deletions')
+    assert(document.body.textContent.includes('Deleting 1 of 2…'), 'deletion must show a visible count')
+    finishDelete()
+    await flush(100)
+    assert(!vm.bulkDeleting && !vm.bulkDeleteOpen, 'completion must clear the dialog and its busy state')
+    assert(vm.docs.length === 0, 'completion must refresh the document list')
+    assert(vm.categories.length === 1 && vm.categories[0].category === 'pages', 'completion must preserve unrelated folders')
+    assert(ext.prefs.category === null && vm.childFolders[0].path === 'pages', 'completion must leave the deleted folder and show remaining folders')
+    assert(document.querySelector('button[title="Delete the filestore to remove all documents"]')?.disabled, 'the last folder must not be deletable')
+    await vm.openCategoryDelete('pages',1)
+    assert(!vm.bulkDeleteOpen && error.message.includes('filestore root'), 'the last folder must require store deletion')
+    error=null
+    assert(!error,String(error))
+    app.unmount()
+    document.querySelector('#result').textContent='PASS: root and whole-store deletion blocked, folder deletion shows progress, preserves other folders, and returns to the store view'
+} catch(e){document.querySelector('#result').textContent='FAIL: '+(e.stack||e)}
+</script></body></html>

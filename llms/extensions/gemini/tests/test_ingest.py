@@ -148,6 +148,7 @@ class IngestTestCase(unittest.TestCase):
             d["sourceKey"]: {
                 "id": i + 1,
                 "sourceKey": d["sourceKey"],
+                "displayName": d["displayName"],
                 "contentHash": d["contentHash"],
                 "metadataHash": d["metadataHash"],
                 "extractorVer": d["extractorVer"],

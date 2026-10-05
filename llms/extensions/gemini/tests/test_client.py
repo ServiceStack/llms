@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import importlib.util
 
@@ -43,6 +44,16 @@ class RecordingClient(client_mod.GeminiClient):
 
 
 class TestGeminiClient(unittest.TestCase):
+    def test_deletion_timeout_does_not_change_upload_timeout(self):
+        client = client_mod.GeminiClient("secret", api="https://example.test")
+        with patch.object(client_mod, "urlopen", return_value=Response()) as open_request:
+            client.file_search_stores.documents.delete("documents/1", timeout=60)
+            self.assertEqual(open_request.call_args.kwargs["timeout"], 60)
+            client.file_search_stores.get("fileSearchStores/1", timeout=30)
+            self.assertEqual(open_request.call_args.kwargs["timeout"], 30)
+            client.file_search_stores.create({"displayName": "Docs"})
+            self.assertEqual(open_request.call_args.kwargs["timeout"], 600)
+
     def test_request_converts_wire_and_response_names(self):
         response = Response(json.dumps({
             "name": "fileSearchStores/1", "displayName": "Docs", "activeDocumentsCount": 2

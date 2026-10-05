@@ -117,9 +117,12 @@ an `index.md` in that directory (`/docs/` becomes `docs/index.md`). Each file st
 containing its title, public source URL, path, query string, meta description and any page tags.
 URLs that differ only by query string receive a stable suffix so they cannot overwrite one another.
 
-Saved crawl imports remain listed in the Web crawl tab. Select one to edit and apply its ordered
-regular-expression transforms. **Import this folder** then switches to the Folder tab, fills its
-path, and loads the workspace metadata ready for Preview Import.
+Crawl imports appear alongside folder imports in **Saved imports**. Select **Edit** to adjust
+crawl rules and ordered regular-expression transforms in the Web crawl form. After crawling,
+select **Import folder** to open the Folder form with the generated Markdown folder and saved
+settings already loaded. Add attributes, preview the documents, and select **Run import** there.
+**Run** in the saved list imports its current files, and
+**Sync Store** refreshes the crawl and imports changes.
 
 ### Controlling what is crawled
 
@@ -200,8 +203,81 @@ entered explicitly in the Import UI has the highest precedence.
 ```
 
 When no metadata has been entered, Preview Import automatically loads the root `import.json`.
-Saving a folder as a recurring import writes its effective metadata back to the root manifest
-atomically, preserving its crawl and transform configuration.
+Previewing a folder saves its input settings to the manifest atomically,
+preserving its crawl, transforms, and inherited metadata. Click **Load import.json** in **Saved imports**
+to browse folders on the server and select a manifest, or enter its path and click
+**Load**. Folder manifests open in **Folder**; manifests with a crawl URL open in **Web crawl**.
+Both use the same `import.json`, with crawl rules, transforms, folder settings, and metadata
+stored together. Loading immediately adds the import to the store's **Saved imports** list and
+opens its editor without uploading documents. Use **Run**, **Preview**, or **Sync Store** when ready.
+Existing crawl workspaces can be added by selecting their `import.json` here.
+
+Loading a web crawl from outside your own `gemini/imports` directory copies its workspace,
+including `import.json`, generated Markdown, and nested metadata, into your private imports
+directory under its plain crawl name, such as `sharpscript.net`. The original workspace is left
+untouched. Loading that crawl again refreshes the same private folder with the selected manifest
+and files, retaining the saved import and document identities. No suffixed duplicate folder is created.
+**Crawl website**, transforms, page browsing, Preview, Run, and Sync Store all use the saved copy.
+Recrawling an edited import saves its settings and keeps the same saved import and document identities.
+It replaces generated pages with the latest website content and removes generated pages that are
+no longer present. Running the folder import then syncs those changes to Gemini. Repeating the same
+crawl and import leaves the store unchanged and queues no new embeddings after successful uploads.
+
+Click **Edit** on a saved import to load its current manifest into the same form. **Save changes**
+updates that source's `import.json` and keeps its existing documents and identity. For web imports,
+the editor opens directly in **Web crawl** for crawl rules and transforms. **Edit crawl settings**
+switches back there from the Folder form;
+**Edit folder settings** returns to the folder settings. Saving settings does not run an import or
+spend on embeddings. A store can have multiple saved imports.
+
+**Preview import** scans the input and shows proposed changes without indexing documents.
+In Web crawl, **Import folder** continues into the Folder form to configure attributes before
+importing the generated Markdown files. **Run import** in that form applies changes and queues
+uploads. Preview and Run save the current form settings to the same import first, preserving
+the crawl settings when switching between forms.
+**Unchanged locally** means the source content matches the local cache. These files can still be
+**Awaiting Gemini upload**; Preview offers **Resume** and Run resumes their existing queue entries
+without creating duplicate documents. Upload progress is scoped to this import. It shows **Queued**
+while earlier work is running and a completion count once uploads begin. A run with no source
+changes or pending uploads reports that directly.
+The editor stays open after running. **Close editor** clears the form to start another source;
+the saved import remains in the list. **Save changes** and **Close editor** appear below the
+Preview and Run actions.
+
+The portable manifest stores input settings under `source`, with metadata alongside them:
+
+```json
+{
+  "version": 1,
+  "source": {
+    "name": "Product docs",
+    "type": "folder",
+    "config": {
+      "path": ".",
+      "include": ["**/*.md", "**/*.html"],
+      "ignore": ["drafts/", "private.md", "**/generated/**"],
+      "requireSourceUrl": false
+    },
+    "category": { "root": "docs", "maxDepth": 4, "prefix": "product" },
+    "extract": { "minWords": 25 },
+    "onDelete": "tombstone"
+  },
+  "metadata": { "defaults": { "product": "My product" }, "rules": [] }
+}
+```
+
+Input paths are relative to the manifest's directory; `.` imports that directory. Absolute paths
+are also supported. `include`, `exclude`, and `ignore` accept arrays of paths or globs (the UI
+accepts comma or newline separated entries). A folder entry such as `drafts/` ignores its entire
+subtree. Nested manifests can add `ignore` or `exclude` patterns relative to their own directory
+and override metadata. Existing metadata-only manifests remain supported.
+
+**Sync Store** reloads every enabled saved import's manifest, adds new files, queues replacements
+for changed content or metadata, and applies the source's deletion policy. Web imports refresh
+their crawl using the saved crawl rules and reapply saved transforms. Uploads run in the background;
+source errors and queued uploads appear in the sync results. Unchanged sources require no new
+uploads. Large deletions still require confirmation through the individual source run. Older
+saved folder imports gain a manifest link on their next successful sync.
 
 The **Folder** tab scans a directory on the machine running llms.py. It is useful for documentation
 repositories and other collections you want to preview and re-run as they change.
@@ -213,6 +289,7 @@ repositories and other collections you want to preview and re-run as they change
 | **Max depth** | Limit how deeply files are imported. Use `0` for files directly in the selected directory only, `1` to also include files in its immediate subdirectories, or leave blank for unlimited depth. |
 | **Include only** | Optional glob such as `**/*.md`. |
 | **Exclude** | Optional glob such as `**/drafts/**`. |
+| **Ignore files and folders** | Paths or globs such as `drafts/, private.md`; folder paths exclude their entire subtree. |
 | **Destination category** | Optional category prefix for the entire import. |
 
 Folder imports currently extract UTF-8 or Latin-1 text from text, Markdown, HTML, common source
@@ -266,23 +343,35 @@ legitimate mass deletion.
 
 ## Saved imports
 
-Enable **Save as a recurring import** before confirming a folder import to retain its definition.
-Give each saved import a unique name within the store.
-
-A preview alone does not create a visible saved import. It appears under **Saved imports** only
-after the import is actually confirmed and completed. One-off imports use the same safe preview
-pipeline but remove their temporary source definition after the run; their imported documents
-remain.
+Folder imports are always saved when previewed, and web crawls are saved after crawling.
+Folder and web crawl imports share the **Saved imports** list. Give each import a unique name
+within the store. Dismissing a preview keeps the saved import so it can be run later.
 
 For a saved import:
 
-- **Preview** rescans it without changing anything.
+- **Edit** opens the existing Folder or Web crawl form with its manifest settings.
+- **Run** imports its current files into this store.
+- **Preview** rescans its files without changing documents.
 - **Import N documents** applies the displayed changes.
-- **Delete** removes the saved definition, not the documents it previously imported.
+- **Remove** stops syncing the source in this store. Its `import.json`, source files, and previously
+  imported documents are kept. Load the manifest again to save the import again.
+
+The manifest saves the destination category, category root/depth, file filters and ignores,
+metadata, extraction settings, crawl rules, and transforms. Changing the selected store category
+does not overwrite a loaded import's destination. Removing and reloading the same manifest in
+the same store reconnects its existing documents, preserving their local and Gemini identities.
 
 Re-running compares normalised extracted content and metadata independently. Unchanged files are
 not re-embedded. Content changes and metadata-only changes both require a new Gemini embedding,
 because Gemini cannot patch indexed metadata in place.
+
+Repeated previews leave documents unchanged. Repeated runs reuse the document's identity within
+the saved import, so running again while uploads are pending does not create another document.
+Once uploads finish, an unchanged input reports zero new embeddings. Changed content, metadata,
+and document titles replace the existing remote copy after the new copy succeeds. If removing an
+upstream document fails, its identity is retained, the error is reported, and the next run retries
+the removal. Re-running also requeues failed uploads on their existing document rows. Sync Store
+audits remote drift across every enabled saved import.
 
 When an upstream file disappears, the default behavior removes its Gemini copy and leaves a local
 `removed upstream` tombstone so the change remains visible.
@@ -417,6 +506,26 @@ Each document row lets you:
 
 An upload spinner, error icon, active checkmark, sync-state label, or red deleting state provides
 feedback for work in progress.
+**Queued** means a local document awaits its Gemini upload; **Uploading** means it has started.
+Pending, failed, and inconsistent status labels appear before the row's action icons. Healthy
+documents use only a green check; its **Local + Gemini** tooltip means the cached file exists and
+Gemini reported an active document at the last successful upload or **Sync Store**. **Cache missing**
+identifies missing cached files. These indicators reflect the last remote check; **Sync Store**
+refreshes them.
+
+**Resume uploads** above the document list resumes queued files in the current folder and its
+descendants, or the whole store when browsing its root. A queued row's upload icon resumes that
+document. Resuming preserves the queue entries and never re-embeds completed documents.
+The status beside the **Sort** dropdown shows running imports, uploads, syncs, deletions,
+queued work, and failures for that store. Hover for upload counts; click for details, or click a
+**Paused** status to resume the whole store's queued uploads.
+
+Deleting a category removes only that folder and its descendants. After deleting the folder
+you are viewing, Explorer returns to the store view so the remaining folders are visible.
+The root folder, a selection containing every document, and the last document cannot be
+deleted through these actions. To remove everything, delete the File Store and complete its
+required confirmation dialog. **Sync Store** reimports files from enabled saved imports, so
+documents removed manually can return while they remain in an import's source folder.
 
 ## Asking questions over a store
 
@@ -604,9 +713,9 @@ Running a sync updates the local state labels and opens Explorer sorted by **Syn
 problems are found. If duplicate Gemini documents exist, **Prune duplicates** retains one remote
 copy, removes the extras, and syncs again.
 
-Syncing compares the two systems; it is not the same operation as re-running a saved import. Re-run
-an import to discover source changes, push pending metadata to re-index edited metadata, and use
-sync to audit or reconcile local-versus-remote state.
+**Sync Store** reloads and runs every enabled saved import, including refreshing web crawls with
+their saved crawl rules and transforms. It discovers source changes and reconciles the local
+catalogue with Gemini, queuing uploads and replacements for the background worker.
 
 ## Authentication and data scope
 

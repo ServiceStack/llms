@@ -95,6 +95,16 @@ def glob_match(path, pattern):
     return bool(rx.match(path))
 
 
+def file_patterns(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [p.strip() for p in value.replace("\n", ",").split(",") if p.strip()]
+    if not isinstance(value, list) or any(not isinstance(p, str) or not p.strip() for p in value):
+        raise ValueError("Include, exclude and ignore must contain file or folder patterns")
+    return [p.replace("\\", "/") for p in value]
+
+
 def resolve_path(path):
     """A filesystem path reduced to the one form comparisons can trust."""
     return os.path.realpath(os.path.abspath(os.path.expanduser(str(path))))
@@ -690,22 +700,52 @@ class FolderSource(Source):
         root = os.path.abspath(os.path.expanduser(self.config.get("path") or ""))
         if not os.path.isdir(root):
             raise Exception(f"Not a directory: {root}")
-        include = self.config.get("include")
-        exclude = list(self.config.get("exclude") or []) + DEFAULT_EXCLUDES
+        def read_manifest(directory):
+            try:
+                with open(os.path.join(directory, "import.json"), encoding="utf-8") as f:
+                    cfg = json.load(f)
+                if not isinstance(cfg, dict):
+                    raise ValueError("import.json must be an object")
+                return cfg
+            except FileNotFoundError:
+                return {}
+
+        manifest = read_manifest(root)
+        include = file_patterns(self.config.get("include") or manifest.get("include"))
+        exclude = file_patterns(self.config.get("exclude")) + file_patterns(self.config.get("ignore")) + DEFAULT_EXCLUDES
+        scoped_excludes = {}
+
+        def ignored(key, patterns):
+            return any(glob_match(key, p) or key.startswith(p.rstrip("/") + "/")
+                       or glob_match(key + "/x", p.rstrip("/") + "/**") for p in patterns)
+
         for dirpath, dirnames, filenames in os.walk(root):
             rel_dir = os.path.relpath(dirpath, root).replace("\\", "/")
             rel_dir = "" if rel_dir == "." else rel_dir
+            cfg = read_manifest(dirpath)
+            local_excludes = file_patterns(cfg.get("exclude")) + file_patterns(cfg.get("ignore"))
+            inherited = scoped_excludes.get(posixpath.dirname(rel_dir), []) if rel_dir else []
+            scoped = [*inherited, (rel_dir, local_excludes)]
+            scoped_excludes[rel_dir] = scoped
+
+            def excluded(key):
+                if ignored(key, exclude):
+                    return True
+                return any(ignored(key[len(base) + 1:] if base else key, pats) for base, pats in scoped)
+
             dirnames[:] = [
                 d for d in sorted(dirnames)
-                if not matches_any(f"{rel_dir}/{d}".lstrip("/") + "/x", exclude)
+                if not excluded(f"{rel_dir}/{d}".lstrip("/"))
             ]
             for name in sorted(filenames):
                 key = f"{rel_dir}/{name}".lstrip("/")
-                if matches_any(key, exclude):
+                if excluded(key):
                     continue
                 if include and not matches_any(key, include):
                     continue
                 full = os.path.join(dirpath, name)
+                if not within_roots(full, [root]):
+                    continue
                 try:
                     st = os.stat(full)
                 except OSError:
@@ -744,7 +784,9 @@ class FolderSource(Source):
             crawl = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(crawl)
         manifest = crawl.effective_manifest(root, item.key)
-        return crawl.merge_metadata(manifest.get("metadata"), base_rules)
+        if self.config.get("metadataSpecified"):
+            return crawl.merge_metadata(manifest.get("metadata"), base_rules)
+        return crawl.merge_metadata(base_rules, manifest.get("metadata"))
 
 
 class ZipSource(Source):
@@ -985,11 +1027,13 @@ def build_plan(source_row, source, existing, override=None, on_progress=None, on
         if not prior:
             plan.add.append(entry)
             plan.bytes += len(raw)
-        elif prior.get("contentHash") != c_hash or prior.get("extractorVer") != extractor_ver:
+        elif (prior.get("tombstonedAt") or prior.get("state") == "MISSING_FROM_REMOTE"
+              or (prior.get("error") and not prior.get("uploadedAt"))
+              or prior.get("contentHash") != c_hash or prior.get("extractorVer") != extractor_ver):
             entry["id"] = prior.get("id")
             plan.change.append(entry)
             plan.bytes += len(raw)
-        elif prior.get("metadataHash") != m_hash:
+        elif prior.get("metadataHash") != m_hash or prior.get("displayName") != display_name:
             entry["id"] = prior.get("id")
             plan.metadata_only.append(entry)
         else:

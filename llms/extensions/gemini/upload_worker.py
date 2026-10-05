@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from .client import GeminiClient
-from .db import GeminiDB, to_custom_metadata
+from .db import GeminiDB, metadata_differs, to_custom_metadata
 
 GEMINI_UPLOAD_MIME_TYPES = os.getenv("GEMINI_UPLOAD_MIME_TYPES", "mdx:text/markdown,cshtml:text/html")
 # Uploads are almost entirely waiting on Gemini, so concurrency is what turns a multi-hour import
@@ -108,7 +108,10 @@ class UploadWorker:
                     with self.lock:
                         self.restart_requested = False
                     try:
-                        docs = self.db.get_pending_documents(limit=GEMINI_UPLOAD_CONCURRENCY * 4)
+                        # Exclude completed rows before LIMIT. Their asynchronous writes can
+                        # lag reads; filtering after LIMIT can hide the rest of the queue.
+                        docs = self.db.get_pending_documents(
+                            limit=GEMINI_UPLOAD_CONCURRENCY * 4, exclude_ids=completed)
                     except Exception as e:
                         # A transient database failure must not kill the only worker and strand
                         # every queued row until a later request happens to call start().
@@ -123,7 +126,6 @@ class UploadWorker:
                         with self.lock:
                             if self.restart_requested:
                                 continue
-                            self.running = False
                         break
 
                     self.progress["total"] += len(batch)
@@ -143,9 +145,17 @@ class UploadWorker:
             self.ctx.err("UploadWorker", e)
         finally:
             with self.lock:
-                self.running = False
+                # Keep ownership until final store refreshes finish. start() during shutdown
+                # requests another pass instead of launching a thread this one could stop.
+                restart = self.restart_requested and not self.cancelled.is_set()
+                if restart:
+                    self.restart_requested = False
+                    threading.Thread(target=self.run, daemon=True).start()
+                else:
+                    self.running = False
             self.ctx.log(
-                f"UploadWorker stopped ({self.progress['done']} uploaded, {self.progress['failed']} failed)"
+                f"UploadWorker {'resuming' if restart else 'stopped'} "
+                f"({self.progress['done']} uploaded, {self.progress['failed']} failed)"
             )
 
     def _process(self, doc):
@@ -213,7 +223,10 @@ class UploadWorker:
                     remote_hash = next(
                         (m.string_value for m in (store_doc.custom_metadata or [])
                          if m.key == "hash" and m.string_value), None)
-                    if str(store_doc.state).endswith("STATE_ACTIVE") and remote_hash == doc.get("hash"):
+                    remote_metadata = db.custom_metadata_dto(store_doc.custom_metadata)
+                    if (str(store_doc.state).endswith("STATE_ACTIVE") and remote_hash == doc.get("hash")
+                            and store_doc.display_name == doc.get("displayName")
+                            and not metadata_differs({**doc, "customMetadata": remote_metadata})):
                         db.update_document(doc_id, {
                             "uploadedAt": datetime.now(), "startedAt": None,
                             "name": store_doc.name, "displayName": store_doc.display_name,

@@ -1,0 +1,143 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/llms/ui/app.css">
+<script type="importmap">
+{"imports":{"vue":"/llms/ui/lib/vue.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs","@servicestack/vue":"/llms/ui/lib/servicestack-vue.mjs","/ui/":"/llms/ui/","chart.js":"/llms/ui/lib/chart.js","color.js":"/llms/ui/lib/color.js","/llms/extensions/ui/components/CheckBox.mjs":"/llms/ui/components/CheckBox.mjs"}}
+</script>
+<style>#result {display:none}</style>
+</head><body><div id="app"></div><div id="report"></div><pre id="result">RUNNING</pre>
+<script type="module">
+import {createApp,ref,reactive,nextTick} from 'vue'
+import extension from '/llms/extensions/gemini/ui/index.mjs'
+import {RunReport} from '/llms/extensions/gemini/ui/sources.mjs'
+const assert=(condition,message)=>{if(!condition)throw Error(message)}
+const flush=async()=>{await new Promise(resolve=>setTimeout(resolve,40));await nextTick()}
+let error,resumeBody,workerRunning=true,otherSourceUploading=4,sourceCounts={sourceId:18,total:66,pending:66,uploading:0,failed:0}
+const store={id:1,name:'remote/store',displayName:'Import test'}
+const docs=[
+    {id:1,displayName:'Waiting',localFileExists:true,uploadedAt:null,state:'STATE_ACTIVE',name:'remote/old'},
+    {id:2,displayName:'Complete',localFileExists:true,uploadedAt:'2026-10-04',state:'STATE_ACTIVE',name:'remote/current'},
+    {id:3,displayName:'No cache',localFileExists:false,uploadedAt:null,state:null},
+    {id:4,displayName:'Failure',localFileExists:true,uploadedAt:null,error:'Provider failed'},
+    {id:5,displayName:'Mismatch',localFileExists:true,uploadedAt:'2026-10-04',state:'METADATA_MISMATCH'},
+].map(doc=>({...doc,filestoreId:1,sourceId:18,category:null,size:10}))
+const ext={
+    prefs:reactive({page:1}),state:reactive({}),
+    getPrefs(){return this.prefs},setPrefs(patch){Object.assign(this.prefs,patch)},savePrefs(){},
+    setState(patch){Object.assign(this.state,patch)},setError(value){error=value},
+    async getJson(path){
+        if(path === '/filestores')return {response:[store]}
+        if(path.includes('/facets'))return {response:{total:66,facets:{category:{values:[],tree:[]}}}}
+        if(path.includes('/categories'))return {response:[]}
+        if(path.startsWith('/documents/count'))return {response:{count:66}}
+        if(path.startsWith('/documents/pending'))return {response:{count:0,uploading:200,
+            sources:{'18':{...sourceCounts},'19':{pending:134,uploading:otherSourceUploading,failed:0}},
+            worker:{running:workerRunning,total:160,done:144}}}
+        if(path.startsWith('/documents?'))return {response:docs}
+        if(path === '/source-types')return {response:[{type:'folder',available:true,roots:{},unrestricted:true}]}
+        if(path === '/imports')return {response:[]}
+        if(path === '/imports/schema')return {response:{}}
+        if(path.startsWith('/sources?'))return {response:[]}
+        return {response:[]}
+    },
+    async postJson(path,body){
+        assert(path === '/filestores/1/resume-uploads', 'resume must use the queued-only endpoint')
+        resumeBody=body
+        workerRunning=true
+        return {response:{queued:1,ids:[1],worker:{running:true}}}
+    },
+}
+const context={
+    routes:[],scope:()=>ext,state:reactive({models:[]}),
+    router:{currentRoute:ref({path:'/gemini/filestores/1',params:{id:'1'},query:{view:'import',import:'folder'}}),
+        push(route){this.currentRoute.value={...this.currentRoute.value,...route}}},
+    setLeftIcons(){},setThreadHeaders(){},setMessageFooters(){},addMessageContentFilter(){},setError:value=>error=value,
+}
+try {
+    extension.install(context)
+    ext.setState({filestores:[store],documentsCache:{}})
+    const app=createApp(context.routes[1].component)
+    app.provide('ctx',context)
+    app.component('ErrorViewer',{template:'<div></div>'})
+    app.config.globalProperties.$styles={muted:'text-gray-500',chromeBorder:'border-gray-200'}
+    app.config.globalProperties.$fmt={bytes:value=>value+' bytes',date:value=>value}
+    app.config.globalProperties.$ctx=context
+    app.config.errorHandler=value=>{error=value}
+    app.mount('#app')
+    await flush()
+    const vm=document.querySelector('[data-tag="FileStoreDetails"]').__vueParentComponent.proxy
+    await vm.onUploadImported({sourceId:18,queued:0,uploadTotal:66,category:'sharpscript.net'})
+    await flush()
+    assert(vm.uploadStatus.includes('Queued 66') && vm.uploadStatus.includes('earlier uploads'), 'existing pending files must show their own queue count')
+    assert(!document.querySelector('#app').textContent.includes('Uploaded 0/0'), 'pending imports must not claim zero-file success')
+    sourceCounts={...sourceCounts,pending:65,uploading:1}
+    await vm.onImported()
+    await flush()
+    assert(vm.uploadStatus.includes('Uploading 1/66'), 'progress must follow this source rather than the store-wide queue')
+    sourceCounts={...sourceCounts,pending:0,uploading:0,failed:1}
+    await vm.onImported()
+    await flush()
+    assert(vm.uploadStatus.includes('Uploaded 65/66') && vm.uploadStatus.includes('1 failed'), 'failed uploads must not be reported as successful')
+    sourceCounts={...sourceCounts,failed:0}
+    await vm.onImported()
+    await flush()
+    assert(vm.uploadStatus.includes('Uploaded 66/66'), 'completion must use this source even while other sources are pending')
+    await vm.onUploadImported({sourceId:18,queued:0,uploadTotal:0})
+    await flush()
+    assert(vm.uploadStatus === 'No source changes or pending uploads.', 'a no-op import must not look like an upload')
+    const rows=[...document.querySelectorAll('li')]
+    const waiting=rows.find(row=>row.textContent.includes('Waiting'))
+    const complete=rows.find(row=>row.textContent.includes('Complete'))
+    assert(waiting?.textContent.includes('Queued') && !waiting.textContent.includes('Local + Gemini'), 'an old active copy must not look current while a replacement is pending')
+    assert(!complete?.textContent.includes('Local + Gemini') && complete?.querySelector('[title^="Local + Gemini:"]'), 'healthy documents must show the local/Gemini check only through its tooltip')
+    const actions=waiting.querySelector('button[title="Delete document"]').parentElement
+    assert(actions.firstElementChild.textContent.trim() === 'Queued', 'pending labels must precede all row icons')
+    const failed=rows.find(row=>row.textContent.includes('Failure'))
+    assert(failed.querySelector('button[title="Delete document"]').parentElement.firstElementChild.textContent.trim() === 'Failed', 'failed labels must precede all row icons')
+    const mismatch=rows.find(row=>row.textContent.includes('Mismatch'))
+    assert(mismatch.querySelector('button[title="Delete document"]').parentElement.firstElementChild.textContent.trim() === 'METADATA_MISMATCH', 'inconsistent labels must precede all row icons')
+    assert(rows.some(row=>row.textContent.includes('Cache missing')), 'missing cached files must be explicit')
+    workerRunning=false
+    await vm.onImported()
+    await flush()
+    vm.view='explore'
+    vm.selectCategory('blog')
+    await flush()
+    const headerStatus=document.querySelector('[data-tag="StoreOperationStatus"]')
+    assert(headerStatus?.previousElementSibling?.tagName === 'SELECT' && headerStatus.textContent.includes('Paused'), 'Explore must show the paused status beside the Sort dropdown')
+    headerStatus.click()
+    await flush()
+    assert(Object.keys(resumeBody).length === 0 && vm.storeOperationStatus.label === 'Uploading 4', 'the store status must resume the whole store and show its active upload count')
+    otherSourceUploading=0
+    await vm.onImported()
+    await flush()
+    assert(vm.storeOperationStatus.label === 'Queued 200' && !vm.storeOperationStatus.running, 'another store running must not make this store show an active upload')
+    vm.syncing=true
+    await flush()
+    assert(headerStatus.textContent.includes('Syncing') && headerStatus.querySelector('.animate-spin'), 'running Sync Store must appear in the header')
+    vm.syncing=false
+    workerRunning=false
+    await vm.onImported()
+    await flush()
+    const resumeQueue=[...document.querySelectorAll('#app button')].find(button=>button.textContent.trim() === 'Resume uploads')
+    assert(resumeQueue && document.querySelector('#app').textContent.includes('worker is stopped'), 'stopped queues must expose a resume action in Explorer')
+    resumeQueue.click()
+    await flush()
+    assert(resumeBody.categoryUnder === 'blog' && vm.pendingWorker.running, 'folder resume must scope its request and refresh worker state')
+    waiting.querySelector('button[title="Resume upload to Gemini"]').click()
+    await flush()
+    assert(resumeBody.ids?.[0] === 1, 'queued rows must offer a resume action for the selected document')
+    const reportApp=createApp(RunReport,{run:{dryRun:true,unchanged:66,embeds:0,pendingUploads:66}})
+    reportApp.config.globalProperties.$styles=app.config.globalProperties.$styles
+    reportApp.mount('#report')
+    await flush()
+    const resume=document.querySelector('#report button')
+    assert(!resume.disabled && resume.textContent.trim().replace(/\s+/g,' ') === 'Resume 66 documents', 'an unchanged local preview must allow resuming queued uploads')
+    assert(document.querySelector('#report').textContent.includes('Awaiting Gemini upload'), 'preview must distinguish the pending Gemini uploads')
+    assert(!error,String(error))
+    reportApp.unmount()
+    app.unmount()
+    document.querySelector('#result').textContent='PASS: upload progress, labels before icons, healthy tooltip, folder/row resume, per-store status beside Sort'
+} catch(e){document.querySelector('#result').textContent='FAIL: '+(e.stack||e)}
+</script></body></html>

@@ -1,0 +1,333 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="/llms/ui/app.css">
+    <link rel="stylesheet" href="/llms/ui/components/CheckBox.css">
+    <style>body { padding:24px; background:#f9fafb } #result { display:none } #sources { margin-top:24px }</style>
+    <script type="importmap">
+    {"imports":{"vue":"/llms/ui/lib/vue.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs","@servicestack/vue":"/llms/ui/lib/servicestack-vue.mjs","/llms/extensions/ui/components/CheckBox.mjs":"/llms/ui/components/CheckBox.mjs"}}
+    </script>
+</head>
+<body>
+<div id="app"></div><div id="sources"></div><pre id="result">RUNNING</pre>
+<script type="module">
+import { createApp, nextTick, reactive, h } from 'vue'
+import { ImportPanel, initImport } from '/llms/extensions/gemini/ui/import.mjs'
+import { initMetadata } from '/llms/extensions/gemini/ui/metadata.mjs'
+import { SourcesPanel, initSources } from '/llms/extensions/gemini/ui/sources.mjs'
+import { JsonSchemaForm } from '@servicestack/vue'
+
+const assert = (condition, message) => { if (!condition) throw Error(message) }
+const clone = value => JSON.parse(JSON.stringify(value))
+const flush = async () => { await new Promise(resolve => setTimeout(resolve, 30)); await nextTick() }
+let submitted, preview, imported, lastRun, lastCrawl, error, patched, removed, vm, listVm, saves = 0, runs = 0
+const stored = new Map()
+const manifests = new Map()
+const folder = {
+    name:'Product docs', type:'folder', config:{path:'/docs', manifestPath:'/docs/import.json',
+        include:['**/*.md', '**/*.html'], exclude:[], ignore:['private/', '**/generated/**'], requireSourceUrl:true},
+    category:{root:'content', maxDepth:0, prefix:'product'},
+    extract:{minWords:0}, volatile:['Generated: .*'], onDelete:'ignore',
+    rules:{frontmatter:false, customOption:'preserved', defaults:{tags:['docs']},
+        rules:[{match:'**/*.md', customOption:'preserved', set:{locale:'en', status:'published'}}]},
+}
+const web = {...clone(folder),name:'Website docs',config:{...folder.config,path:'/imports/example.test',manifestPath:'/imports/example.test/import.json'},
+    importOptions:{crawl:{url:'https://example.test',maxPages:20,
+        query:{mode:'allow',allow:['lang'],exclude:['secret'],maxVariantsPerPath:2}},
+        transforms:[{pattern:'Old',replacement:'New',flags:'g'}]}}
+const ext = {
+    prefs:{}, setPrefs(){}, setError(value){error=value},
+    async getJson(path) {
+        if(path === '/source-types') return {response:[{type:'folder', available:true, roots:{all:['/docs']}, unrestricted:true}]}
+        if(path === '/imports') return {response:[]}
+        if(path === '/imports/schema') return {response:{}}
+        if(path.startsWith('/imports/') && path.includes('/pages?')) {
+            assert(new URLSearchParams(path.split('?')[1]).get('sourceId') === '8', 'page browser must use saved source identity')
+            return {response:{pages:['guide/index.md']}}
+        }
+        if(path.startsWith('/imports/') && path.includes('/page?')) {
+            const query=new URLSearchParams(path.split('?')[1])
+            assert(query.get('sourceId') === '8' && query.get('path') === 'guide/index.md', 'page reads must select the saved workspace')
+            return {response:{content:'# Private copied guide'}}
+        }
+        if(path.startsWith('/imports/browse')) return {response:{path:'/docs', parent:'/', entries:[
+            {name:'z-last',path:'/docs/z-last',directory:true},
+            {name:'a-first',path:'/docs/a-first',directory:true},
+            {name:'import.json',path:'/docs/import.json',directory:false}]}}
+        if(path.startsWith('/sources?')) return {response:clone([...stored.values()])}
+        if(path.startsWith('/sources/')) return {response:clone(stored.get(Number(path.split('/')[2])))}
+        throw Error('Unexpected GET '+path)
+    },
+    async postJson(path, body) {
+        if(path === '/sources/load') {
+            assert(listVm.manifestPath === body.path, 'clicking the manifest must select its path before loading')
+            const source = body.path === '/docs/import.json' ? folder : web
+            const id = source === folder ? 7 : 8
+            if(!stored.has(id)) {
+                const copy=clone(manifests.get(body.path) || source)
+                if(source === web) copy.config={...copy.config,path:'/user/alice/gemini/imports/example.test',
+                    manifestPath:'/user/alice/gemini/imports/example.test/import.json'}
+                stored.set(id, {...copy,id})
+            }
+            return {response:clone(stored.get(id))}
+        }
+        if(path === '/sources') {
+            submitted=clone(body)
+            stored.set(9, {...clone(body),id:9})
+            return {response:clone(stored.get(9))}
+        }
+        if(/^\/sources\/\d+\/run$/.test(path)) {
+            runs++
+            lastRun={id:Number(path.split('/')[2]),dryRun:body.dryRun}
+            return {response:{added:1,embeds:1,queued:body.dryRun?0:1,dryRun:body.dryRun}}
+        }
+        if(path === '/imports/crawl') {
+            assert(body.filestoreId === 1, 'new crawls must be linked to the active store')
+            lastCrawl=clone(body)
+            if(body.sourceId) {
+                assert(stored.has(body.sourceId) && body.sourceId === 8, 'recrawling must reuse the loaded saved import')
+                assert(patched.importOptions.crawl.maxPages === body.maxPages, 'recrawling must save current settings first')
+                const source=clone(stored.get(body.sourceId))
+                assert(source.config.path === '/user/alice/gemini/imports/example.test', 'recrawling must target the same named workspace')
+                return {response:{path:source.config.path,source}}
+            }
+            assert(body.sourceSettings.category.prefix === host.presetCategory, 'new crawls must save their destination category')
+            const settings=body.sourceSettings
+            const crawl=clone(body)
+            delete crawl.sourceSettings
+            const source = {...clone(web),...clone(settings),config:{...clone(web.config),...settings.config},
+                id:10,name:'New website',importOptions:{crawl,transforms:[]}}
+            stored.set(10,source)
+            return {response:{path:source.config.path,source:clone(source)}}
+        }
+        if(path.startsWith('/imports/') && path.includes('/transform?')) {
+            assert(new URLSearchParams(path.split('?')[1]).get('sourceId') === '8', 'transforms must select the saved workspace')
+            const source=stored.get(8)
+            source.importOptions.transforms=clone(body.transforms)
+            return {response:{changed:1,config:{crawl:clone(source.importOptions.crawl),transforms:clone(body.transforms)}}}
+        }
+        throw Error('Unexpected POST '+path)
+    },
+    async patchJson(path, body) {
+        const id=Number(path.split('/')[2])
+        assert(stored.has(id), 'editing must retain the source id')
+        patched=clone(body)
+        stored.set(id, {...clone(body),id})
+        manifests.set(body.config.manifestPath, clone(body))
+        return {response:clone(stored.get(id))}
+    },
+    async deleteJson(path) {
+        assert(path.endsWith('?documents=keep'), 'Remove must explicitly keep imported documents')
+        removed=Number(path.split('/')[2].split('?')[0])
+        stored.delete(removed)
+        return {response:{}}
+    },
+}
+initImport(ext)
+initMetadata(ext, {})
+initSources(ext)
+const host = reactive({presetCategory:'initial'})
+const app = createApp({render:()=>h(ImportPanel, {ref:'panel',storeId:1,routeTab:'folder',facets:{},presetCategory:host.presetCategory,
+    onPreviewing:()=>preview=null,onPreview:value=>preview=value,onImported:value=>imported=value,
+    onSaved:()=>{saves++;listVm?.load()}})})
+app.component('JsonSchemaForm', JsonSchemaForm)
+app.config.globalProperties.$styles = {muted:'text-gray-500',chromeBorder:'border-gray-200'}
+app.config.errorHandler = value => {error=value}
+const listApp = createApp(SourcesPanel,{storeId:1,onEdit:source=>vm.editSource(source),
+    onRemoved:id=>{if(vm.loadedManifest?.id === id) vm.finishEditing()}})
+listApp.config.globalProperties.$styles = app.config.globalProperties.$styles
+listApp.config.globalProperties.$fmt = {date:value=>value}
+listApp.config.errorHandler = app.config.errorHandler
+const button = (label, root=document) => [...root.querySelectorAll('button')].find(b=>b.textContent.trim() === label)
+const editor = document.querySelector('#app'), list = document.querySelector('#sources')
+try {
+    vm=app.mount(editor).$refs.panel
+    listVm=listApp.mount(list)
+    await flush()
+    assert(vm.tabs.length === 3 && !vm.tabs.some(t=>t.id === 'saved'), 'a separate saved tab must not be added')
+    assert(!vm.canSubmit, 'empty folder must not submit')
+    for(const tab of ['folder','upload','crawl']) {
+        vm.select(tab)
+        await flush()
+        assert(!button('Load import.json',editor), 'manifest loader must only appear in Saved imports')
+        assert(!editor.textContent.includes('Save as a recurring import'), 'imports must always save')
+        assert(button('Load import.json',list), 'shared loader must be accessible from every tab')
+    }
+    button('Load import.json',list).click()
+    await flush()
+    const browse=button('Browse',list), input=list.querySelector('input')
+    assert(browse.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING, 'Browse must precede the path input')
+    browse.click()
+    await flush()
+    const manifestButtons=[...list.querySelectorAll('.max-h-56 button')]
+    assert(manifestButtons.map(b=>b.textContent.trim()).join(',') === 'import.json,a-first,z-last', 'import.json must appear before all folders')
+    button('import.json',list).click()
+    assert(listVm.manifestPath === '/docs/import.json' && listVm.loadingManifest, 'manifest click must immediately select the path and start loading')
+    await flush()
+    assert(stored.size === 1 && runs === 0, 'loading must immediately save without importing documents')
+    assert(vm.editingSource.id === 7 && vm.tab === 'folder', 'loaded folder must open its editor')
+    const editingName=editor.querySelector('strong')
+    assert(editingName.textContent === 'Product docs' && editingName.parentElement.textContent.trim() === 'Editing Product docs', 'only the import name must be bold in the editing heading')
+    assert(!editingName.parentElement.classList.contains('font-semibold'), 'Editing must use normal weight')
+    assert(editingName.compareDocumentPosition(editor.querySelector('p')) & Node.DOCUMENT_POSITION_FOLLOWING, 'editing heading must precede the folder description')
+    const headingClose=editor.querySelector('button[aria-label="Close editor"]')
+    assert(headingClose && headingClose.parentElement.classList.contains('justify-end') && headingClose === headingClose.parentElement.lastElementChild, 'heading close button must be right aligned')
+    const saveFooter=button('Save changes',editor).parentElement
+    assert(saveFooter.classList.contains('border-t') && saveFooter.classList.contains('justify-end'), 'save and close actions must be below a divider and right aligned')
+    assert(button('Close editor',editor).parentElement === saveFooter, 'save and close must share the footer')
+    assert(button('Run import',editor).compareDocumentPosition(saveFooter) & Node.DOCUMENT_POSITION_FOLLOWING, 'save footer must follow Preview and Run')
+    assert(!button('New import',editor), 'Close editor replaces the New import button')
+    assert(listVm.sources.length === 1 && list.textContent.includes('Product docs'), 'loaded manifest missing from unified list')
+    assert(vm.config.maxDepth === 0 && vm.config.root === 'content', 'category settings lost')
+    assert(vm.requireSourceUrl && vm.name === 'Product docs', 'saved settings lost')
+    vm.name='Updated docs'
+    vm.config.ignore+=' , secret.md'
+    button('Save changes',editor).click()
+    await flush()
+    assert(patched.name === 'Updated docs' && patched.config.ignore.join(',') === 'private/,**/generated/**,secret.md', 'form edits not saved')
+    assert(patched.config.include.length === 2 && patched.config.manifestPath === '/docs/import.json', 'input settings lost')
+    assert(patched.category.maxDepth === 0 && patched.category.prefix === 'product', 'category settings changed')
+    assert(patched.extract.minWords === 0 && patched.onDelete === 'ignore', 'advanced settings lost')
+    assert(JSON.stringify(patched.rules) === JSON.stringify(folder.rules), 'multi-field metadata rule changed')
+    assert(!patched.config.metadataSpecified && saves === 1 && runs === 0, 'settings changes must save without running')
+    host.presetCategory='different-selected-category'
+    await flush()
+    assert(vm.landingCategory === 'product', 'selected category must not overwrite a saved destination')
+    const destination=editor.querySelector('[data-tag="MetadataInput"] input')
+    destination.value='manuals/framework'
+    destination.dispatchEvent(new Event('input',{bubbles:true}))
+    destination.dispatchEvent(new Event('blur',{bubbles:true}))
+    await flush()
+    button('Save changes',editor).click()
+    await flush()
+    assert(patched.category.prefix === 'manuals/framework', 'typed destination must be saved')
+    assert(JSON.stringify(patched.rules) === JSON.stringify(folder.rules), 'destination changes must preserve advanced metadata rules')
+    assert(button('Preview import',editor) && button('Run import',editor), 'saved editor must offer preview and run')
+    vm.config.ignore+=', preview-only.md'
+    button('Preview import',editor).click()
+    await flush()
+    assert(lastRun.id === 7 && lastRun.dryRun && preview.source.id === 7, 'editor preview must use the existing source')
+    assert(stored.size === 1 && patched.config.ignore.includes('preview-only.md'), 'preview must save edits without duplicating the source')
+    vm.config.ignore+=', run-only.md'
+    button('Run import',editor).click()
+    await flush()
+    assert(lastRun.id === 7 && !lastRun.dryRun && patched.config.ignore.includes('run-only.md'), 'editor Run must apply its current edits')
+    assert(imported.queued === 1 && imported.category === 'manuals/framework', 'editor Run must update upload progress')
+    assert(vm.editingSource.id === 7 && !vm.busy, 'running must keep the editor open')
+    headingClose.click()
+    await flush()
+    assert(!vm.editingSource && !vm.loadedManifest && !vm.config.path && !vm.name && !vm.requireSourceUrl, 'closing must clear the editor for a new import')
+    assert(!vm.canSubmit && !preview && !button('Run import',editor) && !button('Close editor',editor), 'closing must clear the preview and saved import actions')
+    assert(stored.has(7) && listVm.sources.length === 1, 'closing must retain the saved import in the list')
+    await vm.editSource(stored.get(7))
+    await flush()
+    button('Preview import',editor).click()
+    await flush()
+    assert(lastRun.id === 7 && lastRun.dryRun && stored.size === 1, 'reopening must reuse the saved import')
+    await listVm.loadManifest('/imports/example.test/import.json')
+    await flush()
+    assert(stored.size === 2 && listVm.sources.length === 2, 'folder and crawl imports must share one list')
+    assert(vm.editingSource.id === 8 && vm.tab === 'crawl', 'crawl manifest must open Web crawl editor immediately')
+    assert(vm.config.path === '/user/alice/gemini/imports/example.test' && listVm.manifestPath === vm.config.manifestPath, 'loaded crawls must use the plain named private workspace')
+    assert(!(editor.textContent + list.textContent).includes('Saved crawl imports'), 'separate saved crawl list must be removed')
+    assert(list.textContent.includes('Web crawl') && list.textContent.includes('Folder'), 'list must show both input types')
+    button('Edit folder settings',editor).click()
+    await flush()
+    vm.config.ignore='drafts/, internal.md'
+    button('Edit crawl settings',editor).click()
+    await flush()
+    vm.crawlForm.maxPages=42
+    vm.setTransforms([{pattern:'Old',replacement:'Updated',flags:'g'}])
+    button('Save changes',editor).click()
+    await flush()
+    assert(patched.importOptions.crawl.maxPages === 42 && patched.importOptions.transforms[0].replacement === 'Updated', 'crawl edits not saved')
+    assert(patched.importOptions.crawl.query.maxVariantsPerPath === 2, 'advanced crawl query settings lost')
+    assert(patched.config.ignore.join(',') === 'drafts/,internal.md', 'switching forms must retain folder edits')
+    vm.crawlForm.maxPages=44
+    button('Crawl website',editor).click()
+    await flush()
+    assert(lastCrawl.sourceId === 8 && lastCrawl.maxPages === 44 && stored.size === 2 && vm.editingSource.id === 8, 'recrawling must save edits and retain the same import')
+    button('Apply & save transforms',editor).click()
+    await flush()
+    assert(vm.transformMessage.includes('1 page'), 'transforms must work in the private copied workspace')
+    button('View crawled pages',editor).click()
+    await flush()
+    assert(vm.pagePaths[0] === 'guide/index.md' && vm.selectedPageContent === '# Private copied guide', 'page browser must read the private copied pages')
+    vm.closePageBrowser()
+    vm.crawlForm.maxPages=43
+    button('Preview import',editor).click()
+    await flush()
+    assert(vm.tab === 'crawl' && lastRun.id === 8 && lastRun.dryRun, 'crawl editor must offer preview without switching forms')
+    assert(patched.importOptions.crawl.maxPages === 43 && stored.size === 2, 'crawl preview must save current settings on the same source')
+    assert(!button('Run import',editor), 'the crawl flow must offer Import folder instead of running directly')
+    const beforeFolder=runs
+    vm.crawlForm.maxPages=45
+    button('Import folder',editor).click()
+    await flush()
+    assert(vm.tab === 'folder' && vm.editingSource.id === 8 && vm.config.path === '/user/alice/gemini/imports/example.test', 'Import folder must open the configured crawled Markdown folder')
+    assert(runs === beforeFolder && stored.size === 2 && vm.config.ignore === 'drafts/, internal.md', 'opening the folder must retain settings without creating or running an import')
+    vm.setLanding('website/pages')
+    button('Run import',editor).click()
+    await flush()
+    assert(vm.editingSource.id === 8 && vm.tab === 'folder' && !lastRun.dryRun, 'the folder form must run the same saved crawl import')
+    assert(patched.category.prefix === 'website/pages' && patched.importOptions.crawl.maxPages === 45, 'folder import must save attributes and retained crawl edits')
+    button('Close editor',editor).click()
+    await flush()
+    assert(!vm.loadedManifest && !vm.selectedImport && !vm.crawlForm.url && !vm.crawlRules.length && !vm.transforms.length, 'closing must clear web crawl settings for a new import')
+    const beforeListRun=runs
+    button('Run',list).click()
+    await flush()
+    assert(runs === beforeListRun + 1, 'saved Run must execute the selected source')
+    assert(!button('Delete',list), 'saved imports must use Remove')
+    vm.select('folder')
+    await vm.editSource(stored.get(7))
+    await flush()
+    assert(vm.tab === 'folder', 'Edit must choose the folder UI')
+    button('Remove',list).click()
+    await flush()
+    assert(removed === 7 && stored.size === 1 && !vm.editingSource, 'Remove must detach the source and close its editor')
+    assert(folder.config.manifestPath === '/docs/import.json', 'removing a source must keep its manifest')
+    await listVm.loadManifest('/docs/import.json')
+    await flush()
+    assert(vm.landingCategory === 'manuals/framework' && vm.name === 'Updated docs', 'Remove and reload must restore destination and name')
+    assert(vm.config.ignore.includes('run-only.md') && vm.config.maxDepth === 0 && vm.requireSourceUrl, 'Remove and reload must restore all form settings')
+    button('Close editor',editor).click()
+    await flush()
+    await listVm.remove(stored.get(7))
+    await flush()
+    assert(!vm.loadedManifest && !vm.config.path, 'Remove must clear the loaded import after closing its editor')
+    vm.select('upload')
+    vm.select('folder')
+    vm.config.path='/new-folder'
+    await flush()
+    assert(vm.name === 'Import new-folder', 'saved import name must be populated from the folder')
+    vm.config.path='C:\\docs\\other-folder\\'
+    await flush()
+    assert(vm.name === 'Import other-folder', 'default name must follow folder changes and Windows separators')
+    vm.name='New folder'
+    vm.config.path='/new-folder'
+    await flush()
+    assert(vm.name === 'New folder', 'changing the folder must retain a custom name')
+    button('Preview import',editor).click()
+    await flush()
+    assert(submitted.saveConfig && stored.has(9) && preview.source.id === 9, 'folder preview must automatically save the source')
+    assert(vm.editingSource.id === 9 && listVm.sources.length === 2, 'new folder must stay saved before confirmation')
+    vm.select('upload')
+    vm.select('crawl')
+    vm.crawlForm.url='https://new.example.test/'
+    await flush()
+    button('Crawl website',editor).click()
+    await flush()
+    assert(vm.editingSource.id === 10 && listVm.sources.length === 3, 'new crawl must automatically save and open its editor')
+    button('Import folder',editor).click()
+    await flush()
+    assert(vm.tab === 'folder' && vm.config.path === stored.get(10).config.path && button('Run import',editor), 'a new crawl must continue into the folder import form')
+    assert(!error, String(error))
+    document.querySelector('#result').textContent='PASS: saved Folder/Web imports, private crawl workspace, recrawl preserves source, transforms and pages use source identity, editor actions and shared loader'
+} catch(e) {
+    document.querySelector('#result').textContent='FAIL: '+(e.stack || e)
+}
+</script>
+</body>
+</html>

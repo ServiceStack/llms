@@ -94,9 +94,10 @@ class _Documents:
     def get(self, name):
         return self.client.request("GET", name)
 
-    def delete(self, name, config=None):
+    def delete(self, name, config=None, timeout=None):
         force = (config or {}).get("force", True)
-        return self.client.request("DELETE", name, query={"force": str(force).lower()})
+        options = {"timeout": timeout} if timeout is not None else {}
+        return self.client.request("DELETE", name, query={"force": str(force).lower()}, **options)
 
 
 class _FileSearchStores:
@@ -107,8 +108,9 @@ class _FileSearchStores:
     def create(self, config):
         return self.client.request("POST", "fileSearchStores", config)
 
-    def get(self, name):
-        return self.client.request("GET", name)
+    def get(self, name, timeout=None):
+        options = {"timeout": timeout} if timeout is not None else {}
+        return self.client.request("GET", name, **options)
 
     def delete(self, name, config=None):
         force = (config or {}).get("force", True)
@@ -162,9 +164,9 @@ class GeminiClient:
         prefix = "upload/" if upload else ""
         return f"{self.api}/{prefix}v1beta/{path}?{urlencode(params)}"
 
-    def open(self, request):
+    def open(self, request, timeout=None):
         try:
-            return urlopen(request, timeout=self.timeout)
+            return urlopen(request, timeout=self.timeout if timeout is None else timeout)
         except HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
             try:
@@ -173,10 +175,12 @@ class GeminiClient:
                 message = None
             raise GeminiApiError(e.code, message or f"Gemini API failed with {e.code}: {body[:500]}", body) from e
 
-    def request(self, method, path, body=None, query=None):
+    def request(self, method, path, body=None, query=None, timeout=None):
         data = None if body is None else json.dumps(_wire(body)).encode("utf-8")
         headers = {"Content-Type": "application/json"} if data is not None else {}
-        with self.open(Request(self.url(path, query), data=data, headers=headers, method=method)) as response:
+        request = Request(self.url(path, query), data=data, headers=headers, method=method)
+        response = self.open(request) if timeout is None else self.open(request, timeout=timeout)
+        with response:
             raw = response.read()
         return _object(json.loads(raw)) if raw else GeminiObject()
 

@@ -6,6 +6,8 @@ import json
 import os
 import posixpath
 import re
+import shutil
+import tempfile
 import urllib.robotparser
 from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
@@ -146,11 +148,100 @@ def workspace_path(ctx, user, name):
     return path
 
 
+def legacy_workspace(ctx, user, manifest_path):
+    root = os.path.dirname(os.path.realpath(manifest_path))
+    owned_root = os.path.realpath(imports_root(ctx, user))
+    return (os.path.dirname(root) == owned_root
+            and bool(re.fullmatch(r".+-[0-9a-f]{10}", os.path.basename(root)))
+            and bool(read_json(manifest_path).get("importedFrom")))
+
+
+def workspace_target(ctx, user, manifest_path):
+    """One stable directory per named crawl, regardless of the imported manifest's location."""
+    manifest_path = os.path.realpath(manifest_path)
+    root = os.path.dirname(manifest_path)
+    owned_root = os.path.realpath(imports_root(ctx, user))
+    cfg = read_json(manifest_path)
+    if not (cfg.get("crawl") or {}).get("url"):
+        return root
+    try:
+        if os.path.commonpath((owned_root, root)) == owned_root:
+            if legacy_workspace(ctx, user, manifest_path):
+                name = cfg["crawl"].get("name") or site_name(cfg["crawl"]["url"])
+                if name == os.path.basename(root):
+                    name = name[:-11]
+                return workspace_path(ctx, user, name)
+            return root
+    except ValueError:
+        pass
+    return workspace_path(ctx, user, cfg["crawl"].get("name") or site_name(cfg["crawl"]["url"]))
+
+
+def legacy_manifests(ctx, user, target):
+    root = imports_root(ctx, user)
+    if not os.path.isdir(root):
+        return []
+    manifests = []
+    for entry in os.scandir(root):
+        path = os.path.join(entry.path, MANIFEST)
+        if entry.is_dir() and legacy_workspace(ctx, user, path) and workspace_target(ctx, user, path) == target:
+            manifests.append(path)
+    return manifests
+
+
+def import_workspace(ctx, user, manifest_path):
+    """Refresh the named private workspace; repeat imports replace its previous contents."""
+    manifest_path = os.path.realpath(manifest_path)
+    root = os.path.dirname(manifest_path)
+    cfg = read_json(manifest_path)
+    if not (cfg.get("crawl") or {}).get("url"):
+        return manifest_path
+    owned_root = os.path.realpath(imports_root(ctx, user))
+    destination = workspace_target(ctx, user, manifest_path)
+    if destination == root:
+        return manifest_path
+    try:
+        inside_original = os.path.commonpath((root, destination)) == root
+    except ValueError:
+        inside_original = False
+    if inside_original:
+        raise ValueError("A crawl workspace cannot contain the user's private imports directory")
+    copied_manifest = os.path.join(destination, MANIFEST)
+    config = (cfg.get("source") or {}).get("config") or {}
+    input_path = os.path.realpath(os.path.join(root, os.path.expanduser(config.get("path") or ".")))
+    if os.path.commonpath((root, input_path)) != root:
+        raise ValueError("The crawl input folder must be inside its manifest workspace")
+    os.makedirs(owned_root, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".import-", dir=owned_root) as staging:
+        copy = os.path.join(staging, "workspace")
+        # Links could keep the copy attached to original files or an unrelated directory.
+        shutil.copytree(root, copy, ignore=lambda directory, names: [
+            entry for entry in names if os.path.islink(os.path.join(directory, entry)) or entry == MANIFEST + ".tmp"])
+        cfg["importedFrom"] = cfg.get("importedFrom") if legacy_workspace(ctx, user, manifest_path) else manifest_path
+        cfg["crawl"]["name"] = os.path.basename(destination)
+        cfg["source"] = {**(cfg.get("source") or {}),
+            "name": (cfg.get("source") or {}).get("name") or "Import " + os.path.basename(root),
+            "config": {**config, "path": os.path.relpath(input_path, root).replace("\\", "/")}}
+        write_json(os.path.join(copy, MANIFEST), cfg)
+        backup = os.path.join(staging, "previous")
+        if os.path.exists(destination):
+            os.replace(destination, backup)
+        try:
+            os.replace(copy, destination)
+        except BaseException:
+            if os.path.exists(backup):
+                os.replace(backup, destination)
+            raise
+    return copied_manifest
+
+
 def read_json(path):
     try:
         with open(path, encoding="utf-8") as f:
             value = json.load(f)
-        return value if isinstance(value, dict) else {}
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must contain a JSON object")
+        return value
     except FileNotFoundError:
         return {}
 
@@ -388,14 +479,15 @@ def crawl_action(url, options):
     return "save"
 
 
-async def crawl_site(ctx, user, options):
+async def crawl_site(ctx, user, options, *, target_path=None):
     import aiohttp
     start = str(options.get("url") or "").strip()
     parsed = urlsplit(start)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("A valid http:// or https:// URL is required")
     name = safe_name(options.get("name") or site_name(start))
-    root = workspace_path(ctx, user, name)
+    # Explicit targets come from an authorized saved manifest, never from crawl options.
+    root = os.path.realpath(target_path) if target_path else workspace_path(ctx, user, name)
     os.makedirs(root, exist_ok=True)
     cfg_path = os.path.join(root, MANIFEST)
     cfg = read_json(cfg_path)
@@ -436,6 +528,8 @@ async def crawl_site(ctx, user, options):
             requests += 1
             async with session.get(url, allow_redirects=True) as response:
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+                if response.status >= 400 and response.status not in (404, 410):
+                    raise ValueError(f"Crawl failed for {url}: HTTP {response.status}")
                 if response.status >= 400 or not _matches(content_type, options.get("contentTypes") or ["text/html"]):
                     continue
                 final = response.url
