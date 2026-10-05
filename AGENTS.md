@@ -168,6 +168,9 @@ Extensions live in `llms/extensions/<name>/` and can define:
 3. **Preserve Database Invariants**: Never mutate canonical `chat_message` rows to solve token limit issues; always use the compaction projection pattern.
 4. **Cross-Platform Awareness**: Handle Windows path separators (`os.path.normcase`, `os.path.realpath`) and provide non-bash fallbacks where possible (see `core_tools/_code_execution_env`).
 5. **Always add clickable file links**: When explaining changes, use Markdown links formatted with the `file://` scheme.
+6. **Preserve the main chat model selector**: The user explicitly requested restoration of the original selector and instructed us never to change it again. Do not modify `llms/ui/modules/model-selector.mjs`, replace chat's selector with the global `ModelPicker`, or apply shared picker/input restyling to that dialog. Its host is marked `data-chat-model-selector` to isolate it from shared input styles.
+
+7. **Use a single focus indicator**: Never stack focus rings, outlines or shadows on the same control or on both a wrapper and its inner input. Keep control dimensions and padding stable across focus states.
 
 ### 5.2 Common Commands
 

@@ -1,0 +1,488 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <link rel="stylesheet" href="/llms/ui/app.css" />
+        <link rel="stylesheet" href="/llms/ui/components/CheckBox.css" />
+        <link rel="stylesheet" href="/llms/ui/components/ModelPicker.css" />
+        <link rel="stylesheet" href="/llms/ui/components/TextInput.css" />
+        <style>
+            body {
+                padding: 24px;
+                background: #f9fafb;
+            }
+            .dark body {
+                background: #111827;
+                color: #f3f4f6;
+            }
+            #result {
+                display: none;
+            }
+        </style>
+        <script type="importmap">
+            {
+                "imports": {
+                    "vue": "/llms/ui/lib/vue.mjs",
+                    "@servicestack/client": "/llms/ui/lib/servicestack-client.mjs",
+                    "@servicestack/vue": "/llms/ui/lib/servicestack-vue.mjs",
+                    "/ui/lazy.mjs": "/llms/ui/lazy.mjs",
+                    "/llms/extensions/ui/components/CheckBox.mjs": "/llms/ui/components/CheckBox.mjs"
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <div id="app"></div>
+        <pre id="result">RUNNING</pre>
+        <script type="module">
+            import { createApp, reactive, ref, nextTick, markRaw } from 'vue'
+            import ModelPicker from '/llms/ui/components/ModelPicker.mjs'
+            import { CheckBox } from '/llms/ui/components/CheckBox.mjs'
+            import icons from '/llms/ui/modules/icons.mjs'
+            import chatModels from '/llms/ui/modules/model-selector.mjs'
+            import gemini, { GeminiModelSelector } from '/llms/extensions/gemini/ui/index.mjs'
+            import agents from '/llms/extensions/agents/ui/index.mjs'
+            const keepAlive = setInterval(() => {}, 10)
+            const assert = (v, m) => {
+                if (!v) throw Error(m)
+            }
+            const flush = async () => {
+                await new Promise((r) => setTimeout(r, 20))
+                await nextTick()
+            }
+            const query = new URLSearchParams(location.search)
+            if (query.has('dark')) document.documentElement.classList.add('dark')
+            let app
+            try {
+                const models = Array.from({ length: 75 }, (_, i) => ({
+                    id: 'gemini-' + String(i).padStart(2, '0'),
+                    name: 'provider-model-' + i,
+                    display_name: 'Gemini ' + i,
+                    provider: i < 35 ? 'google' : 'openrouter',
+                    release_date: '2026-09-' + String((i % 28) + 1).padStart(2, '0'),
+                    limit: { context: 100000 + i },
+                    modalities: { input: ['text', ...(i % 2 === 0 ? ['image'] : [])], output: ['text'] },
+                    cost: { input: i, output: i * 2 },
+                }))
+                for (const i of [4, 6, 12, 40, 44]) {
+                    models[i].modalities.output.push('image')
+                    models[i].tool_call = i !== 4
+                    models[i].reasoning = i !== 6
+                }
+                models[44].limit.context = 1000
+                models.push({
+                    id: 'gemini-image-preview',
+                    name: 'Image',
+                    provider: 'google',
+                    release_date: '2026-10-01',
+                })
+                models.push({ id: 'unknown-cost', name: 'Unknown cost', provider: 'openrouter' })
+                const scopes = {}
+                const components = {},
+                    modals = {}
+                const ctx = {
+                    state: reactive({
+                        models,
+                        selectedModel: 'original-chat-model',
+                        config: {
+                            defaultModel: 'gemini-01',
+                            status: { enabled: ['google', 'openrouter'], disabled: [] },
+                            providers: [],
+                        },
+                        themes: {},
+                        skills: {},
+                        tools: [],
+                    }),
+                    ai: { isAdmin: false },
+                    routes: [],
+                    chatRequestFilters: [],
+                    scope(id) {
+                        return (scopes[id] ??= {
+                            ctx: this,
+                            prefs: reactive({}),
+                            state: reactive({}),
+                            getPrefs() {
+                                return this.prefs
+                            },
+                            setPrefs(p) {
+                                Object.assign(this.prefs, p)
+                            },
+                            setState(s) {
+                                Object.assign(this.state, s)
+                            },
+                            getJson: async () => ({ tools: [], skills: [] }),
+                        })
+                    },
+                    components(c) {
+                        Object.assign(components, c)
+                    },
+                    modals(m) {
+                        Object.assign(modals, m)
+                    },
+                    setState(s) {
+                        Object.assign(this.state, s)
+                    },
+                    setGlobals(s) {
+                        Object.assign(this, s)
+                    },
+                    setLeftIcons() {},
+                    setThreadHeaders() {},
+                    setMessageFooters() {},
+                    setThreadFooters() {},
+                    setComposerTop() {},
+                    addMessageContentFilter() {},
+                    resolveThemes: () => ({}),
+                    getDefaultAgentAvatar: () => '/llms/ui/fav.svg',
+                    changeProfile() {},
+                    utils: { idToName: (x) => x },
+                    toast() {},
+                }
+                chatModels.install(ctx)
+                gemini.install(ctx)
+                agents.install(ctx)
+                ctx.scope('model-selector').setPrefs({
+                    favorites: ['google:gemini-01', 'disabled:missing:model'],
+                })
+                const modal = ref(null),
+                    model = ref(''),
+                    geminiValue = ref(''),
+                    checkboxValue = ref(false),
+                    arrayValue = ref([]),
+                    indeterminate = ref(true)
+                let parentEscapes = 0
+                const outerEscape = (e) => {
+                    if (e.key === 'Escape') parentEscapes++
+                }
+                document.addEventListener('keydown', outerEscape)
+                const Root = {
+                    components: { GeminiModelSelector },
+                    template: `<div>
+  <h1>Shared model selector</h1><ModelPicker v-model="model" trigger-label="Browse all models"/>
+  <ModelPicker trigger-label="Image models" :input-modalities="['image']" :output-modalities="['image']" :minimum-context="50000" require-tools require-reasoning :allowed-providers="['google','openrouter']"/>
+  <GeminiModelSelector v-model="geminiValue"/><GeminiModelSelector/>
+  <button id="chat" @click="modal=chatModal">Chat models</button><button id="agent" @click="modal=agentModal">Agent profile</button>
+  <label><CheckBox id="shared" v-model="checkboxValue"/> Shared checkbox</label>
+  <label><input id="native" type="checkbox" v-model="arrayValue" value="choice"/> Native array checkbox</label>
+  <CheckBox id="partial" :indeterminate="indeterminate"/><CheckBox id="disabled" disabled/>
+  <component v-if="modal" :is="modal" :data-chat-model-selector="modal === chatModal ? '' : undefined" @done="modal=null"/>
+</div>`,
+                    setup() {
+                        return {
+                            modal,
+                            model,
+                            geminiValue,
+                            checkboxValue,
+                            arrayValue,
+                            indeterminate,
+                            chatModal: markRaw(modals.models),
+                            agentModal: markRaw(modals.ProfilesManagerModal),
+                        }
+                    },
+                }
+                app = createApp(Root)
+                app.component('ModelPicker', ModelPicker)
+                app.component('CheckBox', CheckBox)
+                app.component('ThemeButton', { template: '<button type="button">Theme</button>' })
+                Object.entries(components).forEach(([n, c]) => app.component(n, c))
+                icons.install({
+                    components(c) {
+                        Object.entries(c).forEach(([n, v]) => app.component(n, v))
+                    },
+                })
+                app.provide('ctx', ctx)
+                app.config.globalProperties.$ctx = ctx
+                app.config.globalProperties.$state = ctx.state
+                app.config.globalProperties.$ai = ctx.ai
+                app.config.globalProperties.$styles = {}
+                const errors = []
+                app.config.errorHandler = (e) => errors.push(e.stack)
+                app.config.warnHandler = (m) => errors.push(m)
+                app.mount('#app')
+                await flush()
+                const dialog = () => document.querySelector('.llms-model-dialog[open]')
+                const cards = () => [...dialog().querySelectorAll('.llms-model-card')]
+                const click = async (el) => {
+                    assert(el, 'Control exists')
+                    el.click()
+                    await flush()
+                    assert(!errors.length, errors.join('\n'))
+                }
+                const input = async (el, value) => {
+                    el.value = value
+                    el.dispatchEvent(new Event('input', { bubbles: true }))
+                    await flush()
+                }
+                const select = async (el, value) => {
+                    el.value = value
+                    el.dispatchEvent(new Event('change', { bubbles: true }))
+                    await flush()
+                }
+                const close = async () => click(dialog().querySelector('[aria-label="Close model picker"]'))
+                await click(document.querySelector('[aria-label="Browse all models"]'))
+                assert(cards().length === 20, 'Initial render contains exactly 20 models')
+                assert(cards()[0].textContent.includes('Image'), 'Newest models first')
+                assert(document.activeElement === dialog().querySelector('input'), 'Search autofocus')
+                const list = dialog().querySelector('.llms-model-list')
+                list.scrollTop = list.scrollHeight
+                list.dispatchEvent(new Event('scroll'))
+                await flush()
+                assert(cards().length === 40, 'Scroll appends 20 models')
+                list.scrollTop = list.scrollHeight
+                list.dispatchEvent(new Event('scroll'))
+                await flush()
+                assert(cards().length === 60, 'Next scroll appends 20')
+                await input(dialog().querySelector('input'), 'gemini-01')
+                assert(cards().length === 1, 'Search covers the full catalog')
+                await input(dialog().querySelector('input'), '')
+                assert(cards().length === 20 && list.scrollTop === 0, 'Search resets pagination and scroll')
+                await click(dialog().querySelector('[aria-label="Choose provider"]'))
+                assert(
+                    document.activeElement === dialog().querySelector('[aria-label="Search providers"]'),
+                    'Provider search autofocus',
+                )
+                await input(dialog().querySelector('[aria-label="Search providers"]'), 'Gemini')
+                assert(
+                    dialog().querySelectorAll('.llms-model-provider-list button').length === 1,
+                    'Provider search matches display names',
+                )
+                await click(dialog().querySelector('.llms-model-provider-list button'))
+                assert(
+                    dialog().querySelector('[aria-label="Choose provider"]').textContent.includes('Gemini'),
+                    'Selected provider icon and name shown',
+                )
+                await click(dialog().querySelector('[aria-label="Choose provider"]'))
+                await input(dialog().querySelector('[aria-label="Search providers"]'), 'not-a-provider')
+                assert(dialog().querySelector('.llms-model-provider-list p'), 'Provider search empty state')
+                dialog()
+                    .querySelector('[aria-label="Search providers"]')
+                    .dispatchEvent(
+                        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+                    )
+                await flush()
+                assert(
+                    !dialog().querySelector('.llms-model-provider-popup') && dialog(),
+                    'Escape only closes provider popup',
+                )
+                await click(dialog().querySelector('[aria-label="Choose provider"]'))
+                dialog()
+                    .querySelector('[aria-label="Search providers"]')
+                    .dispatchEvent(
+                        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+                    )
+                assert(
+                    document.activeElement === dialog().querySelector('.llms-model-provider-list button'),
+                    'Keyboard provider navigation',
+                )
+                dialog()
+                    .querySelector('[aria-label="Sort models by"]')
+                    .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+                await flush()
+                assert(
+                    !dialog().querySelector('.llms-model-provider-popup'),
+                    'Outside pointer closes provider popup',
+                )
+                assert(cards().length === 20, 'Provider filter resets pagination')
+                await close()
+                await click(document.querySelector('[aria-label="Browse all models"]'))
+                assert(cards().length === 20, 'Reopen starts with 20')
+                const sort = dialog().querySelector('[aria-label="Sort models by"]')
+                await select(sort, 'cost_input')
+                assert(
+                    !cards().some((c) => c.textContent.includes('Unknown cost')),
+                    'Unknown price sorts after known values',
+                )
+                await click(dialog().querySelector('[aria-label="Sort ascending"]'))
+                assert(
+                    cards()[0].textContent.includes('Gemini 0'),
+                    'Ascending price selects actual zero cost first',
+                )
+                await click(cards()[0])
+                assert(model.value === 'provider-model-0', 'Default value is unique model name')
+                assert(
+                    ctx.state.selectedModel === 'original-chat-model',
+                    'Standalone selection leaves chat state unchanged',
+                )
+                await click(document.querySelector('[aria-label="Choose Gemini model"]'))
+                assert(dialog().querySelector('input').value === 'Gemini', 'Gemini search prepopulated')
+                const fixedProvider = dialog().querySelector('[aria-label="Provider fixed: Gemini"]')
+                assert(
+                    fixedProvider?.disabled &&
+                        fixedProvider.querySelector('svg') &&
+                        fixedProvider.textContent.includes('Gemini'),
+                    'Fixed provider shows disabled icon and name button',
+                )
+                fixedProvider.click()
+                assert(!dialog().querySelector('.llms-model-provider-popup'), 'Fixed provider cannot change')
+                assert(
+                    cards().length === 20 && cards().every((c) => c.textContent.includes('google')),
+                    'Gemini renders only Google models',
+                )
+                assert(
+                    !cards().some((c) => c.textContent.includes('Image')),
+                    'Gemini excludes unsupported image models',
+                )
+                await input(dialog().querySelector('input'), 'openrouter')
+                assert(cards().length === 0, 'Search cannot escape provider confinement')
+                await input(dialog().querySelector('input'), 'gemini-01')
+                await click(cards()[0])
+                assert(geminiValue.value === 'gemini-01', 'Controlled Gemini value remains provider model ID')
+                await click(
+                    [...document.querySelectorAll('[data-tag="GeminiModelSelector"] button')].find(
+                        (b) => b.textContent.trim() === 'Clear Override',
+                    ),
+                )
+                assert(geminiValue.value === '', 'Clear override emits empty value')
+                await click(document.querySelectorAll('[aria-label="Choose Gemini model"]')[1])
+                await input(dialog().querySelector('input'), 'gemini-02')
+                await click(cards()[0])
+                assert(
+                    scopes.gemini.prefs.model === 'provider-model-2',
+                    'Gemini preferences retain unique model name',
+                )
+                await click(document.querySelector('[aria-label="Image models"]'))
+                assert(
+                    cards().length === 2,
+                    'Combined input/output, tools, reasoning, context and provider requirements',
+                )
+                for (const kind of ['Input', 'Output']) {
+                    const controls = dialog().querySelectorAll(
+                        '[aria-label="' + kind + ' modalities"] button',
+                    )
+                    assert(
+                        controls.length === 1 &&
+                            controls[0].disabled &&
+                            controls[0].getAttribute('aria-pressed') === 'true' &&
+                            controls[0].title.includes('image'),
+                        'Only locked image modality icon visible: ' + kind,
+                    )
+                }
+                await input(dialog().querySelector('[aria-label="Search models"]'), 'no-match')
+                await click(dialog().querySelector('.llms-model-empty button'))
+                assert(cards().length === 2, 'Clear filters preserves caller requirements')
+                await close()
+                await click(document.querySelector('#chat'))
+                const chatDialog = document.querySelector('[data-chat-model-selector]')
+                assert(
+                    chatDialog && !dialog(),
+                    'Chat uses its original selector, independently of the global picker',
+                )
+                assert(chatDialog.textContent.includes('Select Model'), 'Original chat dialog title')
+                assert(
+                    chatDialog.querySelectorAll('[title="Input: image"]').length === 1,
+                    'Original modality controls',
+                )
+                assert(chatDialog.textContent.includes('Unavailable'), 'Unavailable favorites preserved')
+                const oldCards = () =>
+                    [...chatDialog.querySelectorAll('button')].filter((b) =>
+                        b.querySelector('[title="Add to favorites"], [title="Remove from favorites"]'),
+                    )
+                assert(oldCards().length === 1, 'Existing favorite view restored')
+                await click(
+                    [...chatDialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'All'),
+                )
+                assert(oldCards().length === models.length, 'Original browse view restored')
+                const chatSearch = chatDialog.querySelector('input[type="text"]')
+                await input(chatSearch, 'gemini-01')
+                assert(oldCards().length === 1, 'Original chat search works')
+                await click(oldCards()[0])
+                assert(
+                    ctx.state.selectedModel === 'provider-model-1' && modal.value === null,
+                    'Original chat selection updates chat and closes modal',
+                )
+                await click(document.querySelector('#agent'))
+                const profileTrigger = [...document.querySelectorAll('button')].find((b) =>
+                    b.textContent.includes('Server Default ('),
+                )
+                await click(profileTrigger)
+                assert(cards().length === 20, 'Agent profile uses shared picker')
+                const preserved = ctx.state.selectedModel
+                await input(dialog().querySelector('input'), 'gemini-03')
+                await click(cards()[0])
+                assert(ctx.state.selectedModel === preserved, 'Agent selection leaves chat unchanged')
+                assert(profileTrigger.textContent.includes('provider-model-3'), 'Profile override set')
+                await click(profileTrigger)
+                dialog()
+                    .querySelector('input')
+                    .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+                assert(parentEscapes === 0, 'Nested Escape does not reach global modal closer')
+                dialog().dispatchEvent(new Event('cancel', { cancelable: true }))
+                await flush()
+                assert(
+                    !dialog() && modal.value !== null,
+                    'Cancel closes picker and keeps profile dialog open',
+                )
+                modal.value = null
+                await flush()
+                await click(document.querySelector('#shared'))
+                await click(document.querySelector('#native'))
+                await new Promise((r) => setTimeout(r, 200))
+                assert(
+                    checkboxValue.value && arrayValue.value[0] === 'choice',
+                    'Boolean and array checkbox bindings preserved',
+                )
+                for (const id of ['shared', 'native']) {
+                    const s = getComputedStyle(document.querySelector('#' + id))
+                    assert(
+                        s.appearance === 'none' &&
+                            s.backgroundColor === 'rgb(37, 99, 235)' &&
+                            s.backgroundImage.includes('svg'),
+                        'Shared checked checkbox appearance: ' +
+                            id +
+                            ' ' +
+                            s.appearance +
+                            ' ' +
+                            s.backgroundColor +
+                            ' ' +
+                            s.backgroundImage,
+                    )
+                }
+                assert(document.querySelector('#partial').indeterminate, 'Indeterminate checkbox state')
+                assert(
+                    getComputedStyle(document.querySelector('#partial')).backgroundImage.includes('M5'),
+                    'Indeterminate dash',
+                )
+                assert(document.querySelector('#disabled').disabled, 'Disabled checkbox state')
+                assert(!errors.length, errors.join('\n'))
+                await click(document.querySelector('[aria-label="Browse all models"]'))
+                if (innerWidth >= 1100) {
+                    const row = ['.llms-model-search', '.llms-model-modalities', '.llms-model-sort'].map(
+                        (selector) => dialog().querySelector(selector).getBoundingClientRect(),
+                    )
+                    assert(
+                        Math.max(...row.map((r) => r.top)) - Math.min(...row.map((r) => r.top)) < 8,
+                        'Search, modalities and sort share one row',
+                    )
+                }
+                const bounds = dialog().getBoundingClientRect()
+                assert(
+                    bounds.left >= 0 &&
+                        bounds.right <= innerWidth &&
+                        bounds.top >= 0 &&
+                        bounds.bottom <= innerHeight,
+                    'Modal fits viewport',
+                )
+                assert(
+                    Math.abs((bounds.left + bounds.right) / 2 - innerWidth / 2) < 2 &&
+                        Math.abs((bounds.top + bounds.bottom) / 2 - innerHeight / 2) < 2,
+                    'Modal centered',
+                )
+                assert(dialog().scrollWidth <= dialog().clientWidth, 'No horizontal overflow')
+                if (query.has('providers'))
+                    await click(dialog().querySelector('[aria-label="Choose provider"]'))
+                else if (query.has('gemini')) {
+                    await close()
+                    await click(document.querySelector('[aria-label="Choose Gemini model"]'))
+                } else if (query.has('images')) {
+                    await close()
+                    await click(document.querySelector('[aria-label="Image models"]'))
+                } else if (!query.has('picker')) await close()
+                document.getElementById('result').textContent =
+                    'PASS: global picker, 20/40/60 pagination and resets, searchable provider popup, provider keyboard/outside dismissal, locked image/capability filters, full catalog search, newest sorting, price sorting, Gemini confinement and ID/name/default semantics, original chat selector and favorites, agent isolation, nested Escape, native/shared/array/indeterminate/disabled checkboxes, responsive centering'
+            } catch (e) {
+                document.getElementById('result').textContent = 'FAIL: ' + e.stack
+            }
+            clearInterval(keepAlive)
+        </script>
+    </body>
+</html>

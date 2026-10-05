@@ -136,6 +136,7 @@ const sandbox = {
     },
     createWebHistory() {}, nextTick: async () => {}, useFormatters: () => ({}), utilsFunctions: () => ({}), utilsFormatters: () => ({}),
     ServiceStackVue: {}, App: {}, AppContext: Context, marked: {}, markedFallback: {},
+    ModelPicker: { template: 'Model picker' }, CheckBox: { template: 'Checkbox' },
     LayoutModule: builtin, ChatModule: { install() {} }, ModelSelectorModule: { install() {} }, IconsModule: { install() {} },
     ai: { base: '/chat', hasAccess: true, resolvePath: path => '/chat' + path },
     afterPaint: async () => {}, installExtensions,
@@ -150,6 +151,8 @@ const bootstrap = fs.readFileSync('llms/ui/index.mjs', 'utf8')
     .replace(/^import .*$/gm, '').replace('export async function createContext', 'async function createContext')
 vm.runInNewContext(bootstrap + '\nglobalThis.createContext = createContext', sandbox)
 const deferred = await sandbox.createContext({ deferExtensions: true })
+assert.equal(deferred.app.component('ModelPicker'), sandbox.ModelPicker)
+assert.equal(deferred.app.component('CheckBox'), sandbox.CheckBox)
 assert.equal(importsStarted, 0)
 assert.equal(deferred.state.startupReady, false)
 deferred.app.mount()
