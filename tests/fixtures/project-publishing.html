@@ -44,7 +44,12 @@ try{
  button('Publish folder').click();await flush();assert(posts[0]==='share_static/project/one/folder','Static endpoint publishes without account');assert(button('Update folder'),'Published status');assert(!document.querySelector('#app').textContent.includes('/srv/p'),'Export root hidden')
  const link=document.querySelector('a[href="http://127.0.0.1:8080/p/alice/website/"]');assert(link?.target==='_blank','Configured link opens a new window')
  const stamp=[...document.querySelectorAll('span[title]')].find(s=>s.textContent.startsWith('Published '));assert(/^Published \d+s ago$/.test(stamp?.textContent),'Relative timestamp');assert(stamp.title,'Full timestamp tooltip');assert(stamp.parentElement.textContent.includes('to ~/alice/website'),'Concise destination')
- config.baseUrl='';await flush();assert(document.querySelector('#app').textContent.includes('URL path: /p/alice/website/'),'Empty base URL shows path')
+ const publication=ctx.state.projects[0].staticPublication
+ publication.urlPath='/p/admin%40email.com/hawain-tetris/';await flush()
+ const emailLink=document.querySelector('a[href="http://127.0.0.1:8080/p/admin%40email.com/hawain-tetris/"]')
+ assert(emailLink?.textContent==='http://127.0.0.1:8080/p/admin@email.com/hawain-tetris/','Published URL label is decoded while href remains encoded')
+ config.baseUrl='';await flush();assert(document.querySelector('#app').textContent.includes('URL path: /p/admin@email.com/hawain-tetris/'),'URL path label is decoded')
+ publication.urlPath='/p/alice/website/';await flush();assert(document.querySelector('#app').textContent.includes('URL path: /p/alice/website/'),'Empty base URL shows path')
  const originalSave=ctx.projects.saveProject,input=document.querySelector('input[type=text]'),postCount=posts.length
  ctx.projects.saveProject=async(name,project,options)=>{const error={message:'Cannot save Build Directory'};if(options?.reportError!==false)ctx.state.error=error;return {error}}
  input.value='other-build';input.dispatchEvent(new Event('input',{bubbles:true}));await flush();button('Update folder').click();await flush();assert(document.querySelector('[role=alert]')?.textContent.includes('Cannot save Build Directory'),'Build Directory save error stays in panel');assert(!ctx.state.error&&posts.length===postCount,'Failed save does not report chat error or start export');ctx.projects.saveProject=originalSave;input.value='dist';input.dispatchEvent(new Event('input',{bubbles:true}));await flush()
