@@ -89,7 +89,19 @@ def main() -> int:
     if not (built_path / executable_name).is_file():
         raise RuntimeError(f"PyInstaller output is missing {executable_name}")
 
-    shutil.copytree(built_path, RESOURCE_PATH)
+    # Framework layout and Python's library aliases must survive packaging.
+    shutil.copytree(built_path, RESOURCE_PATH, symlinks=sys.platform == "darwin")
+    identity = os.environ.get("APPLE_SIGNING_IDENTITY", "").strip()
+    if sys.platform == "darwin" and identity and identity != "-":
+        # PyInstaller signs individual Mach-O files. Frameworks also need a
+        # resource seal after collection, before the outer Tauri app is signed.
+        frameworks = sorted(RESOURCE_PATH.rglob("*.framework"), key=lambda path: len(path.parts), reverse=True)
+        for framework in frameworks:
+            subprocess.run(
+                ["codesign", "--force", "--sign", identity, "--timestamp", "--options", "runtime", str(framework)],
+                check=True,
+            )
+            subprocess.run(["codesign", "--verify", "--strict", str(framework)], check=True)
     executable = RESOURCE_PATH / executable_name
     executable.chmod(executable.stat().st_mode | 0o111)
     (RESOURCE_PATH / "build-info.json").write_text(

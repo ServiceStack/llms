@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": [],
+    "macOS": {
+      "files": {
+        "Resources/resources": "resources"
+      }
+    }
+  }
+}

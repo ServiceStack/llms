@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import ast
+import os
 import sys
 from pathlib import Path
 
@@ -58,6 +59,9 @@ executable = EXE(
     strip=False,
     upx=False,
     console=True,
+    # Tauri signs the shell, but does not sign binaries copied as resources.
+    # PyInstaller signs the sidecar and its collected native libraries together.
+    codesign_identity=os.environ.get("APPLE_SIGNING_IDENTITY") or None,
 )
 
 collection = COLLECT(

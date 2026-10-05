@@ -63,13 +63,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Install and verify desktop runtime
-        run: |
-          python -m pip install -r desktop/requirements-build.txt
-          python -m unittest discover -s desktop/tests -p 'test_*.py'
-          python desktop/scripts/build-sidecar.py
-          python desktop/scripts/verify-sidecar.py
-
       - name: Configure optional signing and updates
         id: release-config
         env:
@@ -83,6 +76,22 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: python desktop/scripts/prepare-release-config.py --allow-unsigned
+
+      # The Python runtime is bundled as resources, so sign it before Tauri
+      # packages the shell. Tauri's later certificate import is too late for this.
+      - name: Import Apple certificate for the Python runtime
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ env.APPLE_CERTIFICATE }}
+          p12-password: ${{ env.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Install and verify desktop runtime
+        run: |
+          python -m pip install -r desktop/requirements-build.txt
+          python -m unittest discover -s desktop/tests -p 'test_*.py'
+          python desktop/scripts/build-sidecar.py --keep-build
+          python desktop/scripts/verify-sidecar.py
 
       - name: Build, sign, and publish native bundles
         uses: tauri-apps/tauri-action@v0.6.2

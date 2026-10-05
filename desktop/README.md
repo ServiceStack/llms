@@ -121,6 +121,77 @@ Production macOS releases should configure these repository secrets:
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` for notarization
 
+### Local Developer ID signing and notarization
+
+Install the **Developer ID Application** certificate and its matching private key in your
+login keychain. `security find-identity -v -p codesigning` must list the identity. If Keychain
+Access marks a G2-issued certificate as untrusted, install **Developer ID – G2** from
+[Apple's certificate authority page](https://www.apple.com/certificateauthority/) using the
+normal system trust defaults.
+
+From the repository root, build a signed app and DMG with the installed identity:
+
+```sh
+export APPLE_SIGNING_IDENTITY='Developer ID Application: ServiceStack, Inc. (N546HR88H9)'
+export APPLE_TEAM_ID='N546HR88H9'
+desktop/.venv/bin/python desktop/scripts/build-desktop.py --bundles app,dmg
+```
+
+PyInstaller signs the frozen Python executable and its native libraries with that same
+identity, including Hardened Runtime and secure timestamps. Tauri then signs the shell
+and bundle. The sidecar build seals collected frameworks, and the macOS configuration
+copies the resource directory with symbolic links preserved so those seals remain valid.
+Signing only the outer app leaves the Python resources ad hoc signed and
+is insufficient for notarization. In release CI, set `APPLE_SIGNING_IDENTITY` along with
+the certificate secrets; the workflow imports the certificate before building Python.
+The CI sidecar build uses `--keep-build` to preserve the generated release overlay.
+
+To notarize, create an **app-specific password** at
+[Apple Account](https://account.apple.com/) under **Sign-In and Security → App-Specific
+Passwords**. Then run:
+
+```sh
+desktop/.venv/bin/python desktop/scripts/build-desktop.py --bundles app,dmg --notarize
+```
+
+The script prompts for your Apple Account email and app-specific password locally; password
+entry is hidden and it is passed to Tauri in the process environment without saving it to
+source files. Use the generated app-specific password, not your normal Apple Account password.
+Tauri submits the signed app to Apple and staples its notarization ticket before packaging
+the DMG. The first notarization can take longer while Apple evaluates the new developer.
+Find the bundles under `desktop/src-tauri/target/release/bundle/` (or the equivalent target
+directory if `CARGO_TARGET_DIR` is configured).
+
+Verify the resulting app before distributing it:
+
+```sh
+codesign --verify --deep --strict --verbose=2 desktop/src-tauri/target/release/bundle/macos/llms.app
+xcrun stapler validate desktop/src-tauri/target/release/bundle/macos/llms.app
+spctl --assess --type execute --verbose=4 desktop/src-tauri/target/release/bundle/macos/llms.app
+```
+
+For GitHub releases, export the signing identity (certificate and private key together) as a
+password-protected `.p12` from Keychain Access. Base64-encode it with
+`openssl base64 -A -in /secure/path/certificate.p12 -out /secure/path/certificate-base64.txt`.
+Store that file's contents as `APPLE_CERTIFICATE`, the export password as
+`APPLE_CERTIFICATE_PASSWORD`, the identity above as `APPLE_SIGNING_IDENTITY`, and the
+app-specific password as `APPLE_PASSWORD`. `APPLE_ID` is the Apple Account email and
+`APPLE_TEAM_ID` is `N546HR88H9`. Add these to the repository's `desktop-release` environment
+secrets. Keep exported private keys and password files outside the repository.
+
+To upload the certificate and authentication secrets with GitHub CLI without putting
+passwords in shell history, run this in your local terminal:
+
+```sh
+desktop/.venv/bin/python desktop/scripts/configure-apple-secrets.py --certificate /secure/path/certificate.p12
+```
+
+It prompts for the Apple Account email and both passwords, with password entry hidden,
+then uploads `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, and
+`APPLE_PASSWORD` to the `ServiceStack/llms` repository's `desktop-release` environment.
+The `.p12` must contain both the certificate and its matching private key. Set
+`APPLE_SIGNING_IDENTITY` and `APPLE_TEAM_ID` separately as listed above.
+
 The release job uses the `desktop-release` GitHub environment so approval and secrets can be managed separately from normal Python publishing. If that environment requires approval, the installer jobs wait for it. Linux and Windows bundles do not require Apple secrets. macOS signing and notarization are optional for generating installers; configure the Apple secrets for production distribution. Unset signing secrets are omitted from the bundler environment so macOS builds do not try to import an empty certificate. Windows Authenticode signing can be configured through Tauri's Windows signing options.
 
 In-app updates are checked from the native application menu and use Tauri's signed updater artifacts. Generate the updater key pair once with `cargo tauri signer generate -w /secure/location/llms-desktop.key`, back up the private key, then configure:
