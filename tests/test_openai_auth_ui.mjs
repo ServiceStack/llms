@@ -71,7 +71,7 @@ const indexSource = fs.readFileSync(new URL('../llms/extensions/openai_auth/ui/i
     .replace(/import\s+OpenAiSettings\s+from\s+['"][^'"]+['"]/, '')
     .replace('export default', 'globalThis.extension =')
 
-const sandbox = { Vue, URL, JSON, console }
+const sandbox = { Vue, URL, JSON, console, window: { location: { href: 'https://app.test/chat/42' } } }
 vm.runInNewContext(settingsSource, sandbox)
 vm.runInNewContext(indexSource, sandbox)
 
@@ -138,3 +138,33 @@ assert.equal(ui.manualInput.value, '')
 assert.equal(ui.showManual.value, false)
 assert.equal(ui.status.value.plan_enabled, false, 'A declined plan remains visibly disabled')
 console.log('✓ full callback entry, declined plan, and revocation notice passed')
+
+let poll, stopped = false
+sandbox.setInterval = callback => { poll = callback; stopped = false; return 1 }
+sandbox.clearInterval = () => { stopped = true }
+uiCtx.scope = () => ({
+    getJson: async () => serverStatus,
+    postJson: async (path, body) => {
+        assert.equal(path, '/connect')
+        assert.equal(body.return_url, sandbox.window.location.href)
+        return { auth_url: 'https://auth.openai.com/authorize', automatic_callback: true, manual_callback: false }
+    },
+})
+serverStatus = { connected: true, pending: false, automatic_callback: true, manual_callback: false }
+const automatic = sandbox.OpenAiSettings.setup()
+await Promise.resolve()
+await automatic.connect(false)
+assert.equal(automatic.showManual.value, false)
+serverStatus = { connected: true, pending: true }
+await poll()
+assert.equal(stopped, false, 'An existing grant must not stop polling during reauthorization')
+serverStatus = { connected: true, pending: false }
+await poll()
+assert.equal(stopped, true)
+assert.equal(automatic.connecting.value, false)
+await automatic.connect(false)
+serverStatus = { connected: false, pending: false, callback_error: 'OpenAI sign-in was not authorized.' }
+await poll()
+assert.equal(stopped, true)
+assert.equal(automatic.status.value.callback_error, serverStatus.callback_error)
+console.log('✓ automatic callback, reauthorization polling, and callback errors passed')
