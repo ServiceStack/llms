@@ -99,27 +99,12 @@ def install(ctx):
         def get_project_url(self, name):
             return self.publish_project_url.format(name=name)
 
-    # helper to get user or default prompts
+    from llms.extensions.publish.client import get_publish_config as account_publish_config
+
     def get_publish_config(user=None, obscure=True):
-        candidate_paths = []
-        if user:
-            candidate_paths.append(os.path.join(ctx.get_user_path(user), "publish", "config.json"))
-        candidate_paths.append(os.path.join(ctx.get_user_path(), "publish", "config.json"))
+        return account_publish_config(ctx, user, obscure)
 
-        obj = {"apiKey": None, "userName": None, "userId": None}
-        for path in candidate_paths:
-            if os.path.exists(path):
-                with open(path, encoding="utf-8") as f:
-                    txt = f.read()
-                    obj = json.loads(txt)
-                    if obscure and "apiKey" in obj and obj["apiKey"]:
-                        obj["apiKey"] = obj["apiKey"][:3] + "******" + obj["apiKey"][-4:]
-
-        publish_base_url = obj.get("baseUrl", DEFAULT_PUBLISH_BASE_URL)
-
-        if "registerUrl" not in obj:
-            obj["registerUrl"] = publish_base_url + DEFAULT_REGISTER_PATH
-        return obj
+    ctx.app.publisher_available = True
 
     def save_config(user, config):
         config_path = os.path.join(ctx.get_user_path(user=user), "publish", "config.json")
