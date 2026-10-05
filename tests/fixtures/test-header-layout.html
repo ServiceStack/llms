@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/llms/ui/app.css">
+<style>body { margin: 0; }</style>
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+<div id="main" class="flex-1 min-w-0 flex flex-col h-screen">
+  <div id="main-inner" class="flex flex-col h-full w-full overflow-hidden">
+    <div id="header" class="min-h-9 py-1 pr-1 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-gray-700">
+      <div class="flex items-center gap-2"></div>
+      <div class="flex items-center gap-2">
+        <div class="flex space-x-1">
+          <button class="size-7 p-1 border rounded bg-slate-100 dark:bg-gray-800">🔍</button>
+          <button class="size-7 p-1 border rounded bg-slate-100 dark:bg-gray-800">📤</button>
+          <button class="size-7 p-1 border rounded bg-slate-100 dark:bg-gray-800">⚙️</button>
+        </div>
+      </div>
+    </div>
+    <div id="page" class="flex-1 overflow-y-auto min-h-0 flex flex-col">
+      <div data-jev-studio class="text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900 h-full min-h-0 flex flex-col text-sm leading-[1.5] isolate">
+        <header data-jev-header class="-mt-8 pl-2 pb-2 border-b border-b-gray-200 dark:border-b-gray-700 flex items-center gap-4 shrink-0">
+          <div data-jev-brand class="flex gap-3 items-center">
+            <div>
+              <h1 class="text-[19px] font-semibold tracking-[-0.3px]">Decision Studio</h1>
+              <span class="text-xs text-slate-500 dark:text-slate-400 leading-[1.6]">Small questions. Useful answers.</span>
+            </div>
+          </div>
+          <div data-jev-header-actions class="flex items-center gap-5 flex-wrap">
+            <button type="button" class="inline-flex items-center justify-center gap-1.75 border border-indigo-600 rounded-lg bg-indigo-600 text-white text-xs font-medium py-2 px-3">
+              Create with AI
+            </button>
+            <span data-jev-connection class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.75">
+              <span class="size-1.5 rounded-full bg-emerald-500 inline-block"></span>Jev via OpenRouter
+            </span>
+          </div>
+        </header>
+        <div class="p-6">Page content below header</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

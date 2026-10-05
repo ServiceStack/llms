@@ -1,0 +1,108 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/llms/ui/app.css"><style>body{margin:0;background:#f9fafb}#result{position:fixed;bottom:0;left:0;font:11px monospace;z-index:100;max-width:100%;background:white;color:#111;padding:4px}</style><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs","/llms/extensions/ui/components/CheckBox.mjs":"/llms/ui/components/CheckBox.mjs"}}</script></head><body><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,reactive,ref,nextTick} from 'vue'
+import projectsExtension from '/llms/extensions/projects/ui/index.mjs'
+const assert=(ok,message)=>{if(!ok)throw new Error(message)}
+const flush=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setTimeout(resolve,0))}
+let enabled=true, mode='success', operation=null, waiting=null, autoCalls=0, opened=[], posted=[]
+const components={}, calls=[]
+const ctx={state:reactive({projects:[{id:'old',name:'Existing project',folder:'existing-project'}],prefs:{}}),
+ chat:{drafts:{state:reactive({key:'local:origin'}),list:()=>[],fresh:id=>opened.push(id)}},threads:{clearCurrentThread(){}},
+ utils:{toKebabCase:s=>s.trim().toLowerCase().replace(/[^\w\s-]/g,'').replace(/[\s_]+/g,'-')},
+ projectCreationRequest:{startNew:true,onCreated:async()=>{autoCalls++}},
+ components:c=>Object.assign(components,c),modals(){},toast(){},to(){},openModal(){},
+ setState:s=>Object.assign(ctx.state,s),setGlobals:s=>Object.assign(ctx,s),scope:()=>({ctx,
+  async getJson(url,options){
+   calls.push(url)
+   if(url==='/creation/options')return {response:{create:true,clone:enabled,initializeGit:enabled,root:'/home/user/projects',operations:[]}}
+   if(url==='/projects.json')return {response:ctx.state.projects}
+   if(url.startsWith('/creation/operations/')){
+    if(mode==='hold')return await new Promise(resolve=>{waiting=resolve;options?.signal.addEventListener('abort',()=>resolve({error:{message:'Aborted'}}))})
+    if(mode==='failure')return {response:{...operation,state:'failed',message:'Project could not be created',error:'Authentication required. Configure Git credentials and retry.',revision:operation.revision+1,cancellable:false}}
+    const project={id:'new-'+posted.length,...posted.at(-1).project}
+    ctx.state.projects=[...ctx.state.projects.filter(p=>p.id!==project.id),project]
+    return {response:{...operation,state:'succeeded',message:'Your project is ready',revision:operation.revision+1,cancellable:false,result:{project,projects:ctx.state.projects}}}
+   }
+   return {error:{message:'Unexpected '+url}}
+  },
+  async postJson(url,payload){
+   if(url==='/create'){
+    posted.push(payload);operation={id:'op-'+posted.length,state:'running',message:'Cloning repository…',revision:1,percent:35,cancellable:true,project:payload.project,source:payload.source}
+    return {response:operation}
+   }
+   if(url.endsWith('/cancel')){
+    operation={...operation,state:'cancelled',message:'Creation cancelled',revision:2,cancellable:false}
+    waiting?.({response:operation});return {response:operation}
+   }
+   if(url.endsWith('/retry')){mode='success';operation={...operation,state:'running',revision:3,cancellable:true};return {response:operation}}
+   if(url.startsWith('/save/'))return {response:ctx.state.projects}
+   throw new Error('Unexpected '+url)
+  }
+ })}
+projectsExtension.install(ctx)
+const dark=new URLSearchParams(location.search).has('dark')
+if(dark)document.documentElement.classList.add('dark')
+const theme=await (await fetch('/llms/extensions/app/themes/'+(dark?'dark':'light')+'.json')).json()
+const shown=ref(true), key=ref(0)
+const app=createApp({components:{ProjectsManagerModal:components.ProjectsManagerModal},setup:()=>({shown,key}),template:'<ProjectsManagerModal v-if="shown" :key="key" @done="shown=false"/>'})
+app.provide('ctx',ctx);Object.assign(app.config.globalProperties,{$styles:theme.styles,$state:ctx.state})
+app.mount('#app')
+const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===text)
+const input=async(id,value)=>{const el=document.getElementById(id);assert(el,'Missing '+id);el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));await flush()}
+const remount=async(reset=false)=>{shown.value=false;await flush();if(reset)ctx.projectCreationSession=null;ctx.projectCreationRequest={startNew:true,onCreated:async()=>{autoCalls++}};shown.value=true;key.value++;await flush()}
+try{
+ await flush()
+ assert(document.querySelector('[data-project-create-source]')?.getAttribute('aria-pressed')==='true','New source selected')
+ assert(document.querySelector('[data-project-create] input[type=checkbox]').checked,'Git starts enabled')
+ assert(button('Create project').disabled,'Empty form cannot submit')
+ await input('project-create-name','Hello World')
+ assert(document.getElementById('project-create-folder').value==='hello-world','Folder derives from name')
+ await input('project-create-folder','custom-folder')
+ await input('project-create-name','Changed Name')
+ assert(document.getElementById('project-create-folder').value==='custom-folder','Manual folder preserved')
+ button('Clone repositoryBring an existing project')?.click()
+ if(!document.getElementById('project-repository'))document.querySelectorAll('[data-project-create-source]')[1].click()
+ await flush();await input('project-repository','https://github.com/example/repository.git')
+ assert(document.getElementById('project-create-name').value==='Changed Name','Manual name preserved')
+ await remount(true)
+ document.querySelectorAll('[data-project-create-source]')[1].click();await flush()
+ await input('project-repository','https://github.com/example/repository.git')
+ assert(document.getElementById('project-create-name').value==='repository','Repository derives name')
+ assert(document.getElementById('project-create-folder').value==='repository','Repository derives folder')
+ document.querySelector('details').open=true;await flush();await input('project-create-branch','feature')
+ mode='hold';button('Clone & create project').click();button('Clone & create project')?.click();await flush()
+ assert(posted.length===1,'Double submit starts only one operation')
+ assert(posted[0].source.branch==='feature','Advanced branch included')
+ assert(document.querySelector('[role=progressbar]'),'Progress visible')
+ assert(button('Cancel creation'),'Cancellation offered')
+ assert(document.querySelector('[data-project-create]').textContent.includes('Creation will continue'),'Close explains continuation')
+ await remount(false)
+ assert(document.querySelector('[role=progressbar]')&&ctx.projectCreationSession.operation.id==='op-1','Reopening restores the active creation')
+ ctx.chat.drafts.state.key='local:other'
+ const project={id:'cloned',...posted[0].project};ctx.state.projects=[...ctx.state.projects,project]
+ waiting({response:{...operation,state:'succeeded',message:'Your project is ready',revision:2,cancellable:false,result:{project,projects:ctx.state.projects}}});await flush()
+ assert(autoCalls===0&&shown.value,'Completion does not move a different chat')
+ button('Open project').click();await flush()
+ assert(opened.includes('cloned')&&!shown.value,'Explicit Open starts a project draft')
+ await remount(true);mode='failure'
+ await input('project-create-name','Retry project');button('Create project').click();await flush()
+ assert(document.querySelector('[role=alert]').textContent.includes('Authentication required'),'Actionable error rendered')
+ button('Edit details').click();await flush()
+ assert(document.getElementById('project-create-name').value==='Retry project','Edit retains details')
+ mode='hold';button('Create project').click();await flush();button('Cancel creation').click();await flush()
+ assert(document.querySelector('[data-project-create]').textContent.includes('Creation cancelled'),'Cancellation reaches terminal state')
+ assert(button('Retry'),'Cancelled job can retry')
+ button('Retry').click();await flush()
+ assert(autoCalls===1&&!shown.value,'Retry completes original project callback')
+ enabled=false;await remount(true)
+ assert(!document.querySelector('[data-project-create-sources]')&&!document.querySelector('[data-project-create]').textContent.includes('Initialize Git repository'),'Git unavailable hides Git choices')
+ enabled=true;await remount(true)
+ document.querySelectorAll('[data-project-create-source]')[1].click();await flush()
+ await input('project-repository','https://github.com/ServiceStack/llms.git')
+ // Virtual time does not paint intermediate CSS transition frames consistently.
+ for(const el of document.querySelectorAll('[data-project-create-source]'))el.style.transition='none'
+ await new Promise(resolve=>setTimeout(resolve,250))
+ assert(document.querySelectorAll('[data-project-create-source]')[1].getAttribute('aria-pressed')==='true','Clone source remains selected')
+ assert(document.querySelector('[data-project-create-input]').getBoundingClientRect().width>250,'Creation form has useful input width')
+ document.getElementById('result').textContent='PASS: Project sources, derived fields, Git availability, progress, cancellation, retry, duplicate submission and origin-safe completion'
+}catch(error){document.getElementById('result').textContent='FAIL: '+error.message+'\n'+error.stack}
+</script></body></html>

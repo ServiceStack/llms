@@ -1,0 +1,316 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/llms/ui/app.css"><style>body{margin:0}#app{height:100vh}#workspace-sidebar{position:absolute;right:0;top:0;width:340px}</style><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs","vue-router":"/llms/ui/lib/vue-router.min.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs"}}</script></head><body><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,reactive,ref,nextTick} from 'vue'
+import {createRouter,createMemoryHistory} from 'vue-router'
+import {AppContext} from '/llms/ui/ctx.mjs'
+import FilesIcon from '/llms/ui/modules/WorkspaceFilesIcon.mjs'
+import gitExtension from '/llms/extensions/git/ui/index.mjs'
+import skillsExtension from '/llms/extensions/skills/ui/index.mjs'
+import {installWorkspaceNavigation} from '/llms/ui/modules/explorerState.mjs'
+import WorkspaceSidebar from '/llms/ui/modules/WorkspaceSidebar.mjs'
+import WorkspaceFileView from '/llms/ui/modules/WorkspaceFileView.mjs'
+const styles = new Proxy({}, {get:(_,name)=>String(name)})
+const components={}, calls=[]
+const currentCommit='a'.repeat(40), olderCommit='b'.repeat(40)
+let commitFailure=true, workingName='a.txt'
+const fixtureSources={
+ '/work/long.txt':'Long source line '.repeat(200),
+ '/work/source.js':'const title = "<script>alert(1)<\/script>"; // comment\n',
+ '/work/source.py':'def greet(name):\n    return "Hello " + name\n',
+ '/work/data.json':'{"name": "demo", "count": 42}',
+}
+
+const svgSource='<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><script>window.__workspaceSvgExecuted=true<\/script><rect width="120" height="60" fill="#3b82f6"/><text x="8" y="35" fill="white">Héllo</text></svg>'
+const fixtureImages={
+ '/work/image.png':{mimeType:'image/png',image:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAAKCAIAAAA2KZn2AAAAF0lEQVR4nGO0bvrGQDpgIkPPqLYhqw0AukABxyDehVUAAAAASUVORK5CYII='},
+ '/work/image.webp':{mimeType:'image/webp',image:'data:image/webp;base64,UklGRkYAAABXRUJQVlA4IDoAAAAwAwCdASoSAAoAPm0qkkWkIqGYBABABsSgCdLoB+AACEUAAP7Lt//UGfIM+QZ+ql/8gvVvm2b7knAA'},
+ '/work/image.jpg':{mimeType:'image/jpeg',image:'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAKABIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCGiiivvj5cKKKKAP/Z'},
+ '/work/image.svg':{mimeType:'image/svg+xml',content:svgSource,image:'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svgSource)))},
+ '/work/broken.png':{mimeType:'image/png',image:'data:image/png;base64,AA=='},
+}
+const ctx={right:reactive({}), setRightIcons:AppContext.prototype.setRightIcons, _validateIcons:AppContext.prototype._validateIcons, visibleComponents:AppContext.prototype.visibleComponents, state:reactive({}),routes:[],prefs:{},chatRequestFilters:[],scope:()=>({getJson:async url=>{
+ calls.push(url); return {response:{content:'Content '+url}}
+}}),components:items=>Object.assign(components,items),setLeftIcons(){},setTopIcons(){},setState:s=>Object.assign(ctx.state,s),
+chat:{drafts:{state:reactive({key:'local:test'}),get:()=>({projectId:null})}},threads:{currentThread:ref(null)},getJson:async url=>{
+ calls.push(url); const q=new URL('http://test'+url).searchParams,path=q.get('path')||'/work'
+ if(url.startsWith('/ext/git/diff')) {
+  const file=q.get('file'),deleted=file.includes('deleted'),binary=file.endsWith('.bin'),commit=q.get('commit')
+  if(commit) return {response:{roots:['/work','/scratch'],path,repository:'/work',commit,parent:commit===currentCommit?olderCommit:null,file:{path:file,name:file.split('/').pop(),relativePath:file.slice(6)},patch:'--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-Parent version\n+Commit version '+commit.slice(0,7)+'\n'}}
+  return {response:{roots:['/work','/scratch'],path,repository:'/work',file:{path:file,name:file.split('/').pop(),relativePath:file.slice(6)},patch:binary?'':deleted?'--- a/gone/deleted.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-Removed file\n':'--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,3 @@\n Keep\n-Old line\n+New line\n+<script>unsafe<\/script>\n',message:binary?'Binary file differences cannot be displayed.':undefined}}
+ }
+ if(url.startsWith('/ext/git/commit')) {
+  if(commitFailure) {commitFailure=false; return {error:{message:'Temporary commit error'}}}
+  return {response:{changes:[{name:workingName,relativePath:workingName,path:'/work/'+workingName,status:'M'},{name:'deleted.txt',relativePath:'gone/deleted.txt',path:'/work/gone/deleted.txt',status:'D'}]}}
+ }
+ if(url.startsWith('/ext/git/')) return {response:{roots:['/work','/scratch'],path,repository:path==='/scratch'?null:'/work',branch:'main',changes:[{name:workingName,relativePath:workingName,path:'/work/'+workingName,status:'M'},{name:'deleted.txt',relativePath:'gone/deleted.txt',path:'/work/gone/deleted.txt',status:'D',deleted:true},{name:'binary.bin',relativePath:'binary.bin',path:'/work/binary.bin',status:'?'}],commits:[{id:currentCommit,hash:'aaaaaaa',author:'Test',email:'test@example.com',date:'2026-01-01',subject:'Initial commit',body:'More commit details',refs:'HEAD -> main'},{id:olderCommit,hash:'bbbbbbb',author:'Test',date:'2025-12-31',subject:'Older commit'}]}}
+ return {response:{roots:['/work','/scratch'],path,parent:path==='/work'?null:'/work',entries:path==='/work'?[{name:'nested',path:'/work/nested',directory:true},{name:'other',path:'/work/other',directory:true},{name:'a.txt',path:'/work/a.txt',directory:false}]:[{name:'a.txt',path:path+'/a.txt',directory:false}],file:q.get('file')?{path:q.get('file'),name:q.get('file').split('/').pop(),...(fixtureImages[q.get('file')] || {content:fixtureSources[q.get('file')] || 'Workspace content'})}:undefined}}
+}}
+ctx.setRightIcons({files:{component:FilesIcon,name:'Files',title:'File explorer'}})
+gitExtension.install(ctx)
+skillsExtension.install(ctx)
+ctx.state.skills={demo:{name:'demo',group:'Tests',description:'Example',files:['SKILL.md','scripts/deep/test.py'],writable:true}}
+const router=createRouter({history:createMemoryHistory(),routes:[...ctx.routes,{path:'/',component:{template:'<div>Chat</div>'}},{path:'/c/:id',component:{template:'<div>Thread</div>'}},{path:'/closed',meta:{workspaceSidebar:false},component:{template:'<div>Closed</div>'}}]})
+installWorkspaceNavigation(router)
+const app=createApp({components:{WorkspaceSidebar,WorkspaceFileView},template:'<div id="header" class="min-h-9 py-1 flex items-center"><button class="flex items-center justify-center size-7 p-1 border border-transparent rounded shrink-0 [&_svg]:size-4.5" aria-label="Top toolbar fixture"><svg viewBox="0 0 24 24"><path d="M2 12h20" stroke="currentColor"/></svg></button></div><RouterView/><WorkspaceSidebar v-if="$route.query.workspace === &quot;1&quot;"/><component v-if="$route.query.workspaceFile" :is="$ctx.right[$route.query.workspacePreview]?.preview || \'WorkspaceFileView\'"/>'})
+app.use(router);app.provide('ctx',ctx);Object.assign(app.config.globalProperties,{$ctx:ctx,$styles:styles})
+for(const [name,c] of Object.entries(components))app.component(name,c)
+app.config.errorHandler=e=>{throw e}
+function check(condition,msg){if(!condition)throw Error(msg)}
+async function flush(){await nextTick();await new Promise(r=>setTimeout(r,30));await nextTick()}
+function button(text,scope=document){return [...scope.querySelectorAll('button')].find(b=>b.textContent.trim()===text)}
+if(new URLSearchParams(location.search).has('preview')) {
+ commitFailure=false
+ await router.push('/?workspace=1&workspacePath=/work&workspaceView=git');await router.isReady();app.mount('#app')
+} else try{
+ await router.push('/skills?skill=demo&file=scripts/deep/test.py');await router.isReady();app.mount('#app');await flush()
+ check(document.body.textContent.includes('Content /file/demo/scripts/deep/test.py'),'Skills URL loads file')
+ button('deep',document.querySelector('[aria-label="Skill file breadcrumbs"]')).click();await flush()
+ check(router.currentRoute.value.query.dir==='scripts/deep'&&!router.currentRoute.value.query.file,'Skill breadcrumb URL directory')
+ check(document.querySelector('[aria-label="Skill directory breadcrumbs"]'),'Directory title bar')
+ check([...document.querySelectorAll('.threadItemActive')].some(e=>e.textContent.includes('deep/')),'Directory highlighted')
+ router.back();await flush();check(router.currentRoute.value.query.file==='scripts/deep/test.py','Back restores skill file')
+ router.forward();await flush();check(router.currentRoute.value.query.dir==='scripts/deep','Forward restores directory')
+ await router.push('/skills?skill=demo&file=SKILL.md');await flush()
+ button('Edit').click();await flush();const editor=document.querySelector('textarea');editor.value='Unsaved';editor.dispatchEvent(new Event('input'));await flush()
+ window.confirm=()=>false
+ await router.push('/skills?skill=demo&dir=scripts');await flush();check(router.currentRoute.value.query.file==='SKILL.md','Unsaved navigation rejected');check(editor.value==='Unsaved','Unsaved content preserved')
+ window.confirm=()=>true
+ await router.push('/skills?skill=demo&dir=scripts');await flush();check(router.currentRoute.value.query.dir==='scripts','Confirmed navigation accepted')
+ await router.push('/?workspace=1&workspacePath=/work/nested&workspaceFile=/work/nested/a.txt');await flush()
+ check(document.querySelector('[aria-label="Workspace file"]').textContent.includes('Workspace content'),'Workspace deep link loads content')
+ check(document.querySelector('#workspace-sidebar [data-workspace-tree-label][title="/work/nested/a.txt"]'),'Deep-linked ancestor folders render expanded on first load')
+ button('work',document.querySelector('[aria-label="File breadcrumbs"]')).click();await flush()
+ check(router.currentRoute.value.query.workspacePath==='/work'&&!router.currentRoute.value.query.workspaceFile,'Workspace breadcrumb selects directory')
+ document.querySelector('#workspace-sidebar [data-workspace-tree-label][title="/work/a.txt"]').click();await flush()
+ check(router.currentRoute.value.query.workspaceFile==='/work/a.txt','Workspace file selection URL')
+ router.back();await flush();check(!router.currentRoute.value.query.workspaceFile,'Workspace Back restores directory')
+ router.forward();await flush();check(router.currentRoute.value.query.workspaceFile==='/work/a.txt','Workspace Forward restores file')
+ const sidebar=document.querySelector('#workspace-sidebar')
+ check(!calls.some(url=>url.includes('path=%2Fwork%2Fother')),'Collapsed sibling not fetched')
+ sidebar.querySelector('[aria-label="Expand other"]').click();await flush()
+ check(calls.filter(url=>url.includes('path=%2Fwork%2Fother')).length===1,'Expansion fetches folder on demand')
+ check(sidebar.querySelector('[data-workspace-tree-label][title="/work/a.txt"]')&&sidebar.querySelector('[data-workspace-tree-label][title="/work/other/a.txt"]'),'Expanded folder retains parent files')
+ sidebar.querySelector('[aria-label="Collapse other"]').click();await flush();sidebar.querySelector('[aria-label="Expand other"]').click();await flush()
+ check(calls.filter(url=>url.includes('path=%2Fwork%2Fother')).length===1,'Reopening uses cached listing')
+ sidebar.querySelector('[data-workspace-tree-label][title="/work/other"]').click();await flush();check(!sidebar.querySelector('[data-workspace-tree-label][title="/work/other/a.txt"]'),'Folder label collapses')
+ sidebar.querySelector('[data-workspace-tree-label][title="/work/other"]').click();await flush();check(sidebar.querySelector('[data-workspace-tree-label][title="/work/other/a.txt"]'),'Folder label expands again')
+ check(sidebar.querySelector('[data-workspace-tree-label][title="/work/other"]').querySelectorAll('svg').length===1,'Folders have one icon and no chevron')
+ const headerIcon=document.querySelector('[aria-label="Top toolbar fixture"]').getBoundingClientRect(),sideIcon=sidebar.querySelector('[aria-label="File explorer"]').getBoundingClientRect()
+ check(Math.abs(headerIcon.y-sideIcon.y)<1 && headerIcon.height===sideIcon.height,'Toolbar buttons align vertically')
+ check(sidebar.querySelector('[aria-label="Refresh workspace"] svg path[fill-rule="evenodd"]'),'Refresh uses supplied SVG')
+ sidebar.querySelector('[aria-label="Refresh workspace"]').click();await flush()
+ check(sidebar.querySelector('[data-workspace-tree-label][title="/work/other/a.txt"]'),'Refresh retains expanded folders')
+ for(const file of ['source.js','source.py','data.json']) {
+  await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/'+file}});await flush()
+  const source=document.querySelector('[aria-label="Workspace file"] [data-workspace-source]')
+  check(source&&source.querySelector('[class^="hljs-"]'),'File type '+file+' is highlighted')
+  check(source.textContent===fixtureSources['/work/'+file],'Highlighted preview preserves exact source')
+  check(!source.querySelector('pre,code,script,img')&&!source.classList.contains('hljs'),'Source uses its own layout and escapes markup')
+  const token=source.querySelector('.hljs-keyword,.hljs-string,.hljs-attr'),lightColor=getComputedStyle(token).color
+  check(getComputedStyle(source).backgroundColor==='rgba(0, 0, 0, 0)','Preview keeps transparent background')
+  check(getComputedStyle(token).fontWeight===getComputedStyle(source).fontWeight,'Token colors do not add bold styling')
+  document.documentElement.classList.add('dark')
+  check(getComputedStyle(token).color!==lightColor,'File highlighting adapts to dark mode')
+  document.documentElement.classList.remove('dark')
+ }
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/a.txt'}});await flush()
+ check(!document.querySelector('[data-workspace-source] [class^="hljs-"]'),'Plain text files are not guessed as code')
+ const clipboardDescriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard'),originalExec=document.execCommand
+ let copiedText=null
+ Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copiedText=text}}})
+ const fileCopy=document.querySelector('[aria-label="Copy file contents"]'),fileWrap=document.querySelector('[aria-label="Toggle line wrap"]')
+ check(fileCopy.getBoundingClientRect().left>=fileWrap.getBoundingClientRect().right,'Copy icon is to the right of line wrap')
+ check(fileCopy.querySelector('rect[width="14"][x="8"]'),'File copy uses message copy icon')
+ fileCopy.click();await flush();check(copiedText==='Workspace content'&&fileCopy.title==='Copied'&&fileCopy.querySelector('.text-green-500'),'File copy writes raw text and shows message-style confirmation')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/source.js'}});await flush()
+ check(document.querySelector('[aria-label="Copy file contents"]').title==='Copy file contents','Copy confirmation resets for another file')
+ document.querySelector('[aria-label="Copy file contents"]').click();await flush();check(copiedText===fixtureSources['/work/source.js'],'Copy preserves markup and newlines without highlight HTML')
+ navigator.clipboard.writeText=async()=>{throw Error('Clipboard permission denied')}
+ let fallbackText=null
+ document.execCommand=command=>{check(command==='copy','Fallback uses clipboard copy command');fallbackText=document.querySelector('textarea').value;return true}
+ document.querySelector('[aria-label="Copy file contents"]').focus();document.querySelector('[aria-label="Copy file contents"]').click();await flush()
+ check(fallbackText===fixtureSources['/work/source.js']&&!document.querySelector('textarea'),'Clipboard fallback copies text and removes temporary textarea')
+ check(document.activeElement===document.querySelector('[aria-label="Copy file contents"]'),'Clipboard fallback preserves button focus')
+ document.execCommand=originalExec
+ if(clipboardDescriptor)Object.defineProperty(navigator,'clipboard',clipboardDescriptor);else delete navigator.clipboard
+
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/long.txt'}});await flush()
+ const wrapButton=document.querySelector('[aria-label="Toggle line wrap"]'),wrappedSource=document.querySelector('[data-workspace-source]')
+ check(wrapButton.getAttribute('aria-pressed')==='true'&&getComputedStyle(wrappedSource).whiteSpace==='pre-wrap','File preview wraps by default')
+ check(wrapButton.getBoundingClientRect().left>=document.querySelector('[aria-label="File breadcrumbs"]').getBoundingClientRect().right,'Wrap icon sits to the right of breadcrumbs')
+ const wrappedHeight=wrappedSource.getBoundingClientRect().height
+ wrapButton.click();await flush()
+ check(wrapButton.getAttribute('aria-pressed')==='false'&&getComputedStyle(wrappedSource).whiteSpace==='pre','Toggle disables line wrapping')
+ check(wrappedSource.getBoundingClientRect().height<wrappedHeight&&wrappedSource.parentElement.scrollWidth>wrappedSource.parentElement.clientWidth,'Unwrapped long lines use horizontal scrolling')
+ check(wrappedSource.textContent===fixtureSources['/work/long.txt'],'Wrap toggle preserves exact file text')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/source.js'}});await flush()
+ check(document.querySelector('[aria-label="Toggle line wrap"]').getAttribute('aria-pressed')==='false','Wrap setting persists between files')
+ await router.push({query:{workspace:'1',workspacePath:'/work'}});await flush()
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/long.txt'}});await flush()
+ check(document.querySelector('[aria-label="Toggle line wrap"]').getAttribute('aria-pressed')==='false','Reopening preview restores saved wrap setting')
+ document.querySelector('[aria-label="Toggle line wrap"]').click();await flush()
+ check(getComputedStyle(document.querySelector('[data-workspace-source]')).whiteSpace==='pre-wrap','Toggle re-enables wrapping')
+ for(const file of ['image.png','image.webp','image.jpg']) {
+  await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/'+file}});await flush()
+  const image=document.querySelector('[aria-label="Image preview"] img')
+  check(image&&image.complete&&image.naturalWidth===18&&image.naturalHeight===10,'Raster preview decodes '+file)
+  check(!document.querySelector('[data-workspace-source],[aria-label="Toggle line wrap"],[aria-label="Toggle SVG render view"],[aria-label="Copy file contents"]'),'Raster previews hide text controls')
+ }
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/image.svg'}});await flush()
+ const svgToggle=document.querySelector('[aria-label="Toggle SVG render view"]')
+ check(svgToggle&&svgToggle.getAttribute('aria-pressed')==='true','SVG opens rendered by default')
+ check(document.querySelector('[aria-label="Image preview"] img').naturalWidth===120,'SVG renders as image')
+ check(!window.__workspaceSvgExecuted&&!document.querySelector('[aria-label="Image preview"] svg'),'SVG script never runs or mounts inline')
+ svgToggle.click();await flush()
+ check(svgToggle.getAttribute('aria-pressed')==='false'&&!document.querySelector('[aria-label="Image preview"]'),'Toggle shows SVG source')
+ check(document.querySelector('[data-workspace-source]').textContent===svgSource&&document.querySelector('[data-workspace-source] .hljs-tag'),'SVG source remains exact and highlighted')
+ check(!document.querySelector('[data-workspace-source] script')&&!window.__workspaceSvgExecuted,'SVG source escapes active markup')
+ check(document.querySelector('[aria-label="Toggle line wrap"]'),'SVG text retains wrap control')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/image.png'}});await flush()
+ check(document.querySelector('[aria-label="Image preview"] img').naturalWidth===18,'Raster remains rendered after SVG source mode')
+ router.back();await flush()
+ check(document.querySelector('[data-workspace-source]').textContent===svgSource,'Back restores SVG source preference')
+ document.querySelector('[aria-label="Toggle SVG render view"]').click();await flush()
+ check(document.querySelector('[aria-label="Image preview"] img').naturalWidth===120,'SVG toggle returns to rendered view')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/broken.png'}});await flush()
+ check(document.querySelector('[aria-label="Image preview"] [role="alert"]').textContent.includes('Unable to display'),'Broken image has readable error')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/image.png'}});await flush()
+ check(document.querySelector('[aria-label="Image preview"] img').naturalWidth===18,'New file clears previous image error')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceFile:'/work/a.txt'}});await flush()
+ check(document.querySelector('[data-workspace-source]')&&!document.querySelector('[aria-label="Image preview"],[aria-label="Toggle SVG render view"]'),'Text files return to source preview')
+
+
+
+ check(!sidebar.querySelector('select'),'No root select dropdown')
+ sidebar.querySelector('[aria-label="Choose workspace directory"]').click();await flush();check(sidebar.querySelector('[role="menu"]'),'Root breadcrumb opens picker');check(sidebar.querySelector('[aria-label="Workspace directory breadcrumbs"] [aria-label="Choose workspace directory"]'),'Directory picker lives in root breadcrumb');sidebar.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));check(document.activeElement.textContent==='/scratch','Root picker supports arrow navigation')
+ button('/scratch',sidebar.querySelector('[role="menu"]')).click();await flush();check(router.currentRoute.value.query.workspacePath==='/scratch','Root picker selection updates URL');check(!sidebar.querySelector('[role="menu"]'),'Picker closes on selection')
+ sidebar.querySelector('[aria-label="Choose workspace directory"]').click();await flush();button('/work',sidebar.querySelector('[role="menu"]')).click();await flush()
+ sidebar.querySelector('[aria-label="Choose workspace directory"]').click();await flush();sidebar.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();check(!sidebar.querySelector('[role="menu"]'),'Escape closes root picker')
+ sidebar.querySelector('[aria-label="Git history"]').click();await flush();check(router.currentRoute.value.query.workspaceView==='git','Git icon updates URL');check(sidebar.textContent.includes('Initial commit'),'Git icon loads history')
+ const statusCalls=()=>calls.filter(url=>url.startsWith('/ext/git/workspace')).length
+ ctx.threads.currentThread.value={id:'refresh-thread',projectId:null,completedAt:null};await flush()
+ let statusCount=statusCalls();workingName='run-generated.txt'
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,completedAt:'2026-10-03T12:00:00'};await flush()
+ check(statusCalls()===statusCount+1&&sidebar.querySelector('[title="run-generated.txt · Modified"]'),'Completed thread refreshes visible Git changes once')
+ statusCount=statusCalls();ctx.threads.currentThread.value={...ctx.threads.currentThread.value,title:'Finished',stats:{duration:5}};await flush()
+ check(statusCalls()===statusCount,'Final thread fetch does not duplicate completion refresh')
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,completedAt:null,run:{status:'running'}};await flush()
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,run:{status:'waiting_approval'}};await flush()
+ check(statusCalls()===statusCount,'Streaming and approval updates do not refresh Git')
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,error:'Run stopped'};await flush()
+ check(statusCalls()===statusCount+1,'Failed or stopped thread also refreshes final file changes')
+ statusCount=statusCalls();ctx.threads.currentThread.value={id:'already-finished',projectId:null,completedAt:'2026-10-03T11:00:00'};await flush()
+ check(statusCalls()===statusCount,'Selecting an already finished thread does not count as completion')
+ ctx.threads.currentThread.value={id:'other-project-run',projectId:'different-project',completedAt:null};await flush()
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,completedAt:'2026-10-03T12:00:00'};await flush()
+ check(statusCalls()===statusCount,'Other project completion does not refresh this Git workspace')
+ sidebar.querySelector('[aria-label="Git history"]').click();await flush()
+ check(statusCalls()===statusCount+1,'Reselecting the current Git view refreshes status')
+ sidebar.querySelector('[aria-label="File explorer"]').click();await flush()
+ ctx.threads.currentThread.value={id:'hidden-git-run',projectId:null,completedAt:null};await flush();statusCount=statusCalls()
+ workingName='hidden-run-file.txt';ctx.threads.currentThread.value={...ctx.threads.currentThread.value,completedAt:'2026-10-03T12:05:00'};await flush()
+ check(statusCalls()===statusCount,'Thread completion in Files does not request Git status')
+ sidebar.querySelector('[aria-label="Git history"]').click();await flush()
+ check(statusCalls()===statusCount+1&&sidebar.querySelector('[title="hidden-run-file.txt · Modified"]'),'Selecting Git reads changes made while it was hidden')
+ workingName='a.txt'
+ sidebar.querySelector('[aria-label="File explorer"]').click();await flush();check(sidebar.querySelector('[data-workspace-tree-label][title="/work/other/a.txt"]'),'View switch retains expanded tree')
+ const gitCalls=calls.filter(url=>url.startsWith('/ext/git/')).length
+ sidebar.querySelector('[aria-label="Git history"]').click();await flush();sidebar.querySelector('[aria-label="Refresh workspace"]').click();await flush()
+ check(calls.filter(url=>url.startsWith('/ext/git/')).length===gitCalls+2,'Git refresh belongs to extension')
+ check(sidebar.querySelector('[title="a.txt · Modified"]'),'Working change rendered');sidebar.querySelector('[title="a.txt · Modified"]').click();await flush()
+ check(router.currentRoute.value.query.workspacePreview==='git'&&router.currentRoute.value.query.workspaceView==='git','Change opens extension diff and keeps Git sidebar')
+ const diff=document.querySelector('[aria-label="Git diff"]')
+ check(diff&&diff.querySelectorAll('[data-diff-type=added]').length===2&&diff.querySelectorAll('[data-diff-type=removed]').length===1,'Diff shows added and removed lines')
+ check(diff.textContent.includes('Index → Working tree')&&diff.textContent.includes('+2')&&diff.textContent.includes('−1'),'Diff comparison and counts are visible')
+ check(diff.textContent.includes('<script>unsafe<\/script>')&&!diff.querySelector('script'),'Diff source is escaped');check(!diff.querySelector('[data-workspace-source],[class^="hljs-"]'),'Git diffs retain plain source rendering')
+ check(getComputedStyle(diff.querySelector('[data-diff-type=added]')).backgroundColor!==getComputedStyle(diff.querySelector('[data-diff-type=removed]')).backgroundColor,'Diff rows have distinct colors')
+ const diffCalls=calls.filter(url=>url.startsWith('/ext/git/diff')).length
+ diff.querySelector('[aria-label="Refresh diff"]').click();await flush();check(calls.filter(url=>url.startsWith('/ext/git/diff')).length===diffCalls+1,'Diff refresh reloads comparison')
+ diff.querySelector('[aria-label="Close diff"]').click();await flush();check(!document.querySelector('[aria-label="Git diff"]')&&!router.currentRoute.value.query.workspacePreview,'Close diff clears preview')
+ router.back();await flush();check(document.querySelector('[aria-label="Git diff"]'),'Back restores diff')
+ sidebar.querySelector('[title="gone/deleted.txt · Deleted"]').click();await flush();check(document.querySelector('[aria-label="Git diff"]').textContent.includes('Removed file'),'Deleted files open removal diff');check(router.currentRoute.value.query.workspacePath==='/work','Deleted parent is not used for directory browsing')
+ sidebar.querySelector('[title="binary.bin · Untracked"]').click();await flush();check(document.querySelector('[aria-label="Git diff"]').textContent.includes('Binary file'),'Binary comparison explains unavailable preview')
+ sidebar.querySelector('[aria-label="File explorer"]').click();await flush();check(!router.currentRoute.value.query.workspacePreview,'Changing views clears diff preview')
+ sidebar.querySelector('[data-workspace-tree-label][title="/work/a.txt"]').click();await flush();check(document.querySelector('[aria-label="Workspace file"]')&&!document.querySelector('[aria-label="Git diff"]'),'Files continue to open regular previews')
+ sidebar.querySelector('[aria-label="Git history"]').click();await flush()
+ const commitButton=sidebar.querySelector('[aria-label="Initial commit by Test"]');commitButton.focus();await flush();check(document.querySelector('[role="tooltip"]'),'Commit keyboard focus shows details');commitButton.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();check(!document.querySelector('[role="tooltip"]'),'Escape dismisses commit details')
+ check(commitButton.getBoundingClientRect().height===28,'Commit row fits on one line')
+ check(!commitButton.textContent.includes('Test')&&!commitButton.textContent.includes('aaaaaaa'),'Author and hash remain in popover')
+ check(commitButton.querySelector('[data-workspace-commit-ref]').textContent==='main','Branch badge shares commit row')
+ check(!calls.some(url=>url.startsWith('/ext/git/commit')),'Commit files load only on expansion')
+ commitButton.click();await flush();check(commitButton.getAttribute('aria-expanded')==='true','Commit row expands')
+ check(sidebar.textContent.includes('Temporary commit error'),'Commit load error stays beside commit')
+ button('Retry',sidebar.querySelector('[data-workspace-commit-files]')).click();await flush()
+ check(sidebar.querySelectorAll('[data-workspace-commit-file]').length===2,'Expanded commit lists changed files')
+ const commitCalls=calls.filter(url=>url.startsWith('/ext/git/commit')).length
+ commitButton.click();await flush();check(!sidebar.querySelector('[data-workspace-commit-files]'),'Commit collapses')
+ commitButton.click();await flush();check(calls.filter(url=>url.startsWith('/ext/git/commit')).length===commitCalls,'Reopening uses cached changed files')
+ sidebar.querySelector('[data-workspace-commit-file]').click();await flush()
+ check(router.currentRoute.value.query.workspaceCommit===currentCommit,'Changed file URL contains its commit')
+ check(document.querySelector('[aria-label="Committed file diff"]').textContent.includes('Commit version aaaaaaa'),'Changed file opens committed diff')
+ check(document.querySelector('[aria-label="Git diff"]').textContent.includes('bbbbbbb → aaaaaaa'),'Diff labels parent and selected commit')
+ check(sidebar.querySelector('[data-workspace-commit-file][aria-pressed="true"]'),'Selected commit file is highlighted')
+ sidebar.querySelector('[aria-label="Older commit by Test"]').click();await flush()
+ sidebar.querySelectorAll('[data-workspace-commit-file]')[2].click();await flush()
+ check(document.querySelector('[aria-label="Committed file diff"]').textContent.includes('Commit version bbbbbbb'),'Same filename at another commit reloads diff')
+ check(document.querySelector('[aria-label="Git diff"]').textContent.includes('Empty tree → bbbbbbb'),'Root commit compares against empty tree')
+ router.back();await flush();check(document.querySelector('[aria-label="Committed file diff"]').textContent.includes('Commit version aaaaaaa'),'Back restores selected revision')
+ sidebar.querySelector('[aria-label="Refresh workspace"]').click();await flush()
+ check(sidebar.querySelectorAll('[data-workspace-commit-file]').length===4,'Refresh preserves expanded commits')
+ check(calls.filter(url=>url.startsWith('/ext/git/commit')).length===commitCalls+3,'Refresh reloads each expanded commit')
+ const expandedCommitCalls=calls.filter(url=>url.startsWith('/ext/git/commit')).length
+ ctx.threads.currentThread.value={id:'expanded-run',projectId:null,completedAt:null};await flush()
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,completedAt:'2026-10-03T12:06:00'};await flush()
+ check(sidebar.querySelectorAll('[data-workspace-commit-file]').length===4&&calls.filter(url=>url.startsWith('/ext/git/commit')).length===expandedCommitCalls+2,'Completion refresh preserves expanded history and reloads its files')
+ sidebar.querySelector('[title="a.txt · Modified"]').click();await flush()
+ check(!router.currentRoute.value.query.workspaceCommit&&document.querySelector('[aria-label="Unstaged file diff"]'),'Working change clears commit revision')
+ sidebar.querySelector('[data-workspace-commit-file]').click();await flush()
+ document.querySelector('[aria-label="Close diff"]').click();await flush();check(!router.currentRoute.value.query.workspaceCommit,'Closing diff clears commit revision')
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceView:'git',workspacePreview:'git',workspaceFile:'/work/a.txt',workspaceCommit:olderCommit}});await flush()
+ check(sidebar.querySelector('[aria-label="Older commit by Test"]').getAttribute('aria-expanded')==='true','Deep link restores expanded commit')
+
+ sidebar.querySelector('[aria-label="Choose workspace directory"]').click();await flush();button('/scratch',sidebar.querySelector('[role="menu"]')).click();await flush();check(router.currentRoute.value.query.workspaceView==='git','Root picker preserves extension view');check(sidebar.textContent.includes('No Git repository here'),'Non-repository has a useful empty state')
+ ctx.threads.currentThread.value={id:'project-chat',projectId:'project-one'};ctx.chat.drafts.state.key='project-chat'
+ await router.push('/c/project-chat');await flush()
+ check(router.currentRoute.value.query.workspaceView==='git'&&sidebar.querySelector('[aria-label="Git history"]').getAttribute('aria-pressed')==='true','Entering a project keeps the Git view')
+ check(router.currentRoute.value.query.workspaceProject==='project-one'&&!router.currentRoute.value.query.workspacePath,'Project switch clears the previous workspace directory')
+ ctx.threads.currentThread.value={id:'main-chat',projectId:null};ctx.chat.drafts.state.key='main-chat'
+ await router.push('/c/main-chat');await flush()
+ check(router.currentRoute.value.query.workspaceView==='git'&&sidebar.querySelector('[aria-label="Git history"]').getAttribute('aria-pressed')==='true','No-project thread keeps the Git view')
+ check(!router.currentRoute.value.query.workspaceProject&&!router.currentRoute.value.query.workspaceFile&&!router.currentRoute.value.query.workspaceCommit,'No-project thread clears project and preview selections')
+ ctx.threads.currentThread.value={id:'second-project',projectId:'project-two'};ctx.chat.drafts.state.key='second-project'
+ await router.push('/c/second-project');await flush()
+ check(router.currentRoute.value.query.workspaceView==='git'&&router.currentRoute.value.query.workspaceProject==='project-two','Switching to another project keeps Git')
+ await router.push({path:router.currentRoute.value.path,query:{}});await flush()
+ check(router.currentRoute.value.query.workspace==='1'&&document.querySelector('#workspace-sidebar'),'Reselecting the current thread keeps the sidebar open')
+ check(router.currentRoute.value.query.workspaceView==='git','Reselecting the current thread keeps Git selected')
+ sidebar.querySelector('[aria-label="File explorer"]').click();await flush()
+ ctx.threads.currentThread.value=null;ctx.chat.drafts.state.key='local:test'
+ await router.push('/');await flush()
+ check(router.currentRoute.value.query.workspaceView==='files'&&sidebar.querySelector('[aria-label="File explorer"]').getAttribute('aria-pressed')==='true','Files selection also survives returning to a no-project draft')
+ delete ctx.right.git
+ await router.push({query:{workspace:'1',workspacePath:'/work',workspaceView:'history'}});await flush()
+ check(!sidebar.querySelector('[aria-label="Git history"]'),'Disabled Git extension has no icon')
+ check(router.currentRoute.value.query.workspaceView==='files','Disabled Git deep link falls back to Files')
+ const disabledGitCalls=calls.filter(url=>url.startsWith('/ext/git/')).length
+ sidebar.querySelector('[aria-label="Refresh workspace"]').click();await flush();check(calls.filter(url=>url.startsWith('/ext/git/')).length===disabledGitCalls,'Files never calls a disabled Git extension')
+ ctx.setRightIcons({notes:{name:'Notes',title:'Workspace notes',component:{template:'<svg viewBox="0 0 24 24"/>'},panel:{props:['workspace'],template:'<p>Notes for {{workspace.path}}</p>'}}});await flush()
+ sidebar.querySelector('[aria-label="Workspace notes"]').click();await flush();check(sidebar.textContent.includes('Notes for /work'),'Third-party sidebar panel is rendered')
+ ctx.threads.currentThread.value={id:'notes-project',projectId:'project-one'};ctx.chat.drafts.state.key='notes-project'
+ await router.push('/c/notes-project');await flush()
+ check(router.currentRoute.value.query.workspaceView==='notes'&&sidebar.textContent.includes('Notes for /work'),'Third-party view survives a project switch')
+ ctx.threads.currentThread.value=null;ctx.chat.drafts.state.key='local:test'
+ await router.push('/');await flush()
+ check(router.currentRoute.value.query.workspaceView==='notes','Third-party view survives returning to no project')
+ sidebar.querySelector('[aria-label="File explorer"]').click();await flush()
+
+ await router.push('/c/one');await flush();check(router.currentRoute.value.query.workspace==='1','Thread navigation preserves open workspace');check(!router.currentRoute.value.query.workspaceFile&&!router.currentRoute.value.query.workspaceCommit,'Thread navigation shows destination chat');check(document.querySelector('#workspace-sidebar'),'Sidebar stays mounted')
+ await router.push('/c/two');await flush();check(router.currentRoute.value.query.workspace==='1','Second thread preserves workspace')
+ await router.push({query:{workspace:'0'}});await flush();await router.push('/c/three');await flush();check(!document.querySelector('#workspace-sidebar'),'Explicit close persists across threads')
+ const closedGitCalls=statusCalls()
+ ctx.threads.currentThread.value={id:'closed-panel-run',projectId:null,completedAt:null};await flush()
+ ctx.threads.currentThread.value={...ctx.threads.currentThread.value,completedAt:'2026-10-03T12:10:00'};await flush()
+ check(statusCalls()===closedGitCalls,'Closed workspace does not request Git on completion')
+ await router.push({query:{workspace:'1'}});await flush();await router.push('/closed');await flush();check(!document.querySelector('#workspace-sidebar'),'Page metadata closes workspace')
+ document.querySelector('#result').textContent='PASS: Workspace navigation, file highlighting/wrap, image and SVG previews, compact commits, revision diffs, thread-completion Git refresh, hidden-panel guards, view selection, Back/Forward'
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.stack}
+</script></body></html>

@@ -298,6 +298,7 @@ def install(ctx):
     if hasattr(ctx, "app"):
         ctx.app.agent_db = g_db
         ctx.app.notify_thread_update = notify_thread_update
+        ctx.app.notify_sidebar = sidebar_signal.notify
     # Live requests are only an in-process authorization aid. Restarted remote runs
     # require the host's reauthorizeBackgroundRequest hook; persisted usernames alone
     # are never treated as an authorization grant.
@@ -501,7 +502,7 @@ def install(ctx):
         revision = sidebar_signal.revisions.get(key)
         if revision is None:
             revision = hashlib.sha256((g_db.sidebar_revision(user) + json.dumps(
-                [(p.get("id"), p.get("name"), p.get("showInSidebar", True)) for p in project_headers(user)],
+                [(p.get("id"), p.get("name"), p.get("showInSidebar", True), p.get('archived', False)) for p in project_headers(user)],
                 sort_keys=True)).encode()).hexdigest()[:24]
             sidebar_signal.revisions[key] = revision
         return revision
@@ -528,7 +529,8 @@ def install(ctx):
         return web.json_response({
             "revision": sidebar_revision(user),
             "projects": [{"id": p["id"], "name": p["name"], **g_db.sidebar_page(user, p["id"], 5)}
-                         for p in headers if p.get("id") in active_projects and p.get("showInSidebar", True)],
+                         for p in headers if p.get("id") in active_projects and p.get("showInSidebar", True)
+                         and not p.get('archived')],
             "unassigned": g_db.sidebar_page(user, None, 30),
         })
 
@@ -1183,7 +1185,15 @@ def install(ctx):
 
         return web.json_response(thread_window_dto(g_db.get_thread(id, user=user)))
 
-    ctx.add_post("threads/{id}/chat", serialized_thread_mutation(queue_chat_handler))
+    async def queue_chat_with_workspace_guard(request):
+        from llms.workspace_operations import workspace_submission_lock
+        if not ctx.check_auth(request)[0]:
+            return web.json_response(ctx.error_auth_required, status=401)
+        # Serialize accepting a new run with repository writes, before touching messages.
+        with workspace_submission_lock(ctx.get_user_path(), shared=True):
+            return await queue_chat_handler(request)
+
+    ctx.add_post("threads/{id}/chat", serialized_thread_mutation(queue_chat_with_workspace_guard))
 
     async def get_thread_updates(request):
         id = request.match_info["id"]

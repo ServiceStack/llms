@@ -1,0 +1,182 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/llms/ui/app.css"><style>body{margin:0;background:var(--background)}#result{position:fixed;bottom:0;left:0;font:11px monospace;z-index:100;max-width:100%;background:white;color:#111;padding:4px}#sidebar{width:260px;height:800px}</style><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs","/llms/extensions/ui/components/CheckBox.mjs":"/llms/ui/components/CheckBox.mjs"}}</script></head><body><div id="sidebar"></div><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,reactive,ref} from 'vue'
+import projectsExtension from '/llms/extensions/projects/ui/index.mjs'
+import ProjectThreads from '/llms/extensions/app/ui/ProjectThreads.mjs'
+const assert=(ok,message)=>{if(!ok)throw new Error(message)}
+const flush=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setTimeout(resolve,0))}
+const clone=value=>JSON.parse(JSON.stringify(value))
+let copiedUrl=''
+Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{copiedUrl=value}}})
+let projects=[{id:'one',name:'Website',folder:'website',description:'Public site',gitSource:{kind:'clone',url:'https://github.com/ServiceStack/llms.git'}},
+ {id:'two',name:'Mobile app',folder:'mobile',description:'iOS and Android',gitSource:{kind:'clone',url:'git@gitlab.com:example/mobile.git'}},
+ {id:'three',name:'Design system',folder:'design',showInSidebar:false},
+ {id:'old',name:'Previous website',folder:'previous-site',description:'Retired portfolio',archived:true,showInSidebar:false}]
+let failOrder=false,failArchive=false,posted=[],revision=0
+const components={},ctx={state:reactive({projects:clone(projects),prefs:{project:'Website'},config:{defaults:{events:{transport:'long-poll'}}}}),
+ chat:{drafts:{state:reactive({key:'local:website'}),list:()=>[{key:'local:website',projectId:'one',text:'Website draft',attachments:[],updatedAt:1}]}},
+ threads:{currentThread:ref(null),clearCurrentThread(){}},ai:{base:'',auth:{}},
+ utils:{toKebabCase:s=>s.toLowerCase().replaceAll(' ','-')},components:c=>Object.assign(components,c),modals(){},toast(){},to(){},openModal(){},
+ setState:s=>Object.assign(ctx.state,s),setGlobals:s=>Object.assign(ctx,s),setError:e=>{throw new Error(e)},scope:name=>({ctx,
+ async getJson(url){
+  if(name==='projects'&&url==='/projects.json')return {response:clone(projects)}
+  if(url==='/thread-sidebar')return {response:{revision:String(revision),projects:projects.filter(p=>!p.archived&&p.showInSidebar!==false).map(p=>({id:p.id,name:p.name,items:[],hasMore:false})),unassigned:{items:[],hasMore:false}}}
+  if(url.startsWith('/thread-sidebar/updates'))return await new Promise(()=>{})
+  throw new Error('Unexpected GET '+url)
+ },
+ async postJson(url,data){
+  posted.push({url,data})
+  if(url==='/order'){
+   if(failOrder)return {error:{message:'Project list changed. Try again.'}}
+   projects=[...data.ids.map(id=>projects.find(p=>p.id===id)),...projects.filter(p=>p.archived)];revision++
+   return {response:clone(projects)}
+  }
+  throw new Error('Unexpected POST '+url)
+ },
+ async patchJson(url,data){
+  posted.push({url,data})
+  if(url.startsWith('/archive/')){
+   if(failArchive)return {error:{message:'Unable to archive project. Try again.'}}
+   const id=url.split('/').at(-1),project=projects.find(p=>p.id===id)
+   if(data.archived){project.archivedSidebarVisibility=project.showInSidebar!==false;project.archived=true;project.showInSidebar=false}
+   else {project.archived=false;project.showInSidebar=project.archivedSidebarVisibility!==false;delete project.archivedSidebarVisibility}
+   projects=projects.filter(p=>p.id!==id)
+   if(data.archived)projects.push(project)
+   else {const end=projects.findIndex(p=>p.archived);projects.splice(end<0?projects.length:end,0,project)}
+   revision++;return {response:clone(projects)}
+  }
+  throw new Error('Unexpected PATCH '+url)
+ }})}
+projectsExtension.install(ctx)
+const dark=new URLSearchParams(location.search).has('dark')
+if(dark)document.documentElement.classList.add('dark')
+const theme=await (await fetch('/llms/extensions/app/themes/'+(dark?'dark':'light')+'.json')).json()
+const shown=ref(true),key=ref(0)
+const app=createApp({components:{ProjectsManagerModal:components.ProjectsManagerModal},setup:()=>({shown,key}),template:'<ProjectsManagerModal v-if="shown" :key="key" @done="shown=false"/>'})
+app.provide('ctx',ctx);Object.assign(app.config.globalProperties,{$styles:theme.styles,$state:ctx.state});app.mount('#app')
+const sidebar=createApp(ProjectThreads)
+sidebar.component('Brand',{template:'<div><slot/></div>'})
+sidebar.provide('ctx',ctx);Object.assign(sidebar.config.globalProperties,{$ctx:ctx,$styles:theme.styles,$fmt:{relativeTime:()=>'',humanifyNumber:String,cost:String}});sidebar.mount('#sidebar')
+const button=text=>[...document.querySelectorAll('#app button')].find(b=>b.textContent.trim()===text)
+const row=id=>document.querySelector(`[data-project-id="${id}"]`)
+const rows=()=>[...document.querySelectorAll('[data-project-id]')].map(el=>el.dataset.projectId).join(',')
+const archiveRows=()=>[...document.querySelectorAll('[data-archived-id]')].map(el=>el.dataset.archivedId).join(',')
+const remount=async()=>{shown.value=false;await flush();shown.value=true;key.value++;await flush()}
+const search=async(text)=>{const el=document.querySelector('[aria-label="Search archived projects"]');el.value=text;el.dispatchEvent(new Event('input',{bubbles:true}));await flush()}
+try{
+ await flush()
+ assert(rows()==='one,two,three','Active list excludes archives')
+ assert(!document.querySelector('[data-project-drag-handle]'),'Handles hidden until reorder')
+ row('three').querySelector('button').click();await flush()
+ assert(!document.getElementById('project-repository-url'),'Plain project has no source URL field')
+ row('two').querySelector('button').click();await flush()
+ assert(document.getElementById('project-repository-url').value==='git@gitlab.com:example/mobile.git','SSH clone URL displayed unchanged')
+ assert(document.querySelector('[aria-label="Open repository"]').href==='https://gitlab.com/example/mobile','SSH clone opens the repository website')
+ row('one').querySelector('button').click();await flush()
+ const repositoryInput=document.getElementById('project-repository-url')
+ assert(repositoryInput.value==='https://github.com/ServiceStack/llms.git'&&repositoryInput.readOnly,'Saved clone URL is visible and read-only')
+ assert(document.querySelector('[aria-label="Open repository"]').href==='https://github.com/ServiceStack/llms','HTTPS clone opens the repository page')
+ document.querySelector('[aria-label="Copy repository URL"]').click();await flush()
+ assert(copiedUrl===repositoryInput.value&&document.querySelector('[aria-label="Copy repository URL"]').title==='Copied','Copy action retains the exact clone URL and confirms success')
+ assert(button('Select Project'),'Repository display does not mark project as edited')
+ button('Reorder').click();await flush()
+ const handle=row('one').querySelector('[data-project-drag-handle]');handle.focus()
+ handle.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));await flush()
+ assert(rows()==='two,one,three','Arrow key saves new order')
+ assert(document.querySelector('[aria-current="true"]').closest('[data-project-id]').dataset.projectId==='one','Selection follows stable identity')
+ assert(document.activeElement.dataset.id==='one','Keyboard focus follows moved handle')
+ assert(document.querySelector('#app input').value==='Website','Selected form stays on same project')
+ // Synthetic pointers exercise the production hit testing and drop behavior; capture needs a trusted pointer.
+ const dragRow=row('three'),dragLabel=dragRow.querySelector('button')
+ dragRow.setPointerCapture=()=>{};dragRow.hasPointerCapture=()=>false
+ const source=dragLabel.getBoundingClientRect(),target=row('two').getBoundingClientRect()
+ const pointer=(type,x,y)=>dragLabel.dispatchEvent(new PointerEvent(type,{pointerId:1,button:0,clientX:x,clientY:y,bubbles:true}))
+ pointer('pointerdown',source.x+8,source.y+8);pointer('pointermove',target.x+20,target.y+3);await flush()
+ const preview=document.querySelector('[data-project-drag-preview]')
+ assert(preview?.textContent.includes('Design system'),'Floating copy shows dragged project')
+ assert(preview.getAttribute('aria-hidden')==='true'&&getComputedStyle(preview).pointerEvents==='none','Floating copy does not intercept interaction or accessibility')
+ assert(Math.abs(preview.getBoundingClientRect().y-(target.y+3-8))<1,'Floating copy follows the pointer offset')
+ assert(row('two').style.transform!=='translateY(0px)'&&row('three').style.transform!=='translateY(0px)','Rows shift to leave a landing gap')
+ pointer('pointerup',target.x+20,target.y+3);await flush()
+ assert(rows()==='three,two,one','Dragging folder label saves order')
+ assert(!document.querySelector('[data-project-drag-preview]'),'Dropping removes floating copy')
+ dragLabel.click();await flush()
+ assert(document.querySelector('#app input').value==='Website','Dragging a row does not switch the selected project')
+ assert(ctx.state.projects[0].name==='Design system','Shared state receives order')
+ const cancelled=row('two'),cancelLabel=cancelled.querySelector('button')
+ cancelled.setPointerCapture=()=>{};cancelled.hasPointerCapture=()=>false
+ const cancelledBounds=cancelLabel.getBoundingClientRect(),firstBounds=row('three').getBoundingClientRect()
+ const cancelPointer=(type,x,y)=>cancelLabel.dispatchEvent(new PointerEvent(type,{pointerId:2,button:0,clientX:x,clientY:y,bubbles:true}))
+ const savedCount=posted.length
+ cancelPointer('pointerdown',cancelledBounds.x+8,cancelledBounds.y+8)
+ cancelPointer('pointermove',firstBounds.x+20,firstBounds.y+3);await flush()
+ cancelPointer('pointercancel',firstBounds.x+20,firstBounds.y+3);await flush()
+ assert(rows()==='three,two,one'&&!document.querySelector('[data-project-drag-preview]')&&posted.length===savedCount,'Cancelling restores original positions without saving')
+ cancelPointer('pointerdown',cancelledBounds.x+8,cancelledBounds.y+8)
+ cancelPointer('pointermove',0,0);await flush();cancelPointer('pointerup',0,0);await flush()
+ assert(rows()==='three,two,one'&&posted.length===savedCount,'Dropping outside the list does not reorder')
+ const scrollList=cancelled.parentElement
+ scrollList.style.flex='0 0 60px';await flush()
+ // Drive scroll frames deterministically under Chromium's virtual-time budget.
+ const nativeFrame=window.requestAnimationFrame,nativeCancel=window.cancelAnimationFrame
+ window.requestAnimationFrame=callback=>setTimeout(()=>callback(performance.now()),16)
+ window.cancelAnimationFrame=clearTimeout
+ const scrollBounds=scrollList.getBoundingClientRect(),scrollSource=cancelLabel.getBoundingClientRect()
+ cancelPointer('pointerdown',scrollSource.x+8,scrollSource.y+4)
+ cancelPointer('pointermove',scrollBounds.x+20,scrollBounds.bottom-1)
+ await new Promise(resolve=>setTimeout(resolve,100))
+ assert(scrollList.scrollTop>0,'Holding near the edge scrolls the folder list')
+ cancelPointer('pointercancel',scrollBounds.x+20,scrollBounds.bottom-1)
+ window.requestAnimationFrame=nativeFrame;window.cancelAnimationFrame=nativeCancel
+ scrollList.style.flex='';scrollList.scrollTop=0;await flush()
+ failOrder=true
+ row('one').querySelector('[data-project-drag-handle]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true}));await flush()
+ assert(rows()==='three,two,one','Failed reorder rolls back')
+ assert(document.querySelector('[role=alert]').textContent.includes('Project list changed'),'Reorder error actionable')
+ failOrder=false;button('Done').click();await flush()
+ failArchive=true;button('Archive project').click();await flush()
+ assert(rows()==='three,two,one'&&document.querySelector('[role=alert]').textContent.includes('Unable to archive'),'Archive failure preserves active project')
+ failArchive=false;button('Archive project').click();await flush()
+ assert(rows()==='three,two','Archiving removes active row immediately')
+ assert(archiveRows()==='old,one','Archiving opens searchable archive page')
+ assert(ctx.state.prefs.project===null,'Archiving clears legacy selection')
+ assert(document.activeElement.getAttribute('aria-label')==='Search archived projects','Archive search focused')
+ assert(!document.querySelector('#sidebar button[title="Website"]'),'Archived folder hidden from main sidebar including its draft')
+ await search('PORTFOLIO');assert(archiveRows()==='old','Search matches description case-insensitively')
+ await search('website');assert(archiveRows()==='old,one','Search matches names')
+ await search('previous-site');assert(archiveRows()==='old','Search matches folders')
+ await search('missing');assert(document.querySelector('[data-project-archive-empty]').textContent.includes('No matching'),'No match empty state')
+ await search('Website')
+ document.querySelector('[aria-label="Unarchive Website"]').click();await flush()
+ assert(rows()==='three,two,one'&&archiveRows()==='old','Unarchive appends to active list')
+ assert(document.querySelector('#sidebar button[title="Website"]'),'Draft folder restored immediately')
+ await remount();assert(rows()==='three,two,one','Order persists after reopen')
+ shown.value=false;await flush()
+ const folder=document.querySelector('#sidebar button[title="Mobile app"]')
+ folder.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));await flush()
+ const archiveMenu=[...document.querySelectorAll('#sidebar [role=menuitem]')].find(el=>el.textContent.trim()==='Archive project')
+ assert(archiveMenu,'Direct sidebar archive action available');archiveMenu.click();await flush()
+ assert(!document.querySelector('#sidebar button[title="Mobile app"]'),'Sidebar menu archives immediately')
+ await remount()
+ document.querySelector('[data-project-archives-link]').click();await flush();await search('')
+ assert(archiveRows()==='old,two','Sidebar archive appears in manager')
+ const dialog=document.querySelector('[role=dialog]'),searchBox=document.querySelector('[aria-label="Search archived projects"]')
+ assert(dialog.scrollWidth<=dialog.clientWidth+1,'Dialog has no horizontal overflow')
+ assert(searchBox.getBoundingClientRect().width>80,'Search has useful width')
+ row('one').querySelector('button').click();await flush()
+ if(innerWidth>640){
+  const archiveLink=document.querySelector('[data-project-archives-link]').getBoundingClientRect()
+  const archiveButton=button('Archive project').getBoundingClientRect()
+  const sidebarFooter=document.querySelector('[data-project-manager-sidebar-footer]').getBoundingClientRect()
+  const actions=document.querySelector('[data-project-manager-actions]').getBoundingClientRect()
+  assert(Math.abs(archiveLink.y+archiveLink.height/2-archiveButton.y-archiveButton.height/2)<1,'Footer controls share a vertical center')
+  assert(Math.abs(sidebarFooter.y-actions.y)<1,'Footer separators align')
+ }
+ button('Reorder').click();await flush()
+ const last=row('one'),lastLabel=last.querySelector('button'),lastBounds=last.getBoundingClientRect(),topBounds=row('three').getBoundingClientRect()
+ last.setPointerCapture=()=>{};last.hasPointerCapture=()=>false
+ lastLabel.dispatchEvent(new PointerEvent('pointerdown',{pointerId:3,button:0,clientX:lastBounds.x+30,clientY:lastBounds.y+18,bubbles:true}))
+ lastLabel.dispatchEvent(new PointerEvent('pointermove',{pointerId:3,button:0,clientX:topBounds.x+40,clientY:topBounds.y+12,bubbles:true}));await flush()
+ lastLabel.dispatchEvent(new PointerEvent('pointercancel',{pointerId:3,button:0,bubbles:true}));await flush()
+ document.getElementById('result').textContent='PASS: Floating row, sliding gap, cancel/outside drop, keyboard focus, persistence, rollback, archive search, restore and direct sidebar archive'
+}catch(error){document.getElementById('result').textContent='FAIL: '+error.message+'\n'+error.stack}
+</script></body></html>

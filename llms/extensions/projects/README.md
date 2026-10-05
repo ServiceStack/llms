@@ -13,6 +13,53 @@ The **Projects** extension provides a workspace management system for `llms.py`.
 - **Relative Publish Paths**: The `publish` output directory is specified as a relative path combined with the project folder path (e.g. `dist`).
 - **Automatic Folder Creation**: Project directories are automatically created on disk upon saving if they do not exist.
 
+## Creating Git-backed projects
+
+When the Git extension is enabled and `git` is installed, **New project** offers two sources:
+
+- **New project** creates an empty workspace. **Initialize Git repository** starts checked; uncheck it
+  for a plain folder. Git repositories start on `main`, without generated files or an automatic commit.
+- **Clone repository** accepts an HTTPS or SSH repository URL. The name and folder derive from the
+  repository name and remain editable. **More options** includes an optional branch; otherwise the
+  remote's default branch is used. Cloning preserves history and the source remote.
+
+The resolved destination is shown beneath the folder field. New folders must be directly inside the
+user's managed projects directory; existing folders are never overwritten. Repository scripts,
+submodule checkout and dependency installation do not run automatically. Git LFS content is not fetched
+automatically; users can fetch it separately using their normal Git tooling.
+
+Creation shows progress and offers cancellation. Closing the dialog leaves the operation running;
+reopening New project restores active progress. Failed or interrupted creation offers Retry and Edit
+details. A completed clone is registered before it becomes an agent workspace. Completion applies to
+the originating chat only while that chat remains selected; otherwise **Open project** is explicit.
+
+In local mode (`LLMS_MODE=local`, the default), cloning can use existing machine Git credential helpers
+and SSH identities. SSH requires the host to already be trusted in `known_hosts`. No credentials should
+be embedded in the URL. In hosted mode, the initial implementation supports public HTTPS repositories
+on `github.com`, `gitlab.com` and `bitbucket.org`. Administrators can change that list using
+`"git_clone_hosts": ["github.com", "git.example.org"]` in configuration. Hosted cloning does not borrow
+the operator's global Git credentials or SSH keys. GitHub sign-in alone does not grant repository access.
+
+Creation state is stored in `projects/.creation.sqlite`; incomplete clones use hidden `.create-*`
+folders. Interrupted attempts with uncertain child-process ownership are retained for safe recovery
+instead of being deleted automatically. The Git sidebar supports staging, unstaging and local commits
+with reviewed staged diffs and an explicit commit message, for both project and home repositories.
+Synchronization, external workspace registration and GitHub publishing remain planned in
+[GIT_PROJECTS.md](../../../GIT_PROJECTS.md).
+
+| API | Purpose |
+|---|---|
+| `GET /ext/projects/creation/options` | Creation/Git capabilities, destination root and recent operations |
+| `POST /ext/projects/create` | Idempotent new-folder or clone creation, returning an operation |
+| `GET /ext/projects/creation/operations/{id}` | Owned operation snapshot; `revision` enables bounded long-poll waiting |
+| `POST /ext/projects/creation/operations/{id}/cancel` | Cancel pending/running creation |
+| `POST /ext/projects/creation/operations/{id}/retry` | Retry a failed/interrupted/cancelled attempt |
+
+Metadata edits continue to use the existing save routes and never initialize or clone a repository.
+Cloned projects show their saved **Repository URL** in the project manager, with copy and open actions.
+SSH sources on GitHub, GitLab and Bitbucket open the corresponding HTTPS repository page; copying
+always keeps the exact clone URL. This is the original source, rather than a live lookup of `origin`.
+
 ---
 
 ## Using Projects in the UI
@@ -28,7 +75,16 @@ The **Projects** extension provides a workspace management system for `llms.py`.
    - **Show folder in sidebar**: hide a folder you don't use; a folder's menu can also hide it, and
      selecting the project again shows it.
    - **Publish Build Directory**: optional relative path (e.g. `dist`).
-4. **Deleting Projects**: select it in the project manager and click **Delete Project**. Its chats move to
+4. **Reordering**: click **Reorder** above the active list, then drag a folder row up or down. Touch and
+   arrow keys on a focused handle work too. Order saves immediately and is shared with the chat sidebar
+   and project pickers; **Done** hides the handles.
+5. **Archiving**: select a project and click **Archive project**, or use a sidebar folder's menu.
+   Archiving automatically hides the folder from the main thread sidebar and removes it from the
+   active list and project pickers. Files, conversations, drafts and existing run workspaces remain
+   attached to its stable ID. **Archived Projects** at the bottom of the manager sidebar opens a page
+   searchable by name, folder and description. **Unarchive** appends it to the active list and restores
+   its previous sidebar visibility (a previously hidden folder stays hidden).
+6. **Deleting Projects**: select it in the project manager and click the **Delete project** trash icon. Its chats move to
    Recents; deleting is refused while one of its chats has a running agent.
 
 ---
@@ -57,3 +113,10 @@ Projects are persisted locally in a JSON file format under the user's data direc
 The `id` is assigned automatically the first time a project is read or saved; keep it when editing the
 file by hand, since chats reference projects by `id`. See [`docs/CHAT_THREADS.md`](../../../docs/CHAT_THREADS.md)
 for how chats, projects and agent workspaces fit together.
+
+Array order is the project's display order. Archived records have `archived: true`,
+`showInSidebar: false`, and `archivedSidebarVisibility` recording the visibility to restore.
+`GET /ext/projects/projects.json` still returns all records so clients never mistake an archive for
+deletion. `POST /ext/projects/order` takes `{"ids": ["active-id", "…"]}` with every active ID once;
+stale membership returns 409. `PATCH /ext/projects/archive/{id}` takes `{"archived": true|false}`.
+Archive state is preserved through legacy metadata/bulk saves, including bulk saves that omit archives.

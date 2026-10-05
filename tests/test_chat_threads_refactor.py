@@ -244,6 +244,135 @@ class SidebarBootstrap(unittest.IsolatedAsyncioTestCase):
 
 
 class SharedContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_repository_write_blocks_submission_before_history_changes(self):
+        import importlib
+        from aiohttp import web
+        import llms.extensions.app as app_extension
+        from llms.workspace_operations import workspace_submission_lock
+        main = importlib.import_module('llms.main')
+        original_app, original_db = main.g_app, app_extension.g_db
+        with tempfile.TemporaryDirectory() as directory:
+            host = main.AppExtensions(SimpleNamespace(), {})
+            host.config = {'defaults': {}}
+            host.get_user_path = lambda user=None: directory
+            host.get_username = lambda request: 'alice'
+            host.check_auth = lambda request: (True, None)
+            context = main.ExtensionContext(host, 'app')
+            database = AppDB(context, os.path.join(directory, 'app.sqlite'))
+            app_extension.g_db = database
+            try:
+                app_extension.install(context)
+                thread_id = database.create_thread({'title': 'Chat', 'messages': [{'role': 'user', 'content': 'Original'}]}, 'alice')
+                before = database.get_thread(thread_id, 'alice')
+                messages = database.get_chat_messages(thread_id)
+                post = {path: handler for path, handler, _ in host.server_add_post}
+                # The submission must fail before even parsing a body or accepting a submissionId.
+                request = SimpleNamespace(match_info={'id': str(thread_id)})
+                with workspace_submission_lock(directory):
+                    with self.assertRaises(web.HTTPConflict):
+                        await post['/ext/app/threads/{id}/chat'](request)
+                self.assertEqual(database.get_thread(thread_id, 'alice'), before)
+                self.assertEqual(database.get_chat_messages(thread_id), messages)
+                self.assertIsNone(database.get_active_agent_run(thread_id, 'alice'))
+            finally:
+                database.close()
+                main.g_app, app_extension.g_db = original_app, original_db
+
+    async def test_project_saves_notify_sidebar_across_extension_contexts(self):
+        import importlib
+        import llms.extensions.app as app_extension
+        from llms.extensions.projects import install as install_projects
+
+        main = importlib.import_module('llms.main')
+        original_app, original_db = main.g_app, app_extension.g_db
+        with tempfile.TemporaryDirectory() as directory:
+            host = main.AppExtensions(SimpleNamespace(), {})
+            host.config = {'defaults': {}}
+            host.get_user_path = lambda user=None: directory
+            host.get_username = lambda request: 'alice'
+            host.get_user_pref = lambda key, user=None: None
+            app_ctx = main.ExtensionContext(host, 'app')
+            project_ctx = main.ExtensionContext(host, 'projects')
+            database = AppDB(app_ctx, os.path.join(directory, 'app.sqlite'))
+            app_extension.g_db = database
+            try:
+                # Production uses a separate context per extension, sharing only the host.
+                install_projects(project_ctx)
+                app_extension.install(app_ctx)
+                post = {path: handler for path, handler, _ in host.server_add_post}
+                get = {path: handler for path, handler, _ in host.server_add_get}
+                patch_routes = {path: handler for path, handler, _ in host.server_add_patch}
+
+                def request(data, **match_info):
+                    async def body():
+                        return data
+                    return SimpleNamespace(json=body, match_info=match_info)
+
+                project = {'name': 'One', 'folder': 'one', 'showInSidebar': True}
+                response = await post['/ext/projects/save/{name}'](request(project, name='One'))
+                project = json.loads(response.text)[0]
+                thread_id = database.create_thread({
+                    'title': 'Chat', 'projectId': project['id'],
+                    'messages': [{'role': 'user', 'content': 'Hello'}],
+                }, 'alice')
+                before = database.get_thread(thread_id, 'alice')
+
+                async def sidebar():
+                    return json.loads((await get['/ext/app/thread-sidebar'](SimpleNamespace())).text)
+
+                self.assertEqual(len((await sidebar())['projects']), 1)
+                for save_path in ('/ext/projects/save/{name}', '/ext/projects/projects.json'):
+                    with self.subTest(save_path=save_path):
+                        await patch_routes['/ext/projects/sidebar/{id}'](
+                            request({'showInSidebar': False}, id=project['id']))
+                        hidden = await sidebar()
+                        self.assertEqual(hidden['projects'], [])
+                        signal = app_extension.sidebar_signal.event
+                        updates = asyncio.create_task(get['/ext/app/thread-sidebar/updates'](
+                            SimpleNamespace(query={'sig': hidden['revision']})))
+                        await asyncio.sleep(0)  # Let the subscriber capture the pre-save signal.
+                        try:
+                            restored = {**project, 'showInSidebar': True}
+                            data = [restored] if save_path.endswith('projects.json') else restored
+                            await post[save_path](request(data, name='One'))
+                            self.assertTrue(signal.is_set(), 'Saving must wake sidebar subscribers')
+                            response = await asyncio.wait_for(updates, 3)
+                        finally:
+                            if not updates.done():
+                                updates.cancel()
+                                await asyncio.gather(updates, return_exceptions=True)
+                        self.assertNotEqual(json.loads(response.text)['revision'], hidden['revision'])
+                        visible = await sidebar()
+                        self.assertEqual([group['id'] for group in visible['projects']], [project['id']])
+                        self.assertEqual(visible['projects'][0]['items'][0]['id'], thread_id)
+                after = database.get_thread(thread_id, 'alice')
+                self.assertEqual(before['messages'], after['messages'])
+                self.assertEqual(before['lastActivityAt'], after['lastActivityAt'])
+                workspace = project_ctx.projects.resolve_workspace(project['id'], 'alice')
+                run_id = database.create_agent_run(thread_id, 'alice', 'test', workspace=workspace)
+                run_before = database.get_agent_run(run_id, 'alice')
+                visible = await sidebar()
+                signal = app_extension.sidebar_signal.event
+                await patch_routes['/ext/projects/archive/{id}'](
+                    request({'archived': True}, id=project['id']))
+                self.assertTrue(signal.is_set(), 'Archiving must wake sidebar subscribers')
+                archived = await sidebar()
+                self.assertEqual(archived['projects'], [])
+                self.assertEqual(archived['unassigned']['items'], [])
+                self.assertNotEqual(visible['revision'], archived['revision'])
+                after = database.get_thread(thread_id, 'alice')
+                self.assertEqual(after['projectId'], project['id'])
+                self.assertEqual(before['messages'], after['messages'])
+                self.assertEqual(before['lastActivityAt'], after['lastActivityAt'])
+                self.assertEqual(database.get_agent_run(run_id, 'alice'), run_before)
+                self.assertEqual(project_ctx.projects.resolve_workspace(project['id'], 'alice'), workspace)
+                await patch_routes['/ext/projects/archive/{id}'](
+                    request({'archived': False}, id=project['id']))
+                self.assertEqual((await sidebar())['projects'][0]['items'][0]['id'], thread_id)
+            finally:
+                database.close()
+                main.g_app, app_extension.g_db = original_app, original_db
+
     async def test_workspace_context_isolated_across_tasks(self):
         from llms.main import AppExtensions
         app = object.__new__(AppExtensions)

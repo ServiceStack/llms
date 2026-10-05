@@ -26,6 +26,7 @@ agent runs choose their workspace. The same UI and contracts are shared with the
 | Sidebar component | `llms/extensions/app/ui/ProjectThreads.mjs` (registered as `ThreadsSidebar`) |
 | Thread store, selection, deletion, new threads | `llms/extensions/app/ui/threadStore.mjs` |
 | Sidebar/thread APIs, chat submission, run workspace, change signal | `llms/extensions/app/__init__.py` |
+| Coordination between run submissions and Git writes | `llms/workspace_operations.py`, `llms/extensions/git/operations.py` |
 | Thread schema, sidebar queries, metadata writes | `llms/extensions/app/db.py` |
 | Title generation | `llms/extensions/app/titles.py` |
 | Run workspace scope (`ContextVar`) | `llms/execution_context.py`, used by `AppExtensions.get_allowed_directories` in `llms/main.py` |
@@ -90,6 +91,13 @@ default; `--apply` backs up the database first).
 for payloads without one. Writes are serialized and atomic. Deleting a project with an active run returns
 409; chats of deleted projects move to Recents (`reconcile_projects`, idempotent).
 
+Project array order determines folders and picker order. Archived projects remain in the full list
+for reconciliation and workspace resolution, but are excluded from the manager's active list, project
+pickers and the main sidebar, including draft-only folders. Archiving forces `showInSidebar=false` and
+records its previous value in `archivedSidebarVisibility`; unarchiving restores that value and appends
+the project to the active list. It never changes chat membership, activity, messages or a run's workspace.
+Metadata/bulk saves preserve server-owned archive state; omitted archives survive older active-only saves.
+
 ## APIs (`/ext/app`, `/ext/projects`)
 
 | Route | Purpose |
@@ -102,6 +110,8 @@ for payloads without one. Writes are serialized and atomic. Deleting a project w
 | `PATCH /ext/app/threads/{id}` | Rename (`title`) or move (`projectId` + current `membershipVersion`) |
 | `POST /ext/app/threads/{id}/chat` | Submit a turn; `submissionId` makes a resubmission return the accepted state |
 | `PATCH /ext/projects/sidebar/{id}` | `{"showInSidebar": bool}` |
+| `POST /ext/projects/order` | `{"ids": [active IDs in display order]}`; exact membership required, stale list returns 409 |
+| `PATCH /ext/projects/archive/{id}` | `{"archived": bool}`; archive hides folder, restore appends to active list |
 | `GET /ext/publish/detect-dist?threadId=…` | Publish directory for the thread's own project |
 
 Pages are keyset-paged on `(lastActivityAt, id)`; the cursor encodes the scope and is rejected for another

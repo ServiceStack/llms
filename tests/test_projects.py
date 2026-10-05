@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import MagicMock
+from aiohttp import web
 
 from llms.extensions.projects import install, kebab_case
 
@@ -69,9 +70,107 @@ class TestProjectsExtension(unittest.IsolatedAsyncioTestCase):
                 self.save_project_handler = handler
             elif path == "active":
                 self.set_active_handler = handler
+            elif path == "order":
+                self.order_handler = handler
         for args in self.mock_ctx.add_patch.call_args_list:
             if args[0][0] == "sidebar/{id}":
                 self.set_sidebar_visibility_handler = args[0][1]
+            elif args[0][0] == "archive/{id}":
+                self.archive_handler = args[0][1]
+
+    def request(self, data, **match_info):
+        request = MagicMock()
+        async def body():
+            return data
+        request.json = body
+        request.match_info = match_info
+        return request
+
+    async def seed_organization(self):
+        response = await self.save_projects_handler(self.request([
+            {'name': 'One', 'folder': 'one', 'description': 'First'},
+            {'name': 'Two', 'folder': 'two', 'showInSidebar': False},
+            {'name': 'Three', 'folder': 'three'},
+        ]))
+        return json.loads(response.text)
+
+    async def test_order_preserves_metadata_and_rejects_stale_membership(self):
+        projects = await self.seed_organization()
+        ids = [p['id'] for p in projects]
+        response = await self.order_handler(self.request({'ids': ids[::-1]}))
+        self.assertEqual(json.loads(response.text), projects[::-1])
+        self.assertEqual(self.mock_ctx.projects.get_user_projects('testuser'), projects[::-1])
+        self.mock_ctx.notify_sidebar.assert_called()
+        for invalid in [ids[:2], [*ids, 'foreign']]:
+            with self.assertRaises(web.HTTPConflict):
+                await self.order_handler(self.request({'ids': invalid}))
+        for invalid in [[ids[0], ids[0]], 'bad', [1]]:
+            with self.assertRaises(web.HTTPBadRequest):
+                await self.order_handler(self.request({'ids': invalid}))
+        self.assertEqual(self.mock_ctx.projects.get_user_projects('testuser'), projects[::-1])
+
+    async def test_archive_hides_and_restores_without_changing_workspace(self):
+        projects = await self.seed_organization()
+        one, two, three = projects
+        workspace = self.mock_ctx.projects.resolve_workspace(one['id'], 'testuser')
+        file = os.path.join(workspace['directories'][0], 'keep.txt')
+        with open(file, 'w') as f:
+            f.write('keep')
+        await self.set_active_handler(self.request({'name': 'One'}))
+        response = await self.archive_handler(self.request({'archived': True}, id=one['id']))
+        archived = json.loads(response.text)
+        self.assertEqual([p['id'] for p in archived], [two['id'], three['id'], one['id']])
+        self.assertTrue(archived[-1]['archived'])
+        self.assertFalse(archived[-1]['showInSidebar'])
+        self.assertIsNone(self.mock_ctx.get_user_pref('project', user='testuser'))
+        self.assertEqual(self.allowed_directories['testuser'], [])
+        self.assertEqual(self.mock_ctx.projects.resolve_workspace(one['id'], 'testuser'), workspace)
+        self.assertTrue(os.path.isfile(file))
+        with self.assertRaises(web.HTTPConflict):
+            await self.set_sidebar_visibility_handler(self.request({'showInSidebar': True}, id=one['id']))
+        with self.assertRaises(web.HTTPConflict):
+            await self.set_active_handler(self.request({'name': 'One'}))
+        with self.assertRaises(web.HTTPConflict):
+            await self.order_handler(self.request({'ids': [p['id'] for p in projects]}))
+        await self.order_handler(self.request({'ids': [three['id'], two['id']]}))
+        response = await self.archive_handler(self.request({'archived': False}, id=one['id']))
+        restored = json.loads(response.text)
+        self.assertEqual([p['id'] for p in restored], [three['id'], two['id'], one['id']])
+        self.assertTrue(restored[-1]['showInSidebar'])
+        self.assertNotIn('archivedSidebarVisibility', restored[-1])
+        repeated = await self.archive_handler(self.request({'archived': False}, id=one['id']))
+        self.assertEqual(json.loads(repeated.text), restored)
+
+    async def test_unarchive_preserves_previously_hidden_folder(self):
+        projects = await self.seed_organization()
+        project_id = projects[1]['id']
+        await self.archive_handler(self.request({'archived': True}, id=project_id))
+        await self.archive_handler(self.request({'archived': True}, id=project_id))
+        response = await self.archive_handler(self.request({'archived': False}, id=project_id))
+        project = next(p for p in json.loads(response.text) if p['id'] == project_id)
+        self.assertFalse(project['showInSidebar'])
+
+    async def test_legacy_saves_cannot_unarchive_or_delete_omitted_archives(self):
+        projects = await self.seed_organization()
+        one = projects[0]
+        await self.archive_handler(self.request({'archived': True}, id=one['id']))
+        response = await self.save_project_handler(self.request({**one, 'archived': False, 'showInSidebar': True}, name='One'))
+        archived = next(p for p in json.loads(response.text) if p['id'] == one['id'])
+        self.assertTrue(archived['archived'])
+        self.assertFalse(archived['showInSidebar'])
+        response = await self.save_projects_handler(self.request(projects[1:]))
+        retained = json.loads(response.text)
+        self.assertEqual(retained[-1], archived)
+        response = await self.save_projects_handler(self.request([{**p, 'archived': False} for p in retained]))
+        self.assertTrue(json.loads(response.text)[-1]['archived'])
+
+    async def test_archive_validates_state_and_project_ownership(self):
+        projects = await self.seed_organization()
+        with self.assertRaises(web.HTTPBadRequest):
+            await self.archive_handler(self.request({'archived': 'true'}, id=projects[0]['id']))
+        with self.assertRaises(web.HTTPNotFound):
+            await self.archive_handler(self.request({'archived': True}, id='foreign'))
+        self.assertEqual(self.mock_ctx.projects.get_user_projects('testuser'), projects)
 
     def tearDown(self):
         os.chdir(self.initial_cwd)
