@@ -50,12 +50,20 @@ def main() -> int:
     endpoint = os.environ.get("TAURI_UPDATER_ENDPOINT", DEFAULT_ENDPOINT).strip()
     if public_key and not endpoint.startswith("https://"):
         raise RuntimeError("TAURI_UPDATER_ENDPOINT must use HTTPS")
+    identity = os.environ.get("APPLE_SIGNING_IDENTITY", "").strip()
+    certificate = os.environ.get("APPLE_CERTIFICATE", "").strip()
+    # Infer the identity from a configured certificate, otherwise sign the
+    # complete app ad hoc. An unsigned bundle can be reported as damaged.
+    macos_identity = identity or (None if certificate else "-")
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
         json.dumps(
             {
-                "bundle": {"createUpdaterArtifacts": bool(public_key)},
+                "bundle": {
+                    "createUpdaterArtifacts": bool(public_key),
+                    "macOS": {"signingIdentity": macos_identity},
+                },
                 "plugins": {"updater": {"pubkey": public_key, "endpoints": [endpoint] if public_key else []}},
             },
             indent=2,

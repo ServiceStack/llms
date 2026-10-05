@@ -83,6 +83,28 @@ cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D wa
 
 ## Releases and signing
 
+Without Apple credentials, release CI signs the macOS bundle ad hoc (`signingIdentity: "-"`).
+This is not Developer ID signing or notarization, so downloaded apps still need explicit approval
+in **System Settings → Privacy & Security → Open Anyway**. To distribute apps that pass Gatekeeper
+without that override, configure the Apple signing and notarization secrets below.
+
+If macOS reports an installed app as damaged, inspect it with:
+
+```bash
+codesign --verify --deep --strict --verbose=2 /Applications/llms.app
+spctl --assess --type execute --verbose=4 /Applications/llms.app
+```
+
+For an unnotarized build you downloaded from this repository and trust, removing quarantine from
+that app alone can allow local testing:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/llms.app
+```
+
+This removes the download quarantine check; it does not repair an invalid code signature or
+notarize the app. Do not disable Gatekeeper globally.
+
 `desktop-ci.yml` builds native artifacts on macOS, Linux, and Windows in GitHub-hosted runners. Publishing a normal `v<version>` GitHub release automatically runs `desktop-release.yml` and attaches installers to that existing release. Each runner freezes its own Python runtime; no cross-compilation is needed.
 
 | Platform | Architecture | Release files |

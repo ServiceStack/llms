@@ -81,8 +81,18 @@ class TestReleaseConfig(unittest.TestCase):
     def test_installers_build_without_updater_keys(self):
         config, output = self.generate({}, "--allow-unsigned")
         self.assertFalse(config["bundle"]["createUpdaterArtifacts"])
+        self.assertEqual(config["bundle"]["macOS"]["signingIdentity"], "-")
         self.assertEqual(config["plugins"]["updater"], {"pubkey": "", "endpoints": []})
         self.assertEqual(output, "updater_enabled=false\n")
+
+    def test_apple_certificate_identity_is_inferred_without_forcing_ad_hoc_signing(self):
+        config, _ = self.generate({"APPLE_CERTIFICATE": "certificate"}, "--allow-unsigned")
+        self.assertIsNone(config["bundle"]["macOS"]["signingIdentity"])
+
+    def test_explicit_apple_identity_is_preserved(self):
+        identity = "Developer ID Application: ServiceStack (TEAMID)"
+        config, _ = self.generate({"APPLE_SIGNING_IDENTITY": identity}, "--allow-unsigned")
+        self.assertEqual(config["bundle"]["macOS"]["signingIdentity"], identity)
 
     def test_both_keys_enable_signed_updates(self):
         config, output = self.generate(
