@@ -13,7 +13,7 @@ CSHARP_ROOT = Path(
 )
 
 
-@unittest.skipUnless((CSHARP_ROOT / "sync.sh").is_file() and shutil.which("rsync"), "C# checkout and rsync required")
+@unittest.skipUnless((CSHARP_ROOT / "sync.sh").is_file() and (CSHARP_ROOT / "sync.py").is_file(), "C# checkout with sync scripts required")
 class McpSyncTests(unittest.TestCase):
     def test_csharp_ui_is_byte_identical(self):
         self.assertEqual(
@@ -28,6 +28,7 @@ class McpSyncTests(unittest.TestCase):
             port.mkdir()
             script = port / "sync.sh"
             shutil.copy2(CSHARP_ROOT / "sync.sh", script)
+            shutil.copy2(CSHARP_ROOT / "sync.py", port / "sync.py")
             source = package / "extensions/mcp_client/ui"
             source.mkdir(parents=True)
             (package / "index.html").write_text("fixture")
