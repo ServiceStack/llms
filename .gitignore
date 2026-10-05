@@ -5,6 +5,7 @@ games/
 .agent/
 .claude/
 techstacks.io/
+p/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
