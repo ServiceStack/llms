@@ -2111,9 +2111,11 @@ def get_active_models():
             if name not in existing_models:
                 existing_models.add(name)
                 item = model.copy()
+                if "id" not in item:
+                    item["id"] = item.get("name", "")
                 item.update({"provider": provider_id})
                 ret.append(item)
-    ret.sort(key=lambda x: x["id"])
+    ret.sort(key=lambda x: x.get("id", x.get("name", "")))
     return ret
 
 
@@ -2534,6 +2536,16 @@ async def g_chat_completion(chat, context=None):
         if len(candidate_providers) == 0:
             raise (Exception(f"Model {model} not found"))
 
+        # If a specific provider was requested via context or chat, prioritize it
+        preferred_provider = (context and context.get("provider")) or chat.get("provider")
+        if not preferred_provider and "/" in model:
+            prefix = model.split("/")[0]
+            if prefix in candidate_providers:
+                preferred_provider = prefix
+        if preferred_provider and preferred_provider in candidate_providers:
+            candidate_providers.remove(preferred_provider)
+            candidate_providers.insert(0, preferred_provider)
+
         # Pre-populate provider/model info in context for pre-chat filters
         if "provider" not in context and candidate_providers:
             context["provider"] = candidate_providers[0]
@@ -2745,7 +2757,7 @@ async def g_chat_completion(chat, context=None):
         except Exception as e:
             # Never restart a provider turn after a remote side effect. A new model
             # response can invent a new call id and otherwise repeat the mutation.
-            if context.get("remoteToolsDispatched"):
+            if context.get("remoteToolsDispatched") or getattr(e, "retryable", True) is False:
                 if g_app:
                     await g_app.on_chat_error(e, context)
                 raise
@@ -3617,6 +3629,16 @@ async def reload_providers():
     global g_config, g_handlers
     g_handlers = init_llms(g_config, g_providers)
     await load_llms()
+    if g_app and getattr(g_app, "extensions", None):
+        for ext in g_app.extensions:
+            reload_fn = getattr(ext.get("module"), "__reload_providers__", None)
+            if callable(reload_fn):
+                try:
+                    res = reload_fn(ext["ctx"])
+                    if inspect.iscoroutine(res):
+                        await res
+                except Exception as e:
+                    _err(f"Extension {ext.get('name')} __reload_providers__ failed", e)
     _log(f"{len(g_handlers)} providers loaded")
     return g_handlers
 
@@ -4352,6 +4374,9 @@ class ExtensionContext:
     def get_registered_provider(self, name: str) -> Optional[Any]:
         return g_handlers.get(name)
 
+    def register_provider_handler(self, name: str, provider: Any):
+        g_handlers[name] = provider
+
     def get_provider(self, sdk: str):
         for p in self.app.all_providers:
             if p.sdk == sdk:
@@ -4440,6 +4465,12 @@ class ExtensionContext:
 
     def add_patch(self, path: str, handler: Callable, **kwargs: Any):
         self.app.server_add_patch.append((self.web_path("PATCH", path), handler, kwargs))
+
+    def notify_sidebar(self) -> None:
+        """Signal sidebar changes through the shared app extension, when installed."""
+        notify = getattr(self.app, "notify_sidebar", None)
+        if notify:
+            notify()
 
     def add_importmaps(self, dict: Dict[str, str]):
         self.app.import_maps.update(dict)
