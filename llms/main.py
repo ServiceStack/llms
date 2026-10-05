@@ -5386,7 +5386,14 @@ def cli_exec(cli_args, extra_args):
 
         async def active_models_handler(request):
             await g_app.on_request(request)
-            return web.json_response(get_active_models())
+            models = get_active_models()
+            subscription = getattr(g_app, "openai_subscription_auth", None)
+            if subscription:
+                user = g_app.assert_username(request) or "default"
+                provider = g_handlers.get("openai")
+                base = getattr(provider, "base_provider", provider)
+                models = await subscription.filter_models(models, user, api_available=bool(base and base.api_key))
+            return web.json_response(models)
 
         app.router.add_get("/models", active_models_handler)
 
