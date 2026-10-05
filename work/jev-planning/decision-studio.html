@@ -1,0 +1,96 @@
+<div id="jev-studio-concept" aria-label="Decision Studio concept">
+  <style>
+    #jev-studio-concept{--js-bg:light-dark(#fff,#17191d);--js-side:light-dark(#f5f6f8,#202329);--js-text:light-dark(#20252e,#e6e9ef);--js-muted:light-dark(#586271,#a8b0bf);--js-line:light-dark(#dce1e8,#363c47);--js-accent:light-dark(#4753d6,#a7afff);--js-button:light-dark(#4753d6,#7e88ed);--js-button-text:light-dark(#fff,#101426);color:var(--js-text);font:14px/1.5 system-ui,sans-serif;background:var(--js-bg);border:1px solid var(--js-line);border-radius:12px;overflow-wrap:anywhere}
+    #jev-studio-concept *{box-sizing:border-box}
+    #jev-studio-concept button,#jev-studio-concept input,#jev-studio-concept textarea{font:inherit;color:inherit}
+    #jev-studio-concept button{background:var(--js-bg);border:1px solid var(--js-line);border-radius:7px;padding:8px 11px;display:inline-flex;align-items:center;gap:7px}
+    #jev-studio-concept button[aria-pressed=true]{background:var(--js-side);color:var(--js-accent)}
+    #jev-studio-concept .js-main-action{background:var(--js-button);color:var(--js-button-text);border-color:var(--js-button)}
+    #jev-studio-concept header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px;border-bottom:1px solid var(--js-line)}
+    #jev-studio-concept .js-brand{font-size:18px;font-weight:500;display:flex;align-items:center;gap:10px}
+    #jev-studio-concept .js-muted{color:var(--js-muted);font-size:12px}
+    #jev-studio-concept .js-shell{display:grid;grid-template-columns:46px 174px minmax(0,1fr)}
+    #jev-studio-concept .js-icons{background:var(--js-side);border-right:1px solid var(--js-line);display:flex;flex-direction:column;align-items:center;gap:22px;padding:22px 8px}
+    #jev-studio-concept .js-icons .js-active{color:var(--js-accent)}
+    #jev-studio-concept .js-library{background:var(--js-side);border-right:1px solid var(--js-line);padding:18px 12px}
+    #jev-studio-concept .js-library button{width:100%;text-align:left;margin-top:8px;justify-content:flex-start;background:transparent}
+    #jev-studio-concept .js-library button[aria-pressed=true]{background:var(--js-bg);color:var(--js-accent)}
+    #jev-studio-concept .js-content{padding:20px;min-width:0}
+    #jev-studio-concept .js-title{font-size:20px;font-weight:500;margin:0 0 4px}
+    #jev-studio-concept .js-columns{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:22px;margin-top:18px}
+    #jev-studio-concept .js-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px}
+    #jev-studio-concept label{display:block;margin-bottom:14px}
+    #jev-studio-concept input,#jev-studio-concept textarea{display:block;width:100%;background:var(--js-bg);border:1px solid var(--js-line);border-radius:7px;padding:10px;margin-top:6px;min-width:0}
+    #jev-studio-concept textarea{min-height:150px;resize:vertical}
+    #jev-studio-concept .js-question,#jev-studio-concept .js-answer{padding:13px 0;border-bottom:1px solid var(--js-line)}
+    #jev-studio-concept .js-question:first-child,#jev-studio-concept .js-answer:first-child{padding-top:0}
+    #jev-studio-concept .js-label{display:flex;justify-content:space-between;gap:10px;font-weight:500;flex-wrap:wrap}
+    #jev-studio-concept .js-value{font-size:19px;font-weight:500;margin:6px 0 10px}
+    #jev-studio-concept .js-bar-row{display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:8px;margin-top:8px;font-size:12px}
+    #jev-studio-concept .js-track{height:5px;background:var(--js-side);margin-top:4px;border-radius:4px}
+    #jev-studio-concept .js-fill{height:5px;background:var(--js-accent);border-radius:4px}
+    #jev-studio-concept pre{font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;background:var(--js-side);border-radius:8px;padding:12px;margin:0}
+    #jev-studio-concept .js-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+    #jev-studio-concept .js-draft{padding:16px 20px;border-bottom:1px solid var(--js-line);background:var(--js-side)}
+    #jev-studio-concept .js-draft textarea{min-height:70px}
+    #jev-studio-concept .js-footer{margin-top:16px;font-size:12px;color:var(--js-muted)}
+    #jev-studio-concept [hidden]{display:none!important}
+    #jev-studio-concept.js-stacked .js-columns{grid-template-columns:1fr}
+    @media(max-width:800px){#jev-studio-concept .js-columns{grid-template-columns:1fr}#jev-studio-concept .js-shell{grid-template-columns:40px 150px minmax(0,1fr)}}
+    @media(max-width:560px){#jev-studio-concept .js-shell{grid-template-columns:1fr}#jev-studio-concept .js-icons{display:none}#jev-studio-concept .js-library{border-right:0;border-bottom:1px solid var(--js-line);display:flex;gap:6px;flex-wrap:wrap}#jev-studio-concept .js-library>strong{width:100%}#jev-studio-concept .js-library button{width:auto;margin:0}#jev-studio-concept .js-content{padding:16px}#jev-studio-concept input,#jev-studio-concept textarea{font-size:16px}}
+  </style>
+  <header>
+    <div class="js-brand"><i data-lucide="split" aria-hidden="true"></i> Decision Studio</div>
+    <div class="js-muted">Jev via OpenRouter · Interface concept</div>
+    <button type="button" id="js-ai" class="cursor-interaction"><i data-lucide="sparkles" aria-hidden="true"></i> Create with AI</button>
+  </header>
+  <div class="js-draft" id="js-draft" hidden>
+    <label for="js-goal">What do you want to decide?<textarea id="js-goal">Route support tickets by department and urgency, and identify software bugs.</textarea></label>
+    <button type="button" id="js-preview-draft" class="cursor-interaction">Preview support recipe draft</button>
+    <span class="js-muted">Example draft only · AI generation would use your selected chat model</span>
+  </div>
+  <div class="js-shell">
+    <nav class="js-icons" aria-label="Application navigation"><i data-lucide="message-square" aria-hidden="true"></i><i data-lucide="folder" aria-hidden="true"></i><span class="js-active" aria-label="Decisions selected"><i data-lucide="split" aria-hidden="true"></i></span><i data-lucide="image" aria-hidden="true"></i></nav>
+    <nav class="js-library" aria-label="Recipes"><strong>Recipes</strong><button type="button" class="cursor-interaction" data-recipe="sentiment">Message sentiment</button><button type="button" class="cursor-interaction" data-recipe="stock">Company news</button><button type="button" class="cursor-interaction" data-recipe="support">Support triage</button></nav>
+    <main class="js-content">
+      <h2 class="js-title" id="js-title"></h2><div class="js-muted" id="js-description"></div>
+      <div class="js-columns">
+        <section aria-label="Recipe workspace">
+          <div class="js-tabs" aria-label="Recipe views"><button type="button" class="cursor-interaction" data-view="inputs">Inputs</button><button type="button" class="cursor-interaction" data-view="questions">Questions</button><button type="button" class="cursor-interaction" data-view="json">Request JSON</button></div>
+          <div id="js-inputs"></div><div id="js-questions" hidden></div><pre id="js-json" hidden></pre>
+          <div class="js-actions"><button type="button" id="js-results-button" class="js-main-action cursor-interaction">Show sample results</button></div>
+        </section>
+        <section aria-label="Results" aria-live="polite"><div class="js-label">Results <span class="js-muted">Illustrative sample</span></div><div id="js-results" style="margin-top:14px"></div><div class="js-footer" id="js-result-footer">Select Show sample results to preview the answer cards.</div></section>
+      </div>
+    </main>
+  </div>
+  <script>
+    (function(){
+      const root=document.getElementById('jev-studio-concept');
+      const find=id=>root.querySelector('#'+id);
+      const choice=(instructions,criteria)=>({type:'choice',instructions,criteria});
+      const noul=(instructions,yes,no)=>({type:'noul',instructions,criteria:{true:yes,false:no}});
+      const score=(instructions,criteria)=>({type:'score',instructions,criteria});
+      const recipes={
+        sentiment:{title:'Message sentiment',description:'Classify the tone toward a named subject, with urgency as a separate signal.',fields:[['subject','Subject','The delivery service'],['message','Tweet or email','My package arrived late again. Nobody has answered my emails. Please fix this today.']],questions:{sentiment:choice('What sentiment does the message express toward the subject?',{negative:'An unfavorable attitude.',neutral:'No positive or negative attitude.',positive:'A favorable attitude.',mixed:'Both favorable and unfavorable attitudes.'}),urgent:noul('Does the message express a time-sensitive request?','Explicit deadline or request for immediate action.','No time-sensitive request.')},answers:[{key:'sentiment',value:'Negative',type:'choice',confidence:0.88,probabilities:{Negative:0.94,Neutral:0.02,Positive:0.01,Mixed:0.03}},{key:'urgent',value:'Probability of yes: 91%',type:'noul',probabilities:{Yes:0.91,No:0.09}}]},
+        stock:{title:'Company news',description:'Assess reported business implications for a specific company.',fields:[['company','Company / ticker','Acme Semiconductors / ACME'],['article','Article text','Acme signed a three-year supply agreement with a major cloud provider. The company raised revenue guidance but said margins would be lower during the factory expansion.']],questions:{relevance:noul('Does the article directly concern the named company?','The named company or its operations are directly discussed.','The company is absent or only tangentially mentioned.'),impact:choice('What direction of business impact does the reported event suggest for the named company?',{favorable:'Beneficial implications.',unfavorable:'Adverse implications.',mixed:'Material benefits and drawbacks.',unclear:'Insufficient information to judge.'}),materiality:score('How material is the reported event to the company?', ['Minor operational detail','Meaningful business development','Major company-wide development'])},answers:[{key:'relevance',value:'Probability of yes: 98%',type:'noul',probabilities:{Yes:0.98,No:0.02}},{key:'impact',value:'Mixed',type:'choice',confidence:0.46,probabilities:{Favorable:0.34,Unfavorable:0.06,Mixed:0.59,Unclear:0.01}},{key:'materiality',value:'1.35 / 2',type:'score',confidence:0.40,probabilities:{Minor:0.05,Meaningful:0.55,Major:0.40}}]},
+        support:{title:'Support triage',description:'Ask independent questions about the same ticket in one request.',fields:[['customer_tier','Customer tier','Enterprise'],['ticket','Support ticket','My checkout page shows a blank screen after I click Pay. I have tried two browsers.']],questions:{is_bug:noul('Is the customer reporting a software defect?','The customer describes broken or unexpected product behavior.','The customer is asking a question or requesting a feature.'),team:choice('Which team should own this ticket?',{payments:'Checkout, billing, or payment processing issues.',frontend:'Rendering, layout, or browser compatibility issues.',account:'Login, permissions, or profile issues.'}),urgency:score('How urgent is this ticket?',['Can wait for the next release','Should be fixed this week','Blocking revenue right now'])},answers:[{key:'is_bug',value:'Probability of yes: 96%',type:'noul',probabilities:{Yes:0.96,No:0.04}},{key:'team',value:'Payments',type:'choice',confidence:0.67,probabilities:{Payments:0.78,Frontend:0.22,Account:0}},{key:'urgency',value:'1.99 / 2',type:'score',confidence:0.99,probabilities:{'Can wait':0,'This week':0,'Blocking revenue':1}}]}
+      };
+      const saved=window.openai?.widgetState?.privateContent;
+      let selected=recipes[saved?.recipe]?saved.recipe:'sentiment';let view=['inputs','questions','json'].includes(saved?.view)?saved.view:'inputs';let shown=false;
+      const design={layout:'Side by side',distributions:true};
+      const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const percent=p=>Math.round(p*100)+'%';
+      function persist(){if(window.openai?.setWidgetState)window.openai.setWidgetState({modelContent:{recipe:selected,view},privateContent:{recipe:selected,view}}).catch(()=>{});}
+      function request(){const state={};root.querySelectorAll('[data-field]').forEach(el=>state[el.dataset.field]=el.value);return {model:'~typesafe/jev-latest',state,questions:recipes[selected].questions};}
+      function renderAnswers(){find('js-results').innerHTML=shown?recipes[selected].answers.map(a=>'<div class="js-answer"><div class="js-label">'+escape(a.key)+'<span class="js-muted">'+escape(a.type==='noul'?'Yes / no':a.type==='choice'?'Choose one':'Ordered scale')+'</span></div><div class="js-value">'+escape(a.value)+'</div>'+(design.distributions?Object.entries(a.probabilities).map(([key,p])=>'<div class="js-bar-row"><span>'+escape(key)+'</span><span>'+percent(p)+'</span></div><div class="js-track"><div class="js-fill" style="width:'+p*100+'%"></div></div>').join(''):'')+(a.confidence!==undefined?'<div class="js-muted" style="margin-top:10px">Confidence '+a.confidence.toFixed(2)+'</div>':'')+'</div>').join(''):'';find('js-result-footer').textContent=shown?'Fixed sample answers · No API call made':'Select Show sample results to preview the answer cards.';}
+      function renderView(){root.querySelectorAll('[data-view]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.view===view)));['inputs','questions','json'].forEach(v=>find('js-'+v).hidden=v!==view);find('js-json').textContent=JSON.stringify(request(),null,2);}
+      function renderRecipe(){const r=recipes[selected];find('js-title').textContent=r.title;find('js-description').textContent=r.description;root.querySelectorAll('[data-recipe]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.recipe===selected)));find('js-inputs').innerHTML=r.fields.map(([key,label,value],i)=>'<label for="js-field-'+key+'">'+escape(label)+(i===r.fields.length-1?'<textarea':'<input')+' id="js-field-'+key+'" data-field="'+key+'"'+(i===r.fields.length-1?'>'+escape(value)+'</textarea>':' value="'+escape(value)+'">')+'</label>').join('');find('js-questions').innerHTML=Object.entries(r.questions).map(([key,q])=>'<div class="js-question"><div class="js-label">'+escape(key)+'<span class="js-muted">'+escape(q.type)+'</span></div><div style="margin-top:7px">'+escape(q.instructions)+'</div><div class="js-muted" style="margin-top:7px">'+escape(Array.isArray(q.criteria)?q.criteria.join(' → '):Object.keys(q.criteria).join(' · '))+'</div></div>').join('');root.querySelectorAll('[data-field]').forEach(el=>el.addEventListener('input',()=>find('js-json').textContent=JSON.stringify(request(),null,2)));renderView();renderAnswers();}
+      root.querySelectorAll('[data-recipe]').forEach(el=>el.addEventListener('click',()=>{selected=el.dataset.recipe;shown=false;renderRecipe();persist();}));root.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>{view=el.dataset.view;renderView();persist();}));find('js-results-button').addEventListener('click',()=>{shown=true;renderAnswers();});find('js-ai').addEventListener('click',()=>{find('js-draft').hidden=!find('js-draft').hidden;});find('js-preview-draft').addEventListener('click',()=>{selected='support';view='questions';shown=false;find('js-draft').hidden=true;renderRecipe();persist();});
+      function renderDesign(){root.classList.toggle('js-stacked',design.layout==='Stacked');renderAnswers();}
+      renderRecipe();renderDesign();
+      window.addEventListener('openai:set_globals',e=>{const s=e.detail?.globals?.widgetState?.privateContent;if(recipes[s?.recipe]){selected=s.recipe;view=['inputs','questions','json'].includes(s.view)?s.view:'inputs';shown=false;renderRecipe();}});
+      if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:renderDesign});tweak.addSelect(design,'layout',{label:'Workspace layout',options:['Side by side','Stacked']});tweak.addToggle(design,'distributions',{label:'Show probability distributions'});}
+    })();
+  </script>
+</div>

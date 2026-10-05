@@ -1,0 +1,79 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/llms/ui/app.css"><link rel="stylesheet" href="/ui/components/CheckBox.css"><style>#result{white-space:pre-wrap;font:12px sans-serif}body{margin:0}</style><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs"}}</script></head><body><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,ref,nextTick} from 'vue'
+import ShareRecipeDialog from '/ext/jev/ShareRecipeDialog.mjs'
+import ImportRecipeDialog from '/ext/jev/ImportRecipeDialog.mjs'
+import {registrationMessage,registrationUrl} from '/ext/publish/PublisherAccount.mjs'
+const assert=(x,m)=>{if(!x)throw Error(m)},wait=()=>new Promise(r=>setTimeout(r,20)),flush=async()=>{await nextTick();await wait();await nextTick()}
+const cases=await (await fetch('/tests/fixtures/jev-sharing-contract.json')).json(),fixture=cases.find(c=>c.name==='sentiment'&&c.valid)
+const shareOpen=ref(false),importOpen=ref(false),row={id:'fixture',filename:fixture.filename,revision:1,document:fixture.document},account={baseUrl:'https://ai.llmspy.org',userName:'author',userId:'owner',apiKey:'abc******1234',registerUrl:'https://ai.llmspy.org/embed/register.html'}
+let publication=null,pendingPublication=null,imported=null,replace=true,posts=[],queries=[],previews=[],toasts=[],failPublication=false,pendingDownload
+const detail={starCount:1,starred:false,publisherStarred:true,publisherRunCount:12,externalRef:'public-ref',filename:fixture.filename,document:fixture.document,execution:fixture.execution,revision:3,contentHash:'reviewed-hash',publishedUrl:'https://ai.llmspy.org/d/public-ref',author:{userName:'author'}}
+async function api(path,method='GET',body){
+ if(path==='/tags')return (await fetch('/tests/fixtures/decision-tags.json')).json()
+ if(path.endsWith('/share')&&method==='GET')return {account,recipe:row,usage:{publisherStarred:true,publisherRunCount:12},runs:[{id:'run-1',execution:fixture.execution}],publication,pendingPublication,savedChangesNotShared:false}
+ if(path.endsWith('/share')&&method==='POST'){posts.push(body);if(failPublication)throw Error('Update failed');publication={publishedUrl:detail.publishedUrl,externalRef:'public-ref',publicRevision:3,sourceRunId:'run-1'};return detail}
+ if(path.endsWith('/share')&&method==='DELETE'){publication=null;return {unpublished:true}}
+ if(path.startsWith('/shared-recipes?')){queries.push(new URL(path,location.origin).searchParams);return {items:[{...detail,id:'public-ref',name:fixture.document.name,description:fixture.document.description,tags:fixture.document.tags,questionCount:Object.keys(fixture.document.questions).length,fieldCount:1}],hasMore:false}}
+ if(path==='/shared-recipes/public-ref/star'){assert(typeof body.starred==='boolean','Star value is explicit');detail.starred=body.starred;detail.starCount=body.starred?2:1;return {starCount:detail.starCount,starred:detail.starred}}
+ if(path==='/recipes/preview-url'){previews.push(body.url);if(body.url==='https://files.example/slow.json')return new Promise(resolve=>pendingDownload=resolve);if(body.url==='https://files.example/export.json')return {document:structuredClone(fixture.document),filename:'export.json'};return structuredClone(detail)}
+ if(path==='/recipes'&&method==='POST'){posts.push(body);return {id:body.filename.slice(0,-5),filename:body.filename,document:JSON.parse(JSON.stringify(body.document))}}
+ if(path==='/shared-recipes/import'){posts.push(body);if(replace){replace=false;const error=Error('Recipe exists');error.code='RecipeExistsError';error.existingRecipe={id:'fixture',revision:2};throw error}return {id:'copy',filename:body.filename,document:fixture.document,sourceExample:fixture.execution,importSource:{externalRef:detail.externalRef}}}
+ throw Error('Unexpected API '+path)
+}
+const app=createApp({components:{ShareRecipeDialog,ImportRecipeDialog},setup(){return {shareOpen,importOpen,api,done:r=>imported=r}},template:`<div data-jev-studio class="h-full min-h-0 flex flex-col bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm"><ShareRecipeDialog :open="shareOpen" recipe-id="fixture" :api="api" @close="shareOpen=false"/><ImportRecipeDialog :open="importOpen" :api="api" @close="importOpen=false" @imported="done"/></div>`})
+app.provide('ctx',{ai:{auth:{userName:'local-owner'}},scope:()=>({}),setError(){},toast:message=>toasts.push(message)})
+const errors=[];app.config.errorHandler=e=>errors.push(e.message);app.mount('#app')
+const click=async text=>{const button=[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent.trim()===text);assert(button,'Button '+text);button.click();await flush()}
+try{
+ if(location.search.includes('dark'))document.documentElement.classList.add('dark')
+ shareOpen.value=true;await flush();await flush()
+ assert(document.querySelector('dialog[open]').textContent.includes('Recorded prompt / state'),'Worked prompt reviewed')
+ assert(document.querySelector('dialog[open]').textContent.includes('Recorded example result'),'Worked results reviewed')
+ assert(document.querySelector('dialog[open]').textContent.includes('This recipe will be public'),'Concise public notice')
+ assert(document.querySelector('dialog[open]').textContent.includes(`${fixture.document.examples.length} usage ${fixture.document.examples.length===1?'example':'examples'} included`),'Concise example count')
+ assert(!document.querySelector('aside').textContent.includes('recorded local')&&!document.querySelector('aside').textContent.includes('Used for discovery'),'Publishing panel omits usage details')
+ assert(!document.querySelector('dialog[open] input[type=checkbox]'),'Recipe documentation is always included, without an opt-in')
+ assert([...document.querySelectorAll('dialog[open] [data-jev-json-block] code')].at(-1).textContent.includes('"examples"'),'Full recipe JSON includes documentation')
+ await click('JSON');const snapshot=JSON.parse(document.querySelector('dialog[open] [data-jev-json-block] code').textContent);assert(JSON.stringify(snapshot)===JSON.stringify({filename:fixture.filename,document:fixture.document,execution:fixture.execution,publisherStarred:true,publisherRunCount:12}),'JSON includes the complete shared payload, including publisher usage');
+ const json=document.querySelector('[data-jev-share-json] [data-jev-json-block]'),preview=document.querySelector('[data-jev-share-preview]'),jsonRect=json.getBoundingClientRect(),previewRect=preview.getBoundingClientRect();assert(Math.abs(jsonRect.bottom-previewRect.bottom)<2,'JSON fills the preview height');assert(json.scrollHeight>json.clientHeight&&getComputedStyle(json).overflowY==='auto','Full-height JSON scrolls independently');if(innerWidth>760)assert(jsonRect.height>400,'Desktop JSON extends beyond the old height limit');await click('Preview');
+ await click('JSON');assert(JSON.stringify(JSON.parse(document.querySelector('dialog[open] [data-jev-json-block] code').textContent).document.examples)===JSON.stringify(fixture.document.examples),'All authored examples are in the snapshot');await click('Preview')
+ const footer=document.querySelector('dialog[open] footer'),body=document.querySelector('[data-jev-sharing-body]');body.scrollTop=body.scrollHeight;await flush();assert(footer.getBoundingClientRect().bottom<=innerHeight&&footer.getBoundingClientRect().top>=0,'Publish footer stays visible while scrolling');body.scrollTop=0
+ await click('Publish recipe');assert(posts[0].runId==='run-1'&&!('includeAdditionalExamples' in posts[0]),'Server receives selected run without a documentation toggle')
+ assert(!document.querySelector('dialog[open]')&&toasts.at(-1)==='Recipe shared','Publishing closes the dialog and confirms sharing')
+ shareOpen.value=true;await flush();await flush();assert(!document.querySelector('dialog[open] footer').textContent.includes('Updates replace'),'Compact footer omits redundant update text');failPublication=true;await click('Update public recipe');assert(document.querySelector('dialog[open]').textContent.includes('Update failed')&&toasts.length===1,'Failed update remains open without a success toast');failPublication=false;await click('Update public recipe');assert(!document.querySelector('dialog[open]')&&toasts.length===2&&toasts.at(-1)==='Recipe shared','Updating closes the dialog and confirms sharing')
+ shareOpen.value=true;await flush();await flush()
+ assert(document.querySelector('dialog[open]').textContent.includes('Copy link'),'Receipt actions visible')
+ await click('Stop sharing');assert(publication===null&&document.querySelector('dialog[open]')&&toasts.length===2,'Explicit unpublish stays open without a shared toast')
+ shareOpen.value=false;await flush();importOpen.value=true;await flush();await flush()
+ assert(!document.querySelector('[data-jev-import-card]').textContent.includes('publisher runs'),'Publisher run count hidden');assert(document.querySelector('#jev-collection-tags option[value="Email"]'),'Remote suggested tag')
+ const collectionStar=document.querySelector('[data-jev-collection-star]');collectionStar.click();await flush();assert(collectionStar.getAttribute('aria-pressed')==='true'&&collectionStar.textContent.trim()==='2','Collection can star a recipe');collectionStar.click();await flush();assert(collectionStar.getAttribute('aria-pressed')==='false'&&collectionStar.textContent.trim()==='1','Collection can remove a star')
+ const publicLink=document.querySelector('[data-jev-import-view]');assert(publicLink.href===detail.publishedUrl&&publicLink.target==='_blank','Collection offers a public page link')
+ assert(!document.querySelector('[data-jev-import-dialog] [data-jev-json-block]'),'Collection has no preview')
+ document.querySelector('[data-jev-import-card-action]').click();await flush();assert(document.querySelector('dialog[open]').textContent.includes('clears its old history'),'Direct import retains replacement warning')
+ assert(!document.querySelector('[data-jev-import-dialog] [data-jev-json-block]'),'Conflict displays no preview')
+ await click('Import as a copy');assert(imported?.sourceExample&&!imported.publication&&!document.querySelector('dialog[open]'),'Import as a copy imports and closes immediately')
+ importOpen.value=true;await flush();await flush()
+ assert([...document.querySelectorAll('[data-jev-import-dialog] [data-jev-tabs] button')].map(b=>b.textContent.trim()).join('|')==='Collection|From JSON','Only public Collection and From JSON tabs')
+ await click('From JSON');assert(document.querySelector('dialog[open]').textContent.includes('Import from file'),'From JSON supports file imports')
+ const urlField=document.querySelector('dialog[open] input[type=url]');urlField.value='https://files.example/export.json';urlField.dispatchEvent(new Event('input',{bubbles:true}));await flush()
+ assert(document.querySelector('dialog[open] a').href==='https://files.example/export.json','URL opens separately from import')
+ await click('Import')
+ assert(previews.at(-1)==='https://files.example/export.json'&&!document.querySelector('dialog[open]'),'JSON URL imports directly without preview')
+ assert(imported.id==='export'&&!imported.sourceExample&&!imported.importSource&&posts.at(-1).document.name===fixture.document.name,'JSON URL imports the portable document independently')
+ importOpen.value=true;await flush();await flush();await click('From JSON')
+ const slowField=document.querySelector('dialog[open] input[type=url]');slowField.value='https://files.example/slow.json';slowField.dispatchEvent(new Event('input',{bubbles:true}));await flush();const beforeDismiss=posts.length
+ document.querySelector('[data-jev-url-import]').click();await flush();assert(document.querySelector('[data-jev-url-import]').disabled,'Import remains disabled during download')
+ importOpen.value=false;await flush();pendingDownload({document:structuredClone(fixture.document),filename:'slow.json'});await flush();assert(posts.length===beforeDismiss,'Closing before download completes prevents a late import')
+ const frame={contentWindow:{}},url=registrationUrl(account.registerUrl,'local-owner','nonce')
+ const event={source:frame.contentWindow,origin:'https://ai.llmspy.org',data:{type:'register-success',nonce:'nonce',apiKey:'key',userName:'author'}}
+ assert(registrationMessage(event,frame,url,'nonce'),'Pinned origin/source handshake')
+ assert(!registrationMessage({...event,origin:'https://evil.example'},frame,url,'nonce'),'Foreign origin rejected')
+ assert(!registrationMessage({...event,source:{}},frame,url,'nonce'),'Foreign frame rejected')
+ assert(!registrationMessage(event,frame,url,'different'),'Nonce rejected')
+ assert(errors.length===0,'No Vue errors: '+errors.join(','))
+ shareOpen.value=true;await flush();await flush()
+ const dialog=document.querySelector('dialog[open]'),rect=dialog.getBoundingClientRect();dialog.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:rect.left-1,clientY:rect.top-1}));await flush();assert(!document.querySelector('dialog[open]'),'Outside click closes sharing');shareOpen.value=true;await flush();await flush();document.querySelector('[data-jev-dialog-close]').click();await flush();assert(!document.querySelector('dialog[open]'),'Close icon closes sharing');shareOpen.value=true;await flush();await flush()
+ shareOpen.value=false;await flush();pendingPublication={payload:{filename:'captured.json',document:fixture.document,execution:fixture.execution,publisherStarred:false,publisherRunCount:4}};shareOpen.value=true;await flush();await flush();await click('JSON');assert(JSON.stringify(JSON.parse(document.querySelector('[data-jev-share-json] code').textContent))===JSON.stringify(pendingPublication.payload),'Recovery JSON shows the captured payload rather than current local usage');shareOpen.value=false;await flush();pendingPublication=null;shareOpen.value=true;await flush();await flush();await click('JSON')
+ document.querySelector('#result').textContent='PASS: share review, full-height JSON, successful publish/update close and toast, failed update stays open, authored examples included, unpublish, direct collection and JSON URL imports, independent import, replacement and registration trust boundaries'
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.stack+'\n'+errors.join('\n')}
+</script></body></html>

@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/llms/ui/app.css"><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs","vue-router":"/llms/ui/lib/vue-router.min.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs","@servicestack/vue":"/llms/ui/lib/servicestack-vue.mjs","/ui/lazy.mjs":"/llms/ui/lazy.mjs","/ui/components/ModelPicker.mjs":"/llms/ui/components/ModelPicker.mjs","/ui/components/CheckBox.mjs":"/llms/ui/components/CheckBox.mjs"}}</script><style>body{margin:0}#app{height:100vh}#result{white-space:pre-wrap}#nav{height:48px;display:flex;align-items:center;padding:8px}#nav svg{font-size:28px;cursor:pointer}</style></head><body class="bg-white dark:bg-gray-900"><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,reactive,nextTick} from 'vue'
+import {createRouter,createMemoryHistory} from 'vue-router'
+import ServiceStackVue from '@servicestack/vue'
+import icons from '/llms/ui/modules/icons.mjs'
+import extension from '/ext/jev/index.mjs'
+import App from '/llms/ui/App.mjs'
+const assert=(x,m)=>{if(!x)throw Error(m)},wait=()=>new Promise(r=>setTimeout(r,20)),until=async f=>{for(let i=0;i<1000&&!f();i++)await wait();assert(f(),'Timed out waiting for navigation')}
+const query=new URLSearchParams(location.search),disabled=query.has('disabled'),errors=[],requests=[]
+if(query.has('dark'))document.documentElement.classList.add('dark')
+const documentRecipe=await(await fetch('/llms/extensions/jev/recipes/sentiment.json')).json(),row={id:'sentiment',filename:'sentiment.json',revision:1,document:documentRecipe}
+const theme=await(await fetch('/llms/extensions/app/themes/'+(query.has('dark')?'dark':'light')+'.json')).json()
+let left=true,right=true,navigation
+const ctx={ai:{hasAccess:true,base:'',auth:{userName:'navigation-fixture'},resolvePath:p=>p},state:reactive({startupReady:true,projects:[],models:[],config:{extensions:disabled?['jev']:['jev','publish']}}),routes:[],icons:{},
+ setLeftIcons(items){Object.assign(this.icons,items)},matchesPath:(a,b)=>a===b,
+ layoutVisible:key=>key==='header'?true:key==='top'?false:key==='right'?right:left,toggleLayout(key,value){if(key==='right')right=value;else left=value},
+ togglePath(path){navigation=this.router.push(path)},openModal(){},toast(){},
+ scope(name){return {state:reactive({}),setState(value){Object.assign(this.state,value)},async getJson(path){assert(name==='publish'&&path==='/config.json','Publisher config request');return {response:{apiKey:'fixture-masked',userName:'fixture-publisher'}}},async get(path,options={}){requests.push({name,path,method:options.method||'GET'});let value,status=200;
+  if(path==='/status')value={available:false,message:'Fixture provider disconnected',models:['~typesafe/jev-latest']}
+  else if(path==='/recipes')value={items:[{...row,name:documentRecipe.name,questionCount:Object.keys(documentRecipe.questions).length}]}
+  else if(path==='/recipes/sentiment')value=row
+  else if(path.startsWith('/runs'))value={items:[],cursor:null}
+  else if(path==='/recipes/sentiment/share'){
+   if(disabled){status=503;value={responseStatus:{errorCode:'Unavailable',message:'Enable the publish extension to share and browse recipes.'}}}
+   else value={account:{apiKey:'fixture-masked',userName:'fixture-publisher',baseUrl:'https://ai.llmspy.org',registerUrl:'https://ai.llmspy.org/embed/register.html'},recipe:row,runs:[],publication:null}
+  }else throw Error('Unexpected request '+name+path)
+  return Response.json(value,{status})
+ }}}
+}
+extension.install(ctx)
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:{template:'<p>Chat fixture</p>'}},...ctx.routes]});ctx.router=router;router.onError(e=>errors.push(e.message))
+Object.assign(ctx,{left:ctx.icons,right:{},leftTop:{},top:{toolbar:{isActive:()=>false,component:{template:'<button type="button" aria-label="Toolbar fixture">Tools</button>'}}},layout:reactive({left:null,top:null}),component:()=>null,visibleComponents:items=>items,cls:(id,classes)=>classes+(id==='header'?' bg-gray-100 dark:bg-gray-800':''),closeModal(){},chat:{setSelectedModel(){}}})
+window.$ctx=ctx
+const app=createApp(App);app.component('Avatar',{template:'<span/>'});app.use(ServiceStackVue);app.use(router);app.provide('ctx',ctx);Object.assign(app.config.globalProperties,{$styles:theme.styles,$ctx:ctx,$layout:ctx.layout,$state:ctx.state,$ai:ctx.ai});icons.install({components:cs=>Object.entries(cs).forEach(([n,c])=>app.component(n,c))});app.config.errorHandler=e=>errors.push(e.message)
+try{
+ await router.push('/');await router.isReady();app.mount('#app');await nextTick()
+ document.querySelector('[aria-label="Decision Studio"]').dispatchEvent(new MouseEvent('click',{bubbles:true}));await navigation
+ await until(()=>document.querySelector('[data-jev-studio] h1')?.textContent==='Decision Studio');await until(()=>[...document.querySelectorAll('[data-jev-menu] button')].some(b=>b.textContent.trim()==='Share recipe'))
+ assert(router.currentRoute.value.path==='/jev','Icon navigates to the actual lazy route');assert(!right,'Icon closes right sidebar')
+ await nextTick()
+ const title=document.querySelector('[data-jev-header] h1'),create=[...document.querySelectorAll('[data-jev-header] button')].find(b=>b.textContent.trim()==='Create with AI'),toolbar=document.querySelector('[aria-label="Toolbar fixture"]')
+ const hit=element=>{const r=element.getBoundingClientRect(),target=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return element===target||element.contains(target)}
+ assert(hit(title)&&hit(create),'Title and Create with AI remain visible and clickable through the app page container')
+ assert(hit(toolbar),'Top-bar icons remain visible and clickable')
+ assert(getComputedStyle(document.querySelector('#page')).overflowY==='visible','Jev owns scrolling rather than clipping its raised header')
+ const titleRect=title.getBoundingClientRect(),toolbarRect=toolbar.getBoundingClientRect()
+ assert(innerWidth<850||titleRect.top<toolbarRect.bottom,'Wide-screen title shares the top-bar row')
+ assert(titleRect.right<=toolbarRect.left||titleRect.top>=toolbarRect.bottom,'Narrow-screen title does not overlap top-bar controls')
+
+ document.querySelector('[aria-label="Recipe actions"]').click();[...document.querySelectorAll('[data-jev-menu] button')].find(b=>b.textContent.trim()==='Share recipe').click()
+ await until(()=>document.querySelector('dialog[open]')?.textContent.includes(disabled?'Enable the publish extension':'fixture-publisher'))
+ assert(document.querySelector('[data-jev-studio] h1'),'Studio remains available with publishing disabled')
+ assert(errors.length===0,'No route/module/render errors: '+errors.join(','))
+ assert(!requests.some(r=>r.path==='/runs'&&r.method==='POST'),'Opening the page does not run a decision')
+ document.querySelector('[aria-label="Close recipe sharing"]').click();await nextTick()
+ await router.push('/');await nextTick()
+ assert(getComputedStyle(document.querySelector('#page')).overflowY==='auto','Normal page scrolling returns when leaving Jev')
+ await router.push('/jev');await until(()=>document.querySelector('[data-jev-header] h1'));await nextTick()
+ assert(hit(document.querySelector('[data-jev-header] h1'))&&hit(document.querySelector('[aria-label="Toolbar fixture"]')),'Header and icons remain visible after returning to Jev')
+ document.querySelector('#result').textContent='PASS: real app header visibility, clickable top-bar icons, responsive overlap and route scrolling; lazy navigation and '+(disabled?'publishing disabled preserves local studio':'sharing loads the publisher account component')
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.stack+'\n'+errors.join('\n')}
+</script></body></html>

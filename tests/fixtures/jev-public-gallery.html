@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/llms/ui/app.css"><link rel="stylesheet" href="/publisher/recipes.css"><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs"}}</script><style>main{max-width:1000px;padding:20px;margin:auto}#result{white-space:pre-wrap}iframe{width:100%;height:550px}</style></head><body style="background:repeating-linear-gradient(45deg,#729fcf 0px,#729fcf 30px,#293b55 30px,#293b55 60px);background-attachment:fixed;color:white"><main><div id="app"></div><pre id="result">RUNNING</pre><div id="registration"></div></main><script type="module">
+import {createApp,nextTick} from 'vue'
+import RecipeGrid from '/publisher/recipes.mjs'
+const assert=(x,m)=>{if(!x)throw Error(m)},wait=()=>new Promise(r=>setTimeout(r,25)),flush=async()=>{await nextTick();await wait();await nextTick()}
+if(location.search.includes('dark'))document.documentElement.classList.add('dark')
+const nativeFetch=window.fetch.bind(window), calls=[]
+const item={starCount:1,starred:false,publisherStarred:true,publisherRunCount:27,externalRef:'fixture',name:'A <script> safe recipe',description:'A recorded worked example',author:{displayName:'Fixture author'},questionCount:2,content:'email',tags:['test'],updatedAt:'2026-10-02',revision:3,publishedUrl:location.origin+'/d/fixture'}
+let authenticated=false,conflict=true,revoked=false
+window.fetch=async(path,options={})=>{
+ const url=new URL(path,location.origin)
+ if(!url.pathname.startsWith('/publish/'))return nativeFetch(path,options)
+ calls.push({url,options})
+ if(url.pathname==='/publish/decisions/tags')return Response.json(await (await nativeFetch('/tests/fixtures/decision-tags.json')).json())
+ if(options.method==='PUT'&&url.pathname.endsWith('/star')){
+  assert(options.headers['X-Recipe-Star']==='1','Star mutation has explicit header')
+  if(!authenticated)return new Response('{}',{status:401})
+  item.starred=JSON.parse(options.body).starred;item.starCount=item.starred?2:1;return Response.json({starred:item.starred,starCount:item.starCount})
+ }
+ if(options.method==='DELETE'){
+  assert(options.headers['X-Recipe-Management']==='1','Cookie mutation has explicit management header')
+  assert(url.searchParams.get('revision')==='3','Revoke pins reviewed revision')
+  if(conflict){conflict=false;return new Response('{}',{status:409})}
+  revoked=true;return new Response('{}')
+ }
+ if(url.pathname.endsWith('/mine')&&!authenticated){assert(options.redirect==='manual','Cookie sign-in redirect handled explicitly');return {ok:false,status:0,type:'opaqueredirect'}}
+ const skip=Number(url.searchParams.get('skip'))
+ return Response.json({items:revoked?[]:[{...item,externalRef:skip?'fixture-next':'fixture'}],hasMore:!skip&&!revoked})
+}
+window.confirm=()=>true
+const errors=[],app=createApp(RecipeGrid);app.config.errorHandler=e=>errors.push(e.message);app.provide('ctx',{});app.mount('#app')
+const click=async text=>{const button=[...document.querySelectorAll('#app button')].find(b=>b.textContent.trim()===text);assert(button,'Button '+text);button.click();await flush()}
+try{
+ await flush();await flush()
+ assert(document.querySelector('.recipe-card').textContent.includes('<script>'),'Titles are escaped text')
+ assert(!document.querySelector('.recipe-card').textContent.includes('publisher runs'),'Run counts hidden')
+ assert(document.querySelector('option[value=most-run]'),'Usage sort available')
+ assert(document.querySelector('#decision-gallery-tags option[value="Email"]'),'Tags loaded from server')
+ assert([...document.querySelectorAll('#decision-gallery-tags option')].every(option=>!option.textContent&&!option.label),'Tag suggestions only show their value')
+ assert(!document.querySelector('.recipe-card script'),'No injected script elements')
+ assert(!document.querySelector('#app').textContent.includes('Stop sharing'),'Anonymous cards have no owner action')
+ const card=document.querySelector('.recipe-card'), primary=card.querySelector('.recipe-card-link'), favourite=card.querySelector('.recipe-star')
+ assert(favourite.textContent.trim()==='1'&&favourite.title==='Star this recipe'&&favourite.getAttribute('aria-label')==='Star this recipe','Combined star count has an accessible action')
+ assert(!card.querySelector('.recipe-card-actions')&&!card.textContent.includes('View recipe')&&!card.textContent.includes('Copy link'),'Card footer and copy action removed')
+ const destinations=[]
+ card.addEventListener('click',event=>{const link=event.target.closest('a');if(link){destinations.push(link.getAttribute('href'));event.preventDefault()}})
+ const hit=async(element)=>{element.scrollIntoView({block:'center'});await flush();const rect=element.getBoundingClientRect();return document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)}
+ for(const area of card.querySelectorAll('.recipe-card-description,.recipe-card-meta,.recipe-eyebrow')){
+  const target=await hit(area);assert(target===primary,'Card body is covered by its native recipe link: '+area.className+' -> '+target?.outerHTML?.slice(0,150));target.click();assert(destinations.at(-1)==='/d/fixture','Card body opens recipe')
+ }
+ card.scrollIntoView({block:'start'});await flush();const rect=card.getBoundingClientRect(),padding=document.elementFromPoint(rect.x+12,rect.y+12)
+ assert(padding===primary,'Card padding opens recipe')
+ const tags=card.querySelectorAll('.recipe-tags a')
+ for(const tagLink of tags){assert(await hit(tagLink)===tagLink,'Tag link is above card link');(await hit(tagLink)).click();assert(destinations.at(-1)===tagLink.getAttribute('href'),'Tag links retain their filter destination')}
+ const favouriteHit=await hit(favourite);assert(favourite.contains(favouriteHit)||favouriteHit===favourite,'Star button is reachable above the card link');const beforeStarNavigation=destinations.length;favourite.click();await flush();assert(card.textContent.includes('Sign in to star')&&destinations.length===beforeStarNavigation,'Anonymous star requests sign-in without navigating');authenticated=true;favourite.click();await flush();assert(favourite.getAttribute('aria-pressed')==='true'&&favourite.textContent.trim()==='2','Signed-in viewer can star');favourite.click();await flush();assert(favourite.getAttribute('aria-pressed')==='false'&&favourite.textContent.trim()==='1','Viewer can unstar');authenticated=false
+ primary.focus();assert(document.activeElement===primary,'Card link supports keyboard focus')
+ const input=document.querySelector('[aria-label="Search recipes"]');input.value='worked';input.dispatchEvent(new Event('input',{bubbles:true}))
+ await click('Search');assert(calls.at(-1).url.searchParams.get('q')==='worked','Search query')
+ await click('Load more');assert(document.querySelectorAll('.recipe-card').length===2,'Append next page');assert(calls.at(-1).url.searchParams.get('skip')==='1','Pagination offset')
+ await click('My recipes');assert(document.querySelector('[role=alert]').textContent.includes('Sign in'),'Disconnected management is actionable')
+ authenticated=true;await click('Search');assert(document.querySelector('#app').textContent.includes('Stop sharing'),'Owner controls after successful owner fetch')
+ const ownerButton=document.querySelector('.recipe-card-controls .recipe-danger');assert(await hit(ownerButton)===ownerButton,'Stop sharing remains clickable above the card link')
+ await click('Stop sharing');assert(document.querySelector('[role=alert]').textContent.includes('Refresh and review'),'Stale revoke requests review')
+ await click('Search');await click('Stop sharing');assert(document.querySelector('#app').textContent.includes('No recipes found'),'Removed share leaves owner catalog')
+ // The real registration page must receive a nonce handshake and an explicit grant.
+ const frame=document.createElement('iframe');frame.src='/publisher/register.html?domain=llmspy.org&callerOrigin='+encodeURIComponent(location.origin)+'&nonce=fixture-nonce';frame.title='Publisher grant test'
+ const loaded=new Promise(resolve=>frame.onload=resolve);document.querySelector('#registration').append(frame);await loaded
+ const doc=frame.contentDocument,win=frame.contentWindow;let requests=0,received=null
+ win.fetch=async()=>{requests++;return Response.json({apiKey:'fixture-key',userName:'fixture_author',userId:'fixture-owner'})}
+ window.addEventListener('message',event=>{if(event.source===win&&event.data?.type==='register-success')received=event.data})
+ win.postMessage({type:'publisher-connect-init',nonce:'wrong'},location.origin);await flush();assert(!doc.querySelector('#publisher-grant'),'Wrong nonce cannot initiate grant')
+ win.postMessage({type:'publisher-connect-init',nonce:'fixture-nonce'},location.origin);await flush();assert(doc.querySelector('#publisher-caller').textContent.includes(location.origin),'Requesting origin displayed')
+ doc.querySelector('#username').value='fixture_author';doc.querySelector('#registerForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await flush();assert(requests===0&&!received,'No disclosure without explicit grant')
+ doc.querySelector('#publisher-grant').checked=true;doc.querySelector('#registerForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await flush();await flush()
+ assert(requests===1&&received?.nonce==='fixture-nonce'&&received.apiKey==='fixture-key','Credential delivered only after handshake and grant')
+ frame.remove();revoked=false;await click('All recipes');await click('Load more');assert(errors.length===0,'No Vue errors: '+errors.join(','))
+ const panel=document.querySelector('.recipe-gallery');assert(getComputedStyle(panel).backgroundColor!=='rgba(0, 0, 0, 0)','Gallery has opaque background');assert(panel.scrollWidth<=panel.clientWidth+1,'Gallery fits viewport');document.querySelector('#result').textContent='PASS: public gallery escaping, search, pagination, sign-in, card and tag navigation, star tooltip, single-value tag suggestions, owner revoke/conflict, and actual registration nonce/explicit grant'
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.stack+'\n'+errors.join('\n')}
+</script></body></html>

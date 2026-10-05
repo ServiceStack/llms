@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/llms/ui/app.css"><link rel="stylesheet" href="/publisher/recipes.css"><script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs"}}</script><style>body{margin:0;background:repeating-linear-gradient(45deg,#729fcf 0px,#729fcf 30px,#293b55 30px,#293b55 60px);color:white}#result{font:12px sans-serif;white-space:pre-wrap}</style></head><body><div id="app"></div><pre id="result">RUNNING</pre><script>for(const kind of ['error','unhandledrejection'])window.addEventListener(kind,e=>document.querySelector('#result').textContent='FAIL: '+(e.message||e.reason?.stack||e.reason))</script><script type="module">
+import {createApp,nextTick} from 'vue'
+const assert=(x,m)=>{if(!x)throw Error(m)},wait=()=>new Promise(r=>setTimeout(r,25)),flush=async()=>{await nextTick();await wait();await nextTick()}
+if(location.search.includes('dark'))document.documentElement.classList.add('dark')
+const nativeFetch=window.fetch.bind(window), cases=await (await nativeFetch('/tests/fixtures/jev-sharing-contract.json')).json(), fixture=cases.find(c=>c.name==='claim'&&c.valid)
+fixture.document.examples.push({id:'recorded',label:'A real successful run',input:structuredClone(fixture.execution.input),execution:structuredClone(fixture.execution)})
+const detail={externalRef:'fixture',starCount:1,starred:false,...fixture,name:fixture.document.name,description:fixture.document.description,author:{userName:'llmspy'},fieldCount:2,questionCount:1,tags:fixture.document.tags,revision:1,publishedAt:'2026-10-03T09:01:04.492666',updatedAt:'2026-10-03T09:01:04.492666',downloadUrl:'/d/fixture/recipe.json'}
+let copied='';Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>copied=text},configurable:true})
+window.fetch=async(path,options)=>{
+ if(String(path).endsWith('/star')){detail.starred=JSON.parse(options.body).starred;detail.starCount=detail.starred?2:1;return Response.json({starCount:detail.starCount,starred:detail.starred})}
+ return String(path).startsWith('/publish/decision/')?Response.json(detail):nativeFetch(path,options)
+}
+// The viewer shell includes this module inline as `const App`; export it for the fixture.
+const source=(await (await nativeFetch('/publisher/recipe.mjs')).text()).replaceAll("from './","from '"+location.origin+"/publisher/").replace('const App =','export default')
+const moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'})), {default:RecipePage}=await import(moduleUrl);URL.revokeObjectURL(moduleUrl)
+const errors=[],app=createApp(RecipePage);app.config.errorHandler=e=>errors.push(e.message);const vm=app.mount('#app')
+const click=async text=>{const button=[...document.querySelectorAll('#app button')].find(b=>b.textContent.trim()===text);assert(button,'Button '+text);button.click();await flush()}
+try{
+ await flush();await flush()
+ const star=document.querySelector('.recipe-star');star.click();await flush();assert(star.getAttribute('aria-pressed')==='true'&&star.textContent.trim()==='2','Public recipe supports starring');star.click();await flush();assert(star.getAttribute('aria-pressed')==='false'&&star.textContent.trim()==='1','Public recipe supports removing a star')
+ assert(document.querySelectorAll('h1').length===1,'One recipe title');assert(document.querySelector('.recipe-results').textContent.includes('Supported'),'Results lead preview')
+ const answer=Object.values(vm.recipe.execution.answers).find(a=>a.type==='choice'),originalConfidence=answer.confidence,probabilityColor=getComputedStyle(document.querySelector('.jev-track > div')).backgroundColor
+ const themes=new Set()
+ for(const [value,strength] of [[0,'weak'],[0.5,'moderate'],[0.75,'high'],[1,'strong'],[null,null]]){
+  answer.confidence=value;await flush();const confidence=document.querySelector('.recipe-results .jev-confidence summary'),fill=confidence.querySelector('[data-jev-confidence-fill]'),style=getComputedStyle(confidence)
+  assert((confidence.dataset.strength||null)===strength,'Correct confidence strength at '+value);assert(style.borderTopStyle==='solid'&&style.borderTopWidth==='1px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)','Confidence pill has a border and background')
+  if(value===null)assert(!fill&&confidence.textContent==='Confidence unavailable','Unavailable confidence has no fill')
+  else{assert(fill.style.width===(value*100)+'%'&&Math.abs(fill.getBoundingClientRect().width-confidence.clientWidth*value)<1,'Confidence fill tracks the value at '+value);assert(getComputedStyle(fill).backgroundImage.includes('linear-gradient'),'Confidence fill has a gradient');themes.add(style.backgroundColor);if(value===0.75)assert(confidence.textContent==='Confidence 75% · High','0.75 uses the High pill')}
+ }
+ assert(themes.size===4,'Every confidence level has its own background theme');answer.confidence=0.75;await flush();const confidence=document.querySelector('.recipe-results .jev-confidence summary');confidence.click();await flush();assert(confidence.parentElement.open&&confidence.parentElement.textContent.includes('not measured accuracy'),'Clicking confidence reveals its explanation');confidence.click();answer.confidence=originalConfidence;await flush();assert(getComputedStyle(document.querySelector('.jev-track > div')).backgroundColor===probabilityColor,'Probability bars retain their neutral color')
+ assert(document.querySelector('.recipe-inputs').textContent.includes('Revenue increased'),'Readable captured inputs')
+ assert(!document.querySelector('.recipe-details').open,'Raw prompt collapsed')
+ assert(!document.querySelector('.recipe-meta').textContent.includes('T09:'),'Dates formatted')
+ const surface=document.querySelector('.recipe-public-inner');assert(getComputedStyle(surface).backgroundColor!=='rgba(0, 0, 0, 0)','Opaque content');assert(document.documentElement.scrollWidth<=innerWidth+1,'No horizontal overflow')
+ const usage=document.querySelector('.recipe-additional');usage.open=true;await flush();assert(usage.querySelector('.recipe-usage-example:last-child .recipe-results')?.textContent.includes('Supported'),'Saved usage examples render actual outputs');assert(usage.querySelectorAll('.recipe-usage-example').length===fixture.document.examples.length,'All usage examples rendered');usage.open=false
+ await click('JSON');const exact=JSON.parse(document.querySelector('.recipe-preview pre').textContent);assert(exact.execution.prompt.claim===fixture.execution.prompt.claim,'Exact captured prompt retained');assert(exact.document.examples.length===fixture.document.examples.length,'Authored examples retained');await click('Preview')
+ await click('Import into Jev');assert(document.querySelector('[aria-label="Recipe share link"]').value===location.origin+location.pathname,'Import instructions include share link');await click('Copy link');assert(copied===location.origin+location.pathname,'Copies page link');await click('Import into Jev')
+ assert(errors.length===0,'No Vue errors: '+errors.join(','));document.querySelector('#result').textContent='PASS: opaque public recipe, readable inputs and dates, exact snapshot JSON, import instructions, copy and responsive layout'
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.stack+'\n'+errors.join('\n')}
+</script></body></html>

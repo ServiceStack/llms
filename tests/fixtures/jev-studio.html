@@ -1,0 +1,1208 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <link rel="stylesheet" href="/llms/ui/app.css" />
+        <link rel="stylesheet" href="/llms/ui/components/CheckBox.css" />
+        <link rel="stylesheet" href="/llms/ui/components/ModelPicker.css" />
+        <link rel="stylesheet" href="/llms/ui/components/TextInput.css" />
+        <style>
+            body {
+                margin: 0;
+                overflow: hidden;
+            }
+            #app {
+                height: 100vh;
+            }
+            #result {
+                display: none;
+                font: 11px monospace;
+                margin: 0;
+                padding: 8px;
+                white-space: pre-wrap;
+            }
+        </style>
+        <script type="importmap">
+            {
+                "imports": {
+                    "vue": "/llms/ui/lib/vue.mjs",
+                    "@servicestack/client": "/llms/ui/lib/servicestack-client.mjs",
+                    "@servicestack/vue": "/llms/ui/lib/servicestack-vue.mjs",
+                    "/ui/lazy.mjs": "/llms/ui/lazy.mjs",
+                    "/ui/components/ModelPicker.mjs": "/llms/ui/components/ModelPicker.mjs",
+                    "/ui/components/CheckBox.mjs": "/llms/ui/components/CheckBox.mjs"
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <div id="app" class="pt-9 bg-white dark:bg-gray-900"></div>
+        <pre id="result">RUNNING</pre>
+        <script type="module">
+            import { createApp, reactive, nextTick } from 'vue'
+            import ServiceStackVue from '@servicestack/vue'
+            import icons from '/llms/ui/modules/icons.mjs'
+            import ModelPicker from '/llms/ui/components/ModelPicker.mjs'
+            import { createDraftStore } from '/ext/jev/draftStore.mjs'
+            import extension from '/ext/jev/index.mjs'
+            const keepAlive = setInterval(() => {}, 10)
+            const assert = (value, message) => {
+                if (!value) throw Error(message)
+            }
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+            const flush = async () => {
+                for (let i = 0; i < 10; i++) await wait(0)
+                await nextTick()
+            }
+            const until = async (fn) => {
+                for (let i = 0; i < 1000 && !fn(); i++) await wait(20)
+                assert(fn(), 'Timed out waiting for UI')
+            }
+            const query = new URLSearchParams(location.search)
+            if (query.has('dark')) document.documentElement.classList.add('dark')
+            const theme = await (
+                await fetch('/llms/extensions/app/themes/' + (query.has('dark') ? 'dark' : 'light') + '.json')
+            ).json()
+            const copy = (value) => JSON.parse(JSON.stringify(value))
+            const filenames = [
+                'sentiment.json',
+                'support.json',
+                'company-news.json',
+                'email.json',
+                'feedback.json',
+                'relevance.json',
+                'claim.json',
+            ]
+            const starters = await Promise.all(
+                filenames.map(async (name) => ({
+                    id: name.slice(0, -5),
+                    filename: name,
+                    revision: 1,
+                    document: await (
+                        await fetch('/llms/extensions/jev/recipes/' + name)
+                    ).json(),
+                })),
+            )
+            let generationModel
+            let connected = false,
+                generationReply,
+                providerCalls = 0,
+                holdRuns = false,
+                failedRuns = false,
+                lostSubmitReply = false,
+                holdExampleName = false,
+                failExampleName = false,
+                exampleNameReply,
+                exampleNameCalls = 0
+            const submissions = new Map(), historySequences = new Map()
+            const recipes = new Map([
+                    [
+                        'sentiment',
+                        { ...copy(starters[0]), id: 'sentiment', templateId: starters[0].id },
+                    ],
+                ]),
+                runs = new Map(),
+                favourites = new Set()
+            const writing = copy(starters[0].document)
+            writing.name = 'AI sentiment recipe'
+            const response = (value) =>
+                new Response(JSON.stringify(value), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                })
+            const saveRecipe = (document, oldId, replaceRevision, templateId, filename) => {
+                filename = recipes.get(oldId)?.filename || filename || document.name + '.json'
+                const id = oldId || filename.slice(0, -5), old = recipes.get(oldId || id)
+                if (!oldId && old && replaceRevision === undefined)
+                    return new Response(JSON.stringify({ responseStatus: {
+                        errorCode: 'RecipeExistsError', message: 'This name already exists.',
+                        existingRecipe: { id, revision: old.revision },
+                    } }), { status: 409 })
+                if (replaceRevision !== undefined) {
+                    assert(replaceRevision === old.revision, 'Replacement checks revision')
+                    for (const [runId, run] of runs) if (run.recipeId === id) runs.delete(runId)
+                }
+                const row = { ...old, id, filename, revision: (old?.revision || 0) + 1, document: copy(document), ...(templateId ? { templateId } : {}) }
+                if (oldId && oldId !== id) {
+                    recipes.delete(oldId)
+                    for (const run of runs.values()) if (run.recipeId === oldId) run.recipeId = id
+                }
+                recipes.set(id, row)
+                return response(row)
+            }
+            const ext = {
+                async get(path, options) {
+                    const method = options?.method || 'GET',
+                        body = options?.body ? JSON.parse(options.body) : null
+                    if (path === '/status')
+                        return response({
+                            available: connected,
+                            message: connected ? 'Connected' : 'Enable OpenRouter in provider settings.',
+                            models: ['~typesafe/jev-latest', 'typesafe/jev-1.13'],
+                        })
+                    if (path === '/tags') return Response.json(await (await fetch('/tests/fixtures/decision-tags.json')).json())
+                    if (path.startsWith('/shared-recipes?') && method === 'GET')
+                        return response({
+                            items: starters.map((row) => ({
+                                id: row.id,
+                                publishedUrl: 'https://recipes.example/'+row.id+'.json',
+                                name: row.document.name,
+                                description: row.document.description,
+                                tags: row.document.tags,
+                                questionCount: Object.keys(row.document.questions).length,
+                                inputCount: Object.keys(row.document.inputSchema.properties).length,
+                            })),
+                        })
+                    if (path === '/recipes/preview-url') {
+                        const id = new URL(body.url).pathname.slice(1,-5), row = starters.find(row => row.id === id)
+                        return response({ document: row.document, filename: row.filename, downloadUrl: body.url })
+                    }
+                    if (path === '/recipes' && method === 'GET')
+                        return response({
+                            items: [...recipes.values()].map((row) => ({
+                                id: row.id,
+                                filename: row.filename,
+                                revision: row.revision,
+                                favourite: favourites.has(row.id),
+                                name: row.document.name,
+                                description: row.document.description,
+                                tags: row.document.tags,
+                                questionCount: Object.keys(row.document.questions).length,
+                            })),
+                        })
+                    if (path.startsWith('/recipes/') && method === 'GET')
+                        return response(recipes.get(decodeURIComponent(path.slice(9))))
+                    if (path === '/validate') {
+                        if (!body.recipe?.name || body.recipe.schemaVersion !== 1)
+                            return new Response(
+                                JSON.stringify({ responseStatus: { message: 'Invalid recipe' } }),
+                                { status: 400 },
+                            )
+                        return response({ recipe: body.recipe })
+                    }
+                    if (
+                        (path === '/recipes' || path.startsWith('/recipes/')) &&
+                        ['POST', 'PUT'].includes(method)
+                    ) {
+                        return saveRecipe(body.document, method === 'PUT' ? decodeURIComponent(path.slice(9)) : null, body.replaceRevision, null, body.filename)
+                    }
+                    if (path.startsWith('/recipes/') && method === 'DELETE') {
+                        recipes.delete(decodeURIComponent(path.slice(9)))
+                        return response({ deleted: true })
+                    }
+                    if (path.startsWith('/favourites/')) {
+                        const id = decodeURIComponent(path.slice(12))
+                        body.enabled ? favourites.add(id) : favourites.delete(id)
+                        return response({ enabled: body.enabled })
+                    }
+                    if (path === '/runs' && method === 'POST') {
+                        if (submissions.has(body.submissionId))
+                            return response(runs.get(submissions.get(body.submissionId)))
+                        providerCalls++
+                        const answers = {}
+                        for (const [key, q] of Object.entries(body.recipe.questions)) {
+                            if (q.type === 'noul') answers[key] = { type: 'noul', noul: 0.91 }
+                            else {
+                                const options =
+                                    q.type === 'choice'
+                                        ? Object.keys(q.criteria)
+                                        : q.criteria.map((_, i) => String(i))
+                                answers[key] = {
+                                    type: q.type,
+                                    confidence: 0.67,
+                                    probabilities: Object.fromEntries(
+                                        options.map((v, i) => [v, i === 0 ? 0.78 : i === 1 ? 0.22 : 0]),
+                                    ),
+                                }
+                                if (q.type === 'choice') answers[key].choice = options[0]
+                                else {
+                                    answers[key].score = 0.22
+                                    answers[key].legend = Object.fromEntries(
+                                        q.criteria.map((v, i) => [String(i), v]),
+                                    )
+                                }
+                            }
+                        }
+                        const historyPrefix = body.recipeId || '_drafts',
+                            sequence = (historySequences.get(historyPrefix) || 0) + 1
+                        historySequences.set(historyPrefix, sequence)
+                        const run = {
+                            id: historyPrefix + '-' + String(sequence).padStart(5, '0'),
+                            recipeId: body.recipeId,
+                            recipe: body.recipe,
+                            input: body.input,
+                            request: {
+                                model: body.recipe.decisionModel,
+                                state: body.input,
+                                questions: body.recipe.questions,
+                            },
+                            status: 'pending',
+                            createdAt: Date.now() / 1000,
+                            name: body.recipe.name,
+                            model: 'typesafe/jev-1.13-20260917',
+                            durationMs: 114,
+                            usage: { cost: 0.000019992, input_tokens: 476, output_tokens: 70 },
+                            answers: null,
+                            response: null,
+                            prepared: answers,
+                        }
+                        runs.set(run.id, run)
+                        submissions.set(body.submissionId, run.id)
+                        if (lostSubmitReply) {
+                            lostSubmitReply = false
+                            throw TypeError('Network reply lost')
+                        }
+                        return response(run)
+                    }
+                    if (path.startsWith('/runs/') && method === 'GET') {
+                        const run = runs.get(decodeURIComponent(path.slice(6)))
+                        if (!holdRuns && run.status === 'pending') {
+                            run.completedAt = Date.now() / 1000
+                            run.status = failedRuns ? 'failed' : 'succeeded'
+                            run.error = failedRuns ? 'OpenRouter needs credits.' : null
+                            run.answers = failedRuns ? null : run.prepared
+                            run.response = { model: run.model, answers: run.answers, usage: run.usage }
+                        }
+                        return response(run)
+                    }
+                    if (path.endsWith('/example-name')) {
+                        exampleNameCalls++
+                        const id = decodeURIComponent(path.split('/')[2])
+                        assert(runs.get(id)?.status === 'succeeded', 'Names only summarize actual successful runs')
+                        if (failExampleName) return new Response(JSON.stringify({responseStatus:{message:'Summarization model unavailable'}}), {status:503})
+                        if (holdExampleName) return new Promise(resolve => { exampleNameReply = () => resolve(response({label:'Late model suggestion'})) })
+                        return response({label:'Delayed package needs urgent attention'})
+                    }
+                    if (path.endsWith('/cancel')) {
+                        const run = runs.get(decodeURIComponent(path.split('/')[2]))
+                        run.status = 'cancelled'
+                        return response(run)
+                    }
+                    if (path.startsWith('/runs?') || (path === '/runs' && method === 'GET'))
+                        return response({ items: [...runs.values()].reverse(), cursor: null })
+                    if (path === '/history' && method === 'DELETE') {
+                        runs.clear()
+                        return response({ deleted: 1 })
+                    }
+                    if (path.startsWith('/runs/') && method === 'DELETE') {
+                        runs.delete(decodeURIComponent(path.slice(6)))
+                        return response({ deleted: true })
+                    }
+                    if (path === '/generate' || path === '/improve') {
+                        generationModel = body.model
+                        return await new Promise(
+                            (resolve) =>
+                                (generationReply = () =>
+                                    resolve(
+                                        response({
+                                            recipe: writing,
+                                            usage: { cost: 0.0001 },
+                                            model: body.model,
+                                        }),
+                                    )),
+                        )
+                    }
+                    throw Error('Unexpected ' + method + ' ' + path)
+                },
+            }
+            const ctx = {
+                ai: { base: '', auth: { userName: 'fixture' }, resolvePath: (path) => path },
+                state: reactive({
+                    models: [
+                        {
+                            name: 'chat-model',
+                            id: 'chat-model',
+                            provider: 'google',
+                            release_date: '2026-04-01',
+                            limit: { context: 100000 },
+                            cost: { input: 1, output: 2 },
+                        },
+                        {
+                            name: 'second-model',
+                            id: 'second-model',
+                            provider: 'anthropic',
+                            release_date: '2026-05-01',
+                            limit: { context: 200000 },
+                            cost: { input: 3, output: 8 },
+                            reasoning: true,
+                        },
+                        {
+                            name: 'free-model',
+                            id: 'free-model',
+                            provider: 'openrouter',
+                            cost: { input: 0, output: 0 },
+                        },
+                        {
+                            name: 'image-model',
+                            id: 'image-model',
+                            provider: 'google',
+                            modalities: { output: ['image'] },
+                        },
+                        { name: '~typesafe/jev-latest', id: '~typesafe/jev-latest', provider: 'openrouter' },
+                    ],
+                    selectedModel: 'chat-model',
+                    config: { extensions: [] },
+                }),
+                scope: () => ({ ...ext, state: {} }),
+                openModal() {},
+                toast() {},
+            }
+            ctx.routes = []
+            let rightVisible = true
+            ctx.layoutVisible = () => rightVisible
+            ctx.toggleLayout = (key, visible) => {
+                assert(key === 'right', 'Studio closes the right sidebar')
+                rightVisible = visible
+            }
+            ctx.togglePath = (path) => assert(path === '/jev', 'Icon opens the studio')
+            ctx.setLeftIcons = (value) => (ctx.icons = value)
+            ctx.matchesPath = (a, b) => a === b
+            ctx.ai.resolvePath = (path) => path.replace('/ext/jev/', '/ext/jev/')
+            extension.install(ctx)
+            ctx.routes[0].beforeEnter()
+            assert(!rightVisible, 'Direct navigation closes the right sidebar')
+            rightVisible = true
+            ctx.icons.jev.component.methods.open()
+            assert(!rightVisible, 'Sidebar icon closes the right sidebar')
+            assert(ctx.icons.jev.isActive({ path: '/jev' }), 'Icon recognizes studio route')
+            const JevPage = await ctx.routes[0].component()
+            let app
+            const vueErrors = []
+            function mount() {
+                app = createApp(JevPage)
+                app.use(ServiceStackVue)
+                app.component('ModelPicker', ModelPicker)
+                icons.install({
+                    components: (value) =>
+                        Object.entries(value).forEach(([name, component]) => app.component(name, component)),
+                })
+                app.provide('ctx', ctx)
+                Object.assign(app.config.globalProperties, { $styles: theme.styles })
+                app.config.errorHandler = (e) => {
+                    vueErrors.push(e.stack)
+                    document.getElementById('result').textContent =
+                        'FAIL: ' + e.message + '\n' + e.stack + '\n' + vueErrors.join('\n')
+                }
+                app.mount('#app')
+            }
+            const button = (text) =>
+                [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text)
+            const click = async (text) => {
+                await until(() => (typeof text === 'string' ? button(text) : text))
+                const b = typeof text === 'string' ? button(text) : text
+                assert(b, 'Missing button ' + text)
+                b.click()
+                await flush()
+            }
+            const input = async (el, value) => {
+                assert(el, 'Missing input')
+                el.value = value
+                el.dispatchEvent(new Event('input', { bubbles: true }))
+                await flush()
+            }
+            const verifySearch = async (frame) => {
+                const field = frame.querySelector('input'), clear = frame.querySelector('button'), icon = frame.querySelector('svg')
+                field.blur()
+                await flush()
+                const geometry = () => [frame, field, icon, clear].map(el => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height] })
+                const before = geometry()
+                const unchanged = () => geometry().every((rect, i) => rect.every((v, j) => Math.abs(v - before[i][j]) < 0.1))
+                field.focus()
+                await flush()
+                assert(unchanged(), 'Search geometry stays fixed on focus')
+                const inner = getComputedStyle(field), outer = getComputedStyle(frame)
+                assert(inner.borderTopWidth === '0px' && inner.outlineStyle === 'none' && inner.boxShadow === 'none', 'Search has no inner border or focus rings')
+                assert(outer.borderTopWidth === '1px' && outer.borderTopColor === 'rgb(59, 130, 246)' && outer.outlineStyle === 'none' && outer.boxShadow === 'none', 'Search uses one focus border')
+                await input(field, 'unmatched-search-value')
+                assert(unchanged() && !clear.disabled, 'Typing reserves the clear button space')
+                clear.click()
+                await flush()
+                assert(field.value === '' && document.activeElement === field && unchanged(), 'Clear restores the search without moving it or losing focus')
+            }
+            try {
+                mount()
+                await until(() => button('Run decision'))
+                await flush()
+                await verifySearch(document.querySelector('[data-jev-library] [data-jev-search]'))
+                assert(
+                    document.querySelectorAll('[data-jev-recipe-row]').length === 1,
+                    'Only Message sentiment initially visible',
+                )
+                assert(
+                    !document.querySelector('[data-jev-input-form]').textContent.includes('Subject'),
+                    'Sentiment has no subject field',
+                )
+                assert(
+                    document.querySelector('[data-jev-input-form]').textContent.includes('Email, tweet or comment'),
+                    'Sentiment label',
+                )
+                const reqAsterisk = document.querySelector('[data-jev-input-form] .text-red-500')
+                assert(reqAsterisk, 'Required asterisk is rendered')
+                const requiredStyle = getComputedStyle(reqAsterisk)
+                assert(requiredStyle.maskImage !== 'none', 'Required asterisk has its SVG mask, not a solid square')
+                const maskUrl = requiredStyle.maskImage.match(/^url\(["']?(data:image\/svg\+xml,[^"')]+)["']?\)$/)?.[1]
+                const maskSvg = maskUrl && new DOMParser().parseFromString(decodeURIComponent(maskUrl.split(',')[1]), 'image/svg+xml')
+                assert(maskSvg?.documentElement.localName === 'svg' && maskSvg.querySelector('path') && !maskSvg.querySelector('parsererror'), 'Asterisk mask contains valid SVG')
+                const headerActions = document.querySelector('[data-jev-header-actions]')
+                assert(headerActions.firstElementChild.textContent.trim() === 'Create with AI' && headerActions.lastElementChild.matches('[data-jev-connection]'), 'Jev status follows Create with AI')
+                const header = document.querySelector('[data-jev-header]')
+                assert((innerWidth < 850 || parseFloat(getComputedStyle(header).marginTop) < 0) && header.getBoundingClientRect().top >= 0, 'Compact header lifts into top-bar space when there is room for both sets of controls')
+                assert(
+                    reqAsterisk.getAttribute('title') === 'Required field',
+                    'Asterisk has title denoting required field',
+                )
+                await click('Edit')
+                assert(!document.querySelector('[data-jev-editor-fieldset]').disabled, 'Initial recipe editable')
+                const contentInput = document.querySelector('[aria-label="Search or create content"]')
+                const tagsInput = document.querySelector('[aria-label="Search or create tags"]')
+                await until(() => document.querySelector('[data-jev-tag-picker]').textContent.includes('Email'))
+                tagsInput.focus()
+                await input(tagsInput, 'rou')
+                await until(() => [...document.querySelectorAll('[data-jev-tag-picker] [role="option"]')].some(b => b.textContent === 'Routing'))
+                const option = [...document.querySelectorAll('[data-jev-tag-picker] [role="option"]')].find(b => b.textContent === 'Routing')
+                await click(option)
+                assert(document.querySelector('[aria-label="Remove tags Routing"]'), 'Search finds and selects an existing tag')
+                await click(document.querySelector('[aria-label="Remove tags Routing"]'))
+                await input(contentInput, 'news')
+                contentInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                assert(document.querySelector('[aria-label="Remove content News"]') && !document.querySelector('[aria-label="Remove content Email"]'), 'Content selection replaces the single previous type')
+                await input(contentInput, 'Policy documents')
+                contentInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                assert(document.querySelector('[aria-label="Remove content Policy documents"]'), 'New custom content type can be created')
+                await input(contentInput, 'email')
+                contentInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                tagsInput.focus()
+                await input(tagsInput, 'custom-review')
+                assert([...document.querySelectorAll('[data-jev-tag-picker] [role="option"]')].some(b => b.textContent.includes('Create “custom-review”')), 'New tag creation offered when search has no matching value')
+                tagsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                await input(tagsInput, 'routing')
+                tagsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                assert(tagsInput.disabled, 'Three tags prevents a fourth while removals remain available')
+                await click(document.querySelector('[aria-label="Remove tags custom-review"]'))
+                assert(!tagsInput.disabled, 'Removing a chip unlocks the tag input')
+                await click(document.querySelector('[aria-label="Remove tags Routing"]'))
+                tagsInput.focus()
+                await input(tagsInput, 'SENTIMENT')
+                tagsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                assert(document.querySelectorAll('[aria-label="Remove tags Sentiment"]').length === 1, 'Catalogue label is used consistently without duplicate tags')
+                tagsInput.focus()
+                await input(tagsInput, 'review, rou')
+                await flush()
+                assert(document.querySelector('[aria-label="Remove tags review"]') && tagsInput.value === ' rou', 'Comma commits one tag and retains the remaining search')
+                tagsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+                tagsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+                await flush()
+                assert(document.querySelector('[aria-label="Remove tags Routing"]'), 'Keyboard selection chooses an existing suggestion')
+                await click(document.querySelector('[aria-label="Remove tags review"]'))
+                await click(document.querySelector('[aria-label="Remove tags Routing"]'))
+                await input(document.querySelector('[data-jev-edit-view] input'), 'My initial sentiment')
+                await click('Save')
+                await until(() => button('Save'))
+                assert(
+                    recipes.size === 1 &&
+                        recipes.get('sentiment').document.name === 'My initial sentiment' &&
+                        recipes.get('sentiment').document.content === 'Email' &&
+                        JSON.stringify(recipes.get('sentiment').document.tags) === JSON.stringify(['Sentiment']),
+                    'Editing display name retains its filename identity',
+                )
+                await input(document.querySelector('[data-jev-edit-view] input'), 'Message sentiment')
+                await click('Save')
+                await until(() => button('Save'))
+                assert(button('Save').previousElementSibling === button('Check'), 'Check recipe immediately precedes Save recipe')
+                assert([...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Check').length === 1, 'One recipe check control in the header')
+                await click('Check')
+                assert(document.querySelector('[data-jev-message][data-tone=success] [data-jev-message-icon]'), 'Recipe validation shows a compact success icon')
+                await click(document.querySelector('[aria-label="Dismiss notice"]'))
+                const originalEditorRecipe = copy(recipes.get('sentiment').document)
+                await click('Add field')
+                await click('Add question')
+                assert(document.querySelector('[aria-label="Delete field New field"]').getBoundingClientRect().height > 0, 'Field delete is visible without opening key settings')
+                assert(document.querySelector('[aria-label="Delete question Question 1"]').getBoundingClientRect().height > 0, 'Question delete is visible without opening key settings')
+                await click('Save')
+                const withRemovals = copy(recipes.get('sentiment').document)
+                withRemovals.inputSchema.required.push('field_1')
+                withRemovals.state = { mode: 'text', field: 'field_1' }
+                withRemovals.presentation.questions.question_1 = { label: 'Disposable question' }
+                for (const example of withRemovals.examples) {
+                    example.input.field_1 = 'Temporary input'
+                    example.expected ||= {}
+                    example.expected.question_1 = false
+                }
+                await click('Recipe JSON')
+                await input(document.querySelector('[data-jev-json-editor] textarea'), JSON.stringify(withRemovals, null, 2))
+                assert(button('Check').disabled, 'Check waits for unapplied JSON edits')
+                assert(document.querySelector('[data-jev-message][data-tone=warning] [data-jev-message-icon]'), 'JSON edits show the styled warning icon')
+                await click('Apply JSON')
+                await click('Visual editor')
+                const fieldDelete = document.querySelector('[aria-label="Delete field New field"]'),
+                    questionDelete = document.querySelector('[aria-label="Delete question Disposable question"]')
+                fieldDelete.closest('details').open = false
+                questionDelete.closest('details').open = false
+                await click(fieldDelete)
+                await click(questionDelete)
+                await click('Save')
+                const removed = recipes.get('sentiment').document
+                assert(!('field_1' in removed.inputSchema.properties) && !removed.inputSchema.required.includes('field_1'), 'Deleting a field removes its required declaration')
+                assert(removed.state.mode === 'object' && removed.examples.every((e) => !('field_1' in e.input)), 'Deleting a mapped field cleans state and example inputs')
+                assert(!removed.questions.question_1 && !removed.presentation.questions.question_1 && removed.examples.every((e) => !('question_1' in e.expected)), 'Deleting a question cleans labels and expected answers')
+                await click(document.querySelectorAll('[data-jev-question-editor] [data-jev-editor-delete]')[1])
+                assert(document.querySelector('[data-jev-question-editor] [data-jev-editor-delete]').disabled, 'Recipes retain one required question')
+                await click('Recipe JSON')
+                await input(document.querySelector('[data-jev-json-editor] textarea'), JSON.stringify(originalEditorRecipe, null, 2))
+                await click('Apply JSON')
+                await click('Visual editor')
+                await click('Save')
+                await click('Import recipe')
+                await until(() => document.querySelectorAll('[data-jev-import-card]').length === 7)
+                const importDialog = document.querySelector('[data-jev-import-dialog][open]')
+                assert(
+                    importDialog &&
+                        document.activeElement.getAttribute('aria-label') === 'Search recipe collection',
+                    'Import collection opens with search focused',
+                )
+                await verifySearch(importDialog.querySelector('[data-jev-search]'))
+                assert([...importDialog.querySelectorAll('[data-jev-tabs] button')].map(b=>b.textContent.trim()).join('|')==='Collection|From JSON', 'Import has only public Collection and From JSON tabs')
+                assert(
+                    getComputedStyle(importDialog.querySelector('[data-jev-search]')).display === 'flex',
+                    'Import search icon and field share one row',
+                )
+                assert(
+                    getComputedStyle(importDialog.querySelector('input')).borderTopWidth === '0px',
+                    'Import search has one outer border',
+                )
+                const importBounds = importDialog.getBoundingClientRect(),
+                    closeBounds = importDialog.querySelector('[data-jev-dialog-close]').getBoundingClientRect()
+                assert(
+                    closeBounds.right > importBounds.left + importBounds.width / 2 &&
+                        closeBounds.top < importBounds.top + 12 && closeBounds.right > importBounds.right - 12,
+                    'Import close button stays at the top right',
+                )
+                await input(importDialog.querySelector('input'), 'Support triage')
+                assert(
+                    importDialog.querySelectorAll('[data-jev-import-card]').length === 1,
+                    'Collection search filters recipes',
+                )
+                await click(importDialog.querySelector('[data-jev-import-card-action]'))
+                await until(() =>
+                    document.querySelector('[data-jev-recipe-header]').textContent.includes('Support triage'),
+                )
+                assert(
+                    recipes.size === 2 && !document.querySelector('[data-jev-import-dialog][open]'),
+                    'Import copies recipe into library',
+                )
+                await click('Edit')
+                await input(document.querySelector('[data-jev-edit-view] textarea'), 'My support triage')
+                await click('Save')
+                runs.set('old-support-history', { id: 'old-support-history', recipeId: 'support', name: 'Support triage', status: 'succeeded', model: 'jev', createdAt: 1 })
+                await click('Import recipe')
+                await until(() => document.querySelectorAll('[data-jev-import-card]').length === 7)
+                await input(
+                    document.querySelector('[aria-label="Search recipe collection"]'),
+                    'Support triage',
+                )
+                await click(document.querySelector('[data-jev-import-card-action]'))
+                assert(document.querySelector('[data-jev-import-dialog]').textContent.includes('clears its old history'), 'Replacement warns that history is cleared')
+                assert(runs.has('old-support-history') && recipes.get('support').document.description === 'My support triage', 'Warning preserves existing recipe and history')
+                await click('Cancel')
+                assert(runs.has('old-support-history'), 'Cancelling replacement preserves history')
+                await click(document.querySelector('[data-jev-import-card-action]'))
+                await click('Replace & clear history')
+                await until(() => !runs.has('old-support-history'))
+                assert(
+                    recipes.size === 2 &&
+                        document
+                            .querySelector('[data-jev-recipe-header]')
+                            .textContent.includes('Support triage') && recipes.get('support').document.description !== 'My support triage',
+                    'Confirmed import replaces definition and clears history',
+                )
+                await click('Import recipe')
+                await until(() => document.querySelectorAll('[data-jev-import-card]').length === 7)
+                await input(document.querySelector('[aria-label="Search recipe collection"]'), 'company')
+                await click(document.querySelector('[data-jev-import-card-action]'))
+                await until(() => !document.querySelector('[data-jev-import-dialog][open]'))
+                await click(document.querySelector('[data-jev-recipe-row]'))
+                await click('Run')
+                assert(button('Run decision').disabled, 'Blank input cannot run')
+                assert(document.querySelector('[data-jev-setup]'), 'Missing credentials has setup guidance')
+                connected = true
+                ctx.state.config = { status: { enabled: ['openrouter'] } }
+                await until(() => !document.querySelector('[data-jev-setup]'))
+                assert(button('Run decision').disabled, 'Connection alone does not bypass required input')
+                assert(document.querySelector('[data-jev-input-form] [role="status"]').textContent.includes('This field is required.'), 'Disabled Run identifies the missing input')
+                await input(document.querySelector('[data-jev-input-form] textarea'), 'A complete decision input')
+                assert(!button('Run decision').disabled, 'Typing valid input unlocks Run after provider settings change')
+                connected = false
+                window.dispatchEvent(new Event('focus'))
+                await until(() => button('Run decision').disabled)
+                connected = true
+                window.dispatchEvent(new Event('focus'))
+                await until(() => !button('Run decision').disabled)
+                assert(providerCalls === 0, 'Connection refresh never submits a decision')
+                const exampleCases=recipes.get('sentiment').document.examples, exampleInput=()=>document.querySelector('[data-jev-input-form] textarea').value, examplePopover=()=>document.querySelector('[data-jev-example-popover]:popover-open')
+                await click('Try example')
+                assert(exampleInput()===exampleCases[0].input.message&&!examplePopover(),'Try example loads the first case without opening its picker')
+                await click('Try example');assert(exampleInput()===exampleCases[1].input.message&&!examplePopover(),'Try example cycles to a different case without opening its picker')
+                await click('Try example');assert(exampleInput()===exampleCases[0].input.message&&!examplePopover(),'Try example wraps to the first case without opening its picker')
+                document.querySelector('[aria-label="Choose example"]').click();await flush();assert(examplePopover()&&exampleInput()===exampleCases[0].input.message,'Chevron opens the picker without changing the input')
+                const pickerBounds=document.querySelector('[data-jev-example-picker]').getBoundingClientRect(),popoverBounds=examplePopover().getBoundingClientRect()
+                assert(popoverBounds.top>=pickerBounds.bottom&&popoverBounds.left>=0&&popoverBounds.right<=innerWidth,'Example popover sits below its button and fits the viewport')
+                assert([...examplePopover().querySelectorAll('button')].map(b=>b.textContent.trim()).join('|')===exampleCases.map(e=>e.label).join('|'),'Picker lists the example names')
+                examplePopover().querySelectorAll('button')[1].click();await flush();assert(exampleInput()===exampleCases[1].input.message&&!examplePopover(),'Picking a case loads its input and closes the popover')
+                document.querySelector('[aria-label="Choose example"]').click();await flush();assert(examplePopover()&&exampleInput()===exampleCases[1].input.message,'Dropdown opens without changing the input')
+                assert(document.activeElement===examplePopover().querySelectorAll('button')[1],'Keyboard focus starts on the selected example')
+                document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true}));await flush();assert(document.activeElement===examplePopover().querySelectorAll('button')[0],'Arrow keys navigate examples')
+                document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await flush();assert(!examplePopover()&&document.activeElement===button('Try example'),'Escape closes the picker and restores focus')
+                document.querySelector('[aria-label="Choose example"]').click();await flush();document.querySelector('[data-jev-input-form] textarea').focus();await flush();assert(!examplePopover(),'Leaving the picker dismisses it')
+                await click('Try example');assert(exampleInput()===exampleCases[0].input.message&&!examplePopover()&&providerCalls===0,'Cycle continues after direct selection without opening the picker or running Jev')
+                assert(!button('Run decision').disabled, 'Example unlocks Run')
+                await click('Run decision')
+                await wait(650)
+                await flush()
+                assert(
+                    document.querySelector('[data-jev-answer-value]')?.textContent.includes('Negative'),
+                    'Choice headline rendered',
+                )
+                assert(
+                    document.querySelector('[data-jev-results]').textContent.includes('91%'),
+                    'Noul probability rendered',
+                )
+                assert(
+                    document.querySelector('[data-jev-call-details]').textContent.includes('0.00001999'),
+                    'Tiny cost stays meaningful',
+                )
+                assert(providerCalls === 1, 'One run dispatch')
+                await input(document.querySelector('[data-jev-input-form] textarea'), 'A new message')
+                assert(
+                    document.querySelector('[data-jev-results]').textContent.includes('earlier input'),
+                    'Edited input marks stale result',
+                )
+                const completed = [...runs.values()].find(run => run.status === 'succeeded')
+                const actualInputs = structuredClone(completed.input)
+                const actualAnswers = structuredClone(completed.answers)
+                assert(!button('Save as example').disabled, 'Original successful run can be saved after editing form input')
+                await click('Save as example')
+                await until(() => document.querySelector('#jev-example-name')?.value === 'Delayed package needs urgent attention')
+                assert(providerCalls === 1, 'Naming never reruns Jev')
+                await input(document.querySelector('#jev-example-name'), 'My delayed delivery example')
+                await click('Save example')
+                const recorded = document.querySelector('[data-jev-recorded-example]')
+                assert(recorded?.textContent.includes('91%'), 'Saved example renders actual probabilities')
+                assert(!button('Add expected answers') && !button('Review expectations') && !button('Add example'), 'Only successful runs can add examples through the UI')
+                const examples = [...document.querySelectorAll('[data-jev-example]')]
+                const savedExample = examples[examples.length - 1]
+                savedExample.querySelector('summary').click()
+                await flush()
+                const jsonBlock = savedExample.querySelector('[data-jev-json-block]')
+                assert(JSON.stringify(JSON.parse(jsonBlock.textContent)) === JSON.stringify(actualInputs), 'Save uses recorded inputs, not the edited form')
+                assert(jsonBlock.querySelectorAll('span').length > 1 && !jsonBlock.querySelector('pre'), 'JSON uses existing syntax highlighter without a global pre')
+                const surfaceColor = getComputedStyle(jsonBlock).backgroundColor
+                assert(surfaceColor !== 'rgba(0, 0, 0, 0)' && surfaceColor !== 'rgb(38, 42, 49)', 'JSON block owns its theme background')
+                await click('Edit')
+                await click('Recipe JSON')
+                const savedDocument = JSON.parse(document.querySelector('[data-jev-json-editor] textarea').value)
+                const captured = savedDocument.examples.at(-1)
+                assert(captured.label === 'My delayed delivery example', 'User can edit the generated name before saving')
+                assert(JSON.stringify(captured.execution.answers) === JSON.stringify(actualAnswers), 'All normalized actual answers saved')
+                assert(!captured.expected && !captured.execution.response && !captured.execution.usage && !captured.execution.recipe, 'Actual answers are separate from expectations and private history')
+                assert(providerCalls === 1 && JSON.stringify(completed.input) === JSON.stringify(actualInputs), 'Saving an example neither reruns Jev nor changes run history')
+                await click('Visual editor')
+                await click('Examples')
+                assert(button('Save last run as example').disabled, 'Same run cannot be accidentally saved twice')
+                const savedName = document.querySelectorAll('[data-jev-example]')[2].querySelector('input')
+                await input(savedName, 'Renamed saved example')
+                savedName.dispatchEvent(new Event('change', { bubbles:true }))
+                await flush()
+                assert(savedName.value === 'Renamed saved example' && savedName.getAttribute('aria-label') === 'Name for Renamed saved example', 'Saved example names remain editable')
+                document.querySelectorAll('[data-jev-example]')[2].querySelector('button[aria-label^="Remove example"]').click()
+                await flush()
+                holdExampleName = true
+                await click('Save last run as example')
+                await until(() => exampleNameReply)
+                await input(document.querySelector('#jev-example-name'), 'Typed while waiting')
+                exampleNameReply()
+                await flush()
+                assert(document.querySelector('#jev-example-name').value === 'Typed while waiting', 'Late suggestions cannot overwrite user typing')
+                await click('Save example')
+                assert(document.querySelectorAll('[data-jev-example]')[2].querySelector('input').value === 'Typed while waiting', 'Manual name saves with the actual result')
+                document.querySelectorAll('[data-jev-example]')[2].querySelector('button[aria-label^="Remove example"]').click()
+                await flush()
+                holdExampleName = false
+                failExampleName = true
+                await click('Save last run as example')
+                await until(() => document.querySelector('[data-jev-save-example-dialog] [data-tone="warning"]'))
+                assert(!button('Save example').disabled, 'Naming failure does not prevent saving the actual run')
+                await click('Cancel')
+                assert(document.querySelectorAll('[data-jev-example]').length === 2, 'Cancelling naming adds no example')
+                failExampleName = false
+                await click('Run')
+                failedRuns = true
+                await click('Run decision')
+                await wait(650)
+                await flush()
+                assert(
+                    document.querySelector('[data-jev-answer-value]')?.textContent.includes('Negative'),
+                    'Failed rerun retains prior success',
+                )
+                assert(
+                    document.querySelector('[data-jev-results]').textContent.includes('needs credits'),
+                    'Provider failure visible',
+                )
+                failedRuns = false
+                const beforeRetry = providerCalls
+                lostSubmitReply = true
+                await click('Run decision')
+                await until(() => button('Retry submission'))
+                assert(document.querySelector('[data-jev-input-form] [role="status"]').textContent.includes('Retry submission'), 'Disabled Run identifies how to recover an uncertain submission')
+                await click('Retry submission')
+                await wait(650)
+                await flush()
+                assert(
+                    providerCalls === beforeRetry + 1,
+                    'Uncertain submission retry does not start another paid call',
+                )
+                document.querySelector('[data-jev-menu] summary').click()
+                await flush()
+                await click('Duplicate')
+                assert(document.querySelector('[data-jev-edit-view]'), 'Visual editor available')
+                const name = document.querySelector('[data-jev-edit-view] input')
+                await input(name, 'My sentiment recipe')
+                await click('Run')
+                await click('Try example')
+                holdRuns = true
+                await click('Run decision')
+                await click('Edit')
+                await click('Save')
+                holdRuns = false
+                await wait(650)
+                await flush()
+                await click('Run')
+                assert(
+                    document.querySelector('[data-jev-run-grid] [data-jev-answer-value]'),
+                    'Saving a running draft preserves its pending result',
+                )
+                await click('Edit')
+                assert(recipes.size === 4, 'Personal recipe persisted')
+                await click('Recipe JSON')
+                const json = document.querySelector('[data-jev-json-editor] textarea')
+                await input(json, '{ broken')
+                assert(
+                    [...document.querySelectorAll('[data-jev-notice]')].some((el) =>
+                        el.textContent.includes('JSON'),
+                    ),
+                    'Unapplied JSON state explicit',
+                )
+                await click('Apply JSON')
+                assert(document.querySelector('[data-jev-alert]'), 'Bad JSON gets error')
+                await click('Discard JSON changes')
+                await click('Visual editor')
+                await click('Examples')
+                assert(!button('Add expected answers') && !button('Review expectations'), 'Examples have no manual expectation editor')
+                await click('Check 2 examples')
+                await wait(1600)
+                await flush()
+                assert(
+                    document.querySelectorAll('[data-jev-example-results]').length === 2,
+                    'Both contrasting examples checked',
+                )
+                await click('Run')
+                await click('Try example')
+                holdRuns = true
+                await click('Run decision')
+                const origin = [...recipes.values()].find(
+                    (row) => row.document.name === 'My sentiment recipe',
+                )
+                document.querySelectorAll('[data-jev-recipe-row]')[2].click()
+                await flush()
+                await click('Try example')
+                holdRuns = false
+                await wait(650)
+                await flush()
+                assert(
+                    !document.querySelector('[data-jev-answer-value]'),
+                    'Late result does not land in another recipe',
+                )
+                const ownRow = [...document.querySelectorAll('[data-jev-recipe-row]')].find((row) =>
+                    row.textContent.includes('My sentiment recipe'),
+                )
+                ownRow.click()
+                await flush()
+                assert(document.querySelector('[data-jev-answer-value]'), 'Origin retains its result')
+                await click('Edit')
+                await click('Improve with AI')
+                const dialogRect = document.querySelector('[data-jev-ai-dialog]').getBoundingClientRect()
+                assert(
+                    Math.abs(dialogRect.left + dialogRect.width / 2 - innerWidth / 2) < 2,
+                    'AI dialog centered horizontally',
+                )
+                assert(
+                    Math.abs(dialogRect.top + dialogRect.height / 2 - innerHeight / 2) < 2,
+                    'AI dialog centered vertically',
+                )
+                const closeRect = document
+                    .querySelector('[aria-label="Close AI assistant"]')
+                    .getBoundingClientRect()
+                assert(
+                    closeRect.width === 32 && closeRect.height === 32,
+                    'Close button has a consistent square hit area',
+                )
+                const checkbox = document.querySelector('[data-jev-ai-dialog] input[type="checkbox"]')
+                assert(getComputedStyle(checkbox).appearance === 'none', 'Shared Project Manager checkbox')
+                checkbox.click()
+                await wait(200)
+                await flush()
+                assert(
+                    checkbox.checked && getComputedStyle(checkbox).backgroundColor === 'rgb(37, 99, 235)',
+                    'Checkbox uses shared blue checked style',
+                )
+                assert(
+                    document.querySelector('[data-jev-ai-dialog] [data-jev-criteria]'),
+                    'Opted-in input preview visible',
+                )
+                checkbox.click()
+                await flush()
+                const goalControl = document.querySelector('[data-jev-ai-goal]')
+                for (const token of theme.styles.borderInput.split(' '))
+                    assert(
+                        goalControl.classList.contains(token),
+                        'Project Manager input border theme applied',
+                    )
+                document.querySelector('[aria-label="Choose recipe-writing model"]').click()
+                await flush()
+                assert(document.querySelector('.llms-model-dialog[open]'), 'Model selection subdialog opens')
+                assert(
+                    document.activeElement === document.querySelector('[aria-label="Search models"]'),
+                    'Model search receives focus',
+                )
+                assert(
+                    document.querySelectorAll('.llms-model-card').length === 3,
+                    'Only text models are offered',
+                )
+                const search = document.querySelector('[aria-label="Search models"]')
+                await input(search, 'nothing-matches')
+                assert(document.querySelector('.llms-model-empty'), 'No-match state visible')
+                await input(search, '')
+                document.querySelector('[aria-label="Choose provider"]').click()
+                await flush()
+                const providerSearch = document.querySelector('[aria-label="Search providers"]')
+                await input(providerSearch, 'openrouter')
+                document.querySelector('.llms-model-provider-list button').click()
+                await flush()
+                assert(
+                    document.querySelectorAll('.llms-model-card').length === 1 &&
+                        document.querySelector('.llms-model-card').textContent.includes('free-model'),
+                    'Provider popup narrows models',
+                )
+                document.querySelector('[aria-label="Choose provider"]').click()
+                await flush()
+                document.querySelector('.llms-model-provider-list button').click()
+                await flush()
+                const sortSelect = document.querySelector('[aria-label="Sort models by"]')
+                sortSelect.value = 'cost_input'
+                sortSelect.dispatchEvent(new Event('change', { bubbles: true }))
+                await flush()
+                assert(
+                    document.querySelector('.llms-model-card').textContent.includes('second-model'),
+                    'Input price sorting descends',
+                )
+                document.querySelector('[aria-label="Sort ascending"]').click()
+                await flush()
+                assert(
+                    document.querySelector('.llms-model-card').textContent.includes('free-model'),
+                    'Input price sorting ascends',
+                )
+                await input(search, 'anthropic')
+                assert(document.querySelectorAll('.llms-model-card').length === 1, 'Search includes provider')
+                document.querySelector('.llms-model-card').click()
+                await flush()
+                assert(!document.querySelector('.llms-model-dialog[open]'), 'Selection closes nested picker')
+                assert(
+                    document.querySelector('.llms-model-trigger').textContent.includes('second-model'),
+                    'Selected model shown',
+                )
+                assert(
+                    ctx.state.selectedModel === 'chat-model',
+                    'Selecting writer leaves global model unchanged',
+                )
+                document.querySelector('[aria-label="Choose recipe-writing model"]').click()
+                await flush()
+                document
+                    .querySelector('.llms-model-dialog')
+                    .dispatchEvent(new Event('cancel', { cancelable: true }))
+                await flush()
+                assert(
+                    !document.querySelector('.llms-model-dialog[open]') &&
+                        document.querySelector('[data-jev-ai-dialog][open]'),
+                    'Escape closes only model picker',
+                )
+                assert(
+                    document.activeElement === document.querySelector('.llms-model-trigger'),
+                    'Focus returns to model trigger',
+                )
+                await input(document.querySelector('[data-jev-ai-dialog] textarea'), 'Add an urgency check')
+                await click('Generate recipe')
+                assert(generationReply, 'Generation started')
+                assert(generationModel === 'second-model', 'Selected writer used in generation request')
+                document.querySelector('[data-jev-ai-dialog] [aria-label="Close AI assistant"]').click()
+                await flush()
+                await input(document.querySelector('[data-jev-edit-view] input'), 'Manual edit while AI runs')
+                generationReply()
+                await flush()
+                assert(
+                    document.querySelector('[data-jev-recipe-header]').textContent.includes('Manual edit'),
+                    'Late AI does not apply itself',
+                )
+                assert(ctx.state.selectedModel === 'chat-model', 'Global chat model unchanged')
+                await click('Run')
+                await click('History')
+                assert(document.querySelectorAll('[data-jev-history-row]').length >= 3, 'History visible')
+                document.querySelector('[data-jev-history-row]').click()
+                await flush()
+                assert(document.querySelector('[data-jev-history-dialog][open]'), 'History snapshot opens')
+                document.querySelector('[aria-label="Close history detail"]').click()
+                await flush()
+                await click('Run')
+                await click('Try example')
+                await click('Create with AI')
+                assert(
+                    document.querySelector('[data-jev-ai-dialog]').contains(document.activeElement),
+                    'AI dialog receives focus',
+                )
+                await input(document.querySelector('[data-jev-ai-dialog] textarea'), 'Classify message sentiment')
+                await click('Generate recipe')
+                generationReply()
+                await flush()
+                await click('Use this draft')
+                assert(
+                    document.querySelector('[data-jev-recipe-header]').textContent.includes('AI sentiment recipe'),
+                    'Generated recipe is an editable draft',
+                )
+                await click('Save')
+                // Finish on the stock recipe with all three primitives visible for visual review.
+                document.querySelectorAll('[data-jev-recipe-row]')[2].click()
+                await flush()
+                await click('Try example')
+                await click('Run decision')
+                await wait(650)
+                await flush()
+                assert(
+                    document.querySelectorAll('[data-jev-run-grid] [data-jev-answer]').length === 3,
+                    'Three answer cards rendered',
+                )
+                assert(document.querySelector('[data-jev-score-meter]'), 'Score scale visible')
+                assert(document.documentElement.scrollWidth <= window.innerWidth, 'No page overflow')
+                await wait(250)
+                app.unmount()
+                await flush()
+                mount()
+                await until(() => button('Run decision'))
+                await flush()
+                await click('Try example')
+                await click('Run decision')
+                await wait(650)
+                await flush()
+                assert(document.querySelector('[data-jev-answer]'), 'Reload/remount still functional')
+                assert(
+                    !document.querySelector('[data-jev-page-alert]')?.textContent.includes('Another tab'),
+                    'Reopening studio is not mistaken for a conflicting tab',
+                )
+                document.documentElement.dataset.stage = 'draft-isolation'
+                const scope = 'isolated-fixture-' + crypto.randomUUID(),
+                    store = createDraftStore(scope),
+                    other = createDraftStore(scope + '-other'),
+                    key = 'local:case'
+                await store.save(key, {
+                    id: key,
+                    builtin: false,
+                    recipe: copy(writing),
+                    input: { text: 'mine' },
+                })
+                await store.flush()
+                assert((await other.load(key)) === null, 'Account namespaces isolate browser drafts')
+                assert(
+                    createDraftStore(scope) === store,
+                    'Same page scope shares pending writes across reopen',
+                )
+                const db = await new Promise((resolve) => {
+                    const request = indexedDB.open('llms-jev-drafts', 1)
+                    request.onsuccess = () => resolve(request.result)
+                })
+                await new Promise((resolve) => {
+                    const tx = db.transaction('drafts', 'readwrite'),
+                        table = tx.objectStore('drafts'),
+                        request = table.get(scope + '::' + key)
+                    request.onsuccess = () =>
+                        table.put({
+                            ...request.result,
+                            tab: 'another-tab',
+                            version: 'foreign',
+                            value: { ...request.result.value, input: { text: 'theirs' } },
+                        })
+                    tx.oncomplete = resolve
+                })
+                db.close()
+                await store.save(key, {
+                    id: key,
+                    builtin: false,
+                    recipe: copy(writing),
+                    input: { text: 'mine updated' },
+                })
+                await store.save(key, {
+                    id: key,
+                    builtin: false,
+                    recipe: copy(writing),
+                    input: { text: 'mine final' },
+                })
+                await store.flush()
+                document.documentElement.dataset.stage = 'draft-recovery'
+                const recovered = await store.list()
+                assert(recovered.length === 2, 'Conflicting tab creates one recovery copy')
+                assert(
+                    recovered.find((row) => row.key === key).value.input.text === 'theirs',
+                    'Conflicting tab original preserved',
+                )
+                assert(
+                    recovered.find((row) => row.key !== key).value.input.text === 'mine final',
+                    'Latest edits preserved in recovery copy',
+                )
+                document.documentElement.dataset.stage = 'file-import'
+                const beforeFileImport = recipes.size
+                await click('Import recipe')
+                await until(() => document.querySelectorAll('[data-jev-import-card]').length === 7)
+                await click('From JSON')
+                await click('Import from file')
+                assert(
+                    !document.querySelector('[data-jev-import-dialog][open]'),
+                    'File import closes collection modal',
+                )
+                const upload = document.querySelector('input[type="file"]'),
+                    transfer = new DataTransfer(),
+                    fileDoc = copy(writing)
+                fileDoc.name = 'Uploaded recipe'
+                transfer.items.add(
+                    new File([JSON.stringify(fileDoc)], 'portable.recipe.json', { type: 'application/json' }),
+                )
+                upload.files = transfer.files
+                upload.dispatchEvent(new Event('change', { bubbles: true }))
+                await until(() =>
+                    document.querySelector('[data-jev-recipe-header]').textContent.includes('Uploaded recipe'),
+                )
+                assert(
+                    recipes.size === beforeFileImport + 1 &&
+                        !document.querySelector('[data-jev-recipe-header]').textContent.includes('NEW RECIPE'),
+                    'File import is saved as an owned recipe',
+                )
+                const uploadedId = [...recipes.values()].find(
+                    (row) => row.document.name === 'Uploaded recipe',
+                ).id
+                assert(uploadedId === 'portable.recipe' && recipes.get(uploadedId).filename === 'portable.recipe.json', 'File import keeps uploaded filename as its ID')
+                await input(document.querySelector('[data-jev-edit-view] input'), 'Edited uploaded recipe')
+                await click('Save')
+                await until(() => button('Save'))
+                assert(
+                    recipes.size === beforeFileImport + 1 &&
+                        recipes.get(uploadedId).document.name === 'Edited uploaded recipe',
+                    'Imported display name edit preserves uploaded filename',
+                )
+                const renamedId = uploadedId,
+                    replacement = { ...copy(fileDoc), name: renamedId, description: 'Replacement from file' },
+                    uploadAgain = async () => {
+                        const data = new DataTransfer()
+                        data.items.add(new File([JSON.stringify(replacement)], recipes.get(renamedId).filename, { type: 'application/json' }))
+                        upload.files = data.files
+                        upload.dispatchEvent(new Event('change', { bubbles: true }))
+                        await until(() => document.querySelector('#jev-confirm-title'))
+                    }
+                runs.set('old-file-history', { id: 'old-file-history', recipeId: renamedId, name: renamedId, status: 'succeeded', model: 'jev', createdAt: 1 })
+                const historyCount = runs.size
+                await uploadAgain()
+                assert(document.querySelector('#jev-confirm-title').parentElement.textContent.includes(renamedId), 'File import warning names existing recipe')
+                await click('Keep it')
+                assert(runs.has('old-file-history') && recipes.get(renamedId).document.description !== replacement.description, 'Cancelled file import retains recipe and history')
+                await uploadAgain()
+                await click('Replace recipe & clear history')
+                await until(() => recipes.get(renamedId).document.description === replacement.description && !runs.has('old-file-history'))
+                assert(runs.size === historyCount - 1 && recipes.size === beforeFileImport + 1, 'File replacement clears only matching history and retains one recipe')
+                await until(() => button('Save'))
+                await click('Save as a copy')
+                await until(() => recipes.has(renamedId + ' (copy)'))
+                assert(recipes.get(renamedId + ' (copy)').id === renamedId + ' (copy)', 'Save as a copy uses an unused filename as ID')
+                await click('Import recipe')
+                await until(() => document.querySelectorAll('[data-jev-import-card]').length === 7)
+                document
+                    .querySelector('[data-jev-import-dialog]')
+                    .dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }))
+                await flush()
+                assert(
+                    !document.querySelector('[data-jev-import-dialog][open]'),
+                    'Outside click closes import modal',
+                )
+                assert(!document.querySelector('[data-jev-studio]').textContent.includes('Recipe ready to use and edit.'), 'Import does not show the redundant editing notice')
+                document.documentElement.dataset.stage = 'final-render'
+                assert(vueErrors.length === 0, 'No Vue rendering errors')
+                document.querySelectorAll('[data-jev-recipe-row]')[2].click()
+                await flush()
+                await click('Try example')
+                await click('Run decision')
+                await wait(650)
+                await flush()
+                if (query.has('editor') || query.has('notices') || query.has('tags')) {
+                    await click('Edit')
+                    await click('Check')
+                    if (query.has('notices')) {
+                        await click('Recipe JSON')
+                        const source = document.querySelector('[data-jev-json-editor] textarea')
+                        await input(source, source.value + ' ')
+                    }
+                    document.querySelector('[data-jev-workspace]').scrollIntoView({ block: 'start' })
+                    await flush()
+                    const banner = document.querySelector('[data-jev-message][data-tone=warning]')
+                    if (banner) assert(banner.scrollWidth <= banner.clientWidth, 'Warning notice fits its available width')
+                }
+                if (query.has('tags')) {
+                    const tagSearch = document.querySelector('[aria-label="Search or create tags"]')
+                    tagSearch.focus()
+                    await input(tagSearch, 'ver')
+                }
+                if (query.has('example-name')) {
+                    await click('Save as example')
+                    await until(() => document.querySelector('#jev-example-name')?.value)
+                    const dialog = document.querySelector('[data-jev-save-example-dialog]')
+                    assert(dialog.open && dialog.contains(document.activeElement), 'Naming dialog contains keyboard focus')
+                    assert(dialog.scrollWidth <= dialog.clientWidth + 1 && dialog.getBoundingClientRect().width <= window.innerWidth, 'Naming dialog fits the viewport')
+                }
+                if (query.has('examples')) {
+                    await click('Save as example')
+                    await until(() => document.querySelector('#jev-example-name')?.value)
+                    await click('Save example')
+                    for (const example of document.querySelectorAll('[data-jev-example]')) example.querySelector('details').open = true
+                    await flush()
+                }
+                if (query.has('import')) {
+                    await click('Import recipe')
+                    await until(() => document.querySelectorAll('[data-jev-import-card]').length === 7)
+                }
+                if (query.has('ai') || query.has('picker')) {
+                    await click('Create with AI')
+                    if (query.has('picker')) {
+                        document.querySelector('[aria-label="Choose recipe-writing model"]').click()
+                        await flush()
+                    }
+                }
+                document.getElementById('result').textContent =
+                    'PASS: visible editor deletion and cleanup, header recipe check, styled notices, filename stems as IDs, stable name edits and copy, collection and file replacement warnings, cancellation and history clearing, AI dialog, shared controls, forms, primitives, results, drafts, origin ownership, retry, examples, history, remount, responsive layout'
+            } catch (e) {
+                document.getElementById('result').textContent =
+                    'FAIL: ' + e.message + '\n' + e.stack + '\n' + vueErrors.join('\n')
+            } finally {
+                clearInterval(keepAlive)
+            }
+        </script>
+    </body>
+</html>
