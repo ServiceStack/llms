@@ -2,7 +2,7 @@
 import {createApp,ref,nextTick} from 'vue'
 import ShareRecipeDialog from '/ext/jev/ShareRecipeDialog.mjs'
 import ImportRecipeDialog from '/ext/jev/ImportRecipeDialog.mjs'
-import {registrationMessage,registrationUrl} from '/ext/publish/PublisherAccount.mjs'
+import {registrationMessage,registrationUrl} from '/ext/share_llmspy/PublisherAccount.mjs'
 const assert=(x,m)=>{if(!x)throw Error(m)},wait=()=>new Promise(r=>setTimeout(r,20)),flush=async()=>{await nextTick();await wait();await nextTick()}
 const cases=await (await fetch('/tests/fixtures/jev-sharing-contract.json')).json(),fixture=cases.find(c=>c.name==='sentiment'&&c.valid)
 const shareOpen=ref(false),importOpen=ref(false),row={id:'fixture',filename:fixture.filename,revision:1,document:fixture.document},account={baseUrl:'https://ai.llmspy.org',userName:'author',userId:'owner',apiKey:'abc******1234',registerUrl:'https://ai.llmspy.org/embed/register.html'}

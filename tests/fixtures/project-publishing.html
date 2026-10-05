@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"><script type="importmap">{"imports":{"vue":"/ui/lib/vue.mjs","vue-router":"/ui/lib/vue-router.min.mjs","@servicestack/client":"/ui/lib/servicestack-client.mjs"}}</script></head><body><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,reactive,ref,nextTick} from 'vue'
+import {AppContext} from '/ui/ctx.mjs'
+import {o as ai} from '/ui/ai.mjs'
+import SharePanel from '/ui/modules/SharePanel.mjs'
+import App from '/ui/App.mjs'
+import ThreadStore from '/ext/app/threadStore.mjs'
+import remote from '/ext/share_llmspy/index.mjs'
+import folder from '/ext/share_static/index.mjs'
+window.requestAnimationFrame=callback=>setTimeout(()=>callback(performance.now()),16)
+const assert=(v,m)=>{if(!v)throw Error(m)},flush=async()=>{await new Promise(r=>setTimeout(r,200));await nextTick()}
+const posts=[],errors=[]
+let postFailure=null
+const ctx=Object.assign(Object.create(AppContext.prototype),{
+ _components:{},top:reactive({}),shareOptions:reactive({}),layout:reactive({}),
+ state:reactive({projects:[{id:'one',name:'Website',folder:'website',publish:'dist'}],prefs:{project:'Website'}}),
+ threads:{currentThread:ref({id:'chat-one',projectId:'one',title:'Website chat'})},ai:{auth:{userName:'alice'}},utils:{toKebabCase:s=>s.toLowerCase()},
+ gallery:{setLightboxFooters(){},setAudioActions(){}},projects:{getProject:name=>ctx.state.projects.find(p=>p.name===name),saveProject:async()=>{throw Error('Unexpected save')}},
+})
+const config=reactive({enabled:true,directory:'/srv/p',basePath:'/p/',baseUrl:'http://127.0.0.1:8080/p'})
+const scopes=Object.fromEntries(['share_static','share_llmspy'].map(id=>[id,{ctx,state:reactive({}),setState(value){Object.assign(this.state,value)},toast(){},setError:e=>errors.push(e),getJson:async()=>({response:id==='share_static'?config:{registerUrl:location.origin+'/registration'}}),async postJson(path){posts.push(id+path);if(postFailure instanceof Error)throw postFailure;if(postFailure)return postFailure;return {response:{publishedPath:'/srv/p/alice/website',urlPath:'/p/alice/website/',publishedAt:new Date().toISOString()}}}}]))
+scopes.app={getJson:async path=>({response:path.startsWith('/threads/chat-one')?{id:'chat-one',projectId:'one',title:'Website chat',messages:[{role:'user',content:'saved message'}],completedAt:new Date().toISOString()}:[]})}
+ctx.scope=id=>scopes[id]
+ctx.app={config:{globalProperties:{}}}
+ctx.getJson=async()=>({response:[]})
+ctx.setError=e=>errors.push(e)
+ThreadStore.install(ctx)
+ctx.state.prefs.project=null
+globalThis.$ctx=ctx
+let app
+const mount=()=>{app=createApp({components:{SharePanel,TopBar:App.components.TopBar},template:'<TopBar data-share-toolbar/><SharePanel/>'});app.provide('ctx',ctx);app.config.globalProperties.$ctx=ctx;app.config.globalProperties.$styles=new Proxy({},{get:()=>''});app.config.globalProperties.$state=ctx.state;app.component('ErrorSummary',{template:'<div></div>'});app.config.errorHandler=e=>errors.push(e);app.mount('#app')}
+const button=label=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===label)
+try{
+ assert(!ctx.top.share,'No share icon without registered options')
+ folder.install(ctx);await folder.load(ctx);assert(ctx.top.share,'Static alone registers core icon')
+ mount();await flush();assert(!document.querySelector('[data-share-toolbar] svg'),'No icon before selecting a project chat');await ctx.threads.setCurrentThread('chat-one');await flush();assert(document.querySelector('[data-share-toolbar] svg'),'Selecting saved project chat through thread store shows icon');assert(document.querySelectorAll('[role=tab]').length===1,'Static alone has one tab');assert(!document.querySelector('iframe'),'Static does not load remote account UI')
+ assert(document.querySelector('[data-share-toolbar] svg'),'Share icon visible with a project')
+ document.querySelector('[data-share-toolbar] svg').dispatchEvent(new MouseEvent('click',{bubbles:true}));await flush();assert(ctx.layout.top==='SharePanel','Share icon opens panel')
+ ctx.threads.currentThread.value={id:'unassigned-chat',projectId:null};await flush();assert(!document.querySelector('[data-share-toolbar] svg'),'No share icon when all tabs are hidden');assert(!ctx.layout.top,'Empty sharing panel closes')
+ ctx.threads.currentThread.value=null;ctx.state.prefs.project=null;await flush();assert(!document.querySelector('[data-share-toolbar] svg'),'No share icon without selected project or chat project')
+ ctx.state.prefs.project='Website';await flush();assert(document.querySelector('[data-share-toolbar] svg'),'Share icon returns for selected project')
+ ctx.threads.currentThread.value={id:'chat-one',projectId:'one',title:'Website chat'};await flush()
+ ctx.state.prefs.project=null;await flush();assert(document.querySelector('[data-share-toolbar] svg'),'Saved project chat shows icon without selected project preference');ctx.state.prefs.project='Website'
+ button('Publish folder').click();await flush();assert(posts[0]==='share_static/project/one/folder','Static endpoint publishes without account');assert(button('Update folder'),'Published status');assert(!document.querySelector('#app').textContent.includes('/srv/p'),'Export root hidden')
+ const link=document.querySelector('a[href="http://127.0.0.1:8080/p/alice/website/"]');assert(link?.target==='_blank','Configured link opens a new window')
+ const stamp=[...document.querySelectorAll('span[title]')].find(s=>s.textContent.startsWith('Published '));assert(/^Published \d+s ago$/.test(stamp?.textContent),'Relative timestamp');assert(stamp.title,'Full timestamp tooltip');assert(stamp.parentElement.textContent.includes('to ~/alice/website'),'Concise destination')
+ config.baseUrl='';await flush();assert(document.querySelector('#app').textContent.includes('URL path: /p/alice/website/'),'Empty base URL shows path')
+ const originalSave=ctx.projects.saveProject,input=document.querySelector('input[type=text]'),postCount=posts.length
+ ctx.projects.saveProject=async(name,project,options)=>{const error={message:'Cannot save Build Directory'};if(options?.reportError!==false)ctx.state.error=error;return {error}}
+ input.value='other-build';input.dispatchEvent(new Event('input',{bubbles:true}));await flush();button('Update folder').click();await flush();assert(document.querySelector('[role=alert]')?.textContent.includes('Cannot save Build Directory'),'Build Directory save error stays in panel');assert(!ctx.state.error&&posts.length===postCount,'Failed save does not report chat error or start export');ctx.projects.saveProject=originalSave;input.value='dist';input.dispatchEvent(new Event('input',{bubbles:true}));await flush()
+ const failureMessage='Publish directory does not exist: /user/admin/projects/sudoku/dist. Build the project first.'
+ postFailure=await ai.createJsonResult(new Response(JSON.stringify({responseStatus:{errorCode:'BadRequest',message:failureMessage}}),{status:400}));button('Update folder').click();await flush()
+ assert(document.querySelector('[role=alert]')?.textContent.includes(failureMessage),'Server details shown in Folder panel');assert(document.querySelector('[role=alert]').textContent.includes('Destination: ~/alice/website'),'Publication context shown');assert(!ctx.state.error,'Publish failure stays out of chat error state')
+ document.querySelector('[aria-label="Dismiss publishing error"]').click();await flush();assert(!document.querySelector('[role=alert]'),'Panel error dismisses')
+ postFailure=await ai.createJsonResult(new Response('Permission denied: /srv/p/alice/website',{status:500}));button('Update folder').click();await flush();assert(document.querySelector('[role=alert]')?.textContent.includes('Permission denied'),'Plain text failure is descriptive');assert(document.querySelector('[role=alert]').textContent.includes('Permission denied: ~/alice/website'),'Export root hidden in failure')
+ postFailure=null;button('Update folder').click();await flush();assert(!document.querySelector('[role=alert]'),'Successful retry clears error')
+ assert((await ai.createJsonResult(new Response(JSON.stringify({error:'Destination already exists'}),{status:409}))).error.message==='Destination already exists','JSON error text preserved')
+ assert((await ai.createJsonResult(new Response('<html>unexpected response</html>',{status:200}),'/ext/share_static/project/one/folder')).error.message.includes('invalid JSON response'),'Malformed success reported as error')
+ remote.install(ctx);await remote.load(ctx);await flush();assert(document.querySelector('[role=tab][aria-selected=true]').textContent==='Folder','Lowest order defaults first');assert(document.querySelectorAll('[role=tab]').length===2,'Both independent options')
+ button('ai.llmspy.org').click();await flush();assert(document.querySelector('iframe'),'Remote account is optional');button('Folder').click();await flush();assert(!document.querySelector('iframe'),'Inactive option unmounts registration')
+ const assertRemoteOnly=()=>{assert(document.querySelector('[data-share-toolbar] svg'),'Remote tab keeps share icon visible');assert(document.querySelectorAll('[role=tab]').length===1,'Folder hidden without a project');assert(document.querySelector('[role=tab][aria-selected=true]').textContent==='ai.llmspy.org','Remote selected when Folder is hidden');assert(document.querySelector('iframe'),'Remote panel shown');assert(!document.querySelector('#app').textContent.includes('Select a project or open a chat'),'No missing-project message')}
+ ctx.threads.currentThread.value={id:'unassigned-chat',projectId:null};await flush();assertRemoteOnly()
+ ctx.threads.currentThread.value={id:'missing-project-chat',projectId:'missing'};await flush();assertRemoteOnly()
+ ctx.threads.currentThread.value=null;ctx.state.prefs.project=null;await flush();assertRemoteOnly()
+ ctx.state.prefs.project='Website';await flush();assert(button('Folder'),'Selected project restores Folder');assert(document.querySelectorAll('[role=tab]').length===2,'Both options return with a project')
+ ctx.threads.currentThread.value={id:'chat-one',projectId:'one',title:'Website chat'};ctx.state.prefs.project=null;await flush();assert(button('Folder'),'Chat project shows Folder without a selected preference');ctx.state.prefs.project='Website'
+ scopes.share_llmspy.state.publish={...scopes.share_llmspy.state.publish,apiKey:'fixture',userName:'Alice'};button('ai.llmspy.org').click();await flush();assert(button('Publish Project'),'Connected remote project action remains');assert(button('Publish Chat Thread'),'Connected remote thread action remains');button('Folder').click();await flush()
+ button('ai.llmspy.org').click();await flush();postFailure={error:{message:'Publisher rejected project'}};button('Publish Project').click();await flush();assert(document.querySelector('[role=alert]')?.textContent.includes('Publisher rejected project'),'Remote project error stays in panel');assert(!ctx.state.error,'Remote project failure stays out of chat')
+ postFailure=new Error('Publisher is offline');button('Publish Chat Thread').click();await flush();button('Publish Thread').click();await flush();assert(document.querySelector('[role=alert]')?.textContent.includes('Publisher is offline'),'Remote network error stays in panel');assert(!ctx.state.error,'Remote thread failure stays out of chat');postFailure=null;button('Folder').click();await flush()
+ ctx.setShareOptions({share_static:null});await flush();assert(document.querySelectorAll('[role=tab]').length===1,'Remote alone');assert(button('Publish Project'),'Selected option falls back on removal')
+ ctx.setShareOptions({share_llmspy:null});await flush();assert(!ctx.top.share,'None removes share icon')
+ ctx.setShareOptions({later:{name:'Later',order:20,component:{template:'<div>Later content</div>'}},earlier:{name:'Earlier',order:-1,component:{template:'<div>Earlier content</div>'}}});await flush();assert(document.querySelector('[role=tab]').textContent==='Earlier','Custom order');assert(document.querySelector('[role=tab][aria-selected=true]').textContent==='Earlier','First ordered default')
+ document.querySelector('[role=tab]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));await flush();assert(document.querySelector('[role=tab][aria-selected=true]').textContent==='Later','Keyboard tab navigation')
+ ctx.setShareOptions({earlier:null,later:null});config.enabled=false;await folder.load(ctx);assert(!ctx.top.share,'Disabled configuration does not register option')
+ assert(errors.length===0,errors.map(e=>e.message||e).join('; '));ctx.threads.clearCurrentThread();app.unmount()
+ document.querySelector('#result').textContent='PASS: independent static/remote/none, account-free publishing, ordered extensible options, links and timestamps'
+}catch(e){document.querySelector('#result').textContent='FAIL: '+e.stack}
+</script></body></html>

@@ -13,7 +13,7 @@ from llms.extensions.jev.client import normalize_answers
 from llms.extensions.jev.schema import ValidationError, compile_request, validate_recipe
 from llms.extensions.jev.sharing import Sharing, execution_package, validate_execution
 from llms.extensions.jev.storage import ConflictError, JevStore, RecipeExistsError, document_hash, read_json, write_json
-from llms.extensions.publish.client import get_publish_config, reference_from_url
+from llms.extensions.share_llmspy.client import get_publish_config, reference_from_url
 from tests.test_jev import sample_response, starter
 
 FIXTURES = Path(__file__).parent / "fixtures/jev-sharing-contract.json"
@@ -50,7 +50,7 @@ class ContractTests(TestCase):
     def test_sharing_uses_the_publish_extensions_saved_account(self):
         from unittest.mock import AsyncMock, MagicMock
 
-        from llms.extensions.publish import install
+        from llms.extensions.share_llmspy import install
 
         with tempfile.TemporaryDirectory() as root:
             ctx = MagicMock()
@@ -495,7 +495,7 @@ class NetworkTests(IsolatedAsyncioTestCase):
     async def test_authenticated_requests_use_the_saved_publish_key(self):
         from aiohttp.test_utils import TestServer
 
-        from llms.extensions.publish.client import PublisherClient
+        from llms.extensions.share_llmspy.client import PublisherClient
 
         seen = []
 
@@ -520,7 +520,7 @@ class NetworkTests(IsolatedAsyncioTestCase):
     async def test_anonymous_fetches_never_send_a_key_and_redirects_are_rejected(self):
         from aiohttp.test_utils import TestServer
 
-        from llms.extensions.publish.client import PublisherClient
+        from llms.extensions.share_llmspy.client import PublisherClient
 
         headers = []
 

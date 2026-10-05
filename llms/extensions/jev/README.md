@@ -204,10 +204,10 @@ URL and Collection imports save an independent editable copy directly. Collectio
 links retain attribution and a separate **Published example**, including its original recipe snapshot.
 Copying its input into the form is explicit, and it never counts as a local execution.
 
-Publisher credentials come from the authenticated user’s existing `publish/config.json` on the server
-(`$LLMS_HOME/user/{username}/publish/config.json`, or `~/.llms/user/{username}/publish/config.json`). Connecting an account shows the requesting host
+Publisher credentials come from the authenticated user’s existing `share_llmspy/config.json` on the server
+(`$LLMS_HOME/user/{username}/share_llmspy/config.json`, or `~/.llms/user/{username}/share_llmspy/config.json`). Connecting an account shows the requesting host
 and requires an explicit grant. Public browsing/importing does not require a publisher key. With the
-publish extension disabled, local Jev remains usable and sharing reports its unavailable state.
+share_llmspy extension disabled, local Jev remains usable and sharing reports its unavailable state.
 The [sharing implementation plan](SHARING_PLAN.md) records contracts and recovery rules. Deploy
 ubixar’s migration, APIs and public viewer before releasing the Jev client.
 

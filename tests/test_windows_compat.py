@@ -10,7 +10,7 @@ from unittest.mock import patch
 from llms.extensions.computer import bash
 from llms.extensions.computer.edit import EditTool20250124
 from llms.extensions import core_tools
-from llms.extensions.publish import is_path_within
+from llms.extensions.share_llmspy import is_path_within
 from llms.main import ExtensionContext, path_is_within
 
 

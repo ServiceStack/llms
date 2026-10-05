@@ -11,7 +11,7 @@ import threading
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--fixture', default='explorer-navigation.html', choices=['explorer-navigation.html', 'project-creation.html', 'project-organization.html', 'git-operations.html'])
+    parser.add_argument('--fixture', default='explorer-navigation.html', choices=['explorer-navigation.html', 'project-creation.html', 'project-organization.html', 'git-operations.html', 'project-publishing.html'])
     parser.add_argument('--screenshot')
     parser.add_argument('--dark', action='store_true')
     parser.add_argument('--width', type=int, default=1280)
@@ -30,6 +30,12 @@ def main():
                 self.end_headers()
                 self.wfile.write(content)
             else:
+                if self.path.startswith('/ui/'):
+                    self.path = '/llms' + self.path
+                elif self.path.startswith('/ext/'):
+                    parts = self.path.split('/', 3)
+                    if len(parts) == 4 and parts[2] in ('app', 'share_static', 'share_llmspy'):
+                        self.path = '/llms/extensions/' + parts[2] + '/ui/' + parts[3]
                 super().do_GET()
 
         def log_message(self, *args):

@@ -13,3 +13,6 @@ GitHub: [llmspy.org](https://github.com/ServiceStack/llmspy.org)
 Connect conversations and durable agents to approved remote MCP tools, with per-user connections,
 OAuth, editable approvals, and recovery without replaying uncertain calls. The Python and C# AI.Chat
 implementations share the same endpoints and UI. See [MCP client configuration](llms/extensions/mcp_client/README.md).
+
+Projects and conversations share through independently enabled `share_static` and `share_llmspy`
+extensions. See [sharing options](docs/SHARING.md) for configuration and extension registration.

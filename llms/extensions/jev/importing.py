@@ -6,7 +6,7 @@ from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 import aiohttp
 from aiohttp import web
 
-from llms.extensions.publish.client import DEFAULT_BASE_URL, reference_from_url
+from llms.extensions.share_llmspy.client import DEFAULT_BASE_URL, reference_from_url
 
 from .schema import MAX_BYTES, ValidationError, require, validate_recipe
 from .storage import InvalidIdentityError, default_filename, recipe_filename

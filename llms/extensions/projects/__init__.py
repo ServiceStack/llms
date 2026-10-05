@@ -188,6 +188,11 @@ def install(ctx):
                 project.pop(key, None)
         if project.get('archived'):
             project['showInSidebar'] = False
+        # Publication status is server-owned and survives stale project edit forms.
+        if existing and 'staticPublication' in existing:
+            project['staticPublication'] = existing['staticPublication']
+        else:
+            project.pop('staticPublication', None)
 
     def preserve_ids(projects, previous, user):
         by_id = {p["id"]: p for p in previous}
@@ -480,6 +485,17 @@ def install(ctx):
     ctx.register_setup_user_handler(setup_user)
 
     class ProjectsApi:
+        def update_publication(self, project_id, values, user=None, expected=None):
+            with locked_projects(ctx.get_user_path()):
+                projects = read_user_projects(user)
+                project = next((p for p in projects if p['id'] == project_id), None)
+                if not project:
+                    raise web.HTTPNotFound(text='Project not found')
+                if expected and any(project.get(key) != value for key, value in expected.items()):
+                    raise web.HTTPConflict(text='Project output settings changed during publishing. Retry publishing.')
+                project.update(values)
+                atomic_projects(os.path.join(ctx.get_user_path(user), 'projects', 'projects.json'), projects)
+
         def creation_destination(self, project, user=None):
             return get_project_dir(user, project)
 

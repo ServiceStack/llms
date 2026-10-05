@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from aiohttp import web
 
-from llms.extensions.publish.client import PublisherClient, get_publish_config, public_reference, reference_from_url
+from llms.extensions.share_llmspy.client import PublisherClient, get_publish_config, public_reference, reference_from_url
 
 from .recorded import bounded_json, validate_execution
 from .importing import download_recipe, import_url
@@ -70,7 +70,7 @@ class Sharing:
 
     def client(self, user):
         if not getattr(self.ctx.app, "publisher_available", False):
-            raise web.HTTPServiceUnavailable(text="Enable the publish extension to share and browse recipes.")
+            raise web.HTTPServiceUnavailable(text="Enable the share_llmspy extension to share and browse recipes.")
         return PublisherClient(get_publish_config(self.ctx, user, obscure=False))
 
     @staticmethod

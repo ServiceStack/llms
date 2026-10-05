@@ -62,9 +62,9 @@ def main():
 
             route = urlsplit(path).path
             parts = Path(route).parts
-            if args.disable_publish and route.startswith("/ext/publish/"):
+            if args.disable_publish and route.startswith("/ext/share_llmspy/"):
                 return str(repo / "tests/fixtures/disabled-publisher-not-found")
-            if len(parts) >= 4 and parts[1] == "ext" and parts[2] in ("jev", "publish") and ".." not in parts:
+            if len(parts) >= 4 and parts[1] == "ext" and parts[2] in ("jev", "share_llmspy") and ".." not in parts:
                 return str(repo / "llms/extensions" / parts[2] / "ui" / Path(*parts[3:]))
             if route.startswith("/ui/") and ".." not in parts:
                 return str(repo / "llms/ui" / Path(*parts[2:]))

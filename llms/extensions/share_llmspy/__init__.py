@@ -5,10 +5,16 @@ import mimetypes
 import os
 import re
 import tarfile
-from typing import Optional
 
 import aiohttp
 from aiohttp import web
+
+from llms.extensions.projects.publishing import (
+    is_path_within,
+    kebab_case,
+    register_project_output_routes,
+    sanitize_publish_path,
+)
 
 # DEFAULT_PUBLISH_BASE_URL = "https://localhost:5001"
 DEFAULT_PUBLISH_BASE_URL = "https://ai.llmspy.org"
@@ -20,69 +26,9 @@ DEFAULT_PUBLISH_AVATARS_PATH = "/publish/avatar/{profile}"
 DEFAULT_PUBLISH_TO_CACHE_PATH = "/publish/cache"
 
 
-def is_path_within(path: str, directory: str) -> bool:
-    """Return whether path is inside directory, including Windows drive/case rules."""
-    path = os.path.normcase(os.path.realpath(os.path.abspath(path)))
-    directory = os.path.normcase(os.path.realpath(os.path.abspath(directory)))
-    try:
-        return os.path.commonpath([path, directory]) == directory
-    except ValueError:
-        return False
-
-
-def sanitize_publish_path(publish: Optional[str], project_dir: Optional[str] = None) -> str:
-    if not publish or not publish.strip():
-        return ""
-    publish = publish.strip()
-
-    if project_dir:
-        abs_project = os.path.abspath(project_dir)
-        project_folder_name = os.path.basename(abs_project)
-
-        if os.path.isabs(publish):
-            abs_publish = os.path.abspath(publish)
-            if os.path.normcase(abs_publish) == os.path.normcase(abs_project):
-                return ""
-            if is_path_within(abs_publish, abs_project):
-                rel = os.path.relpath(abs_publish, abs_project)
-                parts = [p for p in re.split(r"[/\\]+", rel) if p and p != "." and p != ".."]
-                return "/".join(parts)
-
-        clean = publish.lstrip("/\\")
-        if clean == project_folder_name or clean == f"projects/{project_folder_name}":
-            return ""
-        if clean.startswith(f"projects/{project_folder_name}/"):
-            clean = clean[len(f"projects/{project_folder_name}/"):]
-        elif clean.startswith(f"{project_folder_name}/"):
-            clean = clean[len(f"{project_folder_name}/"):]
-
-        parts = [p for p in re.split(r"[/\\]+", clean) if p and p != "." and p != ".."]
-        return "/".join(parts)
-
-    path = publish.lstrip("/\\")
-    if "projects/" in path:
-        parts_path = path.split("projects/")[-1]
-        subparts = parts_path.split("/", 1)
-        if len(subparts) > 1:
-            path = subparts[1]
-        else:
-            path = ""
-
-    parts = [p for p in re.split(r"[/\\]+", path) if p and p != "." and p != ".."]
-    return "/".join(parts)
-
-
-def kebab_case(s: str) -> str:
-    if not s:
-        return ""
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[\s_]+", "-", s)
-    s = re.sub(r"-+", "-", s)
-    return s.strip("-").lower()
 
 
 def install(ctx):
-
     class PublishUrls:
         def __init__(self, config):
             self.base_url = config.get("baseUrl", DEFAULT_PUBLISH_BASE_URL)
@@ -99,31 +45,39 @@ def install(ctx):
         def get_project_url(self, name):
             return self.publish_project_url.format(name=name)
 
-    from llms.extensions.publish.client import get_publish_config as account_publish_config
+    from llms.extensions.share_llmspy.client import get_publish_config as account_publish_config
 
     def get_publish_config(user=None, obscure=True):
         return account_publish_config(ctx, user, obscure)
 
+    def public_config(user):
+        config = get_publish_config(user=user)
+        return config
+
     ctx.app.publisher_available = True
 
     def save_config(user, config):
-        config_path = os.path.join(ctx.get_user_path(user=user), "publish", "config.json")
+        config_path = os.path.join(ctx.get_user_path(user=user), "share_llmspy", "config.json")
         ctx.dbg(f"Saving publish config to: {config_path}")
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
+        legacy = os.path.join(ctx.get_user_path(user=user), "publish", "config.json")
+        if os.path.exists(legacy):
+            os.remove(legacy)
 
     async def handle_publish_config(request):
-        return web.json_response(get_publish_config(user=ctx.get_username(request)))
+        return web.json_response(public_config(ctx.get_username(request)))
 
     ctx.add_get("config.json", handle_publish_config)
 
     async def delete_config(request):
         user = ctx.get_username(request)
-        config_path = os.path.join(ctx.get_user_path(user=user), "publish", "config.json")
-        if os.path.exists(config_path):
-            os.remove(config_path)
-        return web.json_response(get_publish_config(user=user))
+        config_path = os.path.join(ctx.get_user_path(user=user), "share_llmspy", "config.json")
+        for path in (config_path, os.path.join(ctx.get_user_path(user=user), "publish", "config.json")):
+            if os.path.exists(path):
+                os.remove(path)
+        return web.json_response(public_config(user))
 
     ctx.add_post("disconnect", delete_config)
 
@@ -138,105 +92,11 @@ def install(ctx):
             save_config(user, existing_config)
         else:
             save_config(user, body)
-        return web.json_response(get_publish_config(user=user))
+        return web.json_response(public_config(user))
 
     ctx.add_post("config.json", save_publish_config)
 
-    async def detect_dist(request):
-        user = ctx.get_username(request)
-        active_project = ctx.get_user_pref("project", user=user)
-        user_projects = ctx.projects.get_user_projects(user) if hasattr(ctx, "projects") else []
-        if request.query.get("threadId"):
-            thread = ctx.threads.get_thread(request.query["threadId"], user)
-            if not thread:
-                raise web.HTTPNotFound(text="Thread not found")
-            proj = next((p for p in user_projects if p.get("id") == thread.get("projectId")), None)
-        else:
-            proj = next((p for p in user_projects if p.get("name") == active_project), None) if active_project else None
-
-        if proj:
-            folder = proj.get("folder") or kebab_case(proj.get("name", ""))
-            project_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects", folder))
-            publish_prop = sanitize_publish_path(proj.get("publish"), project_dir)
-
-            if publish_prop:
-                return web.json_response({"dist": publish_prop})
-
-            dist_path = os.path.join(project_dir, "dist")
-            if os.path.exists(dist_path) and os.path.isdir(dist_path):
-                return web.json_response({"dist": "dist"})
-            return web.json_response({"dist": ""})
-
-        return web.json_response({"dist": ""})
-
-    ctx.add_get("detect-dist", detect_dist)
-
-    async def list_subdirs(request):
-        user = ctx.get_username(request)
-        path_param = request.query.get("path", "")
-        project_param = request.query.get("project", "")
-
-        active_project = project_param or ctx.get_user_pref("project", user=user)
-        project_dir = None
-        proj = None
-        if active_project:
-            user_projects = ctx.projects.get_user_projects(user) if hasattr(ctx, "projects") else []
-            proj = next((p for p in user_projects if p.get("name") == active_project or p.get("folder") == active_project), None)
-            if proj:
-                folder = proj.get("folder") or kebab_case(proj.get("name", ""))
-                project_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects", folder))
-
-        if not project_dir:
-            project_dir = os.path.abspath(ctx.get_user_path(user))
-
-        clean_rel = sanitize_publish_path(path_param, project_dir)
-        resolved_path = os.path.abspath(os.path.join(project_dir, clean_rel))
-
-        if not is_path_within(resolved_path, project_dir) or not os.path.exists(resolved_path) or not os.path.isdir(resolved_path):
-            return web.json_response({"error": "Invalid or non-existent path", "path": path_param}, status=400)
-
-        try:
-            subdirs = []
-            for item in os.listdir(resolved_path):
-                full_path = os.path.join(resolved_path, item)
-                if os.path.isdir(full_path) and not item.startswith("."):
-                    rel_sub = os.path.relpath(full_path, project_dir)
-                    subdirs.append({"name": item, "path": rel_sub})
-            subdirs.sort(key=lambda x: x["name"].lower())
-
-            rel_current = os.path.relpath(resolved_path, project_dir)
-            if rel_current == ".":
-                rel_current = ""
-
-            parent_path = None
-            if resolved_path != project_dir:
-                parent_abs = os.path.dirname(resolved_path)
-                if is_path_within(parent_abs, project_dir):
-                    rel_parent = os.path.relpath(parent_abs, project_dir)
-                    parent_path = "" if rel_parent == "." else rel_parent
-
-            user_projects_dir = os.path.abspath(os.path.join(ctx.get_user_path(user), "projects"))
-            if is_path_within(resolved_path, user_projects_dir):
-                rel_proj = os.path.relpath(resolved_path, user_projects_dir)
-                display_path = "~/" if rel_proj == "." else f"~/{rel_proj}"
-            elif proj:
-                folder_name = proj.get("folder") or kebab_case(proj.get("name", ""))
-                display_path = f"~/{folder_name}" + (f"/{rel_current}" if rel_current else "")
-            else:
-                display_path = "~/" + os.path.basename(resolved_path)
-
-            return web.json_response(
-                {
-                    "currentPath": rel_current,
-                    "displayPath": display_path,
-                    "parentPath": parent_path,
-                    "subdirs": subdirs,
-                }
-            )
-        except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
-
-    ctx.add_get("list-subdirs", list_subdirs)
+    register_project_output_routes(ctx)
 
     async def get_publish_thread(request):
         thread_id = request.match_info["id"]
@@ -292,7 +152,7 @@ def install(ctx):
             cache_references = sorted(cache_references, key=lambda x: len(x[0]), reverse=True)
             async with aiohttp.ClientSession() as upload_session:
                 upload_headers = {"Authorization": f"Bearer {publish_api_key}", "Accept": "application/json"}
-                for orig_url, tail in cache_references:
+                for _orig_url, tail in cache_references:
                     file_path = ctx.get_cache_path(tail)
                     if os.path.exists(file_path):
                         # Upload main file
@@ -512,28 +372,13 @@ def install(ctx):
             try:
                 data = json.loads(text)
                 if status_code == 200 and "publishedUrl" in data:
-                    projects_list = ctx.projects.get_user_projects(user)
-                    updated = False
-                    for proj in projects_list:
-                        if proj.get("name") == name:
-                            proj["publishedUrl"] = data["publishedUrl"]
-                            updated = True
-                            break
-                    if updated:
-                        if user:
-                            write_path = os.path.join(ctx.get_user_path(user), "projects", "projects.json")
-                        else:
-                            write_path = os.path.join(ctx.get_user_path(), "projects", "projects.json")
-                        os.makedirs(os.path.dirname(write_path), exist_ok=True)
-                        with open(write_path, "w", encoding="utf-8") as f:
-                            json.dump(projects_list, f, indent=2, ensure_ascii=False)
+                    ctx.projects.update_publication(project['id'], {'publishedUrl': data['publishedUrl']}, user)
                 return web.json_response(data, status=status_code)
             except json.JSONDecodeError:
                 content_type = getattr(resp, "content_type", "text/plain")
                 return web.Response(text=text, status=status_code, content_type=content_type)
 
     ctx.add_post("project/{name}", publish_project)
-
 
     async def publish_media(request):
         user = ctx.get_username(request)

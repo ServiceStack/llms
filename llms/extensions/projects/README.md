@@ -105,6 +105,12 @@ Projects are persisted locally in a JSON file format under the user's data direc
     "description": "Creating a Tic Tac Toe game in React",
     "publish": "dist",
     "publishedUrl": "https://ai.llmspy.org/p/user/Tic_Tac_Toe",
+    "staticPublication": {
+      "publishedPath": "/srv/www/p/user/tic-tac-toe",
+      "urlPath": "/p/user/tic-tac-toe/",
+      "publishedUrl": "https://example.com/p/user/tic-tac-toe/",
+      "publishedAt": "2026-10-05T00:00:00+00:00"
+    },
     "showInSidebar": true
   }
 ]
@@ -120,3 +126,8 @@ Array order is the project's display order. Archived records have `archived: tru
 deletion. `POST /ext/projects/order` takes `{"ids": ["active-id", "…"]}` with every active ID once;
 stale membership returns 409. `PATCH /ext/projects/archive/{id}` takes `{"archived": true|false}`.
 Archive state is preserved through legacy metadata/bulk saves, including bulk saves that omit archives.
+
+Project output can publish through the independently enabled `share_static` and `share_llmspy`
+extensions. See [static sharing configuration](../share_static/README.md).
+`staticPublication` is server-owned and preserved across project edits; `publishedUrl` remains the
+remote publication link.

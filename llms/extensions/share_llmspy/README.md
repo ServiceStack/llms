@@ -1,10 +1,12 @@
-# Publish Extension
+# llmspy Sharing Extension
 
 Share your conversations, projects, and media with the world — straight from your workspace.
 
-The **Publish** extension lets you generate public, read-only links for chat threads, static projects
-(games, apps, dashboards), and individual media files (images and audio). Everything is hosted on
-[llmspy.org](https://llmspy.org) and available instantly.
+The **share_llmspy** extension publishes chat threads, projects and media to
+[ai.llmspy.org](https://ai.llmspy.org). It registers the **ai.llmspy.org** option in the core Share
+panel and runs independently of [static folder sharing](../share_static/README.md).
+Disable it by adding `"share_llmspy"` to `disable_extensions` in your llms configuration.
+No sharing icon appears when no sharing extensions register an option.
 
 ---
 
@@ -18,7 +20,8 @@ Click the **Share** icon in the top toolbar to open the publishing panel.
 
 ### 2. Register & Connect
 
-If you haven't connected a publisher account yet, you'll see a registration form alongside
+Select **ai.llmspy.org** to use remote publishing. If you haven't connected an account,
+you'll see a registration form alongside
 a short list of benefits:
 
 - ✅ Generate beautiful public read-only links
@@ -47,7 +50,7 @@ permanent, styled web page.
 ### How to Publish
 
 1. Open the **Share** panel while you have an active conversation.
-2. Make sure the **Publish Chat Thread** tab is selected.
+2. Select **ai.llmspy.org**, connect an account if needed, then select **Publish Chat Thread**.
 3. You'll see the thread title and model displayed in a summary card.
 4. Click **Publish Thread** (or **Update Thread** if previously published).
 5. A public URL is generated and displayed. Click the link to open it, or click the copy icon
@@ -72,18 +75,17 @@ Hit **Update Thread** to push any new messages or edits to the same URL.
 
 ## Publishing Projects
 
-Deploy a static project — a game, web app, or any folder of HTML/JS/CSS — to a live public URL
-with a single click.
+Publish a project build to the public host. Static folder exports are provided independently by
+`share_static`; they do not require a publisher account.
 
-### How to Publish
+### Publish to ai.llmspy.org
 
-1. Open a chat that belongs to the project (the project tab only appears for a chat in a project;
-   with no chat open it uses the project last selected in the project manager).
-2. Open the **Share** panel and select the **Publish Project** tab.
-3. The extension auto-detects your project's build/dist folder. You can change it manually or
-   use the **Browse** button to pick a different folder.
-4. Click **Publish Project**.
-5. Your project is packaged as a tarball, uploaded, and a live URL is returned.
+1. Select the **ai.llmspy.org** tab and connect a publisher account if needed.
+2. Select **Publish Project**, choose the output directory and click **Publish Project**.
+3. Your project is packaged as a tarball, uploaded, and a live URL is returned.
+
+Folder and remote publication status are stored separately, so publishing to either destination
+preserves the other destination's result.
 
 <!-- screenshot: publish-project-tab -->
 
@@ -153,8 +155,8 @@ Share generated audio clips from the audio player.
 
 | Content Type | Where to Find It | Action |
 |---|---|---|
-| **Chat Thread** | Share panel → *Publish Chat Thread* tab | Publish / Update Thread |
-| **Project** | Share panel → *Publish Project* tab | Publish Project |
+| **Chat Thread** | Share panel → *ai.llmspy.org* → *Publish Chat Thread* | Publish / Update Thread |
+| **Remote project** | Share panel → *ai.llmspy.org* → *Publish Project* | Publish Project |
 | **Image** | Gallery lightbox footer | Share Image |
 | **Audio** | Audio player actions | share |
 
@@ -168,3 +170,8 @@ To unlink your publisher account:
 
 Your API key will be removed locally. Previously published content remains accessible at its
 public URL until you remove it from the hosting platform.
+
+Account configuration is stored under `user/<username>/share_llmspy/config.json`. Existing
+`publish/config.json` account files remain readable, migrate on the next save, and are removed
+on disconnect so an old grant cannot be restored. Named users inherit only public origin defaults,
+never the default account's credentials.

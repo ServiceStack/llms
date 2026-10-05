@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from llms.extensions.publish import install
+from llms.extensions.share_llmspy import install
 
 
 class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
@@ -19,7 +19,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         self.mock_ctx.threads.db.update_thread_async = AsyncMock()
         self.mock_ctx.get_user_avatar_path.return_value = None
         self.mock_ctx.get_profile_avatar_path.return_value = None
-        self.mock_ctx.path = os.path.join(self.temp_dir, "extensions", "publish")
+        self.mock_ctx.path = os.path.join(self.temp_dir, "extensions", "share_llmspy")
         os.makedirs(self.mock_ctx.path, exist_ok=True)
 
         def get_user_path(user=None):
@@ -28,6 +28,16 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
             return os.path.join(self.temp_dir, "user", user)
 
         self.mock_ctx.get_user_path = get_user_path
+
+        def update_publication(project_id, values, user=None):
+            projects = self.mock_ctx.projects.get_user_projects(user)
+            project = next(p for p in projects if p.get('id') == project_id)
+            project.update(values)
+            path = os.path.join(get_user_path(user), 'projects', 'projects.json')
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(projects, f)
+        self.mock_ctx.projects.update_publication.side_effect = update_publication
 
         # Install the publish extension
         install(self.mock_ctx)
@@ -48,6 +58,28 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         os.chdir(self.initial_cwd)
         shutil.rmtree(self.temp_dir)
+
+    async def test_legacy_account_migrates_on_save_and_disconnect_removes_old_grant(self):
+        self.mock_ctx.get_username.return_value = "admin"
+        legacy = os.path.join(self.mock_ctx.get_user_path("admin"), "publish", "config.json")
+        os.makedirs(os.path.dirname(legacy), exist_ok=True)
+        with open(legacy, "w") as f:
+            json.dump({"apiKey": "legacy-key", "userName": "Alice"}, f)
+        request = MagicMock()
+        get = next(c.args[1] for c in self.mock_ctx.add_get.call_args_list if c.args[0] == "config.json")
+        self.assertEqual(json.loads((await get(request)).text)["userName"], "Alice")
+        request.json = AsyncMock(return_value={"userName": "Alice renamed"})
+        save = next(c.args[1] for c in self.mock_ctx.add_post.call_args_list if c.args[0] == "config.json")
+        await save(request)
+        self.assertFalse(os.path.exists(legacy))
+        target = os.path.join(self.mock_ctx.get_user_path("admin"), "share_llmspy", "config.json")
+        with open(target) as f:
+            self.assertEqual(json.load(f)["apiKey"], "legacy-key")
+        with open(legacy, "w") as f:
+            json.dump({"apiKey": "old-key"}, f)
+        disconnect = next(c.args[1] for c in self.mock_ctx.add_post.call_args_list if c.args[0] == "disconnect")
+        self.assertIsNone(json.loads((await disconnect(request)).text)["apiKey"])
+        self.assertFalse(os.path.exists(legacy))
 
     async def test_get_publish_config_default_none_exists(self):
         self.mock_ctx.get_username.return_value = None
@@ -76,7 +108,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
 
         # Verify it was saved correctly in the mock user path
-        config_file_path = os.path.join(self.mock_ctx.get_user_path("admin"), "publish", "config.json")
+        config_file_path = os.path.join(self.mock_ctx.get_user_path("admin"), "share_llmspy", "config.json")
         self.assertTrue(os.path.exists(config_file_path))
 
         with open(config_file_path, encoding="utf-8") as f:
@@ -91,7 +123,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response_data["userName"], "admin")
         self.assertEqual(response_data["userId"], "usr_123")
 
-    @unittest.mock.patch("llms.extensions.publish.aiohttp.ClientSession")
+    @unittest.mock.patch("llms.extensions.share_llmspy.aiohttp.ClientSession")
     async def test_publish_thread(self, mock_client_session):
         # 1. Retrieve the publish_thread handler
         publish_thread_handler = None
@@ -148,7 +180,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
             ssl=None
         )
 
-    @unittest.mock.patch("llms.extensions.publish.aiohttp.ClientSession")
+    @unittest.mock.patch("llms.extensions.share_llmspy.aiohttp.ClientSession")
     async def test_publish_thread_localhost(self, mock_client_session):
         # 1. Retrieve the publish_thread handler
         publish_thread_handler = None
@@ -202,7 +234,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
             ssl=False
         )
 
-    @unittest.mock.patch("llms.extensions.publish.aiohttp.ClientSession")
+    @unittest.mock.patch("llms.extensions.share_llmspy.aiohttp.ClientSession")
     async def test_publish_thread_error_forwarding(self, mock_client_session):
         # 1. Retrieve the publish_thread handler
         publish_thread_handler = None
@@ -250,7 +282,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp_data.get("message"), "Unauthorized")
         self.assertIn("publishedAt", resp_data)
 
-    @unittest.mock.patch("llms.extensions.publish.aiohttp.ClientSession")
+    @unittest.mock.patch("llms.extensions.share_llmspy.aiohttp.ClientSession")
     async def test_publish_thread_with_cache_files(self, mock_client_session):
         # 1. Retrieve the publish_thread handler
         publish_thread_handler = None
@@ -347,7 +379,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
             ssl=None
         )
 
-    @unittest.mock.patch("llms.extensions.publish.aiohttp.ClientSession")
+    @unittest.mock.patch("llms.extensions.share_llmspy.aiohttp.ClientSession")
     async def test_publish_project_success(self, mock_client_session):
         import io
         import tarfile
@@ -364,6 +396,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
 
         # Mock project data
         project_data = {
+            "id": "project-a-id",
             "name": "ProjectA",
             "folder": "project-a",
             "description": "My test project",
@@ -502,7 +535,7 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
             await publish_project_handler(request)
         self.assertEqual(str(context.exception), "No publish directory configured for the project")
 
-    @unittest.mock.patch("llms.extensions.publish.aiohttp.ClientSession")
+    @unittest.mock.patch("llms.extensions.share_llmspy.aiohttp.ClientSession")
     async def test_publish_media_success(self, mock_client_session):
         # 1. Retrieve handler
         publish_media_handler = None
@@ -641,4 +674,3 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 404)
         resp_data = json.loads(response.text)
         self.assertIn("Cached file not found", resp_data.get("error"))
-

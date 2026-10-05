@@ -12,12 +12,18 @@ DEFAULT_BASE_URL = "https://ai.llmspy.org"
 MAX_PUBLICATION_BYTES = 3 * 1024 * 1024
 
 
+def config_path(ctx, user=None):
+    path = Path(ctx.get_user_path(user)) / "share_llmspy/config.json"
+    legacy = Path(ctx.get_user_path(user)) / "publish/config.json"
+    return path if path.exists() or not legacy.exists() else legacy
+
+
 def get_publish_config(ctx, user=None, obscure=True):
     # A named account never inherits the default account's credentials.
-    path = Path(ctx.get_user_path(user)) / "publish/config.json"
+    path = config_path(ctx, user)
     obj = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     public_defaults = {}
-    default_path = Path(ctx.get_user_path()) / "publish/config.json"
+    default_path = config_path(ctx)
     if user and default_path != path and default_path.exists():
         defaults = json.loads(default_path.read_text(encoding="utf-8"))
         public_defaults = {key: defaults[key] for key in ("baseUrl", "allowHttp") if key in defaults}
