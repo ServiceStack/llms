@@ -267,7 +267,7 @@ wheels = [
 
 [[package]]
 name = "llms-py"
-version = "4.0.21"
+version = "4.0.22"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
