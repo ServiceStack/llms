@@ -186,11 +186,20 @@ def no_links(path, root):
         raise web.HTTPBadRequest(text="Publication path is outside its configured root")
 
 
+def is_excluded(name):
+    """Hidden files and folders, whose names start with '.', are never published: they're repositories, secrets
+    like .env, and tool settings, which a static server that doesn't hide them would serve."""
+    return name.startswith(".")
+
+
 def copy_output(source, stage):
     def failed(error):
         raise error
 
     for root, dirs, files in os.walk(source, followlinks=False, onerror=failed):
+        # Skipped before they're checked, so nothing in them can fail the publication
+        dirs[:] = [name for name in dirs if not is_excluded(name)]
+        files = [name for name in files if not is_excluded(name)]
         no_links(root, source)
         relative = os.path.relpath(root, source)
         target = stage / relative

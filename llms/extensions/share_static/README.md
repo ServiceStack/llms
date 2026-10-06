@@ -37,7 +37,9 @@ After publication the panel shows `Published 15m ago to ~/user/project`, followe
 or URL path. The timestamp's title contains the full date and time. **Update folder** replaces the
 export and removes obsolete files. Copy/rewrite/metadata failures restore the previous export.
 Source files remain unchanged; links/junctions, traversal, overlapping paths and unrelated existing
-destinations are rejected. `staticPublication` metadata survives project edits and remains separate
+destinations are rejected. Hidden files and folders, whose names start with `.`, such as `.git`,
+`.env` and `.vscode`, are never published, so a static server that doesn't hide them can't serve a
+project's repository, secrets or tool settings. `staticPublication` metadata survives project edits and remains separate
 from the remote publication link.
 
 For example, run llms from `/srv/www` and serve that directory independently:

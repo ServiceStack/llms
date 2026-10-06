@@ -192,6 +192,27 @@ class StaticPublishTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((self.destination / "old.txt").exists())
         self.assertEqual((self.destination / "new.txt").read_text(), "new")
 
+    def test_hidden_files_and_folders_are_not_published(self):
+        (self.source / ".git/refs").mkdir(parents=True)
+        (self.source / ".git/HEAD").write_text("ref: refs/heads/main")
+        # A link in a hidden folder would otherwise be rejected
+        (self.source / ".git/refs/outside").symlink_to(self.root, target_is_directory=True)
+        (self.source / ".env").write_text("API_KEY=secret")
+        (self.source / "assets/.git").write_text("gitdir: ../../.git/worktrees/site")
+        (self.source / "assets/.cache").mkdir()
+        (self.source / "assets/.cache/build.json").write_text("{}")
+        (self.source / "assets/app.v1.js").write_text("app()")
+        self.export()
+        self.assertFalse((self.destination / ".git").exists())
+        self.assertFalse((self.destination / ".env").exists())
+        self.assertFalse((self.destination / "assets/.git").exists())
+        self.assertFalse((self.destination / "assets/.cache").exists())
+        # Only names that start with '.' are hidden
+        self.assertEqual((self.destination / "assets/app.v1.js").read_text(), "app()")
+        self.assertTrue((self.destination / "assets/app.js").exists())
+        # The source is unchanged
+        self.assertTrue((self.source / ".env").exists())
+
     def test_failed_copy_or_rewrite_preserves_publication(self):
         previous = self.export()
         original = (self.destination / "index.html").read_bytes()
