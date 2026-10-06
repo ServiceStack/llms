@@ -74,6 +74,7 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         self.saved_handlers = dict(main.g_handlers)
         self.saved_app = main.g_app
         self.calls, self.inference, self.key_requests = [], [], 0
+        self.model_bearers = []
         self.response_mode, self.token_status, self.refresh_calls = "complete", 200, 0
         self.delay_entered, self.delay_release = asyncio.Event(), asyncio.Event()
         self.delay_token = False
@@ -223,6 +224,7 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         return web.json_response({"keys": [self.jwk]})
 
     async def models_handler(self, request):
+        self.model_bearers.append(request.headers.get("Authorization"))
         return web.json_response({"models": self.model_rows})
 
     async def discovery_handler(self, request):
@@ -546,6 +548,9 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         body = await response.json()
         self.assertEqual(body["email"], "alice@example.test")
         self.assertFalse(body["has_codex_auth"])
+        self.assertTrue(body["has_api_key"])
+        self.assertTrue(body["api_key_disabled"])
+        self.assertFalse(body["api_key_active"])
         self.assertEqual(response.headers["Cache-Control"], "no-store")
         self.assertNotIn(alice["access_token"], json.dumps(body))
         self.assertNotIn(alice["id_token"], json.dumps(body))
@@ -555,6 +560,11 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.auth.store.load("alice"))
         self.assertIsInstance(main.g_handlers["openai"], OpenAiSubscriptionProvider)
         self.assertIsNotNone(self.auth.store.load("bob"))
+        alice_status = await (await self.client.get("/status", headers={"Test-User": "alice"})).json()
+        bob_status = await (await self.client.get("/status", headers={"Test-User": "bob"})).json()
+        self.assertTrue(alice_status["api_key_active"])
+        self.assertFalse(alice_status["api_key_disabled"])
+        self.assertTrue(bob_status["api_key_disabled"])
         query = parse_qs(urlsplit(self.connect()["auth_url"]).query)
         self.assertEqual(query["client_id"], ["oaiapp_fixture"])
         self.assertNotIn("access_token", self.auth.store.registration("alice"))
@@ -576,9 +586,32 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         bob = await self.auth.models("bob")
         self.assertEqual([m["id"] for m in bob], ["bob-model"])
         self.assertEqual(await self.auth.models("alice"), alice)
+        self.assertEqual(self.model_bearers, ["Bearer access-alice", "Bearer access-bob"])
         self.auth.disconnect("alice")
         with self.assertRaises(SubscriptionError):
             await self.auth.models("alice")
+
+    async def test_request_models_use_the_signed_in_users_subscription_and_never_fail_before_sign_in(self):
+        self.save_grant()
+        self.model_rows = [{"slug": "plan-model", "display_name": "Plan Model", "visibility": "list"}]
+        main.g_app = SimpleNamespace(
+            openai_subscription_auth=self.auth,
+            is_auth_enabled=lambda: True,
+            get_username=lambda request: request.headers.get("Test-User"),
+        )
+
+        def openai(models):
+            return [m["id"] for m in models if m["provider"] == "openai"]
+
+        alice = await main.get_request_models(SimpleNamespace(headers={"Test-User": "alice"}))
+        # The subscription's models replace the API-key catalog's
+        self.assertEqual(openai(alice), ["plan-model"])
+        # Before sign-in there's no user, which the UI asks for models without
+        anonymous = await main.get_request_models(SimpleNamespace(headers={}))
+        self.assertEqual(openai(anonymous), ["fixture-model"])
+        self.base.api_key = None
+        anonymous = await main.get_request_models(SimpleNamespace(headers={}))
+        self.assertEqual(openai(anonymous), [])
 
     async def test_real_stream_and_tool_translation_use_public_request_and_local_headers(self):
         self.save_grant()
@@ -674,17 +707,32 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         query = parse_qs(urlsplit(self.connect()["auth_url"]).query)
         self.assertEqual(query["client_id"], ["dynamic_agent_client"])
 
-    async def test_fallback_requires_missing_personal_grant_or_explicit_nontext_modality(self):
+    async def test_subscription_disables_api_key_for_all_modalities_until_disconnect(self):
         self.save_grant("admin")
         provider = OpenAiSubscriptionProvider(self.ctx, self.base)
         self.assertEqual(
             await provider.chat({"model": "fixture-model", "messages": []}, {"user": "alice"}), {"fallback": True}
         )
         self.save_grant()
+        self.base.chat.reset_mock()
+        for modality in ("image", "audio"):
+            chat = {"model": "fixture-model", "messages": [], "modalities": ["text", modality]}
+            with self.assertRaisesRegex(SubscriptionError, "OpenAI API key is disabled") as error:
+                await provider.chat(chat, {"user": "alice"})
+            self.assertFalse(error.exception.retryable)
+            self.base.chat.assert_not_awaited()
+        await provider.chat({"model": "fixture-model", "messages": []}, {"user": "alice"})
+        self.base.chat.assert_not_awaited()
+        models = [{"id": "api-only", "provider": "openai"}, {"id": "other", "provider": "other"}]
         self.assertEqual(
-            await provider.chat({"model": "fixture-model", "messages": [], "modalities": ["image"]}, {"user": "alice"}),
-            {"fallback": True},
+            [row["id"] for row in await self.auth.filter_models(models, "alice", api_available=True)],
+            ["other", "fixture-model"],
         )
+        self.auth.disconnect("alice")
+        self.assertEqual(await provider.chat(chat, {"user": "alice"}), {"fallback": True})
+        self.assertEqual(await self.auth.filter_models(models, "alice", api_available=True), models)
+        self.assertEqual(self.base.api_key, "sk-fixture")
+        self.assertIsNotNone(self.auth.store.load("admin"))
         self.assertEqual(provider.headers, {})
 
     async def test_provider_reload_and_unknown_model(self):
@@ -842,3 +890,131 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaises(SubscriptionError),
         ):
             await self.auth.valid_credentials("alice")
+
+    async def automatic_connect(self, user="alice", **body):
+        response = await self.client.post("/connect", headers={"Test-User": user}, json=body)
+        self.assertEqual(response.status, 200, await response.text())
+        result = await response.json()
+        if not hasattr(self, "nonces"):
+            self.nonces = {}
+        self.nonces[user] = self.auth.pending[user]["nonce"]
+        self.assertTrue(result["automatic_callback"])
+        self.assertFalse(result["manual_callback"])
+        return result
+
+    async def test_automatic_callback_completes_origin_identity_without_manual_entry(self):
+        self.options.redirect_uri = "http://127.0.0.1:0/auth/callback"
+        target = str(self.client.make_url("/settings"))
+        result = await self.automatic_connect(return_url=target)
+        self.assertGreater(urlsplit(result["redirect_uri"]).port, 0)
+        url = self.callback_url() + "&user=bob"
+        async with self.client.session.get(url) as response:
+            self.assertEqual(response.status, 200, await response.text())
+            text = await response.text()
+            self.assertIn("Connected to ChatGPT", text)
+            self.assertIn("window.close()", text)
+            self.assertIn(target, text)
+            self.assertNotIn("access-alice", text)
+            self.assertNotIn("state=", text)
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
+            self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+        self.assertEqual(self.calls[0]["redirect_uri"], result["redirect_uri"])
+        self.assertEqual(self.auth.store.load("alice")["subject"], "alice")
+        self.assertIsNone(self.auth.store.load("bob"))
+        self.assertIsInstance(main.g_handlers["openai"], OpenAiSubscriptionProvider)
+        status = await (await self.client.get("/status", headers={"Test-User": "alice"})).json()
+        self.assertTrue(status["connected"])
+        self.assertFalse(status["pending"])
+        self.assertTrue(status["automatic_callback"])
+        async with self.client.session.get(url) as replay:
+            self.assertEqual(replay.status, 400)
+        self.assertEqual(len(self.calls), 1)
+
+    async def test_automatic_callback_preserves_concurrent_user_ownership(self):
+        self.options.redirect_uri = "http://127.0.0.1:0/auth/callback"
+        await self.automatic_connect("alice")
+        await self.automatic_connect("bob")
+        urls = [self.callback_url(user) for user in ("alice", "bob")]
+        responses = await asyncio.gather(*(self.client.session.get(url) for url in urls))
+        for response in responses:
+            self.assertEqual(response.status, 200, await response.text())
+            response.release()
+        for user in ("alice", "bob"):
+            self.assertEqual(self.auth.store.load(user)["subject"], user)
+        self.assertEqual(len(self.calls), 2)
+
+    async def test_callback_port_conflict_uses_available_port_and_cleanup_releases_it(self):
+        import socket
+
+        with socket.socket() as occupied:
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen()
+            port = occupied.getsockname()[1]
+            self.options.redirect_uri = f"http://127.0.0.1:{port}/auth/callback"
+            result = await self.automatic_connect()
+            selected = urlsplit(result["redirect_uri"]).port
+            self.assertNotEqual(selected, port)
+            self.assertGreater(selected, 0)
+            await self.auth.cleanup()
+            with socket.socket() as replacement:
+                replacement.bind(("127.0.0.1", selected))
+                replacement.listen()
+
+    async def test_automatic_callback_rejects_state_replay_expiry_and_superseded_attempts(self):
+        self.options.redirect_uri = "http://127.0.0.1:0/auth/callback"
+        for kind in ("state", "duplicate", "expired", "disconnect", "new-login"):
+            with self.subTest(kind=kind):
+                await self.automatic_connect()
+                url = self.callback_url()
+                if kind == "state":
+                    url = self.callback_url(state="wrong")
+                elif kind == "duplicate":
+                    url += "&state=second"
+                elif kind == "expired":
+                    self.auth.pending["alice"]["created_at"] -= self.options.flow_lifetime + 1
+                elif kind == "disconnect":
+                    self.auth.disconnect("alice")
+                elif kind == "new-login":
+                    await self.automatic_connect()
+                async with self.client.session.get(url) as response:
+                    self.assertEqual(response.status, 400)
+                self.assertEqual(self.calls, [])
+                self.assertIsNone(self.auth.store.load("alice"))
+
+    async def test_callback_denial_is_reported_only_to_origin_user_and_cleared_on_retry(self):
+        self.options.redirect_uri = "http://127.0.0.1:0/auth/callback"
+        await self.automatic_connect()
+        flow = self.auth.pending["alice"]
+        url = flow["redirect"] + "?" + urlencode({"state": flow["state"], "error": "access_denied"})
+        async with self.client.session.get(url) as response:
+            self.assertEqual(response.status, 400)
+            self.assertIn("not authorized", await response.text())
+        for user in ("alice", "bob"):
+            status = await (await self.client.get("/status", headers={"Test-User": user})).json()
+            if user == "alice":
+                self.assertIn("not authorized", status["callback_error"])
+                self.assertFalse(status["pending"])
+            else:
+                self.assertIsNone(status["callback_error"])
+        await self.automatic_connect()
+        self.assertIsNone(self.auth.callback_error("alice"))
+        self.assertEqual(self.calls, [])
+
+    async def test_automatic_sign_in_rejects_untrusted_return_urls_before_starting_listener(self):
+        for target in ("https://evil.test/", "/relative", 42, "http://localhost:1455/", "x" * 9000):
+            with self.subTest(target=str(target)[:40]):
+                response = await self.client.post(
+                    "/connect", headers={"Test-User": "alice"}, json={"return_url": target}
+                )
+                self.assertEqual(response.status, 400)
+        self.assertIsNone(self.auth.callback_receiver.runner)
+        self.assertFalse(self.auth.has_pending("alice"))
+
+    async def test_manual_completion_requires_explicit_host_opt_out(self):
+        self.options.automatic_callback = False
+        response = await self.client.post("/connect", headers={"Test-User": "alice"}, json={})
+        self.assertEqual(response.status, 200)
+        result = await response.json()
+        self.assertTrue(result["manual_callback"])
+        self.assertFalse(result["automatic_callback"])
+        self.assertIsNone(self.auth.callback_receiver.runner)

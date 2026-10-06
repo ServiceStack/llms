@@ -92,6 +92,7 @@ class Options:
     scope: str = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
     agent_name: str = "llms-py"
     redirect_uri: str = "http://127.0.0.1:1455/auth/callback"
+    automatic_callback: bool = True
     flow_lifetime: int = 600
     timeout: int = 20
     # Both are explicit host callbacks. Never probe or import the operator's file.
@@ -408,12 +409,20 @@ class Auth:
         self.http = Transport(self.options)
         self.identity = Identity(self.options, self.http)
         self.pending, self.catalogs = {}, {}
+        self.callback_errors = {}
+        self.callback_receiver = None
         self.closed = False
 
     def close(self):
         self.closed = True
         self.pending.clear()
         self.catalogs.clear()
+        self.callback_errors.clear()
+
+    async def cleanup(self):
+        self.close()
+        if self.callback_receiver:
+            await self.callback_receiver.close()
 
     def has_pending(self, user):
         self.pending = {
@@ -421,11 +430,18 @@ class Auth:
         }
         return user in self.pending
 
-    def connect(self, user):
+    def callback_error(self, user):
+        self.callback_errors = {
+            u: error for u, error in self.callback_errors.items() if time.time() - error[1] < self.options.flow_lifetime
+        }
+        return self.callback_errors.get(user, (None, 0))[0]
+
+    def connect(self, user, *, redirect_uri=None, automatic=False, return_url=None):
         if self.closed:
             raise SubscriptionError("Subscription service is shutting down.")
         endpoint(self.options.authorization_url)
-        redirect = urllib.parse.urlsplit(self.options.redirect_uri)
+        redirect_uri = redirect_uri or self.options.redirect_uri
+        redirect = urllib.parse.urlsplit(redirect_uri)
         if (
             redirect.scheme != "http"
             or redirect.hostname != "127.0.0.1"
@@ -456,13 +472,16 @@ class Auth:
             "nonce": secrets.token_urlsafe(32),
             "verifier": verifier,
             "client_id": client,
-            "redirect": self.options.redirect_uri,
+            "redirect": redirect_uri,
+            "automatic": automatic,
+            "return_url": return_url,
             "created_at": time.time(),
             "generation": generation,
             "previous": fingerprint,
             "subject": previous.get("subject") if previous.get("issuer") == self.options.issuer else None,
         }
         self.pending[user] = flow
+        self.callback_errors.pop(user, None)
         query = {
             "response_type": "code",
             "client_id": client,
@@ -482,9 +501,41 @@ class Auth:
             "auth_url": self.options.authorization_url + "?" + urllib.parse.urlencode(query),
             "redirect_uri": flow["redirect"],
             "port": redirect.port or 80,
-            "manual_callback": True,
-            "automatic_callback": False,
+            "manual_callback": not automatic,
+            "automatic_callback": automatic,
         }
+
+    async def automatic_callback(self, callback):
+        if not isinstance(callback, str) or len(callback) > 16384:
+            raise SubscriptionError("Invalid OpenAI callback URL.")
+        try:
+            pairs = urllib.parse.parse_qsl(
+                urllib.parse.urlsplit(callback).query, keep_blank_values=True, max_num_fields=32
+            )
+            query = dict(pairs)
+            if len(pairs) != len(query) or not query.get("state"):
+                raise ValueError()
+        except ValueError:
+            raise SubscriptionError("Invalid OpenAI callback parameters.") from None
+        self.has_pending("")  # Expire old attempts before looking up their initiating identity.
+        match = next(
+            (
+                (user, flow)
+                for user, flow in self.pending.items()
+                if flow.get("automatic") and secrets.compare_digest(query["state"].encode(), flow["state"].encode())
+            ),
+            None,
+        )
+        if match is None:
+            raise SubscriptionError("No matching active sign-in. Start a new sign-in.")
+        user, flow = match
+        try:
+            await self.callback(user, callback)
+        except SubscriptionError as error:
+            if self.store.state(user).generation == flow["generation"]:
+                self.callback_errors[user] = (str(error), time.time())
+            raise
+        return user, flow.get("return_url")
 
     def credentials(self, response, client, claims, previous=None):
         previous = previous or {}
@@ -659,6 +710,7 @@ class Auth:
         self.store.disconnect(user)
         self.pending.pop(user, None)
         self.catalogs.pop(user, None)
+        self.callback_errors.pop(user, None)
 
     async def models(self, user):
         async with self.store.state(user).catalog:

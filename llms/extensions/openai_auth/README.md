@@ -9,16 +9,17 @@ and [Responses inference contract](https://developers.openai.com/siwc/token-shar
 
 - Fresh PKCE S256, state and OIDC nonce, with a stable installation host ID. Initial registration uses
   `dynamic_agent_client`; subsequent sign-ins use the issued client ID bound to the verified subject.
-- Complete callback URL entry, exact redirect and state validation, per-user ownership, ten-minute
-  expiry, duplicate-parameter rejection and one code exchange per attempt. Hosted sign-in is manual;
-  no server-side loopback listener is advertised. The browser's callback page may fail to load, but
-  its complete address can be pasted into Settings.
+- Automatic local callbacks: a loopback listener starts before authorization, preferring port 1455
+  and selecting an available port if occupied. The exact selected redirect is retained for exchange.
+  State binds each callback to its initiating user; PKCE, OIDC verification, ten-minute expiry,
+  duplicate-parameter rejection and one exchange per attempt still apply.
 - RS256 signature verification using the configured issuer's JWKS, with issuer/audience/authorized
   party/subject/expiration/not-before/nonce checks. JWT-supplied key URLs are never used. Signature
   verification uses strict RFC 8017 PKCS#1 v1.5 encoding and SHA-256, without new runtime dependencies.
 - Granted scopes control inference. A valid identity-only sign-in is retained with `plan_enabled=false`;
   it does not use an API key as an inference fallback. Sign in again and authorize plan usage.
-- Account-specific models from the public `/v1/models` endpoint, preserving server order and resolving
+- Account-specific models from the public `/v1/models` endpoint using the user's OAuth access token,
+  showing only entries with `visibility="list"`, preserving server order and resolving
   display names to the current account's model IDs. Unknown models are rejected rather than silently
   changing the selected model. Unavailable grants hide OpenAI choices while other providers and
   Settings remain accessible.
@@ -26,11 +27,26 @@ and [Responses inference contract](https://developers.openai.com/siwc/token-shar
   Text, images, reasoning and function-call history are translated without changing canonical chat
   history. An explicit `response.completed` is required; EOF, errors and incomplete events fail.
 - One refresh/retry after an HTTP 401; uncertain inference failures never restart the outer provider
-  loop or switch to a paid provider. API-key fallback is allowed only with no personal grant, or an
-  explicitly requested non-text output modality with an API-key provider.
+  loop or switch to a paid provider. A personal subscription grant disables OpenAI API-key access,
+  including image/audio generation. Disconnect restores the configured API key and API model catalog
+  for that user; the stored key and other users' access are preserved. Invalid or expired grants keep
+  API-key access disabled until disconnected. Status distinguishes `has_api_key` (configured) from
+  `api_key_active` and `api_key_disabled` (per-user routing).
 - Bounded, redirect-free, cookie-free HTTP; strict UTF-8/finite/duplicate-free JSON; redacted failures;
   bounded SSE frames and total stream bytes; socket-read/connect timeouts; cancellation and no-store
   checkpoints. Settings responses use `Cache-Control: no-store` and reject foreign Origin headers.
+
+## Local sign-in callbacks
+
+Select **Continue with ChatGPT** in Settings. The loopback receiver completes sign-in automatically,
+closes the sign-in tab, and the settings panel updates through status polling. Callback errors appear
+in the initiating user's panel. The receiver binds only to `127.0.0.1`, disables access logging, and
+is closed during server cleanup. Return URLs must match the app's origin.
+
+This requires the browser and llms.py to run on the same computer. Remote browsers cannot reach the
+server through a loopback URL. Hosts explicitly choosing manual completion can supply
+`Options(automatic_callback=False)` through `ctx.openai_subscription_options`; only that mode shows
+callback URL entry. It still requires the complete URL, including state and issued client ID.
 
 ## Credential lifecycle and deployment
 
@@ -94,7 +110,7 @@ Its current backend still has review items that were **not changed in this Pytho
 - C# proactive refresh fallback checks the time captured before the network request. A token that
   expires while a failed refresh is in flight can be returned as valid; Python rechecks the current time.
 - Both implementations use refresh locks within a single process. Neither establishes cross-process
-  rotation safety. Both omit browser-visible ID-token hints and provide manual hosted callbacks.
+  rotation safety. Both omit browser-visible ID-token hints and support automatic local loopback callbacks.
 
 These observations do not certify either implementation for production or prove live interoperability.
 
@@ -112,7 +128,7 @@ writes, late callback/refresh/catalog races, refresh timing/rotation, import aut
 model discovery, public request shape, concurrent headers, no-store/cancellation, SSE tools/errors/EOF,
 body bounds and the outer chat retry integration.
 
-Final results: 36 authentication tests; 129 Python tests including related regressions; UI behavior
+Initial review results: 36 authentication tests; 129 Python tests including related regressions; UI behavior
 checks; 69 existing C# OpenAI/sync tests plus one embedded-asset manifest test. Full sync changed only
 `chat/ext/openai_auth/OpenAiSettings.mjs` and `chat/shared-assets.json`; subsequent `--check` found no
 drift across 282 assets. The main chat model selector was not changed. Ruff and whitespace checks passed.

@@ -5,10 +5,12 @@ import contextlib
 import copy
 import sys
 import time
+import urllib.parse
 
 import aiohttp
 from aiohttp import web
 
+from llms.extensions.openai_auth.callback import CallbackReceiver
 from llms.extensions.openai_auth.security import (
     Auth,
     Options,
@@ -193,10 +195,9 @@ class OpenAiSubscriptionProvider(OpenAiCompatible):
                 return await self.base_provider.chat(copy.deepcopy(chat), context=context)
             raise SubscriptionError("ChatGPT subscription is not connected. Sign in in Settings.")
         if any(m != "text" for m in chat.get("modalities", [])):
-            if self.base_provider and getattr(self.base_provider, "api_key", None):
-                return await self.base_provider.chat(copy.deepcopy(chat), context=context)
             raise SubscriptionError(
-                "ChatGPT plan usage supports text responses. Configure an API-key provider for other modalities."
+                "ChatGPT subscription supports text responses only. The OpenAI API key is disabled while connected. "
+                "Disconnect the subscription in Settings to use the OpenAI API key for image or audio generation."
             )
         try:
             grant = await self.auth.valid_credentials(user)
@@ -407,7 +408,7 @@ class OpenAiSubscriptionProvider(OpenAiCompatible):
 
 async def cleanup_active_flow():
     for auth in _auth_instances:
-        auth.close()
+        await auth.cleanup()
     _auth_instances.clear()
 
 
@@ -430,6 +431,10 @@ def deactivate_subscription_provider(ctx):
 def install(ctx):
     auth = _auth(ctx)
     ctx.register_shutdown_handler(auth.close)
+    if callable(getattr(ctx, "register_cleanup_handler", None)):
+        ctx.register_cleanup_handler(auth.cleanup)
+    if auth.callback_receiver is None:
+        auth.callback_receiver = CallbackReceiver(auth, lambda _: activate_subscription_provider(ctx))
     # The model selector remains unchanged. Its existing /models endpoint receives
     # an account-scoped catalog from this server-side adaptation.
     ctx.app.openai_subscription_auth = auth
@@ -450,10 +455,12 @@ def install(ctx):
 
     async def status(request):
         async def action(username):
-            credentials = auth.store.load(username) or {}
+            grant = auth.store.load(username)
+            credentials = grant or {}
             account = credentials.get("account") or {}
             provider = _get_handlers(ctx).get("openai")
             base = provider.base_provider if isinstance(provider, OpenAiSubscriptionProvider) else provider
+            has_api_key = bool(base and getattr(base, "api_key", None))
             connected = (
                 bool(credentials.get("access_token"))
                 and credentials.get("issuer") == auth.options.issuer
@@ -473,11 +480,14 @@ def install(ctx):
                 "expires_at": credentials.get("expires_at", 0),
                 "expired": connected and time.time() >= credentials.get("expires_at", 0),
                 "plan_enabled": bool(credentials.get("plan_enabled")),
-                "has_api_key": bool(base and getattr(base, "api_key", None)),
+                "has_api_key": has_api_key,
+                "api_key_active": has_api_key and grant is None,
+                "api_key_disabled": has_api_key and grant is not None,
                 "has_codex_auth": bool(can_import),
                 "pending": auth.has_pending(username),
-                "manual_callback": True,
-                "automatic_callback": False,
+                "manual_callback": not auth.options.automatic_callback,
+                "automatic_callback": auth.options.automatic_callback,
+                "callback_error": auth.callback_error(username),
                 "requires_reconnect": bool(credentials) and not connected,
             }
 
@@ -485,23 +495,50 @@ def install(ctx):
 
     async def connect(request):
         async def action(username):
-            return auth.connect(username)
+            body = await read_body(request)
+            return_url = body.get("return_url")
+            origin = f"{request.scheme}://{request.host}"
+            if return_url is not None:
+                try:
+                    if (
+                        not isinstance(return_url, str)
+                        or len(return_url) > 8192
+                        or any(ord(c) < 32 for c in return_url)
+                    ):
+                        raise ValueError()
+                    target = urllib.parse.urlsplit(return_url)
+                    if (
+                        target.scheme not in ("http", "https")
+                        or target.username is not None
+                        or f"{target.scheme}://{target.netloc}" != origin
+                    ):
+                        raise ValueError()
+                except ValueError:
+                    raise SubscriptionError("The sign-in return URL must belong to this app.") from None
+            redirect = await auth.callback_receiver.start() if auth.options.automatic_callback else None
+            return auth.connect(
+                username,
+                redirect_uri=redirect,
+                automatic=auth.options.automatic_callback,
+                return_url=return_url or origin + "/",
+            )
 
         return await guarded(request, action)
 
+    async def read_body(request):
+        raw = bytearray()
+        async for chunk in request.content.iter_chunked(4096):
+            raw.extend(chunk)
+            if len(raw) > 32 * 1024:
+                raise SubscriptionError("Provide a JSON object under 32 KB.")
+        try:
+            return parse_object(raw)
+        except (ValueError, UnicodeError):
+            raise SubscriptionError("Provide a JSON object under 32 KB.") from None
+
     async def callback(request):
         async def action(username):
-            raw = bytearray()
-            async for chunk in request.content.iter_chunked(4096):
-                raw.extend(chunk)
-                if len(raw) > 32 * 1024:
-                    raise SubscriptionError("Provide a JSON object under 32 KB.")
-            try:
-                if len(raw) > 32 * 1024:
-                    raise ValueError()
-                body = parse_object(raw)
-            except ValueError:
-                raise SubscriptionError("Provide a JSON object under 32 KB.") from None
+            body = await read_body(request)
             callback_url = body.get("url_or_code")
             if not isinstance(callback_url, str):
                 raise SubscriptionError("Paste the complete callback URL, including state.")

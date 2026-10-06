@@ -2119,6 +2119,23 @@ def get_active_models():
     return ret
 
 
+async def get_request_models(request):
+    """The models a request can choose from. A connected ChatGPT subscription replaces OpenAI's API-key catalog
+    with the models its account can use. A request that isn't signed in, e.g. the UI's before sign-in, gets no
+    subscription's models."""
+    models = get_active_models()
+    subscription = getattr(g_app, "openai_subscription_auth", None)
+    if not subscription:
+        return models
+    provider = g_handlers.get("openai")
+    base = getattr(provider, "base_provider", provider)
+    api_available = bool(base and base.api_key)
+    user = g_app.get_username(request) if g_app.is_auth_enabled() else "default"
+    if not user:
+        return models if api_available else [m for m in models if m.get("provider") != "openai"]
+    return await subscription.filter_models(models, user, api_available=api_available)
+
+
 def api_providers():
     ret = []
     for id, provider in g_handlers.items():
@@ -5386,14 +5403,7 @@ def cli_exec(cli_args, extra_args):
 
         async def active_models_handler(request):
             await g_app.on_request(request)
-            models = get_active_models()
-            subscription = getattr(g_app, "openai_subscription_auth", None)
-            if subscription:
-                user = g_app.assert_username(request) or "default"
-                provider = g_handlers.get("openai")
-                base = getattr(provider, "base_provider", provider)
-                models = await subscription.filter_models(models, user, api_available=bool(base and base.api_key))
-            return web.json_response(models)
+            return web.json_response(await get_request_models(request))
 
         app.router.add_get("/models", active_models_handler)
 
