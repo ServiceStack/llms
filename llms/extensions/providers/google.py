@@ -334,7 +334,7 @@ def install_google(ctx):
                                         else (fc.get("args") or "")
                                     )
                                     tc = {
-                                        "id": f"call_{idx}_{int(started_at)}",
+                                        "id": fc.get("id") or f"call_{idx}_{int(started_at)}",
                                         "type": "function",
                                         "function": {
                                             "name": fn_name,
@@ -491,7 +491,7 @@ def install_google(ctx):
                                     break
                         elif isinstance(content, str):
                             system_prompt = content
-                    elif "content" in message:
+                    elif "content" in message or "tool_calls" in message:
                         role = "user"
                         if "role" in message:
                             if message["role"] == "user":
@@ -507,11 +507,14 @@ def install_google(ctx):
                         if message.get("role") == "assistant" and "tool_calls" in message:
                             for tool_call in message["tool_calls"]:
                                 tool_id_map[tool_call["id"]] = tool_call["function"]["name"]
+                                fc_payload = {
+                                    "name": tool_call["function"]["name"],
+                                    "args": json.loads(tool_call["function"]["arguments"]),
+                                }
+                                if tool_call.get("id"):
+                                    fc_payload["id"] = tool_call["id"]
                                 part = {
-                                    "functionCall": {
-                                        "name": tool_call["function"]["name"],
-                                        "args": json.loads(tool_call["function"]["arguments"]),
-                                    }
+                                    "functionCall": fc_payload
                                 }
 
                                 signature = tool_call.get("thoughtSignature") or tool_call.get("thought_signature")
@@ -540,10 +543,9 @@ def install_google(ctx):
                             # Gemini expects function response in 'functionResponse' part
                             # We need to find the name associated with this tool_call_id
                             tool_call_id = message.get("tool_call_id")
-                            name = tool_id_map.get(tool_call_id)
+                            name = tool_id_map.get(tool_call_id) or message.get("name")
                             # If we can't find the name (maybe from previous turn not in history or restart),
                             # we might have an issue. But let's try to proceed.
-                            # Fallback: if we can't find the name, skip or try to infer?
                             # Gemini strict validation requires the name.
                             if name:
                                 # content is the string response
@@ -556,16 +558,20 @@ def install_google(ctx):
                                 except Exception:
                                     response_data = {"content": message["content"]}
 
+                                func_response = {
+                                    "name": name,
+                                    "response": response_data,
+                                }
+                                if tool_call_id:
+                                    func_response["id"] = tool_call_id
+
                                 parts.append(
                                     {
-                                        "functionResponse": {
-                                            "name": name,
-                                            "response": response_data,
-                                        }
+                                        "functionResponse": func_response
                                     }
                                 )
 
-                        if isinstance(message["content"], list):
+                        if isinstance(message.get("content"), list):
                             for item in message["content"]:
                                 if "type" in item:
                                     if item["type"] == "image_url" and "image_url" in item:
@@ -605,7 +611,7 @@ def install_google(ctx):
                                 if "text" in item:
                                     text = item["text"]
                                     parts.append({"text": text})
-                        elif message["content"]:  # String content
+                        elif message.get("content") and message.get("role") != "tool":  # String content
                             parts.append({"text": message["content"]})
 
                         if len(parts) > 0:
@@ -645,28 +651,61 @@ def install_google(ctx):
                 if system_prompt is not None:
                     gemini_chat["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
+                model_name_lower = chat.get("model", "").lower()
+                is_gemini_3 = model_name_lower.startswith("gemini-3") or model_name_lower in (
+                    "gemini-flash-latest", "gemini-flash-lite-latest",
+                )
+
                 if "max_completion_tokens" in chat:
                     generation_config["maxOutputTokens"] = chat["max_completion_tokens"]
                 if "stop" in chat:
                     generation_config["stopSequences"] = [chat["stop"]]
-                if "temperature" in chat:
-                    generation_config["temperature"] = chat["temperature"]
-                if "top_p" in chat:
-                    generation_config["topP"] = chat["top_p"]
-                if "top_logprobs" in chat:
-                    generation_config["topK"] = chat["top_logprobs"]
+                if not is_gemini_3:
+                    if "temperature" in chat:
+                        generation_config["temperature"] = chat["temperature"]
+                    if "top_p" in chat:
+                        generation_config["topP"] = chat["top_p"]
+                    if "top_logprobs" in chat:
+                        generation_config["topK"] = chat["top_logprobs"]
+                    if "candidate_count" in chat:
+                        generation_config["candidateCount"] = chat["candidate_count"]
 
-                model_name_lower = chat.get("model", "").lower()
                 is_thinking_model = "thinking" in model_name_lower or (
-                    model_info and (model_info.get("thinking") or model_info.get("thinking_budget"))
+                    model_info and (model_info.get("thinking") or model_info.get("thinking_budget") or model_info.get("reasoning"))
                 )
                 enable_thinking = chat.get("enable_thinking")
 
+                raw_thinking = None
                 if "thinkingConfig" in chat:
-                    generation_config["thinkingConfig"] = chat["thinkingConfig"]
+                    raw_thinking = chat["thinkingConfig"]
                 elif enable_thinking is True or (enable_thinking is not False and is_thinking_model and self.thinking_config):
                     if self.thinking_config:
-                        generation_config["thinkingConfig"] = self.thinking_config
+                        raw_thinking = self.thinking_config
+                elif is_gemini_3 and ("thinking_level" in chat or "thinkingLevel" in chat):
+                    raw_thinking = {"includeThoughts": True}
+
+                if raw_thinking is not None:
+                    if isinstance(raw_thinking, dict):
+                        thinking_cfg = dict(raw_thinking)
+                        if is_gemini_3:
+                            thinking_cfg.pop("thinkingBudget", None)
+                            thinking_cfg.pop("thinking_budget", None)
+                            nested_thinking_level = thinking_cfg.pop("thinking_level", None)
+                            nested_thinking_level_camel = thinking_cfg.pop("thinkingLevel", None)
+                            thinking_level = (
+                                chat.get("thinking_level")
+                                or chat.get("thinkingLevel")
+                                or nested_thinking_level
+                                or nested_thinking_level_camel
+                            )
+                            if not thinking_level:
+                                thinking_level = "medium"
+                            if isinstance(thinking_level, str) and thinking_level.lower() == "minimal" and "3.8" in model_name_lower:
+                                thinking_level = "low"
+                            thinking_cfg["thinkingLevel"] = thinking_level.upper() if isinstance(thinking_level, str) else thinking_level
+                        generation_config["thinkingConfig"] = thinking_cfg
+                    else:
+                        generation_config["thinkingConfig"] = raw_thinking
 
                 if "response_format" in chat:
                     response_format = chat["response_format"]
@@ -730,11 +769,16 @@ def install_google(ctx):
                                 return await self.handle_stream_response(response, chat, started_at, context=context)
                         except Exception as e:
                             err_msg = str(e)
-                            if ("thinking budget" in err_msg.lower() or "thinkingconfig" in err_msg.lower()) and attempt < max_retries - 1:
+                            if (
+                                "thinking budget" in err_msg.lower()
+                                or "thinkingconfig" in err_msg.lower()
+                                or "thinking_level" in err_msg.lower()
+                                or "thinkinglevel" in err_msg.lower()
+                            ) and attempt < max_retries - 1:
                                 if "generationConfig" in gemini_chat and "thinkingConfig" in gemini_chat["generationConfig"]:
                                     del gemini_chat["generationConfig"]["thinkingConfig"]
                                 chat.pop("thinkingConfig", None)
-                                ctx.dbg("Thinking budget not supported for model. Retrying stream without thinkingConfig...")
+                                ctx.dbg("Thinking config not supported for model. Retrying stream without thinkingConfig...")
                                 continue
                             raise e
 
@@ -778,11 +822,16 @@ def install_google(ctx):
 
                     if "error" in obj:
                         err_msg = obj["error"].get("message", "") if isinstance(obj["error"], dict) else str(obj["error"])
-                        if ("thinking budget" in err_msg.lower() or "thinkingconfig" in err_msg.lower()) and attempt < max_retries - 1:
+                        if (
+                            "thinking budget" in err_msg.lower()
+                            or "thinkingconfig" in err_msg.lower()
+                            or "thinking_level" in err_msg.lower()
+                            or "thinkinglevel" in err_msg.lower()
+                        ) and attempt < max_retries - 1:
                             if "generationConfig" in gemini_chat and "thinkingConfig" in gemini_chat["generationConfig"]:
                                 del gemini_chat["generationConfig"]["thinkingConfig"]
                             chat.pop("thinkingConfig", None)
-                            ctx.dbg("Thinking budget not supported for model. Retrying without thinkingConfig...")
+                            ctx.dbg("Thinking config not supported for model. Retrying without thinkingConfig...")
                             continue
                         ctx.log(f"Error: {obj['error']}")
                         raise Exception(obj["error"]["message"])
@@ -847,7 +896,7 @@ def install_google(ctx):
                             if "functionCall" in part:
                                 fc = part["functionCall"]
                                 tc = {
-                                    "id": f"call_{len(tool_calls)}_{int(time.time())}",  # Gemini doesn't return ID, generate one
+                                    "id": fc.get("id") or f"call_{len(tool_calls)}_{int(time.time())}",  # Preserve ID if returned
                                     "type": "function",
                                     "function": {"name": fc["name"], "arguments": json.dumps(fc["args"])},
                                 }

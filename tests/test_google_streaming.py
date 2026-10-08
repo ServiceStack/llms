@@ -379,6 +379,167 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(res["choices"][0]["message"]["content"], "Recovered response")
 
+    async def test_gemini_3_8_flash_strips_deprecated_parameters_and_maps_thinking_level(self):
+        """Test Gemini 3.8 Flash omits temperature, top_p, top_k, candidate_count and maps thinking budget to thinkingLevel."""
+        chat_data = {
+            "model": "gemini-3.8-flash",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": False,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_logprobs": 40,
+            "candidate_count": 1,
+            "thinkingConfig": {"thinkingBudget": 2048, "includeThoughts": True},
+        }
+        success_payload = {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Hello from 3.8 Flash"}], "role": "model"},
+                    "finishReason": "STOP",
+                }
+            ],
+            "modelVersion": "gemini-3.8-flash",
+        }
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+
+        mock_session_post = MagicMock()
+        mock_session_post.__aenter__.return_value = mock_response
+        mock_session_post.__aexit__.return_value = None
+
+        mock_session = MagicMock()
+        mock_session.post.return_value = mock_session_post
+        mock_session.__aenter__.return_value = mock_session
+        mock_session.__aexit__.return_value = None
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            with patch.object(self.provider, "response_json", AsyncMock(return_value=success_payload)):
+                res = await self.provider.chat(chat_data)
+
+        self.assertEqual(res["choices"][0]["message"]["content"], "Hello from 3.8 Flash")
+
+        posted_payload = json.loads(mock_session.post.call_args.kwargs["data"])
+        gen_config = posted_payload.get("generationConfig", {})
+        # Deprecated sampling parameters must not be present
+        self.assertNotIn("temperature", gen_config)
+        self.assertNotIn("topP", gen_config)
+        self.assertNotIn("topK", gen_config)
+        self.assertNotIn("candidateCount", gen_config)
+
+        # Thinking config must not have thinkingBudget and must have thinkingLevel
+        thinking_cfg = gen_config.get("thinkingConfig", {})
+        self.assertNotIn("thinkingBudget", thinking_cfg)
+        self.assertIn("thinkingLevel", thinking_cfg)
+        self.assertEqual(thinking_cfg["thinkingLevel"], "MEDIUM")
+
+    async def test_gemini_function_response_preserves_rest_id(self):
+        """Tool responses use the generateContent REST schema, not Interactions fields."""
+        chat_data = {
+            "model": "gemini-3.8-flash",
+            "messages": [
+                {"role": "user", "content": "What is the weather?"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_123",
+                            "function": {"name": "get_weather", "arguments": '{"location": "Tokyo"}'},
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_123",
+                    "content": json.dumps({"temp": 20}),
+                },
+            ],
+            "stream": False,
+        }
+        success_payload = {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Tokyo is 20C"}], "role": "model"},
+                    "finishReason": "STOP",
+                }
+            ],
+            "modelVersion": "gemini-3.8-flash",
+        }
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+
+        mock_session_post = MagicMock()
+        mock_session_post.__aenter__.return_value = mock_response
+        mock_session_post.__aexit__.return_value = None
+
+        mock_session = MagicMock()
+        mock_session.post.return_value = mock_session_post
+        mock_session.__aenter__.return_value = mock_session
+        mock_session.__aexit__.return_value = None
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            with patch.object(self.provider, "response_json", AsyncMock(return_value=success_payload)):
+                await self.provider.chat(chat_data)
+
+        posted_payload = json.loads(mock_session.post.call_args.kwargs["data"])
+        contents = posted_payload.get("contents", [])
+        tool_content = next(c for c in contents if any("functionResponse" in p for p in c.get("parts", [])))
+        fr_part = next(p["functionResponse"] for p in tool_content["parts"] if "functionResponse" in p)
+        self.assertEqual(fr_part, {"name": "get_weather", "id": "call_123", "response": {"temp": 20}})
+        call_content = next(c for c in contents if any("functionCall" in p for p in c.get("parts", [])))
+        call = next(p["functionCall"] for p in call_content["parts"] if "functionCall" in p)
+        self.assertEqual(call["id"], fr_part["id"])
+
+    async def _capture_generation_config(self, model, stream=False, **options):
+        response = AsyncMock()
+        response.status = 200
+        result = {"candidates": [{"content": {"parts": [{"text": "Hello"}]}, "finishReason": "STOP"}]}
+        response.content = DummyStreamReader([f"data: {json.dumps(result)}\n", "data: [DONE]\n"])
+        post = MagicMock()
+        post.__aenter__.return_value = response
+        session = MagicMock()
+        session.post.return_value = post
+        session.__aenter__.return_value = session
+        chat = {"model": model, "messages": [{"role": "user", "content": "Hello"}], "stream": stream, **options}
+        with patch("aiohttp.ClientSession", return_value=session), patch.object(
+            self.provider, "response_json", AsyncMock(return_value=result)
+        ):
+            await self.provider.chat(chat)
+        return json.loads(session.post.call_args.kwargs["data"])["generationConfig"]
+
+    async def test_latest_aliases_strip_deprecated_parameters(self):
+        for model in ("gemini-flash-latest", "gemini-flash-lite-latest"):
+            for stream in (False, True):
+                with self.subTest(model=model, stream=stream):
+                    config = await self._capture_generation_config(
+                        model, stream=stream, temperature=0.7, top_p=0.9, top_logprobs=40, candidate_count=2,
+                    )
+                    self.assertEqual(config, {"thinkingConfig": {"includeThoughts": True, "thinkingLevel": "MEDIUM"}})
+
+    async def test_thinking_level_rest_casing_and_precedence(self):
+        cases = [
+            ({"thinking_level": "high", "thinkingConfig": {"thinking_level": "low", "thinkingLevel": "medium"}}, "HIGH"),
+            ({"thinkingLevel": "low", "thinkingConfig": {"thinking_level": "high"}}, "LOW"),
+            ({"thinkingConfig": {"thinking_level": "low", "thinkingLevel": "high"}}, "LOW"),
+            ({"thinkingConfig": {"thinkingLevel": "High"}}, "HIGH"),
+            ({"thinkingConfig": {"thinking_level": "MINIMAL"}}, "LOW"),
+        ]
+        for options, expected in cases:
+            with self.subTest(options=options):
+                config = await self._capture_generation_config("gemini-3.8-flash", **options)
+                self.assertEqual(config["thinkingConfig"], {"thinkingLevel": expected})
+
+    async def test_legacy_models_keep_sampling_and_thinking_budget(self):
+        config = await self._capture_generation_config(
+            "gemini-2.5-flash", temperature=0.7, top_p=0.9, top_logprobs=40,
+            thinkingConfig={"thinkingBudget": 2048, "includeThoughts": True},
+        )
+        self.assertEqual(config, {
+            "temperature": 0.7, "topP": 0.9, "topK": 40,
+            "thinkingConfig": {"thinkingBudget": 2048, "includeThoughts": True},
+        })
+
 
 if __name__ == "__main__":
     unittest.main()
