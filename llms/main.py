@@ -51,6 +51,39 @@ from typing import (
 )
 from urllib.parse import parse_qs, urljoin
 
+def load_env(path=None):
+    """Load a cwd .env file, preserving variables already in the environment.
+
+    Supports optional export prefixes, quoted values and inline comments.
+    Values are literal: shell commands and variable substitutions are not evaluated.
+    """
+    path = Path(path) if path is not None else Path.cwd() / ".env"
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            continue
+        value = value.strip()
+        if value.startswith(("'", '"')):
+            quote = value[0]
+            end = value.find(quote, 1)
+            if end < 0 or (value[end + 1:].strip() and not value[end + 1:].lstrip().startswith("#")):
+                continue
+            value = value[1:end]
+        else:
+            value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+        os.environ.setdefault(key, value)
+
+
+# The Windows launcher does not source shell environment files.
+if sys.platform == "win32":
+    load_env()
+
 from llms.db import count_tokens_approx
 from llms.web_assets import asset_content_type, asset_response, compress_responses, is_text_asset
 import aiohttp
