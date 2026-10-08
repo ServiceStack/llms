@@ -1,11 +1,27 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient, TestServer, make_mocked_request
 
-from llms.web_assets import asset_response, compress_responses
+from llms.web_assets import asset_content_type, asset_response, compress_responses
+
+
+class TestAssetContentTypes(unittest.IsolatedAsyncioTestCase):
+    async def test_browser_assets_ignore_os_mime_registrations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix, expected in (("mjs", "text/javascript"), ("js", "text/javascript"), ("css", "text/css")):
+                for guessed in ("text/plain", "application/octet-stream", None):
+                    with self.subTest(suffix=suffix, guessed=guessed):
+                        path = Path(directory) / ("asset." + suffix)
+                        path.write_bytes(b"/* browser asset */")
+                        with patch("llms.web_assets.mimetypes.guess_type", return_value=(guessed, None)):
+                            self.assertEqual(asset_content_type(path), expected)
+                            response = await asset_response(make_mocked_request("GET", "/asset"), path)
+                        self.assertEqual(response.content_type, expected)
+                        self.assertEqual(response.body, path.read_bytes())
 
 
 class TestWebAssets(unittest.IsolatedAsyncioTestCase):

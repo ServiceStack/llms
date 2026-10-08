@@ -52,7 +52,7 @@ from typing import (
 from urllib.parse import parse_qs, urljoin
 
 from llms.db import count_tokens_approx
-from llms.web_assets import asset_response, compress_responses, is_text_asset
+from llms.web_assets import asset_content_type, asset_response, compress_responses, is_text_asset
 import aiohttp
 from aiohttp import web
 
@@ -4452,7 +4452,7 @@ class ExtensionContext:
             path = request.match_info["path"]
             file_path = os.path.realpath(os.path.join(ext_dir, path))
             if path_is_within(file_path, ext_dir) and os.path.isfile(file_path):
-                content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+                content_type = asset_content_type(file_path)
                 if is_text_asset(content_type):
                     return await asset_response(request, Path(file_path))
                 return web.FileResponse(file_path)
