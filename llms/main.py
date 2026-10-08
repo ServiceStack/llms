@@ -97,7 +97,7 @@ except ImportError:
     HAS_PIL = False
 
 _ROOT = None
-VERSION = "4.0.22"
+VERSION = "4.0.23"
 DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
 MOCK_DIR = os.getenv("MOCK_DIR")

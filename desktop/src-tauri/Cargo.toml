@@ -1,6 +1,6 @@
 [package]
 name = "llms-desktop"
-version = "4.0.22"
+version = "4.0.23"
 description = "Additive desktop shell for llms-py"
 authors = ["ServiceStack <team@servicestack.net>"]
 edition = "2021"
