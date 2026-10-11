@@ -346,10 +346,11 @@ def install(ctx):
 
         tar_bytes = tar_stream.getvalue()
 
+        info_project = {k: v for k, v in project.items() if k != "id"}
         data_form = aiohttp.FormData()
         data_form.add_field(
             "info",
-            json.dumps(project).encode("utf-8"),
+            json.dumps(info_project).encode("utf-8"),
             filename="info.json",
             content_type="application/json",
         )

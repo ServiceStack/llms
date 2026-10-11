@@ -476,6 +476,9 @@ class TestPublishExtension(unittest.IsolatedAsyncioTestCase):
         file_field = next(f for f in data_form._fields if f[0]["name"] == "file")
 
         self.assertEqual(info_field[0]["filename"], "info.json")
+        info_data = json.loads(info_field[2].decode("utf-8"))
+        self.assertNotIn("id", info_data)
+        self.assertEqual(info_data["name"], "ProjectA")
         self.assertEqual(file_field[0]["filename"], "ProjectA.tar.gz")
 
         # Verify tar file contents

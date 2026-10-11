@@ -72,7 +72,7 @@ trap cleanup EXIT
 info_file="$tmp_dir/info.json"
 archive_file="$tmp_dir/$project_folder.tar.gz"
 response_file="$tmp_dir/response.json"
-printf '%s\n' "$project_json" > "$info_file"
+printf '%s\n' "$(jq 'del(.id)' <<< "$project_json")" > "$info_file"
 tar -C "$publish_dir" -czf "$archive_file" .
 
 encoded_name="$(jq -rn --arg value "$project_name" '$value | @uri')"
