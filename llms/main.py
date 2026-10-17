@@ -2134,20 +2134,19 @@ def get_models():
 
 def get_active_models():
     ret = []
-    existing_models = set()
     for provider_id, provider in g_handlers.items():
         for model in provider.models.values():
             name = model.get("name")
             if not name:
                 _log(f"Provider {provider_id} model {model} has no name")
                 continue
-            if name not in existing_models:
-                existing_models.add(name)
-                item = model.copy()
-                if "id" not in item:
-                    item["id"] = item.get("name", "")
-                item.update({"provider": provider_id})
-                ret.append(item)
+            # The picker identifies models by provider and id. Shared display
+            # names must not hide a model offered by another provider.
+            item = model.copy()
+            if "id" not in item:
+                item["id"] = item.get("name", "")
+            item.update({"provider": provider_id})
+            ret.append(item)
     ret.sort(key=lambda x: x.get("id", x.get("name", "")))
     return ret
 
