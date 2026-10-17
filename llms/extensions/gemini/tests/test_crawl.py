@@ -54,12 +54,33 @@ class CrawlTests(unittest.TestCase):
         }}
         start = "https://example.org/docs/"
         self.assertEqual(
-            crawl.canonical_url("guide?utm_source=x&lang=en&version=v2", start, options),
+            crawl.canonical_url("guide?utm_source=x&lang=en&version=v2", start, start, options),
             "https://example.org/docs/guide?lang=en&version=v2",
         )
-        self.assertIsNone(crawl.canonical_url("/docs/archive/old", start, options))
-        self.assertIsNone(crawl.canonical_url("/docs-private/page", start, options))
-        self.assertIsNone(crawl.canonical_url("https://other.org/docs/page", start, options))
+        self.assertIsNone(crawl.canonical_url("/docs/archive/old", start, start, options))
+        self.assertIsNone(crawl.canonical_url("/docs-private/page", start, start, options))
+        self.assertIsNone(crawl.canonical_url("https://other.org/docs/page", start, start, options))
+
+    def test_canonical_url_resolves_against_page_but_keeps_start_scope(self):
+        for start_path in ("/docs/intro.html", "/docs/", "/docs"):
+            start = "https://example.org" + start_path
+            base = "https://example.org/docs/nested/page.html"
+            with self.subTest(start=start):
+                self.assertEqual(crawl.canonical_url("../setup.html", base, start, {}),
+                                 "https://example.org/docs/setup.html")
+                self.assertIsNone(crawl.canonical_url("/docs-private/page", base, start, {}))
+                self.assertIsNone(crawl.canonical_url("/outside", base, start, {}))
+                self.assertIsNone(crawl.canonical_url("https://other.org/docs/page", base, start, {}))
+        self.assertEqual(crawl.crawl_scope("https://example.org/intro.html"), "")
+        self.assertEqual(crawl.crawl_scope("https://example.org/v1.0/docs/"), "/v1.0/docs")
+
+    def test_allowed_host_does_not_replace_start_origin(self):
+        start = "https://example.org/docs/"
+        base = "https://allowed.org/docs/a"
+        options = {"allowedHosts": ["allowed.org"]}
+        self.assertEqual(crawl.canonical_url("https://example.org/docs/b", base, start, options),
+                         "https://example.org/docs/b")
+        self.assertIsNone(crawl.canonical_url("https://other.org/docs/b", base, start, options))
 
     def test_ordered_rules_support_follow_only_and_query_matching(self):
         options = {"rules": [
@@ -172,6 +193,47 @@ class CrawlTests(unittest.TestCase):
             self.assertEqual(doc["product"], "Docs")
             self.assertEqual(doc["status"], "published")
             self.assertEqual(doc["tags"], ["page"])
+
+
+class CrawlTraversalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_file_and_directory_starts_follow_siblings_and_keep_scope(self):
+        from unittest.mock import patch
+        for start_path in ("/docs/intro.html", "/docs/", "/docs"):
+            start = "https://example.org" + start_path
+            pages = {
+                start: '<p>Start</p><a href="/docs/setup.html">Setup</a>',
+                "https://example.org/docs/setup.html": '<link rel="canonical" href="canonical.html"><p>Setup</p>'
+                    '<a href="nested/page">Nested</a><a href="/outside">Outside</a>'
+                    '<a href="/docs-private/leak">Leak</a><a href="https://other.org/docs/page">Other</a>',
+                "https://example.org/docs/nested/page": '<p>Nested</p><a href="/docs/finish.html">Finish</a>',
+                "https://example.org/docs/finish.html": '<p>Finish</p>',
+            }
+            requested = []
+
+            class Response:
+                status = 200
+                headers = {"Content-Type": "text/html"}
+                def __init__(self, url): self.url = url
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                async def text(self, **kwargs): return pages[self.url]
+
+            class Session:
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                def get(self, url, **kwargs):
+                    requested.append(url)
+                    return Response(url)
+
+            with self.subTest(start=start), tempfile.TemporaryDirectory() as root:
+                with patch("aiohttp.ClientSession", return_value=Session()):
+                    result = await crawl.crawl_site(None, None, {
+                        "url": start, "respectRobots": False,
+                    }, target_path=root)
+                self.assertCountEqual(requested, pages)
+                self.assertEqual(result["pages"], 4)
+                canonical = pathlib.Path(root, "docs/canonical.md").read_text()
+                self.assertIn('https://example.org/docs/canonical.html', canonical)
 
 
 if __name__ == "__main__":

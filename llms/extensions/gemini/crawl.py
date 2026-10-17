@@ -431,9 +431,17 @@ def origin_of(value):
     return p.scheme.lower(), (p.hostname or "").lower(), port
 
 
-def canonical_url(raw, start, options):
+def crawl_scope(start):
+    path = urlsplit(start).path
+    # A file start URL scopes to its containing folder; directory URLs keep their scope.
+    if "." in path.rsplit("/", 1)[-1]:
+        path = path.rsplit("/", 1)[0]
+    return path.rstrip("/")
+
+
+def canonical_url(raw, base_url, start, options):
     """Normalize a discovered URL and reject anything outside the configured crawl scope."""
-    joined = urljoin(start, str(raw or "").strip())
+    joined = urljoin(base_url, str(raw or "").strip())
     parsed = urlsplit(joined)
     if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
         return None
@@ -442,7 +450,7 @@ def canonical_url(raw, start, options):
     host_port = parsed.netloc.rsplit("@", 1)[-1].lower()
     if options.get("sameOrigin", True) and origin_of(joined) != start_origin and host_port not in allowed_hosts:
         return None
-    base = urlsplit(start).path.rstrip("/")
+    base = crawl_scope(start)
     if base and not (parsed.path == base or parsed.path.startswith(base + "/")):
         return None
     path = parsed.path or "/"
@@ -498,7 +506,7 @@ async def crawl_site(ctx, user, options, *, target_path=None):
     validate_crawl_rules(options.get("rules") or [])
     max_pages = min(max(int(options.get("maxPages") or 500), 1), 10000)
     max_depth = min(max(int(options.get("maxDepth") if options.get("maxDepth") not in (None, "") else 10), 0), 100)
-    start_url = canonical_url(start, start, options)
+    start_url = canonical_url(start, start, start, options)
     if not start_url:
         raise ValueError("The start URL is excluded by the crawl rules")
     pending, queued, seen, pages = [(start_url, 0)], {start_url}, set(), []
@@ -533,7 +541,7 @@ async def crawl_site(ctx, user, options, *, target_path=None):
                 if response.status >= 400 or not _matches(content_type, options.get("contentTypes") or ["text/html"]):
                     continue
                 final = response.url
-                final_url = canonical_url(str(final), start, options)
+                final_url = canonical_url(str(final), start, start, options)
                 if not final_url:
                     continue
                 html = await response.text(errors="replace")
@@ -541,7 +549,7 @@ async def crawl_site(ctx, user, options, *, target_path=None):
             parser.feed(html)
             page_url = final_url
             if options.get("useCanonical", True) and parser.canonical:
-                page_url = canonical_url(parser.canonical, final_url, options) or final_url
+                page_url = canonical_url(parser.canonical, final_url, start, options) or final_url
             text = ingest._HtmlText.convert(html, options.get("selector"))
             noindex = "noindex" in parser.robots and options.get("respectNoIndex", True)
             digest = hashlib.sha256(text.strip().encode()).hexdigest() if text.strip() else None
@@ -564,7 +572,7 @@ async def crawl_site(ctx, user, options, *, target_path=None):
             for href, link_nofollow in parser.links:
                 if link_nofollow and not options.get("followNoFollow", False):
                     continue
-                clean = canonical_url(href, final_url, options)
+                clean = canonical_url(href, final_url, start, options)
                 if clean and clean not in seen and clean not in queued and crawl_action(clean, options) != "exclude":
                     split_clean = urlsplit(clean)
                     if split_clean.query:
