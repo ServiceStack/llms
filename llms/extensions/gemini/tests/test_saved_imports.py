@@ -637,6 +637,76 @@ class SavedImportTests(unittest.IsolatedAsyncioTestCase):
         self.client.file_search_stores.documents.delete.assert_not_called()
         self.assertEqual(doc["name"], "remote/old")
 
+    async def test_progress_poll_counts_current_run_and_is_user_scoped(self):
+        import asyncio
+        import uuid
+        folder = self.root / "progress"
+        folder.mkdir()
+        for _ in range(2):
+            progress_id = str(uuid.uuid4())
+            first_entered, first_release = asyncio.Event(), asyncio.Event()
+            next_entered, next_release = asyncio.Event(), asyncio.Event()
+
+            class Response:
+                status = 200
+                headers = {"Content-Type": "text/html"}
+                def __init__(self, url): self.url = url
+                async def __aenter__(self):
+                    entered, release = (first_entered, first_release) if self.url.endswith("/docs/") else (next_entered, next_release)
+                    entered.set()
+                    await release.wait()
+                    return self
+                async def __aexit__(self, *args): pass
+                async def text(self, **kwargs):
+                    return '<p>First</p><a href="next">Next</a>' if self.url.endswith("/docs/") else '<p>Next</p>'
+
+            class Session:
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                def get(self, url, **kwargs): return Response(url)
+
+            with patch("aiohttp.ClientSession", return_value=Session()):
+                task = asyncio.create_task(crawl.crawl_site(self.ctx, "alice", {
+                    "url": "https://example.test/docs/", "respectRobots": False,
+                }, target_path=str(folder), progress_id=progress_id))
+                try:
+                    await asyncio.wait_for(first_entered.wait(), 2)
+                    initial = await self.call("get", "imports/crawl/progress", query={"progressId": progress_id})
+                    self.assertTrue(initial["running"])
+                    self.assertEqual(initial["pages"], 0)
+                    first_release.set()
+                    await asyncio.wait_for(next_entered.wait(), 2)
+                    progress = await self.call("get", "imports/crawl/progress", query={"progressId": progress_id})
+                    self.assertEqual(progress["pages"], 1)
+                    self.assertFalse(crawl.crawl_progress(self.ctx, "bob", progress_id)["running"])
+                finally:
+                    first_release.set()
+                    next_release.set()
+                    result = await asyncio.wait_for(task, 2)
+                self.assertEqual(result["pages"], 2)
+                self.assertNotIn("progressId", result["config"]["crawl"])
+                self.assertFalse(crawl.crawl_progress(self.ctx, "alice", progress_id)["running"])
+
+    async def test_saved_webcrawl_run_returns_and_records_crawl_statistics(self):
+        folder = pathlib.Path(crawl.workspace_path(self.ctx, "alice", "site"))
+        folder.mkdir(parents=True)
+        crawl.write_json(str(folder / "import.json"), {"crawl": {"url": "https://example.test", "maxPages": 2}})
+        (folder / "guide.md").write_text("Guide text")
+        source_id = await self.save_source(folder)
+        stats = {"pages": 2, "stopReason": "maxPages", "remaining": 5, "maxPages": 2,
+                 "maxRequests": 10, "failed": 1, "errors": [{"url": "https://example.test/bad", "message": "HTTP 302", "statusCode": 302}],
+                 "retainedPages": 1, "config": {}, "path": str(folder), "name": "site"}
+        with patch.object(crawl, "crawl_site", AsyncMock(return_value=stats)) as refresh:
+            local = await self.call("post", "sources/{id}/run", {"dryRun": True}, id=str(source_id))
+            refresh.assert_not_awaited()
+            self.assertNotIn("crawl", local)
+            result = await self.call("post", "sources/{id}/run", {"dryRun": True, "refreshCrawl": True}, id=str(source_id))
+            refresh.assert_awaited_once()
+            self.assertEqual(refresh.call_args.kwargs["target_path"], str(folder))
+        expected = {key: value for key, value in stats.items() if key not in ("config", "path", "name")}
+        self.assertEqual(result["crawl"], expected)
+        self.assertEqual(self.db.runs[result["runId"]]["plan"]["crawl"], expected)
+
     async def test_crawl_is_refreshed_with_saved_options_and_transforms(self):
         folder = pathlib.Path(crawl.workspace_path(self.ctx, "alice", "site"))
         folder.mkdir(parents=True)
@@ -647,7 +717,7 @@ class SavedImportTests(unittest.IsolatedAsyncioTestCase):
         source_id = await self.save_source(folder)
         self.db.sources[source_id]["extract"] = {"minWords": 0}
         self.assertEqual(self.db.sources[source_id]["name"], "Import site")
-        with patch.object(crawl, "crawl_site", AsyncMock()) as refresh:
+        with patch.object(crawl, "crawl_site", AsyncMock(return_value={})) as refresh:
             await self.sync()
             refresh.assert_awaited_once()
             self.assertEqual(refresh.call_args.args[2]["url"], "https://example.test")

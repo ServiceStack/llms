@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script type="importmap">
+{"imports":{"vue":"/llms/ui/lib/vue.mjs","vue-router":"/llms/ui/lib/vue-router.min.mjs","@servicestack/client":"/llms/ui/lib/servicestack-client.mjs"}}
+</script></head><body><div id="app"></div><pre id="result">RUNNING</pre>
+<script type="module">
+import { createApp, reactive, isReactive, nextTick } from 'vue'
+import { AppContext } from '/llms/ui/ctx.mjs'
+import App from '/llms/ui/App.mjs'
+const assert = (value, message) => { if (!value) throw Error(message) }
+const warnings = []
+try {
+    const ctx = Object.assign(Object.create(AppContext.prototype), {top:reactive({}),left:{},right:reactive({})})
+    const state = reactive({title:'Tools'})
+    const tools = {template:'<button>{{ $ctx.top.tools.title }}</button>'}
+    ctx.setTopIcons({tools:{component:tools,get title(){return state.title}}})
+    window.$ctx = ctx
+    const app = createApp(App.components.TopBar)
+    app.config.globalProperties.$ctx = ctx
+    app.config.globalProperties.$layout = {}
+    app.config.globalProperties.$styles = {}
+    app.config.warnHandler = message => warnings.push(message)
+    app.mount('#app')
+    await nextTick()
+    assert(!warnings.some(x=>x.includes('reactive object')), 'TopBar must not render reactive component definitions')
+    assert(!isReactive(ctx.top.tools.component) && ctx.top.tools.component === tools, 'registered top icons must retain raw component identity')
+    assert(isReactive(ctx.top.tools), 'top icon metadata must remain reactive')
+    state.title = 'Updated tools'
+    await nextTick()
+    assert(document.querySelector('#app button').textContent === 'Updated tools', 'dynamic titles must still update')
+    const replacement = {template:'<button>Replacement</button>'}
+    ctx.setTopIcons({tools:{component:replacement}})
+    await nextTick()
+    assert(document.querySelector('#app button').textContent === 'Replacement', 'replacing a registered icon must still render')
+    ctx.setLeftIcons({left:{component:{template:'<span>Left</span>'}}})
+    ctx.setRightIcons({right:{component:{template:'<span>Right</span>'}}})
+    assert(!isReactive(ctx.left.left.component) && !isReactive(ctx.right.right.component), 'all icon registration paths must keep components raw')
+    const proxied = reactive({template:'<button>Previously proxied</button>'})
+    ctx.setTopIcons({tools:{component:proxied}})
+    await nextTick()
+    assert(!isReactive(ctx.top.tools.component), 'already proxied component inputs must be unwrapped')
+    assert(document.querySelector('#app button').textContent === 'Previously proxied', 'unwrapped icon must render')
+    assert(!warnings.length, warnings.join('\n'))
+    app.unmount()
+    document.querySelector('#result').textContent='PASS: raw icon components, reactive metadata, replacement, and TopBar rendering without warnings'
+} catch (e) { document.querySelector('#result').textContent='FAIL: '+(e.stack || e) }
+</script></body></html>

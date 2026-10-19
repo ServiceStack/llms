@@ -196,6 +196,128 @@ class CrawlTests(unittest.TestCase):
 
 
 class CrawlTraversalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_page_failures_are_reported_without_aborting_or_removing_previous_pages(self):
+        from unittest.mock import patch
+        import asyncio
+        for failure in (302, 404, 410, 429, 503, "network", "timeout", "read"):
+            class Response:
+                headers = {"Content-Type": "text/html"}
+                def __init__(self, url):
+                    self.url = url
+                    self.status = failure if url.endswith("/bad") and isinstance(failure, int) else 200
+                async def __aenter__(self):
+                    if self.url.endswith("/bad"):
+                        if failure == "network": raise OSError("Connection failed")
+                        if failure == "timeout": raise asyncio.TimeoutError()
+                    return self
+                async def __aexit__(self, *args): pass
+                async def text(self, **kwargs):
+                    if self.url.endswith("/bad") and failure == "read": raise OSError("Read failed")
+                    if self.url.endswith("/docs/"):
+                        return '<p>Start</p><a href="bad">Bad</a><a href="good">Good</a>'
+                    return '<p>Good page</p>'
+
+            class Session:
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                def get(self, url, **kwargs): return Response(url)
+
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as root:
+                pathlib.Path(root, "old.md").write_text("Original content")
+                crawl.write_json(os.path.join(root, "import.json"), {"crawl": {"generated": ["old.md"]}})
+                with patch("aiohttp.ClientSession", return_value=Session()):
+                    result = await crawl.crawl_site(None, None, {
+                        "url": "https://example.org/docs/", "respectRobots": False,
+                    }, target_path=root)
+                self.assertEqual(result["pages"], 2)
+                self.assertEqual(result["requests"], 3)
+                self.assertEqual(result["failed"], 1)
+                self.assertEqual(result["stopReason"], "complete")
+                error = result["errors"][0]
+                self.assertEqual(error["url"], "https://example.org/docs/bad")
+                self.assertEqual(error["statusCode"], failure if isinstance(failure, int) else 200 if failure == "read" else None)
+                self.assertTrue(error["message"])
+                self.assertEqual(result["retainedPages"], 1)
+                self.assertIn("old.md", result["config"]["crawl"]["generated"])
+                self.assertEqual(pathlib.Path(root, "old.md").read_text(), "Original content")
+                failure = None
+                with patch("aiohttp.ClientSession", return_value=Session()):
+                    complete = await crawl.crawl_site(None, None, {
+                        "url": "https://example.org/docs/", "respectRobots": False,
+                    }, target_path=root)
+                self.assertEqual(complete["failed"], 0)
+                self.assertEqual(complete["retainedPages"], 0)
+                self.assertFalse(pathlib.Path(root, "old.md").exists())
+
+    async def test_failed_start_is_a_result_and_cancellation_still_propagates(self):
+        from unittest.mock import patch
+        import asyncio
+        for failure in (503, "cancel"):
+            class Response:
+                status = 503
+                headers = {"Content-Type": "text/html"}
+                async def __aenter__(self):
+                    if failure == "cancel": raise asyncio.CancelledError()
+                    return self
+                async def __aexit__(self, *args): pass
+
+            class Session:
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                def get(self, url, **kwargs): return Response()
+
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as root:
+                pathlib.Path(root, "old.md").write_text("Original content")
+                crawl.write_json(os.path.join(root, "import.json"), {"crawl": {"generated": ["old.md"]}})
+                with patch("aiohttp.ClientSession", return_value=Session()):
+                    task = crawl.crawl_site(None, None, {
+                        "url": "https://example.org/docs/", "respectRobots": False,
+                    }, target_path=root)
+                    if failure == "cancel":
+                        with self.assertRaises(asyncio.CancelledError): await task
+                    else:
+                        result = await task
+                        self.assertEqual(result["pages"], 0)
+                        self.assertEqual(result["failed"], 1)
+                        self.assertEqual(result["retainedPages"], 1)
+                self.assertEqual(pathlib.Path(root, "old.md").read_text(), "Original content")
+
+    async def test_crawl_reports_limits_only_when_urls_remain_queued(self):
+        from unittest.mock import patch
+        cases = [(1, 10, False, "maxPages", 1, 3),
+                 (2, 2, True, "maxRequests", 1, 2),
+                 (4, 4, False, "complete", 4, 0),
+                 (10, 10, False, "complete", 4, 0),
+                 (1, 1, False, "maxPages", 1, 3)]
+        for max_pages, max_requests, noindex, reason, saved, remaining in cases:
+            class Response:
+                status = 200
+                headers = {"Content-Type": "text/html"}
+                def __init__(self, url): self.url = url
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                async def text(self, **kwargs):
+                    if self.url.endswith("/docs/"):
+                        return '<p>Start</p><a href="a">A</a><a href="b">B</a><a href="c">C</a>'
+                    return ('<meta name="robots" content="noindex">' if noindex else '') + '<p>' + self.url + '</p>'
+
+            class Session:
+                async def __aenter__(self): return self
+                async def __aexit__(self, *args): pass
+                def get(self, url, **kwargs): return Response(url)
+
+            with self.subTest(reason=reason, max_pages=max_pages, max_requests=max_requests):
+                with tempfile.TemporaryDirectory() as root, patch("aiohttp.ClientSession", return_value=Session()):
+                    result = await crawl.crawl_site(None, None, {
+                        "url": "https://example.org/docs/", "respectRobots": False,
+                        "maxPages": max_pages, "maxRequests": max_requests,
+                    }, target_path=root)
+                self.assertEqual(result["pages"], saved)
+                self.assertEqual(result["stopReason"], reason)
+                self.assertEqual(result["remaining"], remaining)
+                self.assertEqual(result["maxPages"], max_pages)
+                self.assertEqual(result["maxRequests"], max_requests)
+
     async def test_file_and_directory_starts_follow_siblings_and_keep_scope(self):
         from unittest.mock import patch
         for start_path in ("/docs/intro.html", "/docs/", "/docs"):
@@ -232,6 +354,8 @@ class CrawlTraversalTests(unittest.IsolatedAsyncioTestCase):
                     }, target_path=root)
                 self.assertCountEqual(requested, pages)
                 self.assertEqual(result["pages"], 4)
+                self.assertEqual(result["stopReason"], "complete")
+                self.assertEqual(result["remaining"], 0)
                 canonical = pathlib.Path(root, "docs/canonical.md").read_text()
                 self.assertIn('https://example.org/docs/canonical.html', canonical)
 

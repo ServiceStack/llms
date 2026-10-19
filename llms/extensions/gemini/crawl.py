@@ -9,6 +9,7 @@ import re
 import shutil
 import tempfile
 import urllib.robotparser
+import uuid
 from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
 
@@ -487,7 +488,20 @@ def crawl_action(url, options):
     return "save"
 
 
-async def crawl_site(ctx, user, options, *, target_path=None):
+# Only active crawls are retained; progress is partitioned by host context, user and request id.
+_active_crawls = {}
+
+
+def _progress_key(ctx, user, progress_id):
+    return id(ctx), user or "default", str(uuid.UUID(str(progress_id)))
+
+
+def crawl_progress(ctx, user, progress_id):
+    progress = _active_crawls.get(_progress_key(ctx, user, progress_id))
+    return {"running": progress is not None, **(progress or {"pages": 0, "failed": 0, "requests": 0})}
+
+
+async def crawl_site(ctx, user, options, *, target_path=None, progress_id=None):
     import aiohttp
     start = str(options.get("url") or "").strip()
     parsed = urlsplit(start)
@@ -512,85 +526,115 @@ async def crawl_site(ctx, user, options, *, target_path=None):
     pending, queued, seen, pages = [(start_url, 0)], {start_url}, set(), []
     saved_urls, content_hashes = set(), set()
     query_variants, requests = {}, 0
+    errors = []
     max_requests = min(max(int(options.get("maxRequests") or max_pages * 5), max_pages), 50000)
-    timeout = aiohttp.ClientTimeout(total=30)
-    headers = {"User-Agent": "llms-gemini-crawler/1.0"}
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        robots = urllib.robotparser.RobotFileParser()
-        robots.set_url(urljoin(start_url, "/robots.txt"))
-        if options.get("respectRobots", True):
-            try:
-                async with session.get(robots.url) as response:
-                    robots.parse((await response.text(errors="replace")).splitlines() if response.status < 400 else [])
-            except Exception:
-                robots.parse([])
-        while pending and len(pages) < max_pages and requests < max_requests:
-            url, depth = pending.pop(0)
-            if url in seen: continue
-            seen.add(url)
-            if options.get("respectRobots", True) and not robots.can_fetch(headers["User-Agent"], url):
-                continue
-            action = crawl_action(url, options)
-            if action == "exclude":
-                continue
-            requests += 1
-            async with session.get(url, allow_redirects=True) as response:
-                content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
-                if response.status >= 400 and response.status not in (404, 410):
-                    raise ValueError(f"Crawl failed for {url}: HTTP {response.status}")
-                if response.status >= 400 or not _matches(content_type, options.get("contentTypes") or ["text/html"]):
+    progress_key = _progress_key(ctx, user, progress_id) if progress_id else None
+    if progress_key is not None:
+        if progress_key in _active_crawls:
+            raise ValueError("A crawl with this progress id is already running")
+        _active_crawls[progress_key] = {"pages": 0, "failed": 0, "requests": 0}
+    try:
+        timeout = aiohttp.ClientTimeout(total=30)
+        headers = {"User-Agent": "llms-gemini-crawler/1.0"}
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            robots = urllib.robotparser.RobotFileParser()
+            robots.set_url(urljoin(start_url, "/robots.txt"))
+            if options.get("respectRobots", True):
+                try:
+                    async with session.get(robots.url) as response:
+                        robots.parse((await response.text(errors="replace")).splitlines() if response.status < 400 else [])
+                except Exception:
+                    robots.parse([])
+            while pending and len(pages) < max_pages and requests < max_requests:
+                url, depth = pending.pop(0)
+                if url in seen: continue
+                seen.add(url)
+                if options.get("respectRobots", True) and not robots.can_fetch(headers["User-Agent"], url):
                     continue
-                final = response.url
-                final_url = canonical_url(str(final), start, start, options)
-                if not final_url:
+                action = crawl_action(url, options)
+                if action == "exclude":
                     continue
-                html = await response.text(errors="replace")
-            parser = PageParser()
-            parser.feed(html)
-            page_url = final_url
-            if options.get("useCanonical", True) and parser.canonical:
-                page_url = canonical_url(parser.canonical, final_url, start, options) or final_url
-            text = ingest._HtmlText.convert(html, options.get("selector"))
-            noindex = "noindex" in parser.robots and options.get("respectNoIndex", True)
-            digest = hashlib.sha256(text.strip().encode()).hexdigest() if text.strip() else None
-            duplicate = digest in content_hashes if digest and options.get("dedupeContent", True) else False
-            if action != "followOnly" and not noindex and text.strip() and page_url not in saved_urls and not duplicate:
-                split = urlsplit(page_url)
-                meta = {"title": parser.title.strip(), "sourceUrl": page_url, "path": split.path,
-                        "queryString": split.query, "description": parser.description, "tags": parser.tags}
-                rel = page_relative_path(page_url)
-                full = os.path.join(root, *rel.split("/"))
-                os.makedirs(os.path.dirname(full), exist_ok=True)
-                with open(full, "w", encoding="utf-8") as f:
-                    f.write(frontmatter(meta) + text.strip() + "\n")
-                pages.append(rel)
-                saved_urls.add(page_url)
-                if digest: content_hashes.add(digest)
-            page_nofollow = "nofollow" in parser.robots and not options.get("followNoFollow", False)
-            if depth >= max_depth or page_nofollow:
-                continue
-            for href, link_nofollow in parser.links:
-                if link_nofollow and not options.get("followNoFollow", False):
-                    continue
-                clean = canonical_url(href, final_url, start, options)
-                if clean and clean not in seen and clean not in queued and crawl_action(clean, options) != "exclude":
-                    split_clean = urlsplit(clean)
-                    if split_clean.query:
-                        variant_key = (split_clean.scheme, split_clean.netloc, split_clean.path)
-                        limit = int((options.get("query") or {}).get("maxVariantsPerPath") or 5)
-                        if query_variants.get(variant_key, 0) >= limit:
+                requests += 1
+                status_code = None
+                try:
+                    async with session.get(url, allow_redirects=True) as response:
+                        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+                        status_code = response.status
+                        if not 200 <= response.status < 300:
+                            errors.append({"url": url, "statusCode": response.status, "message": f"HTTP {response.status}"})
                             continue
-                        query_variants[variant_key] = query_variants.get(variant_key, 0) + 1
-                    queued.add(clean)
-                    pending.append((clean, depth + 1))
+                        if not _matches(content_type, options.get("contentTypes") or ["text/html"]):
+                            continue
+                        final = response.url
+                        final_url = canonical_url(str(final), start, start, options)
+                        if not final_url:
+                            continue
+                        html = await response.text(errors="replace")
+                    parser = PageParser()
+                    parser.feed(html)
+                    page_url = final_url
+                    if options.get("useCanonical", True) and parser.canonical:
+                        page_url = canonical_url(parser.canonical, final_url, start, options) or final_url
+                    text = ingest._HtmlText.convert(html, options.get("selector"))
+                    noindex = "noindex" in parser.robots and options.get("respectNoIndex", True)
+                    digest = hashlib.sha256(text.strip().encode()).hexdigest() if text.strip() else None
+                    duplicate = digest in content_hashes if digest and options.get("dedupeContent", True) else False
+                    if action != "followOnly" and not noindex and text.strip() and page_url not in saved_urls and not duplicate:
+                        split = urlsplit(page_url)
+                        meta = {"title": parser.title.strip(), "sourceUrl": page_url, "path": split.path,
+                                "queryString": split.query, "description": parser.description, "tags": parser.tags}
+                        rel = page_relative_path(page_url)
+                        full = os.path.join(root, *rel.split("/"))
+                        os.makedirs(os.path.dirname(full), exist_ok=True)
+                        with open(full, "w", encoding="utf-8") as f:
+                            f.write(frontmatter(meta) + text.strip() + "\n")
+                        pages.append(rel)
+                        saved_urls.add(page_url)
+                        if digest: content_hashes.add(digest)
+                    page_nofollow = "nofollow" in parser.robots and not options.get("followNoFollow", False)
+                    if depth >= max_depth or page_nofollow:
+                        continue
+                    for href, link_nofollow in parser.links:
+                        if link_nofollow and not options.get("followNoFollow", False):
+                            continue
+                        clean = canonical_url(href, final_url, start, options)
+                        if clean and clean not in seen and clean not in queued and crawl_action(clean, options) != "exclude":
+                            split_clean = urlsplit(clean)
+                            if split_clean.query:
+                                variant_key = (split_clean.scheme, split_clean.netloc, split_clean.path)
+                                limit = int((options.get("query") or {}).get("maxVariantsPerPath") or 5)
+                                if query_variants.get(variant_key, 0) >= limit:
+                                    continue
+                                query_variants[variant_key] = query_variants.get(variant_key, 0) + 1
+                            queued.add(clean)
+                            pending.append((clean, depth + 1))
+                except Exception as e:
+                    # asyncio cancellation is a BaseException and must still abort the request.
+                    errors.append({"url": url, "statusCode": status_code, "message": str(e) or type(e).__name__})
+                finally:
+                    if progress_key is not None:
+                        _active_crawls[progress_key] = {"pages": len(pages), "failed": len(errors), "requests": requests}
+    finally:
+        if progress_key is not None:
+            _active_crawls.pop(progress_key, None)
+    remaining = len(pending)
+    # Reaching a limit on the final page is still complete when no URLs remain queued.
+    stop_reason = "complete" if not remaining else "maxPages" if len(pages) >= max_pages else "maxRequests"
     # Once a crawl has recorded ownership of its generated pages, a later crawl removes pages
     # that are no longer reachable or are newly excluded. Hand-authored Markdown is untouched.
-    for rel in previously_generated - set(pages):
+    retained = []
+    preserve_previous = bool(errors or remaining or not pages)
+    for rel in sorted(previously_generated - set(pages)):
         full = os.path.realpath(os.path.join(root, *rel.split("/")))
         if os.path.commonpath((os.path.realpath(root), full)) == os.path.realpath(root) and os.path.isfile(full):
-            os.remove(full)
-    cfg.update({"version": 1, "crawl": {**(cfg.get("crawl") or {}), **options, "generated": pages}})
+            if preserve_previous:
+                retained.append(rel)
+            else:
+                os.remove(full)
+    cfg.update({"version": 1, "crawl": {**(cfg.get("crawl") or {}), **options, "generated": pages + retained}})
     cfg.setdefault("metadata", {"defaults": {}, "rules": []})
     cfg.setdefault("transforms", [])
     write_json(cfg_path, cfg)
-    return {"name": name, "path": root, "pages": len(pages), "config": cfg}
+    return {"name": name, "path": root, "pages": len(pages), "stopReason": stop_reason, "remaining": remaining,
+            "maxPages": max_pages, "maxRequests": max_requests, "requests": requests,
+            "failed": len(errors), "errors": errors, "retainedPages": len(retained), "config": cfg}

@@ -591,7 +591,7 @@ def install(ctx):
 
     async def _run_source_pipeline(source_row, user, dry_run=True, override=None, confirm_deletes=False,
                                   selected_adds=None, add_all=True, request=None, refresh_crawl=False,
-                                  start_uploads=True):
+                                  start_uploads=True, progress_id=None):
         """
         discover -> fetch -> extract -> derive -> diff, then (unless dry run) apply.
 
@@ -613,6 +613,7 @@ def install(ctx):
                 source_row = import_manifest.load(manifest_path, source_row)
         assert_source_allowed(source_row, request)
         filestore_id = int(source_row.get("filestoreId"))
+        crawl_result = None
         if refresh_crawl and source_row.get("type") == "folder":
             path = (source_row.get("config") or {}).get("path")
             cfg = crawl.read_json(manifest_path or os.path.join(path, crawl.MANIFEST))
@@ -620,7 +621,7 @@ def install(ctx):
                 root = os.path.dirname(manifest_path) if manifest_path else path
                 assert_source_allowed({"config": {"path": root}}, request)
                 options = {**cfg["crawl"], "name": cfg["crawl"].get("name") or os.path.basename(root)}
-                await crawl.crawl_site(ctx, user, options, target_path=root)
+                crawl_result = await crawl.crawl_site(ctx, user, options, target_path=root, **({"progress_id": progress_id} if progress_id else {}))
                 crawl.apply_transforms(root, cfg.get("transforms") or [])
         source = ingest.create_source(ctx, source_row.get("type"), source_row.get("config") or {})
         existing = g_db.documents_by_source_key(filestore_id, source_row.get("id"), user=user)
@@ -662,6 +663,8 @@ def install(ctx):
             plan.add = retained
 
         summary = plan.summary()
+        if crawl_result is not None:
+            summary["crawl"] = {key: value for key, value in crawl_result.items() if key not in ("config", "path", "name")}
         # Unchanged means the source matches the local cache, not that Gemini has received it.
         # Preserve the existing queue entries and report them so Run can resume their uploads.
         summary["pendingUploads"] = sum(
@@ -2124,6 +2127,15 @@ def install(ctx):
     # Register static paths before /imports/{name} so aiohttp cannot treat "schema" as a name.
     ctx.add_get("imports/schema", crawl_import_schema)
 
+    async def get_crawl_progress(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        return web.json_response(crawl.crawl_progress(ctx, ctx.get_username(request), request.query.get("progressId")))
+
+    # No source-operation lock: this request must run while the crawl is saving files.
+    ctx.add_get("imports/crawl/progress", get_crawl_progress)
+
     async def browse_import_manifests(request):
         denied = auth_error(request)
         if denied:
@@ -2239,6 +2251,7 @@ def install(ctx):
         body = await request.json()
         filestore_id = body.pop("filestoreId", None)
         source_id = body.pop("sourceId", None)
+        progress_id = body.pop("progressId", None)
         settings = body.pop("sourceSettings", None)
         if settings is not None and not isinstance(settings, dict):
             raise ValueError("sourceSettings must be an object")
@@ -2249,9 +2262,9 @@ def install(ctx):
         if source:
             filestore_id = source["filestoreId"]
             body = {**source["importOptions"]["crawl"], **body}
-            result = await crawl.crawl_site(ctx, user, body, target_path=root)
+            result = await crawl.crawl_site(ctx, user, body, target_path=root, **({"progress_id": progress_id} if progress_id else {}))
         else:
-            result = await crawl.crawl_site(ctx, user, body)
+            result = await crawl.crawl_site(ctx, user, body, **({"progress_id": progress_id} if progress_id else {}))
         if settings is not None:
             updated_source = import_manifest.load(os.path.join(result["path"], crawl.MANIFEST))
             updated_source.update({key: value for key, value in settings.items() if key in (*import_manifest.SOURCE_FIELDS, "rules")})
@@ -2460,7 +2473,8 @@ def install(ctx):
         ):
             raise Exception(f"A saved import named '{source_row.get('name')}' already exists")
         result = await run_source_pipeline(source_row, user, dry_run=dry_run, override=body.get("set"),
-                                           confirm_deletes=bool(body.get("confirmDeletes")), request=request)
+                                           confirm_deletes=bool(body.get("confirmDeletes")), request=request,
+                                           refresh_crawl=bool(body.get("refreshCrawl")), progress_id=body.get("progressId"))
         if not dry_run and body.get("saveConfig"):
             source_row = source_dto(g_db.get_source(id, user=user))
             current_source = source_row
