@@ -224,6 +224,7 @@ docker run --rm -v ~/.llms:/home/llms/.llms \
 
 ```bash
 cp .env.example .env      # then fill in your keys
+mkdir -p ~/.llms         # create the bind-mount directory before starting Docker
 docker compose up -d
 docker compose logs -f
 docker compose down
@@ -231,6 +232,21 @@ docker compose down
 
 The bundled `docker-compose.yml` uses `env_file: .env`, so it picks up every key
 in that file without needing an entry per provider.
+
+Both Compose files run as `${PUID:-1000}:${PGID:-1000}`. For a Linux bind mount,
+set `PUID` and `PGID` in `.env` to the numeric IDs of the host account that owns
+the data directory (find them with `id -u` and `id -g`):
+
+```dotenv
+PUID=1000
+PGID=1000
+```
+
+Replace these example values with your IDs before starting Compose. The selected
+user must have write access to the mounted directory; setting these variables
+does not change its ownership. `docker-compose.local.yml` uses a named volume by
+default, initialized for UID/GID 1000:1000; keep the defaults for that volume
+unless its permissions have been prepared for another user.
 
 ### Available tags
 
@@ -428,9 +444,30 @@ The installer prints the right command for your platform. On macOS you need
 Docker Desktop actually launched, not just installed.
 
 **Permission denied writing to `~/.llms` (Linux)**
-The image runs as UID 1000. If your UID is different, the installer detects it
-and adds `--user $(id -u):$(id -g)` — stored as `LLMS_DOCKER_USER_ARGS` in
-`~/.llms/config`. If you're running Docker by hand, add that flag yourself.
+The image runs as the non-root `llms` user (UID/GID 1000:1000). Bind mounts use
+the host directory's ownership and permissions, replacing those set in the
+image. If the host directory doesn't exist, Docker may create it as root.
+
+For Compose, pre-create the directory and set `PUID`/`PGID` in `.env` to its
+owner's IDs as described above. After changing them, run `docker compose up -d`
+to recreate the container. For direct `docker run` use, add
+`--user "$(id -u):$(id -g)"` when mounting a directory owned by your account.
+The installer configures this automatically on Linux via
+`LLMS_DOCKER_USER_ARGS` in `~/.llms/config`.
+
+If a dedicated data directory was already created as root, stop the service
+and correct its ownership and owner permissions. For the default Compose user:
+
+```bash
+docker compose down
+sudo chown -R 1000:1000 ~/.llms
+sudo chmod -R u+rwX ~/.llms
+docker compose up -d
+```
+
+Use your configured `PUID:PGID` and actual data directory if they differ. For
+rootless Docker, user namespace remapping, or SELinux, also check the host's
+mount permissions and labeling requirements.
 
 **Voice input isn't working**
 Check which mode the extension picked:

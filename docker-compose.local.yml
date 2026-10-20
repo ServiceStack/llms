@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     image: llms-py:latest
     container_name: llms-py
+    # When using a bind mount, set PUID/PGID in .env to its owner's IDs.
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "127.0.0.1:8000:8000"
     env_file:

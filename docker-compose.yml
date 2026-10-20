@@ -2,6 +2,8 @@ services:
   llms:
     image: ghcr.io/servicestack/llms:latest
     container_name: llms-py
+    # For bind mounts, set PUID/PGID in .env to the host directory owner's IDs.
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       # Only reachable from this machine. Use "8000:8000" to expose it on your LAN.
       - "127.0.0.1:8000:8000"
