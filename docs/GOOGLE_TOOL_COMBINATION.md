@@ -65,6 +65,19 @@ signed messages remain intact. Snapshot sequence boundaries keep custom calls wi
 Canonical history is never rewritten by compaction. An indivisible signed recent exchange can exceed
 the preferred compaction target; it must not be made smaller by truncating signatures.
 
+## UI history and follow-ups
+
+Thread responses omit server-only `provider_metadata` and compatibility thought signatures before
+applying UI byte budgets. Visible text, function calls/results, media and grounding citations remain.
+The head and tail have independent budgets, with complete tool-call/result groups kept together;
+the latest group is always included even when a single group exceeds the soft limit. Message pages,
+full-history reads, previews, streaming checkpoints and update events use the same client projection.
+
+Normal client submissions extend canonical server history instead of replacing it with a UI window.
+Explicit edits, deletes and redo operations hydrate surviving messages from stored history so their
+signed Gemini parts remain intact. Editing a signed message invalidates its old replay state.
+Full-history reads use canonical rows, including replies missing from a legacy compatibility projection.
+
 ## Citations
 
 `groundingMetadata` remains separate, per-message citation metadata. Built-in File Search parts can
@@ -78,7 +91,7 @@ Run the regression suites from the repository root:
 ```sh
 .venv/bin/python -m unittest tests.test_google_tool_combination tests.test_google_streaming \
     tests.test_app_db_provider tests.test_agent_scheduler tests.test_stream_history_preservation \
-    tests.test_chat_threads_refactor
+    tests.test_chat_threads_refactor tests.test_thread_window_projection
 ```
 
 For live verification, set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and run:

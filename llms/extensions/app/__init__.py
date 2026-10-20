@@ -19,6 +19,7 @@ from llms.db import count_tokens_approx
 from llms.main import AgentSliceYield, ToolApprovalPending, remove_avatar_files
 
 from .db import AppDB
+from .messages import client_message, client_thread, reconcile_client_messages
 
 g_db = None
 active_update_tasks: Dict[str, asyncio.Task] = {}
@@ -415,21 +416,22 @@ def install(ctx):
             return None
         rows = g_db.get_chat_message_window(row["id"], head=head, tail=tail)
         bounds = g_db.get_chat_message_bounds(row["id"])
-        first_sequence = bounds.get("firstSequence") or 1
-        head_rows = [x for x in rows if x.get("_sequence", 0) < first_sequence + head]
-        tail_rows = [x for x in rows if x not in head_rows]
-        messages = limit_message_payload(head_rows, 128 * 1024) + limit_message_payload(
-            tail_rows, 384 * 1024, from_end=True
+        rows = [client_message(message) for message in rows]
+        # Budget both ends independently even when the count-based head/tail overlap.
+        # Always retain the newest complete group, including a single oversized group.
+        selected = limit_message_payload(rows, 128 * 1024) + limit_message_payload(
+            rows, 384 * 1024, from_end=True
         )
+        messages = sorted({m["_sequence"]: m for m in selected}.values(), key=lambda m: m["_sequence"])
         projected = dict(row)
         projected["messages"] = json.dumps(messages)
         dto = thread_dto(projected)
         dto["messageCount"] = bounds.get("messageCount") or 0
         dto["messageWindow"] = {**bounds, "ranges": message_ranges(messages)}
-        return dto
+        return client_thread(dto)
 
     def message_page_dto(thread_id, rows, max_bytes=512 * 1024, from_end=False):
-        messages = limit_message_payload(rows, max_bytes, from_end=from_end)
+        messages = limit_message_payload([client_message(m) for m in rows], max_bytes, from_end=from_end)
         return {
             "messages": messages,
             **g_db.get_chat_message_bounds(thread_id),
@@ -478,7 +480,7 @@ def install(ctx):
                 # Sidebar/recents only need a preview; retain the legacy property
                 # shape without returning the complete history for every thread.
                 dto["messages"] = latest
-            dtos.append(dto)
+            dtos.append(client_thread(dto))
         return web.json_response(dtos)
 
     ctx.add_get("threads", query_threads)
@@ -607,8 +609,12 @@ def install(ctx):
         row = g_db.get_thread(id, user=ctx.get_username(request))
         if not row and ctx.is_admin(request):
             row = g_db.get_thread(id, user="all")
-        dto = (thread_dto(row) if request.query.get("allMessages") == "true"
-               else thread_window_dto(row)) if row else None
+        if row and request.query.get("allMessages") == "true":
+            full = dict(row)
+            full["messages"] = json.dumps(canonical_messages(id))
+            dto = client_thread(thread_dto(full))
+        else:
+            dto = thread_window_dto(row) if row else None
         if dto and dto.get("run") and dto["run"].get("status") in ("queued", "running"):
             scheduler.wake()
         return web.json_response(dto or "")
@@ -639,6 +645,11 @@ def install(ctx):
 
     ctx.add_get("threads/{id}/messages", get_thread_messages)
 
+    def canonical_messages(thread_id):
+        g_db.ensure_legacy_chat_messages(thread_id)
+        return [{**row["message"], "_sequence": row["sequence"]}
+                for row in g_db.get_chat_messages(thread_id)]
+
     async def update_thread(request):
         thread = await request.json()
         id = request.match_info["id"]
@@ -664,6 +675,11 @@ def install(ctx):
                 raise web.HTTPBadRequest(text=str(ex)) from ex
         for key in protected_thread_fields:
             thread.pop(key, None)
+        if isinstance(thread.get("messages"), list):
+            thread["messages"] = reconcile_client_messages(
+                canonical_messages(id), timestamp_messages(thread["messages"]),
+                rewrite=bool(thread.get("truncate")),
+            )
         update_count = await g_db.update_thread_async(id, thread, user=user) if thread else 1
         notify_thread_update(id)
         if update_count == 0:
@@ -1118,6 +1134,9 @@ def install(ctx):
         if active_run:
             raise web.HTTPConflict(text="An agent run is already active for this thread")
 
+        messages = reconcile_client_messages(
+            canonical_messages(id), messages, rewrite=bool(chat.get("truncate")), keep_prefix=True,
+        )
         workspace = resolve_workspace(thread.get("projectId"), user)
         tools = chat.get("tools", thread.get("tools", []))
         update_thread = {
