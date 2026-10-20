@@ -1,6 +1,7 @@
 from typing import Dict
 import _collections_abc
 import asyncio
+import copy
 import hashlib
 import io
 import json
@@ -694,9 +695,26 @@ def install(ctx):
             return {k: truncate_compaction_value(v, max_chars) for k, v in value.items()}
         return value
 
-    def bound_compaction_messages(messages, per_message_tokens):
+    def bound_compaction_messages(messages, per_message_tokens, preserve_replay=True):
         max_chars = max(4000, int(per_message_tokens) * 3)
-        return [truncate_compaction_value(message, max_chars) for message in messages]
+        bounded = []
+        for message in messages:
+            # Signed provider state is indivisible. Truncating even one opaque signature
+            # makes the retained turn impossible to replay. Summarizers need only the
+            # provider-neutral view; canonical messages always retain the original state.
+            if preserve_replay and message.get("provider_metadata"):
+                bounded.append(copy.deepcopy(message))
+            else:
+                projected = {k: v for k, v in message.items() if k != "provider_metadata"}
+                bounded.append(truncate_compaction_value(projected, max_chars))
+        return bounded
+
+    def tool_safe_cutoff(history, cutoff):
+        while 0 < cutoff < len(history) and history[cutoff].get("role") == "tool":
+            cutoff -= 1
+        if cutoff > 0 and history[cutoff - 1].get("tool_calls"):
+            cutoff -= 1
+        return cutoff
 
     def split_compaction_history(messages, recent_count):
         """Keep authoritative instructions and a tool-safe recent tail out of summaries."""
@@ -706,18 +724,13 @@ def install(ctx):
             protected.append(messages[index])
             index += 1
         history = messages[index:]
-        cutoff = max(0, len(history) - recent_count)
-        # Never retain a tool result without the assistant tool call which produced it.
-        while cutoff > 0 and history[cutoff].get("role") == "tool":
-            cutoff -= 1
-        if cutoff > 0 and history[cutoff - 1].get("tool_calls"):
-            cutoff -= 1
+        cutoff = tool_safe_cutoff(history, max(0, len(history) - recent_count))
         return protected, history[:cutoff], history[cutoff:]
 
     def partition_compaction_messages(messages, token_limit):
         groups = []
         index = 0
-        bounded = bound_compaction_messages(messages, token_limit)
+        bounded = bound_compaction_messages(messages, token_limit, preserve_replay=False)
         while index < len(bounded):
             group = [bounded[index]]
             if bounded[index].get("tool_calls"):
@@ -854,13 +867,19 @@ def install(ctx):
             return bound_compaction_messages(messages, per_message)
 
         if snapshot:
-            tail_cutoff = max(0, len(tail_rows) - recent_count)
+            tail_cutoff = tool_safe_cutoff(
+                [x["message"] for x in tail_rows], max(0, len(tail_rows) - recent_count)
+            )
             compact_source = (snapshot.get("summary") or []) + [x["message"] for x in tail_rows[:tail_cutoff]]
             recent = [x["message"] for x in tail_rows[tail_cutoff:]]
             snapshot_from = snapshot["fromSequence"]
             snapshot_to = tail_rows[tail_cutoff - 1]["sequence"] if tail_cutoff else snapshot["toSequence"]
         else:
-            cutoff = max(1, len(rows) - recent_count)
+            cutoff = tool_safe_cutoff([x["message"] for x in rows], max(0, len(rows) - recent_count))
+            if not cutoff:
+                # There is no complete older group to summarize. Do not publish a
+                # snapshot that claims to cover any of the retained signed exchange.
+                return bound_compaction_messages(working_messages, max(1000, threshold // max(1, len(working_messages))))
             compact_source = [x["message"] for x in rows[:cutoff]]
             recent = [x["message"] for x in rows[cutoff:]]
             snapshot_from = rows[0]["sequence"]

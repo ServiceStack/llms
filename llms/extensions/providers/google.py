@@ -1,7 +1,9 @@
 import asyncio
 import base64
+import copy
 import io
 import json
+import re
 import time
 import wave
 
@@ -170,7 +172,7 @@ def install_google(ctx):
             return params
 
         # Create a copy to avoid modifying original tool definition
-        p = params.copy()
+        p = copy.deepcopy(params)
 
         # Remove forbidden fields
         for forbidden in ["$schema", "additionalProperties"]:
@@ -209,6 +211,7 @@ def install_google(ctx):
 
     class GoogleProvider(OpenAiCompatible):
         sdk = "@ai-sdk/google"
+        preserve_provider_metadata = True
 
         def __init__(self, **kwargs):
             new_kwargs = {"api": "https://generativelanguage.googleapis.com", **kwargs}
@@ -217,6 +220,7 @@ def install_google(ctx):
             self.thinking_config = kwargs.get("thinking_config")
             self.speech_config = kwargs.get("speech_config")
             self.tools = kwargs.get("tools")
+            self.tool_combination = kwargs.get("tool_combination")
             self.curl = kwargs.get("curl")
             self.headers = kwargs.get("headers", {"Content-Type": "application/json"})
             # Google fails when using Authorization header, use query string param instead
@@ -241,7 +245,36 @@ def install_google(ctx):
                 }
             return None
 
-        async def handle_stream_response(self, response, chat, started_at, context=None):
+        def supports_tool_combination(self, model, model_info, chat):
+            """Preview support can be overridden per request, model, or provider."""
+            enabled = chat.get("tool_combination", (model_info or {}).get("tool_combination", self.tool_combination))
+            if enabled is not None:
+                return enabled is True
+            return bool(re.match(r"gemini-[34](?:[.-]|$)", model.lower())) or model.lower() in (
+                "gemini-flash-latest", "gemini-flash-lite-latest",
+            )
+
+        def response_metadata(self, content, chat, include_invocations=False):
+            # This is replay state, not diagnostics. Keep opaque signatures and unknown
+            # fields intact on the message, including turns without custom function calls.
+            return {"google": {
+                "provider": self.id,
+                "model": chat["model"],
+                "content": copy.deepcopy(content),
+                "include_server_side_tool_invocations": include_invocations,
+            }}
+
+        def replay_content(self, message, model):
+            metadata = message.get("provider_metadata") or {}
+            google = metadata.get("google") if isinstance(metadata, dict) else None
+            if not isinstance(google, dict) or google.get("provider") != self.id or google.get("model") != model:
+                return None
+            content = google.get("content")
+            if not isinstance(content, dict) or not content.get("parts") or content.get("role", "model") != "model":
+                return None
+            return google
+
+        async def handle_stream_response(self, response, chat, started_at, context=None, include_invocations=False):
             if response.status >= 300:
                 text = await response.text()
                 try:
@@ -262,6 +295,7 @@ def install_google(ctx):
             finish_reason = None
             usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
             grounding_acc = None
+            model_content = {"role": "model", "parts": []}
             writer = self.stream_writer(context)
 
             try:
@@ -303,6 +337,10 @@ def install_google(ctx):
 
                         candidates = chunk.get("candidates") or []
                         for candidate in candidates:
+                            # The OpenAI response and executor consume candidate zero only.
+                            # Never mix another candidate's tool calls or replay state into it.
+                            if candidate.get("index", 0) != 0:
+                                continue
                             if candidate.get("finishReason"):
                                 finish_reason = candidate["finishReason"]
 
@@ -316,6 +354,8 @@ def install_google(ctx):
 
                             raw_content = candidate.get("content", {})
                             parts = raw_content.get("parts", [])
+                            model_content.update({k: copy.deepcopy(v) for k, v in raw_content.items() if k != "parts"})
+                            model_content["parts"].extend(copy.deepcopy(parts))
                             for part in parts:
                                 if "text" in part:
                                     text_val = part["text"]
@@ -357,6 +397,10 @@ def install_google(ctx):
                             "content": content_acc,
                             "model": chat.get("model"),
                         }
+                        if model_content["parts"]:
+                            assistant_msg["provider_metadata"] = self.response_metadata(
+                                model_content, chat, include_invocations
+                            )
                         if reasoning_acc:
                             assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
                         if tool_calls_dict:
@@ -381,6 +425,8 @@ def install_google(ctx):
                 "content": content_acc,
                 "model": chat.get("model"),
             }
+            if model_content["parts"]:
+                assistant_msg["provider_metadata"] = self.response_metadata(model_content, chat, include_invocations)
             if reasoning_acc:
                 assistant_msg[reasoning_field or "reasoning"] = reasoning_acc
             if tool_calls_dict:
@@ -394,6 +440,8 @@ def install_google(ctx):
                 "role": "assistant",
                 "content": content_acc,
             }
+            if model_content["parts"]:
+                message_obj["provider_metadata"] = self.response_metadata(model_content, chat, include_invocations)
             if reasoning_acc:
                 message_obj[reasoning_field or "reasoning"] = reasoning_acc
             if tool_calls_dict:
@@ -422,13 +470,18 @@ def install_google(ctx):
             return self.to_response(openai_response, chat, started_at, context=context)
 
         async def chat(self, chat, context=None):
+            # Provider formatting must never rewrite the scheduler's working history.
+            chat = copy.deepcopy(chat)
             is_stream = chat["stream"] if "stream" in chat else (self.stream if self.stream is not None else True)
             chat["model"] = self.provider_model(chat["model"]) or chat["model"]
             model_info = (context.get("modelInfo") if context is not None else None) or self.model_info(chat["model"])
 
-            chat = await self.process_chat(chat)
+            chat = await self.process_chat(chat, provider_id=self.id)
             generation_config = {}
             tools = None
+            include_invocations = False
+            combination_supported = self.supports_tool_combination(chat["model"], model_info, chat)
+            chat.pop("tool_combination", None)
 
             modalities = chat.get("modalities")
             has_media_modality = modalities and ("image" in modalities or "audio" in modalities)
@@ -464,11 +517,13 @@ def install_google(ctx):
                     elif tool["type"] == "file_search":
                         gemini_tools["file_search"] = tool["file_search"]
 
-                # Gemini built-in tools (including File Search) cannot be combined with
-                # client-side function calling unless server-side tool invocations are
-                # explicitly enabled. File-search threads are retrieval-only, so retain
-                # the built-in tool and omit globally injected function declarations.
-                if function_declarations and "file_search" not in gemini_tools:
+                if function_declarations and "file_search" in gemini_tools:
+                    if combination_supported:
+                        include_invocations = True
+                    else:
+                        ctx.log("File Search function tools omitted: this model does not support tool combination. "
+                                "Set tool_combination=true only for models supporting tool context circulation.")
+                if function_declarations and ("file_search" not in gemini_tools or include_invocations):
                     gemini_tools["function_declarations"] = function_declarations
 
                 tools = [gemini_tools] if gemini_tools else None
@@ -482,6 +537,29 @@ def install_google(ctx):
 
             async with aiohttp.ClientSession() as session:
                 for message in chat["messages"]:
+                    replay = self.replay_content(message, chat["model"]) if message.get("role") == "assistant" else None
+                    if replay:
+                        raw = copy.deepcopy(replay["content"])
+                        circulated = replay.get("include_server_side_tool_invocations") or any(
+                            "toolCall" in part or "toolResponse" in part for part in raw["parts"]
+                        )
+                        if circulated and not combination_supported:
+                            raise ValueError("This history requires Gemini tool context circulation; "
+                                             "enable tool_combination or choose a supported model.")
+                        include_invocations = include_invocations or bool(circulated)
+                        legacy_calls = iter(message.get("tool_calls") or [])
+                        for part in raw["parts"]:
+                            fc = part.get("functionCall")
+                            if fc:
+                                legacy = next(legacy_calls, {})
+                                # Older Gemini models can omit IDs. Match the compatibility
+                                # tool call's synthesized ID without altering stored content.
+                                if not fc.get("id") and legacy.get("id"):
+                                    fc["id"] = legacy["id"]
+                                if fc.get("id"):
+                                    tool_id_map[fc["id"]] = fc["name"]
+                        contents.append(raw)
+                        continue
                     if message["role"] == "system":
                         content = message["content"]
                         if isinstance(content, list):
@@ -499,7 +577,7 @@ def install_google(ctx):
                             elif message["role"] == "assistant":
                                 role = "model"
                             elif message["role"] == "tool":
-                                role = "function"
+                                role = "user"
 
                         parts = []
 
@@ -615,12 +693,16 @@ def install_google(ctx):
                             parts.append({"text": message["content"]})
 
                         if len(parts) > 0:
-                            contents.append(
-                                {
-                                    "role": role,
-                                    "parts": parts,
-                                }
-                            )
+                            if (message.get("role") == "tool" and contents
+                                    and all("functionResponse" in p for p in contents[-1]["parts"])):
+                                contents[-1]["parts"].extend(parts)
+                            else:
+                                contents.append(
+                                    {
+                                        "role": role,
+                                        "parts": parts,
+                                    }
+                                )
 
                 gemini_chat = {
                     "contents": contents,
@@ -643,6 +725,19 @@ def install_google(ctx):
 
                 if tools:
                     gemini_chat["tools"] = tools
+                if include_invocations:
+                    function_config = {"mode": "VALIDATED"}
+                    choice = chat.get("tool_choice")
+                    if choice == "none":
+                        function_config["mode"] = "NONE"
+                    elif choice == "required":
+                        function_config["mode"] = "ANY"
+                    elif isinstance(choice, dict) and choice.get("function", {}).get("name"):
+                        function_config = {"mode": "ANY", "allowedFunctionNames": [choice["function"]["name"]]}
+                    gemini_chat["toolConfig"] = {
+                        "includeServerSideToolInvocations": True,
+                        "functionCallingConfig": function_config,
+                    }
 
                 if self.safety_settings:
                     gemini_chat["safetySettings"] = self.safety_settings
@@ -766,7 +861,9 @@ def install_google(ctx):
                                 data=json.dumps(gemini_chat),
                                 timeout=ctx.get_client_timeout(streaming=True),
                             ) as response:
-                                return await self.handle_stream_response(response, chat, started_at, context=context)
+                                return await self.handle_stream_response(
+                                    response, chat, started_at, context=context, include_invocations=include_invocations
+                                )
                         except Exception as e:
                             err_msg = str(e)
                             if (
@@ -983,6 +1080,10 @@ def install_google(ctx):
                             "content": content if content else "",
                         },
                     }
+                    if not has_media_modality and candidate.get("content", {}).get("parts"):
+                        choice["message"]["provider_metadata"] = self.response_metadata(
+                            candidate["content"], chat, include_invocations
+                        )
                     if reasoning:
                         choice["message"]["reasoning"] = reasoning
                     if grounding:

@@ -273,6 +273,8 @@ def apply_args_to_chat(chat, args_params):
                 value = int(value)
             elif key == "temperature" or key == "top_p" or key == "frequency_penalty" or key == "presence_penalty":
                 value = float(value)
+            elif key == "tool_combination":
+                value = value.lower() in ("true", "1", "yes")
             elif (
                 key == "store"
                 or key == "logprobs"
@@ -1495,6 +1497,8 @@ class StreamCheckpointWriter:
         for tool_call in message.get("tool_calls") or []:
             fn = tool_call.get("function") or {}
             total += len(fn.get("name") or "") + len(fn.get("arguments") or "")
+        if message.get("provider_metadata"):
+            total += len(json.dumps(message["provider_metadata"]))
         return total
 
     async def write(self, assistant_message, final=False):
@@ -1703,6 +1707,8 @@ class OpenAiCompatible:
 
     async def process_chat(self, chat, provider_id=None):
         ret = await process_chat(chat, provider_id)
+        if not getattr(self, "preserve_provider_metadata", False):
+            ret.pop("tool_combination", None)
         messages = ret.get("messages", [])
         if messages:
             cleaned_messages = []
@@ -1713,6 +1719,8 @@ class OpenAiCompatible:
                 msg.pop("usage", None)
                 msg.pop("_sequence", None)
                 msg.pop("streaming", None)
+                if not getattr(self, "preserve_provider_metadata", False):
+                    msg.pop("provider_metadata", None)
                 cleaned_messages.append(msg)
             ret["messages"] = cleaned_messages
         if provider_id == "nvidia" or self.id == "nvidia":
@@ -3901,6 +3909,7 @@ class AppExtensions:
             "safety_identifier": str,
             "store": bool,
             "enable_thinking": bool,
+            "tool_combination": bool,
         }
         self.all_providers = [
             OpenAiCompatible,

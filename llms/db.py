@@ -188,6 +188,14 @@ def count_tokens_approx(messages: list[dict]) -> int:
         role = message.get("role", "")
         total += count_text_tokens(role)
 
+        metadata = message.get("provider_metadata") or {}
+        google = metadata.get("google") if isinstance(metadata, dict) else None
+        if isinstance(google, dict) and isinstance(google.get("content"), dict):
+            # Replay parts replace compatibility text/tool_calls. Count them once,
+            # including the opaque tool context that also consumes Gemini's window.
+            total += count_text_tokens(json.dumps(google["content"].get("parts") or []))
+            continue
+
         content = message.get("content")
         text = extract_text_content(content)
         total += count_text_tokens(text)

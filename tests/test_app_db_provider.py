@@ -1,10 +1,12 @@
 import os
+import copy
 import json
 import shutil
 import sqlite3
 import tempfile
 import unittest
 from threading import Event, Thread
+from types import SimpleNamespace
 
 from llms.extensions.app import install, resolve_events_config
 
@@ -168,6 +170,101 @@ class TestAppDbProvider(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(call[1]["nohistory"] and call[1]["nostore"] for call in self.ctx.compaction_calls))
         self.assertEqual(len(compacted[:-4]), 2)  # protected system + one consolidated summary
         self.assertEqual(compacted[1]["role"], "system")
+
+    async def test_compaction_preserves_signed_recent_tool_group_and_omits_replay_state_from_summary_input(self):
+        self.ctx.config["defaults"]["compact"] = {
+            "model": "compact-model",
+            "messages": [{"role": "user", "content": "{messages_json}"}],
+        }
+        signature = "opaque-signature" * 2000
+        raw = {"role": "model", "parts": [
+            {"toolCall": {"toolType": "FILE_SEARCH", "id": "search-1"}, "thoughtSignature": signature},
+            {"functionCall": {"name": "fetch_url", "args": {}, "id": "fetch-1"}, "thoughtSignature": signature},
+            {"toolResponse": {"toolType": "FILE_SEARCH", "id": "search-1"}, "thoughtSignature": signature},
+        ]}
+        signed_call = {
+            "role": "assistant", "content": "Checking the document", "timestamp": 100,
+            "tool_calls": [{"id": "fetch-1", "type": "function",
+                            "function": {"name": "fetch_url", "arguments": "{}"}}],
+            "provider_metadata": {"google": {"model": "gemini-3.8-flash", "content": raw}},
+        }
+        history = [{"role": "user", "content": "old text " * 3000, "timestamp": i + 1}
+                   for i in range(12)]
+        history[1] = {**signed_call, "timestamp": 2}
+        history += [signed_call, {"role": "tool", "tool_call_id": "fetch-1", "content": "Document text", "timestamp": 101}]
+        before = copy.deepcopy(history)
+        thread_id = self.app_db.create_thread({"messages": history}, user="test_user")
+
+        compacted, _, retained = await self.ctx.compact_messages(
+            history, target_tokens=5000, chunk_tokens=8000, user="test_user", recent_count=1
+        )
+
+        self.assertEqual(retained, 2, "the recent tool result must retain its signed assistant call")
+        self.assertEqual(compacted[-2:], history[-2:])
+        self.assertTrue(self.ctx.compaction_calls)
+        for chat, _ in self.ctx.compaction_calls:
+            prompt = chat["messages"][-1]["content"]
+            self.assertNotIn("provider_metadata", prompt)
+            self.assertNotIn(signature, prompt)
+        self.assertEqual(history, before)
+        self.assertEqual([row["message"] for row in self.app_db.get_chat_messages(thread_id)], before)
+
+    async def test_compaction_never_truncates_signed_final_answers(self):
+        self.ctx.config["defaults"]["compact"] = {
+            "model": "compact-model", "messages": [{"role": "user", "content": "{messages_json}"}],
+        }
+        answer = {"role": "assistant", "content": "Answer", "provider_metadata": {"google": {
+            "content": {"role": "model", "parts": [{"text": "Answer", "thoughtSignature": "opaque" * 5000}]},
+        }}}
+        compacted, _, _ = await self.ctx.compact_messages(
+            [{"role": "user", "content": "Old question"}, answer],
+            target_tokens=1000, chunk_tokens=8000, user="test_user", recent_count=1,
+        )
+        self.assertEqual(compacted[-1], answer)
+
+    async def test_durable_snapshot_boundary_retains_complete_signed_exchange(self):
+        self.ctx.app = SimpleNamespace()
+        self.ctx.request_args = {}
+        self.ctx.config["defaults"]["compact"] = {
+            "model": "compact-model", "messages": [{"role": "user", "content": "{messages_json}"}],
+        }
+        install(self.ctx)
+        calls = [{"id": f"call-{i}", "type": "function", "function": {"name": "fetch_url", "arguments": "{}"}}
+                 for i in (1, 2)]
+        signed = {"role": "assistant", "content": "Checking", "timestamp": 8, "tool_calls": calls,
+                  "provider_metadata": {"google": {"content": {"role": "model", "parts": [
+                      {"toolCall": {"toolType": "FILE_SEARCH", "id": "search"}, "thoughtSignature": "opaque" * 3000},
+                  ]}}}}
+        messages = [{"role": "user", "content": "Old context " * 2000, "timestamp": i + 1} for i in range(7)]
+        messages += [signed,
+                     {"role": "tool", "tool_call_id": "call-1", "content": "one", "timestamp": 9},
+                     {"role": "tool", "tool_call_id": "call-2", "content": "two", "timestamp": 10},
+                     {"role": "user", "content": "Continue", "timestamp": 11},
+                     {"role": "assistant", "content": "Continuing", "timestamp": 12}]
+        thread_id = self.app_db.create_thread({
+            "model": "main-model", "messages": messages,
+            "metadata": {"compactThreshold": 3000, "compactRecentMessages": 4},
+        }, user="test_user")
+        run_id = self.app_db.create_agent_run(thread_id, "test_user", "main-model")
+        seen = []
+        summarize = self.ctx.chat_completion
+
+        async def complete(chat, context=None):
+            if chat["model"] == "compact-model":
+                return await summarize(chat, context)
+            seen.append(chat)
+            return {"choices": [{"message": {"role": "assistant", "content": "Done"}}]}
+
+        self.ctx.chat_completion = complete
+        await self.ctx.app.agent_scheduler.execute_slice({
+            **self.app_db.get_agent_run(run_id, user="test_user"), "workspace": {"projectId": None, "directories": []},
+        })
+        snapshot = self.app_db.get_latest_context_snapshot(thread_id)
+        self.assertEqual(snapshot["toSequence"], 7)
+        self.assertEqual(seen[0]["messages"][-5:], messages[-5:])
+        reloaded = [row["message"] for row in self.app_db.get_chat_messages(thread_id, after=snapshot["toSequence"])]
+        self.assertEqual(reloaded, messages[-5:])
+        self.assertEqual(len(self.app_db.get_chat_messages(thread_id)), len(messages))
 
     async def test_projected_tool_checkpoint_appends_only_new_canonical_messages(self):
         original = [{"role": "user", "content": "Do the work", "timestamp": 1}]
