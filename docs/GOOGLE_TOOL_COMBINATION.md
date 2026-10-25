@@ -78,6 +78,43 @@ Explicit edits, deletes and redo operations hydrate surviving messages from stor
 signed Gemini parts remain intact. Editing a signed message invalidates its old replay state.
 Full-history reads use canonical rows, including replies missing from a legacy compatibility projection.
 
+## Optional replay filters
+
+The default remains full replay of all native parts, as documented by Google. Extensions may register
+synchronous `ProviderReplayContext` callbacks using `ctx.register_provider_replay_filter(handler)`.
+Filters run in registration order on each matching assistant message, on every provider request
+(including function-loop continuations). Currently the Google provider invokes this hook for matching
+provider/model replay metadata. Other providers can adopt the same hook when they support native replay.
+
+A callback receives `provider`, resolved `model`, `message_index`, `last_user_message_index`,
+`is_current_turn`, and a detached mutable native `content` dictionary. The context's fields are read-only;
+mutate `content` in place. Tool results do not start a new user turn, and when no user prompt exists,
+all messages count as current. Empty `parts` omits that native message. Filters must leave `parts` a
+list. Exceptions abort request preparation rather than silently reverting the customization.
+
+For the optional workaround discussed in ServiceStack/Discuss#163:
+
+```python
+from llms.provider_replay import GeminiReplayFilters
+
+
+def install(ctx):
+    ctx.register_provider_replay_filter(
+        GeminiReplayFilters.exclude_completed_turn_tool_invocations
+    )
+
+
+__install__ = install
+```
+
+Save this as `~/.llms/extensions/gemini_replay/__init__.py` and restart. A ready-to-copy example is
+`examples/gemini_replay_extension.py`. It is not enabled by default. The helper removes only
+`toolCall`/`toolResponse` parts from completed user turns, retaining other parts (including their
+signatures), function calls/results, and all current-turn context. Stored history and UI citations stay
+unchanged, and the tool-combination capability checks still apply. This intentionally differs from
+Google's documented full replay contract; it may improve follow-up File Search citations but cannot
+guarantee citations. No automatic citation retry or prior-turn citation reuse is performed.
+
 ## Citations
 
 `groundingMetadata` remains separate, per-message citation metadata. Built-in File Search parts can
@@ -91,7 +128,7 @@ Run the regression suites from the repository root:
 ```sh
 .venv/bin/python -m unittest tests.test_google_tool_combination tests.test_google_streaming \
     tests.test_app_db_provider tests.test_agent_scheduler tests.test_stream_history_preservation \
-    tests.test_chat_threads_refactor tests.test_thread_window_projection
+    tests.test_chat_threads_refactor tests.test_thread_window_projection tests.test_provider_replay_filters
 ```
 
 For live verification, set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and run:

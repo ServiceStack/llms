@@ -9,6 +9,8 @@ import wave
 
 import aiohttp
 
+from llms.provider_replay import ProviderReplayContext
+
 # class GoogleOpenAiProvider(OpenAiCompatible):
 #     sdk = "google-openai-compatible"
 
@@ -535,8 +537,10 @@ def install_google(ctx):
             # Track tool call IDs to names for response mapping
             tool_id_map = {}
 
+            # Locate real user prompts before converting tool results to Gemini user parts.
+            last_user_index = max((i for i, m in enumerate(chat["messages"]) if m.get("role") == "user"), default=-1)
             async with aiohttp.ClientSession() as session:
-                for message in chat["messages"]:
+                for message_index, message in enumerate(chat["messages"]):
                     replay = self.replay_content(message, chat["model"]) if message.get("role") == "assistant" else None
                     if replay:
                         raw = copy.deepcopy(replay["content"])
@@ -547,6 +551,13 @@ def install_google(ctx):
                             raise ValueError("This history requires Gemini tool context circulation; "
                                              "enable tool_combination or choose a supported model.")
                         include_invocations = include_invocations or bool(circulated)
+                        if apply_filter := getattr(ctx, "filter_provider_replay", None):
+                            apply_filter(ProviderReplayContext(self, chat["model"], message_index, last_user_index, raw))
+                        # A filter may remove all parts of a historical built-in-only message.
+                        if not isinstance(raw.get("parts"), list):
+                            raise ValueError("Provider replay content.parts must be a list")
+                        if not raw["parts"]:
+                            continue
                         legacy_calls = iter(message.get("tool_calls") or [])
                         for part in raw["parts"]:
                             fc = part.get("functionCall")

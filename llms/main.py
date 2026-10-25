@@ -3863,6 +3863,7 @@ class AppExtensions:
         self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
         self.chat_request_filters = []
+        self.provider_replay_filters = []
         self.extensions = []
         self.loaded = False
         self.chat_tool_filters = []
@@ -4449,6 +4450,15 @@ class ExtensionContext:
     def register_chat_request_filter(self, handler: Callable):
         self.log(f"Registered chat request filter: {handler_name(handler)}")
         self.app.chat_request_filters.append(handler)
+
+    def register_provider_replay_filter(self, handler: Callable):
+        """Register a synchronous filter of detached native replay content (currently Gemini)."""
+        self.log(f"Registered provider replay filter: {handler_name(handler)}")
+        self.app.provider_replay_filters.append(handler)
+
+    def filter_provider_replay(self, replay):
+        for handler in self.app.provider_replay_filters:
+            handler(replay)
 
     def register_chat_tool_filter(self, handler: Callable):
         self.log(f"Registered chat tool filter: {handler_name(handler)}")
