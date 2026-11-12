@@ -91,7 +91,7 @@ class MemoryDB:
     async def delete_document_async(self, id, user=None):
         self.documents.pop(int(id), None)
 
-    def update_document(self, id, doc, user=None):
+    def update_document(self, id, doc, user=None, wait_for_commit=False):
         self.documents[id].update(copy.deepcopy(doc))
 
     async def create_run_async(self, run, user=None):

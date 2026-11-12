@@ -1,12 +1,15 @@
+import hashlib
 import json
+import mimetypes
 import os
 import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from urllib.error import URLError
 
-from .client import GeminiClient
+from .client import GeminiApiError, GeminiClient, GeminiObject
 from .db import GeminiDB, metadata_differs, to_custom_metadata
 
 GEMINI_UPLOAD_MIME_TYPES = os.getenv("GEMINI_UPLOAD_MIME_TYPES", "mdx:text/markdown,cshtml:text/html")
@@ -228,7 +231,8 @@ class UploadWorker:
                             and store_doc.display_name == doc.get("displayName")
                             and not metadata_differs({**doc, "customMetadata": remote_metadata})):
                         db.update_document(doc_id, {
-                            "uploadedAt": datetime.now(), "startedAt": None,
+                            "uploadedAt": datetime.now(), "startedAt": None, "error": None,
+                            "uploadOperationName": None, "uploadOperationHash": None,
                             "name": store_doc.name, "displayName": store_doc.display_name,
                             "sizeBytes": store_doc.size_bytes, "mimeType": store_doc.mime_type,
                             "createTime": store_doc.create_time, "updateTime": store_doc.update_time,
@@ -277,19 +281,36 @@ class UploadWorker:
             if self.ctx.debug:
                 self.ctx.dbg(f"Uploading {doc.get('displayName')} to {store_name}\n" + json.dumps(config, indent=2))
 
-            operation = self.upload_with_retry(store_name, full_path, config)
+            signature = {
+                "store": store_name, "hash": doc.get("hash"), "config": config,
+                "mimeType": config.get("mime_type") or mimetypes.guess_type(full_path)[0] or "application/octet-stream",
+            }
+            operation_hash = hashlib.sha256(json.dumps(signature, sort_keys=True).encode("utf-8")).hexdigest()
+            if doc.get("uploadOperationName") and doc.get("uploadOperationHash") == operation_hash:
+                operation = GeminiObject(name=doc["uploadOperationName"])
+                self.ctx.log(f"Resuming Gemini indexing operation {operation.name} for document {doc_id}")
+            else:
+                operation = self.upload_with_retry(store_name, full_path, config)
+                receipt = {"uploadOperationName": operation.name, "uploadOperationHash": operation_hash}
+                db.update_document(doc_id, receipt, user=user, wait_for_commit=True)
+                doc.update(receipt)
 
-            while not operation.done:
-                if self.cancelled.is_set():
-                    raise Exception("Cancelled")
-                time.sleep(2)
-                operation = self.client.operations.get(operation)
-
+            operation = self.wait_for_operation(operation)
             if operation.error:
-                raise Exception(operation.error.message)
+                # A terminal failure permits a fresh upload on the next explicit retry.
+                db.update_document(doc_id, {"uploadOperationName": None, "uploadOperationHash": None},
+                                   user=user, wait_for_commit=True)
+                raise RuntimeError(
+                    f"Gemini indexing operation {doc.get('uploadOperationName')} failed "
+                    f"(code {operation.error.code}): {operation.error.message}")
 
-            document_name = operation.response.document_name
-            db.update_document(doc_id, {"uploadedAt": datetime.now(), "startedAt": None, "name": document_name}, user=user)
+            document_name = operation.response.document_name if operation.response else None
+            if not document_name:
+                raise RuntimeError(f"Gemini indexing operation {operation.name} completed without a document name")
+            db.update_document(doc_id, {
+                "uploadedAt": datetime.now(), "startedAt": None, "name": document_name, "error": None,
+                "uploadOperationName": None, "uploadOperationHash": None,
+            }, user=user, wait_for_commit=True)
 
             # After the new copy is in and the row points at it, never before: deleting first
             # would take the document out of the store for the length of the upload, and lose it
@@ -325,12 +346,45 @@ class UploadWorker:
                 self.ctx.err(f"Uploaded {document_name}, but could not refresh remote fields", e)
 
         except Exception as e:
-            self.ctx.err(f"Failed to upload doc {doc.get('id')}", e)
+            self.ctx.err(
+                f"Failed to upload document {doc_id} ({doc.get('displayName')}) to store "
+                f"{doc.get('filestoreId')}; indexing operation {doc.get('uploadOperationName')}", e)
             # A deliberate cancellation or process shutdown leaves the row queued so the next
             # worker (including the next app instance) can resume it automatically.
             if doc_id and not self.cancelled.is_set():
                 db.update_document(doc_id, {"error": self.ctx.error_message(e)}, user=user)
             raise
+
+    def wait_for_operation(self, operation):
+        name = operation.name
+        failures = 0
+        while not operation.done:
+            if not name:
+                raise ValueError("Gemini upload operation has no name")
+            if self.cancelled.wait(2):
+                raise RuntimeError(f"Cancelled while waiting for Gemini indexing operation {name}")
+            try:
+                # Retrying this GET cannot create another remote document.
+                operation = self.client.operations.get(name)
+                failures = 0
+            except Exception as e:
+                status = getattr(e, "status", None)
+                transient = (status in (408, 429, 500, 502, 503, 504)
+                             if isinstance(e, GeminiApiError)
+                             else isinstance(e, (URLError, TimeoutError, ConnectionError)))
+                detail = f"HTTP {status}: {e}" if status else str(e)
+                failures += 1
+                if not transient or failures >= GEMINI_UPLOAD_MAX_RETRIES:
+                    raise RuntimeError(
+                        f"Could not check Gemini indexing operation {name}: {detail}. "
+                        "The file was transferred, but indexing has not been confirmed. "
+                        "Retry to check the same operation.") from e
+                delay = min(30, 2 ** failures)
+                self.ctx.log(f"Gemini indexing operation {name} polling retry "
+                             f"{failures}/{GEMINI_UPLOAD_MAX_RETRIES} in {delay}s: {detail}")
+                if self.cancelled.wait(delay):
+                    raise RuntimeError(f"Cancelled while waiting for Gemini indexing operation {name}") from e
+        return operation
 
     def upload_with_retry(self, store_name, full_path, config):
         """

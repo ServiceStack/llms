@@ -2,6 +2,7 @@ import json
 import os
 import re
 import struct
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict
 from urllib.parse import urlsplit
@@ -478,6 +479,9 @@ class GeminiDB:
                 "tags": "JSON",  # {"bug": 0.9706085920333862, "mask": 0.9348311424255371, "glowing": 0.8394700884819031}
                 "startedAt": "TIMESTAMP",
                 "uploadedAt": "TIMESTAMP",
+                # Internal receipt for an accepted upload, retained across polling failures/restarts.
+                "uploadOperationName": "TEXT",
+                "uploadOperationHash": "TEXT",
                 # Local search has its own durable desired/actual state. It must not share the
                 # Gemini upload error or timestamp: either side can fail while the other works.
                 "searchHash": "TEXT",
@@ -661,7 +665,11 @@ class GeminiDB:
             self.ctx.log(f"gemini: SQLite FTS5 unavailable, using LIKE search ({e})")
 
     def to_dto(self, row, json_columns):
-        return to_dto(self.ctx, row, json_columns)
+        dto = to_dto(self.ctx, row, json_columns)
+        if isinstance(dto, dict):
+            dto.pop("uploadOperationName", None)
+            dto.pop("uploadOperationHash", None)
+        return dto
 
     def get_user_filter(self, user=None, params=None):
         if user is None:
@@ -1960,12 +1968,27 @@ class GeminiDB:
             self.prepare_document(document, user=user),
         )
 
-    def update_document(self, id, document: Dict[str, Any], user=None):
-        return self.db.update(
-            "document",
-            self.columns["document"],
-            self.prepare_document(document, id, user=user),
-        )
+    def update_document(self, id, document: Dict[str, Any], user=None, wait_for_commit=False):
+        info = self.prepare_document(document, id, user=user)
+        if not wait_for_commit:
+            return self.db.update("document", self.columns["document"], info)
+
+        # Used only by the synchronous upload worker. Queuing a receipt is insufficient:
+        # polling or a process exit could otherwise race its commit.
+        committed = threading.Event()
+        result = {}
+
+        def callback(lastrowid, rowcount, error=None):
+            result.update(rowcount=rowcount, error=error)
+            committed.set()
+
+        self.db.update("document", self.columns["document"], info, callback=callback)
+        if not committed.wait(30):
+            raise TimeoutError("Timed out saving Gemini upload operation receipt")
+        if result.get("error"):
+            raise result["error"]
+        if result.get("rowcount") != 1:
+            raise ValueError("Document disappeared while saving Gemini upload operation receipt")
 
     async def update_document_async(self, id, document: Dict[str, Any], user=None):
         return await self.db.update_async(
