@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from urllib.error import URLError
 
+from .reconcile import document_lock, pending_names
 from .client import GeminiApiError, GeminiClient, GeminiObject
 from .db import GeminiDB, metadata_differs, to_custom_metadata
 
@@ -109,7 +110,9 @@ class UploadWorker:
             with ThreadPoolExecutor(max_workers=GEMINI_UPLOAD_CONCURRENCY) as pool:
                 while self.running and not self.cancelled.is_set():
                     with self.lock:
-                        self.restart_requested = False
+                        if self.restart_requested:
+                            self.restart_requested = False
+                            completed.clear()
                     try:
                         # Exclude completed rows before LIMIT. Their asynchronous writes can
                         # lag reads; filtering after LIMIT can hide the rest of the queue.
@@ -143,6 +146,12 @@ class UploadWorker:
                         except Exception as e:
                             self.ctx.err("UploadWorker task", e)
 
+            for pending in self.db.get_pending_remote_deletes():
+                with document_lock(self.ctx, pending["id"]):
+                    current = self.db.get_document(pending["id"], user=pending.get("user"))
+                    if current:
+                        self._cleanup_remote_copies(current, self.db)
+                        filestore_ids.add(current.get("filestoreId"))
             self.refresh_filestores(filestore_ids)
         except Exception as e:
             self.ctx.err("UploadWorker", e)
@@ -198,6 +207,35 @@ class UploadWorker:
     # --- one document ------------------------------------------------------------------
 
     def process_doc(self, doc, db):
+        with document_lock(self.ctx, doc.get("id")):
+            current = db.get_document(doc.get("id"), user=doc.get("user"))
+            if not current or current.get("tombstonedAt"):
+                return
+            if not current.get("uploadedAt") and not current.get("error"):
+                self._process_document(current, db)
+            saved = db.get_document(doc.get("id"), user=doc.get("user"))
+            if saved:
+                self._cleanup_remote_copies(saved, db)
+
+    def _cleanup_remote_copies(self, doc, db):
+        if not doc.get("uploadedAt"):
+            return  # A replacement must succeed before removing its fallback copies.
+        remaining = pending_names(doc)
+        for name in list(remaining):
+            if name == doc.get("name"):
+                remaining.remove(name)
+                continue
+            try:
+                self.client.file_search_stores.documents.delete(name=name, config={"force": True})
+            except Exception as error:
+                if getattr(error, "status", None) not in (404, 410):
+                    self.ctx.err(f"Could not remove superseded Gemini document {name}", error)
+                    continue
+            remaining.remove(name)
+        db.update_document(doc["id"], {"pendingDeleteNames": remaining or None},
+                           user=doc.get("user"), wait_for_commit=True)
+
+    def _process_document(self, doc, db):
         user = doc.get("user")
         doc_id = doc.get("id")
 
@@ -310,19 +348,9 @@ class UploadWorker:
             db.update_document(doc_id, {
                 "uploadedAt": datetime.now(), "startedAt": None, "name": document_name, "error": None,
                 "uploadOperationName": None, "uploadOperationHash": None,
+                "pendingDeleteNames": list(dict.fromkeys(pending_names(doc)
+                    + ([prior_name] if prior_name and prior_name != document_name else []))) or None,
             }, user=user, wait_for_commit=True)
-
-            # After the new copy is in and the row points at it, never before: deleting first
-            # would take the document out of the store for the length of the upload, and lose it
-            # outright if the upload failed.
-            if prior_name and prior_name != document_name:
-                try:
-                    self.client.file_search_stores.documents.delete(name=prior_name, config={"force": True})
-                    self.ctx.dbg(f"Removed superseded copy {prior_name}")
-                except Exception as e:
-                    # Worth reporting but not worth failing the upload for: the new copy is live,
-                    # and a leftover is a sync finding rather than a broken document.
-                    self.ctx.err(f"Could not remove superseded copy {prior_name}", e)
 
             try:
                 store_doc = self.client.file_search_stores.documents.get(name=document_name)

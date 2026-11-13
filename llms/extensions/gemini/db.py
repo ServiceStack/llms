@@ -482,6 +482,7 @@ class GeminiDB:
                 # Internal receipt for an accepted upload, retained across polling failures/restarts.
                 "uploadOperationName": "TEXT",
                 "uploadOperationHash": "TEXT",
+                "pendingDeleteNames": "JSON",
                 # Local search has its own durable desired/actual state. It must not share the
                 # Gemini upload error or timestamp: either side can fail while the other works.
                 "searchHash": "TEXT",
@@ -667,6 +668,7 @@ class GeminiDB:
     def to_dto(self, row, json_columns):
         dto = to_dto(self.ctx, row, json_columns)
         if isinstance(dto, dict):
+            dto.pop("pendingDeleteNames", None)
             dto.pop("uploadOperationName", None)
             dto.pop("uploadOperationHash", None)
         return dto
@@ -1996,6 +1998,9 @@ class GeminiDB:
             self.columns["document"],
             self.prepare_document(document, id, user=user),
         )
+
+    def get_pending_remote_deletes(self):
+        return self.db.all("SELECT * FROM document WHERE pendingDeleteNames IS NOT NULL")
 
     def get_pending_documents(self, limit=10, exclude_ids=None):
         exclude = ""

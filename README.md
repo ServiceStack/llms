@@ -16,3 +16,11 @@ implementations share the same endpoints and UI. See [MCP client configuration](
 
 Projects and conversations share through independently enabled `share_static` and `share_llmspy`
 extensions. See [sharing options](docs/SHARING.md) for configuration and extension registration.
+
+### Gemini Sync repairs
+
+Sync Store retries upload and metadata errors from the local cache and removes duplicate remote
+copies belonging to the same document. It preserves separate source documents with identical content
+and keeps a healthy fallback until a replacement succeeds. Cleanup failures remain durable and appear
+under **Repair Errors** for retry on the next Sync. Documents being uploaded are left in progress;
+missing source files and provider/billing failures are reported rather than silently discarded.
