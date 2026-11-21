@@ -21,16 +21,16 @@ def configure_notarization() -> None:
     identity = os.environ.get("APPLE_SIGNING_IDENTITY", "").strip()
     if not identity.startswith("Developer ID Application:"):
         raise RuntimeError("Set APPLE_SIGNING_IDENTITY to your Developer ID Application certificate name")
-    for name, prompt in (
-        ("APPLE_ID", "Apple Account email: "),
-        ("APPLE_TEAM_ID", "Apple Developer Team ID: "),
-        ("APPLE_PASSWORD", "Apple app-specific password (hidden): "),
-    ):
-        if not os.environ.get(name, "").strip():
-            value = getpass.getpass(prompt) if name == "APPLE_PASSWORD" else input(prompt).strip()
-            if not value.strip():
-                raise RuntimeError(f"{name} is required for notarization")
-            os.environ[name] = value
+    os.environ["APPLE_ID"] = "team@servicestack.net"
+    if not os.environ.get("APPLE_TEAM_ID", "").strip():
+        team_id = input("Apple Developer Team ID: ").strip()
+        if not team_id:
+            raise RuntimeError("APPLE_TEAM_ID is required for notarization")
+        os.environ["APPLE_TEAM_ID"] = team_id
+    password = getpass.getpass("Apple app-specific password for team@servicestack.net (hidden): ")
+    if not password.strip():
+        raise RuntimeError("APPLE_PASSWORD is required for notarization")
+    os.environ["APPLE_PASSWORD"] = password
 
 
 def tauri_command() -> list[str]:

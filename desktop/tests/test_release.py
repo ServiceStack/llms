@@ -23,6 +23,33 @@ def load_script(name):
 release_config = load_script("prepare-release-config")
 check_version = load_script("check-version")
 build_desktop = load_script("build-desktop")
+apple_secrets = load_script("configure-apple-secrets")
+
+
+class TestAppleSecrets(unittest.TestCase):
+    def test_password_only_update_uses_fixed_account_and_secret_stdin(self):
+        output = io.StringIO()
+        with (
+            patch.object(sys, "argv", ["configure-apple-secrets.py"]),
+            patch.object(sys.stdin, "isatty", return_value=True),
+            patch.object(apple_secrets.shutil, "which", return_value="gh"),
+            patch.object(apple_secrets.subprocess, "run") as run,
+            patch.object(apple_secrets.getpass, "getpass", return_value="private-password") as password,
+            patch("builtins.input") as prompt,
+            contextlib.redirect_stdout(output),
+        ):
+            run.return_value.returncode = 0
+            self.assertEqual(apple_secrets.main(), 0)
+            prompt.assert_not_called()
+            password.assert_called_once()
+            writes = run.call_args_list[1:]
+            self.assertEqual(len(writes), 2)
+            self.assertEqual(writes[0].args[0][3], "APPLE_ID")
+            self.assertEqual(writes[0].kwargs["input"], b"team@servicestack.net")
+            self.assertEqual(writes[1].args[0][3], "APPLE_PASSWORD")
+            self.assertEqual(writes[1].kwargs["input"], b"private-password")
+            self.assertNotIn("private-password", output.getvalue())
+            self.assertNotIn("private-password", str([call.args for call in writes]))
 
 
 class TestLocalNotarization(unittest.TestCase):
@@ -30,15 +57,16 @@ class TestLocalNotarization(unittest.TestCase):
         with (
             patch.dict(os.environ, {"APPLE_SIGNING_IDENTITY": "Developer ID Application: Test (TEAMID)"}, clear=True),
             patch.object(sys, "platform", "darwin"),
-            patch("builtins.input", side_effect=["test@example.com", "TEAMID"]) as prompt,
+            patch("builtins.input", return_value="TEAMID") as prompt,
             patch.object(build_desktop.getpass, "getpass", return_value="app-specific-password") as password,
         ):
             build_desktop.configure_notarization()
-            self.assertEqual(prompt.call_count, 2)
+            self.assertEqual(prompt.call_count, 1)
             password.assert_called_once()
+            self.assertEqual(os.environ["APPLE_ID"], "team@servicestack.net")
             self.assertEqual(os.environ["APPLE_PASSWORD"], "app-specific-password")
 
-    def test_existing_credentials_do_not_prompt(self):
+    def test_existing_credentials_use_fixed_account_and_prompt_for_fresh_password(self):
         with (
             patch.dict(os.environ, {
                 "APPLE_SIGNING_IDENTITY": "Developer ID Application: Test (TEAMID)",
@@ -46,11 +74,13 @@ class TestLocalNotarization(unittest.TestCase):
             }, clear=True),
             patch.object(sys, "platform", "darwin"),
             patch("builtins.input") as prompt,
-            patch.object(build_desktop.getpass, "getpass") as password,
+            patch.object(build_desktop.getpass, "getpass", return_value="fresh-password") as password,
         ):
             build_desktop.configure_notarization()
             prompt.assert_not_called()
-            password.assert_not_called()
+            password.assert_called_once()
+            self.assertEqual(os.environ["APPLE_ID"], "team@servicestack.net")
+            self.assertEqual(os.environ["APPLE_PASSWORD"], "fresh-password")
 
     def test_ad_hoc_signing_cannot_be_notarized(self):
         with patch.dict(os.environ, {"APPLE_SIGNING_IDENTITY": "-"}, clear=True), patch.object(sys, "platform", "darwin"):
