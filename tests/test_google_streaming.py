@@ -6,8 +6,8 @@ Unit tests for GoogleProvider streaming functionality.
 import json
 import os
 import sys
-import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Ensure test setup
@@ -16,7 +16,8 @@ os.environ["GEMINI_API_KEY"] = "test-api-key"
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from llms.main import cli, g_handlers, get_app
+from llms.extensions.providers.google import install_google
+from llms.main import StreamCheckpointWriter
 
 
 class DummyStreamReader:
@@ -42,10 +43,6 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         config_path = os.path.join(os.path.dirname(__file__), "..", "llms", "llms.json")
         providers_path = os.path.join(os.path.dirname(__file__), "..", "llms", "providers.json")
 
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_config_path = os.path.join(self.temp_dir.name, "llms.json")
-        self.temp_providers_path = os.path.join(self.temp_dir.name, "providers.json")
-
         with open(config_path) as f:
             config = json.load(f)
         with open(providers_path) as f:
@@ -63,21 +60,22 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
                     else:
                         providers[k] = v
 
-        with open(self.temp_config_path, "w") as f:
-            json.dump(config, f)
-        with open(self.temp_providers_path, "w") as f:
-            json.dump(providers, f)
+        registered = []
+        ctx = SimpleNamespace(
+            add_provider=registered.append, log=lambda *_: None, dbg=lambda *_: None,
+            debug=False, MOCK=False, log_json=lambda value: value, get_client_timeout=lambda **_: None,
+            should_cancel_thread=lambda context: context.get("cancelled", False),
+        )
+        install_google(ctx)
+        self.provider = registered[0](id="google", api_key="test-api-key", models=providers["google"]["models"],
+                                      **config["providers"]["google"])
+        self.threads = SimpleNamespace(checkpoint_stream_async=AsyncMock())
+        self.provider.stream_writer = lambda context=None: StreamCheckpointWriter(
+            self.threads, (context or {}).get("threadId"), user=(context or {}).get("user")
+        )
 
-        cli(f"ls google --config {self.temp_config_path} --providers {self.temp_providers_path}")
-        self.app = get_app()
-        self.provider = self.app.get_providers().get("google") or g_handlers.get("google")
-
-    def tearDown(self):
-        self.app.shutdown()
-        self.temp_dir.cleanup()
-
-    async def test_file_search_omits_function_declarations(self):
-        """Gemini rejects built-in File Search combined with client-side functions."""
+    async def test_legacy_file_search_omits_function_declarations(self):
+        """Older Gemini models retain retrieval-only File Search requests."""
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.content = DummyStreamReader([
@@ -143,10 +141,6 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         mock_session.__aenter__.return_value = mock_session
         mock_session.__aexit__.return_value = None
 
-        mock_update_thread_async = AsyncMock()
-        mock_threads = MagicMock()
-        mock_threads.update_thread_async = mock_update_thread_async
-
         chat_data = {
             "model": "gemini-2.0-flash",
             "messages": [{"role": "user", "content": "Hi"}],
@@ -154,15 +148,8 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         }
         context = {"threadId": "thread_google_123", "user": "test_user"}
 
-        from llms.extensions.providers import google
-        module_ctx = getattr(google, "ctx", None)
-
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            if module_ctx:
-                with patch.object(module_ctx, "threads", mock_threads, create=True):
-                    res = await self.provider.chat(chat_data, context=context)
-            else:
-                res = await self.provider.chat(chat_data, context=context)
+            res = await self.provider.chat(chat_data, context=context)
 
         # Verify streamGenerateContent URL was called
         mock_session.post.assert_called_once()
@@ -178,15 +165,11 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res["usage"]["completion_tokens"], 5)
         self.assertEqual(res["usage"]["total_tokens"], 15)
 
-        # Verify update_thread_async was called
-        if module_ctx and hasattr(module_ctx, "threads"):
-            self.assertTrue(mock_update_thread_async.called)
-            last_call_args = mock_update_thread_async.call_args_list[-1]
-            self.assertEqual(last_call_args[0][0], "thread_google_123")
-            updated_messages = last_call_args[0][1]["messages"]
-            self.assertEqual(len(updated_messages), 2)
-            self.assertEqual(updated_messages[1]["role"], "assistant")
-            self.assertEqual(updated_messages[1]["content"], "Hello world!")
+        # Streaming checkpoints keep the in-flight assistant separate from history.
+        last_call = self.threads.checkpoint_stream_async.call_args
+        self.assertEqual(last_call.args[0], "thread_google_123")
+        self.assertEqual(last_call.args[1]["role"], "assistant")
+        self.assertEqual(last_call.args[1]["content"], "Hello world!")
 
     async def test_google_default_streaming(self):
         """Test streaming mode is used by default when 'stream' is not explicitly specified in chat."""
@@ -285,7 +268,6 @@ class TestGoogleStreaming(unittest.IsolatedAsyncioTestCase):
         mock_session.__aenter__.return_value = mock_session
         mock_session.__aexit__.return_value = None
 
-        from llms.extensions.providers import google
         with patch("aiohttp.ClientSession", return_value=mock_session):
             with patch.object(self.provider, "response_json", AsyncMock(return_value=response_json_payload)):
                 res = await self.provider.chat(chat_data)

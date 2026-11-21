@@ -1,6 +1,7 @@
 from typing import Dict
 import _collections_abc
 import asyncio
+import copy
 import hashlib
 import io
 import json
@@ -18,6 +19,7 @@ from llms.db import count_tokens_approx
 from llms.main import AgentSliceYield, ToolApprovalPending, remove_avatar_files
 
 from .db import AppDB
+from .messages import client_message, client_thread, reconcile_client_messages
 
 g_db = None
 active_update_tasks: Dict[str, asyncio.Task] = {}
@@ -414,21 +416,22 @@ def install(ctx):
             return None
         rows = g_db.get_chat_message_window(row["id"], head=head, tail=tail)
         bounds = g_db.get_chat_message_bounds(row["id"])
-        first_sequence = bounds.get("firstSequence") or 1
-        head_rows = [x for x in rows if x.get("_sequence", 0) < first_sequence + head]
-        tail_rows = [x for x in rows if x not in head_rows]
-        messages = limit_message_payload(head_rows, 128 * 1024) + limit_message_payload(
-            tail_rows, 384 * 1024, from_end=True
+        rows = [client_message(message) for message in rows]
+        # Budget both ends independently even when the count-based head/tail overlap.
+        # Always retain the newest complete group, including a single oversized group.
+        selected = limit_message_payload(rows, 128 * 1024) + limit_message_payload(
+            rows, 384 * 1024, from_end=True
         )
+        messages = sorted({m["_sequence"]: m for m in selected}.values(), key=lambda m: m["_sequence"])
         projected = dict(row)
         projected["messages"] = json.dumps(messages)
         dto = thread_dto(projected)
         dto["messageCount"] = bounds.get("messageCount") or 0
         dto["messageWindow"] = {**bounds, "ranges": message_ranges(messages)}
-        return dto
+        return client_thread(dto)
 
     def message_page_dto(thread_id, rows, max_bytes=512 * 1024, from_end=False):
-        messages = limit_message_payload(rows, max_bytes, from_end=from_end)
+        messages = limit_message_payload([client_message(m) for m in rows], max_bytes, from_end=from_end)
         return {
             "messages": messages,
             **g_db.get_chat_message_bounds(thread_id),
@@ -477,7 +480,7 @@ def install(ctx):
                 # Sidebar/recents only need a preview; retain the legacy property
                 # shape without returning the complete history for every thread.
                 dto["messages"] = latest
-            dtos.append(dto)
+            dtos.append(client_thread(dto))
         return web.json_response(dtos)
 
     ctx.add_get("threads", query_threads)
@@ -606,8 +609,12 @@ def install(ctx):
         row = g_db.get_thread(id, user=ctx.get_username(request))
         if not row and ctx.is_admin(request):
             row = g_db.get_thread(id, user="all")
-        dto = (thread_dto(row) if request.query.get("allMessages") == "true"
-               else thread_window_dto(row)) if row else None
+        if row and request.query.get("allMessages") == "true":
+            full = dict(row)
+            full["messages"] = json.dumps(canonical_messages(id))
+            dto = client_thread(thread_dto(full))
+        else:
+            dto = thread_window_dto(row) if row else None
         if dto and dto.get("run") and dto["run"].get("status") in ("queued", "running"):
             scheduler.wake()
         return web.json_response(dto or "")
@@ -638,6 +645,11 @@ def install(ctx):
 
     ctx.add_get("threads/{id}/messages", get_thread_messages)
 
+    def canonical_messages(thread_id):
+        g_db.ensure_legacy_chat_messages(thread_id)
+        return [{**row["message"], "_sequence": row["sequence"]}
+                for row in g_db.get_chat_messages(thread_id)]
+
     async def update_thread(request):
         thread = await request.json()
         id = request.match_info["id"]
@@ -663,6 +675,11 @@ def install(ctx):
                 raise web.HTTPBadRequest(text=str(ex)) from ex
         for key in protected_thread_fields:
             thread.pop(key, None)
+        if isinstance(thread.get("messages"), list):
+            thread["messages"] = reconcile_client_messages(
+                canonical_messages(id), timestamp_messages(thread["messages"]),
+                rewrite=bool(thread.get("truncate")),
+            )
         update_count = await g_db.update_thread_async(id, thread, user=user) if thread else 1
         notify_thread_update(id)
         if update_count == 0:
@@ -694,9 +711,26 @@ def install(ctx):
             return {k: truncate_compaction_value(v, max_chars) for k, v in value.items()}
         return value
 
-    def bound_compaction_messages(messages, per_message_tokens):
+    def bound_compaction_messages(messages, per_message_tokens, preserve_replay=True):
         max_chars = max(4000, int(per_message_tokens) * 3)
-        return [truncate_compaction_value(message, max_chars) for message in messages]
+        bounded = []
+        for message in messages:
+            # Signed provider state is indivisible. Truncating even one opaque signature
+            # makes the retained turn impossible to replay. Summarizers need only the
+            # provider-neutral view; canonical messages always retain the original state.
+            if preserve_replay and message.get("provider_metadata"):
+                bounded.append(copy.deepcopy(message))
+            else:
+                projected = {k: v for k, v in message.items() if k != "provider_metadata"}
+                bounded.append(truncate_compaction_value(projected, max_chars))
+        return bounded
+
+    def tool_safe_cutoff(history, cutoff):
+        while 0 < cutoff < len(history) and history[cutoff].get("role") == "tool":
+            cutoff -= 1
+        if cutoff > 0 and history[cutoff - 1].get("tool_calls"):
+            cutoff -= 1
+        return cutoff
 
     def split_compaction_history(messages, recent_count):
         """Keep authoritative instructions and a tool-safe recent tail out of summaries."""
@@ -706,18 +740,13 @@ def install(ctx):
             protected.append(messages[index])
             index += 1
         history = messages[index:]
-        cutoff = max(0, len(history) - recent_count)
-        # Never retain a tool result without the assistant tool call which produced it.
-        while cutoff > 0 and history[cutoff].get("role") == "tool":
-            cutoff -= 1
-        if cutoff > 0 and history[cutoff - 1].get("tool_calls"):
-            cutoff -= 1
+        cutoff = tool_safe_cutoff(history, max(0, len(history) - recent_count))
         return protected, history[:cutoff], history[cutoff:]
 
     def partition_compaction_messages(messages, token_limit):
         groups = []
         index = 0
-        bounded = bound_compaction_messages(messages, token_limit)
+        bounded = bound_compaction_messages(messages, token_limit, preserve_replay=False)
         while index < len(bounded):
             group = [bounded[index]]
             if bounded[index].get("tool_calls"):
@@ -854,13 +883,19 @@ def install(ctx):
             return bound_compaction_messages(messages, per_message)
 
         if snapshot:
-            tail_cutoff = max(0, len(tail_rows) - recent_count)
+            tail_cutoff = tool_safe_cutoff(
+                [x["message"] for x in tail_rows], max(0, len(tail_rows) - recent_count)
+            )
             compact_source = (snapshot.get("summary") or []) + [x["message"] for x in tail_rows[:tail_cutoff]]
             recent = [x["message"] for x in tail_rows[tail_cutoff:]]
             snapshot_from = snapshot["fromSequence"]
             snapshot_to = tail_rows[tail_cutoff - 1]["sequence"] if tail_cutoff else snapshot["toSequence"]
         else:
-            cutoff = max(1, len(rows) - recent_count)
+            cutoff = tool_safe_cutoff([x["message"] for x in rows], max(0, len(rows) - recent_count))
+            if not cutoff:
+                # There is no complete older group to summarize. Do not publish a
+                # snapshot that claims to cover any of the retained signed exchange.
+                return bound_compaction_messages(working_messages, max(1000, threshold // max(1, len(working_messages))))
             compact_source = [x["message"] for x in rows[:cutoff]]
             recent = [x["message"] for x in rows[cutoff:]]
             snapshot_from = rows[0]["sequence"]
@@ -1099,6 +1134,9 @@ def install(ctx):
         if active_run:
             raise web.HTTPConflict(text="An agent run is already active for this thread")
 
+        messages = reconcile_client_messages(
+            canonical_messages(id), messages, rewrite=bool(chat.get("truncate")), keep_prefix=True,
+        )
         workspace = resolve_workspace(thread.get("projectId"), user)
         tools = chat.get("tools", thread.get("tools", []))
         update_thread = {

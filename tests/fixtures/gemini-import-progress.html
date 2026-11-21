@@ -135,6 +135,15 @@ try {
     const resume=document.querySelector('#report button')
     assert(!resume.disabled && resume.textContent.trim().replace(/\s+/g,' ') === 'Resume 66 documents', 'an unchanged local preview must allow resuming queued uploads')
     assert(document.querySelector('#report').textContent.includes('Awaiting Gemini upload'), 'preview must distinguish the pending Gemini uploads')
+    vm.view='import'
+    vm.savedCrawlResult={pages:2,stopReason:'maxPages',remaining:5,maxPages:2,failed:1,
+        errors:[{url:'https://example.test/bad',message:'HTTP 302'}]}
+    const beforeRefresh=vm.sourceListVersion
+    await vm.onImported()
+    await flush()
+    assert(vm.sourceListVersion > beforeRefresh, 'import completion must refresh saved source list')
+    assert(document.querySelector('#app').textContent.includes('Crawled 2 pages. 1 URL failed.'), 'saved crawl summary must survive source list remount')
+    assert(document.querySelector('#app').textContent.includes('Max pages limit (2) with 5 queued URLs'), 'saved crawl limit must remain visible')
     assert(!error,String(error))
     reportApp.unmount()
     app.unmount()

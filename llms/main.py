@@ -97,7 +97,7 @@ except ImportError:
     HAS_PIL = False
 
 _ROOT = None
-VERSION = "4.0.23"
+VERSION = "4.0.27"
 DEBUG = os.getenv("DEBUG") == "1"
 MOCK = os.getenv("MOCK") == "1"
 MOCK_DIR = os.getenv("MOCK_DIR")
@@ -273,6 +273,8 @@ def apply_args_to_chat(chat, args_params):
                 value = int(value)
             elif key == "temperature" or key == "top_p" or key == "frequency_penalty" or key == "presence_penalty":
                 value = float(value)
+            elif key == "tool_combination":
+                value = value.lower() in ("true", "1", "yes")
             elif (
                 key == "store"
                 or key == "logprobs"
@@ -1495,6 +1497,8 @@ class StreamCheckpointWriter:
         for tool_call in message.get("tool_calls") or []:
             fn = tool_call.get("function") or {}
             total += len(fn.get("name") or "") + len(fn.get("arguments") or "")
+        if message.get("provider_metadata"):
+            total += len(json.dumps(message["provider_metadata"]))
         return total
 
     async def write(self, assistant_message, final=False):
@@ -1703,6 +1707,8 @@ class OpenAiCompatible:
 
     async def process_chat(self, chat, provider_id=None):
         ret = await process_chat(chat, provider_id)
+        if not getattr(self, "preserve_provider_metadata", False):
+            ret.pop("tool_combination", None)
         messages = ret.get("messages", [])
         if messages:
             cleaned_messages = []
@@ -1713,6 +1719,8 @@ class OpenAiCompatible:
                 msg.pop("usage", None)
                 msg.pop("_sequence", None)
                 msg.pop("streaming", None)
+                if not getattr(self, "preserve_provider_metadata", False):
+                    msg.pop("provider_metadata", None)
                 cleaned_messages.append(msg)
             ret["messages"] = cleaned_messages
         if provider_id == "nvidia" or self.id == "nvidia":
@@ -2134,20 +2142,19 @@ def get_models():
 
 def get_active_models():
     ret = []
-    existing_models = set()
     for provider_id, provider in g_handlers.items():
         for model in provider.models.values():
             name = model.get("name")
             if not name:
                 _log(f"Provider {provider_id} model {model} has no name")
                 continue
-            if name not in existing_models:
-                existing_models.add(name)
-                item = model.copy()
-                if "id" not in item:
-                    item["id"] = item.get("name", "")
-                item.update({"provider": provider_id})
-                ret.append(item)
+            # The picker identifies models by provider and id. Shared display
+            # names must not hide a model offered by another provider.
+            item = model.copy()
+            if "id" not in item:
+                item["id"] = item.get("name", "")
+            item.update({"provider": provider_id})
+            ret.append(item)
     ret.sort(key=lambda x: x.get("id", x.get("name", "")))
     return ret
 
@@ -3856,6 +3863,7 @@ class AppExtensions:
         self.error_auth_required = create_error_response("Authentication required", "Unauthorized")
         self.ui_extensions = []
         self.chat_request_filters = []
+        self.provider_replay_filters = []
         self.extensions = []
         self.loaded = False
         self.chat_tool_filters = []
@@ -3902,6 +3910,7 @@ class AppExtensions:
             "safety_identifier": str,
             "store": bool,
             "enable_thinking": bool,
+            "tool_combination": bool,
         }
         self.all_providers = [
             OpenAiCompatible,
@@ -4441,6 +4450,15 @@ class ExtensionContext:
     def register_chat_request_filter(self, handler: Callable):
         self.log(f"Registered chat request filter: {handler_name(handler)}")
         self.app.chat_request_filters.append(handler)
+
+    def register_provider_replay_filter(self, handler: Callable):
+        """Register a synchronous filter of detached native replay content (currently Gemini)."""
+        self.log(f"Registered provider replay filter: {handler_name(handler)}")
+        self.app.provider_replay_filters.append(handler)
+
+    def filter_provider_replay(self, replay):
+        for handler in self.app.provider_replay_filters:
+            handler(replay)
 
     def register_chat_tool_filter(self, handler: Callable):
         self.log(f"Registered chat tool filter: {handler_name(handler)}")

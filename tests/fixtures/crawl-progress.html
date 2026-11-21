@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/llms/ui/app.css">
+<script type="importmap">{"imports":{"vue":"/llms/ui/lib/vue.mjs"}}</script></head>
+<body><div id="app"></div><pre id="result">RUNNING</pre><script type="module">
+import {createApp,ref,nextTick} from 'vue'
+import {CrawlStatus,pollCrawlProgress} from '/llms/extensions/gemini/ui/crawl-status.mjs'
+const assert=(value,message)=>{if(!value) throw Error(message)}
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))
+try {
+ const progress=ref(null)
+ let polls=0,release=null
+ const app=createApp({components:{CrawlStatus},setup:()=>({progress}),template:'<CrawlStatus :loading="true" :progress="progress" />'})
+ app.config.globalProperties.$styles={muted:'text-gray-500'}
+ app.mount('#app')
+ const pending=pollCrawlProgress({getJson:async()=>{polls++;return await new Promise(resolve=>release=resolve)}},value=>progress.value=value)
+ assert(progress.value.pages===0,'each run must start at zero')
+ await wait(2100)
+ assert(polls===1,'slow polling requests must never overlap')
+ pending.stop()
+ release({response:{running:true,pages:99}})
+ await wait(2100)
+ assert(polls===1&&progress.value.pages===0,'stopping must cancel timers and ignore late responses')
+ const next=pollCrawlProgress({getJson:async()=>({response:{running:true,pages:2,failed:1}})},value=>progress.value=value)
+ await nextTick();await nextTick()
+ assert(document.querySelector('#app').textContent.includes('2 pages crawled'),'live saved-file count must render')
+ assert(document.querySelector('#app').textContent.includes('1 URL failed'),'live failure count must render')
+ assert(document.querySelector('svg.animate-spin'),'spinner remains visible during polling')
+ next.stop();app.unmount()
+ document.querySelector('#result').textContent='PASS: live crawl counts, fresh runs, non-overlapping polling, timer cleanup and late-response guards'
+} catch(e){document.querySelector('#result').textContent='FAIL: '+(e.stack||e)}
+</script></body></html>

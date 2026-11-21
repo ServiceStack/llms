@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 from aiohttp import web
+from . import reconcile
 from . import ingest
 from . import crawl
 from . import import_manifest
@@ -591,7 +592,7 @@ def install(ctx):
 
     async def _run_source_pipeline(source_row, user, dry_run=True, override=None, confirm_deletes=False,
                                   selected_adds=None, add_all=True, request=None, refresh_crawl=False,
-                                  start_uploads=True):
+                                  start_uploads=True, progress_id=None):
         """
         discover -> fetch -> extract -> derive -> diff, then (unless dry run) apply.
 
@@ -613,6 +614,7 @@ def install(ctx):
                 source_row = import_manifest.load(manifest_path, source_row)
         assert_source_allowed(source_row, request)
         filestore_id = int(source_row.get("filestoreId"))
+        crawl_result = None
         if refresh_crawl and source_row.get("type") == "folder":
             path = (source_row.get("config") or {}).get("path")
             cfg = crawl.read_json(manifest_path or os.path.join(path, crawl.MANIFEST))
@@ -620,7 +622,7 @@ def install(ctx):
                 root = os.path.dirname(manifest_path) if manifest_path else path
                 assert_source_allowed({"config": {"path": root}}, request)
                 options = {**cfg["crawl"], "name": cfg["crawl"].get("name") or os.path.basename(root)}
-                await crawl.crawl_site(ctx, user, options, target_path=root)
+                crawl_result = await crawl.crawl_site(ctx, user, options, target_path=root, **({"progress_id": progress_id} if progress_id else {}))
                 crawl.apply_transforms(root, cfg.get("transforms") or [])
         source = ingest.create_source(ctx, source_row.get("type"), source_row.get("config") or {})
         existing = g_db.documents_by_source_key(filestore_id, source_row.get("id"), user=user)
@@ -662,6 +664,8 @@ def install(ctx):
             plan.add = retained
 
         summary = plan.summary()
+        if crawl_result is not None:
+            summary["crawl"] = {key: value for key, value in crawl_result.items() if key not in ("config", "path", "name")}
         # Unchanged means the source matches the local cache, not that Gemini has received it.
         # Preserve the existing queue entries and report them so Run can resume their uploads.
         summary["pendingUploads"] = sum(
@@ -1411,158 +1415,20 @@ def install(ctx):
                 g_db.update_source(source_row.get("id"), {"error": error}, user=user)
                 source_errors.append(f"{source_row.get('name')}: {error}")
 
-        # Build hash lookup for all local documents
-        local_doc_hashes = {}
-        local_doc_names = {}
-        local_doc_ids = {}
-        local_docs = []
-        for doc in g_db.query_documents_all({"filestoreId": int(id)}, user=user):
-            if doc.get("tombstonedAt"):
-                continue
-            local_docs.append(doc)
-            local_doc_hashes[doc.get("hash")] = doc
-            local_doc_names[doc.get("name")] = doc
-            local_doc_ids[doc["id"]] = doc
-
-        ctx.log(f"Found {len(local_docs)} local documents in database")
-        ctx.log(f"Local hashes available: {len(local_doc_hashes)}")
-
-        local_missing = []
-        remote_missing = []
-        pending_uploads = []
-        missing_metadata = []
-        metadata_mismatch = []
-        unmatched = []
-        remote_copy_counts = {}
-
-        def extract_custom_metadata(doc):
-            remote_id = None
-            remote_hash = None
-            if doc.custom_metadata:
-                for item in doc.custom_metadata:
-                    if item.key == "id" and item.numeric_value:
-                        remote_id = int(item.numeric_value)
-                    elif item.key == "hash" and item.string_value:
-                        remote_hash = item.string_value
-            return remote_id, remote_hash
-
-        pager = g_client.file_search_stores.documents.list(parent=filestore.get("name"))
-
-        # Separate source documents may have identical content but different metadata.
-        seen_local_ids = set()
-
-        # Track stats for debugging
-        matched_by_hash = 0
-        remote_docs = 0
-
-        # Extract documents from the result
-        for doc in pager:
-            remote_docs += 1
-            remote_id, remote_hash = extract_custom_metadata(doc)
-
-            # Match by hash or name
-            identity_doc = local_doc_ids.get(remote_id)
-            local_doc = (local_doc_names.get(doc.name)
-                         or (identity_doc if identity_doc and identity_doc.get("hash") == remote_hash else None)
-                         or local_doc_hashes.get(remote_hash))
-            info = f"name={doc.name}, display={doc.display_name}, size={doc.size_bytes}, hash={remote_hash}"
-            doc_context = {"doc": doc, "local": local_doc}
-
-            if not local_doc:
-                local_missing.append(doc)
-                ctx.dbg(f"Remote doc not found locally: {info}")
-                continue
-
-            if not local_doc.get("uploadedAt") and not local_doc.get("error"):
-                # This is the old remote copy of a queued replacement. Do not adopt it and
-                # erase the queue state or the source's new title/metadata.
-                continue
-
-            seen_local_ids.add(local_doc["id"])
-            if not remote_hash or not remote_id:
-                missing_metadata.append(doc_context)
-                ctx.dbg(f"Remote doc missing metadata: {info}")
-                continue
-
-            matched_by_hash += 1
-
-            # Update local doc with remote name if missing
-            new_dto = {
-                "name": doc.name,
-                "displayName": doc.display_name,
-                "sizeBytes": doc.size_bytes,
-                "mimeType": doc.mime_type,
-                "createTime": doc.create_time.isoformat(" ") if doc.create_time else None,
-                "updateTime": doc.update_time.isoformat(" ") if doc.update_time else None,
-                "state": doc.state,
-                "customMetadata": json.dumps(g_db.custom_metadata_dto(doc.custom_metadata)),
-            }
-            if doc.state == "STATE_ACTIVE" and not local_doc.get("uploadedAt"):
-                new_dto["uploadedAt"] = datetime.now()
-                new_dto["startedAt"] = None
-            unmatched_fields = []
-            for key, value in new_dto.items():
-                local_value = local_doc.get(key)
-                if local_value != value:
-                    unmatched_fields.append(key)
-
-            if len(unmatched_fields) > 0:
-                ctx.dbg(
-                    f"Updating local doc {local_doc.get('category')}/{local_doc.get('displayName')} unmatched fields: {unmatched_fields}"
-                )
-                unmatched.append(doc_context)
-                await g_db.update_document_async(local_doc.get("id"), new_dto, user=user)
-
-            # Verify that remote_id matches the local document id
-            if (local_doc.get("id") != remote_id or local_doc.get("hash") != remote_hash
-                    or g_db_module.metadata_differs({**local_doc, "customMetadata": new_dto["customMetadata"]})):
-                # Metadata id doesn't match the document with this hash
-                ctx.dbg(
-                    f"Metadata mismatch: id={local_doc.get('id')}|{remote_id}, hash={local_doc.get('hash')}|{remote_hash}"
-                )
-                metadata_mismatch.append(doc_context)
-
-            # Track hash occurrences to detect duplicates
-            remote_copy_counts[local_doc["id"]] = remote_copy_counts.get(local_doc["id"], 0) + 1
-
-        # Find local documents that don't exist in remote
-        for local_doc in local_docs:
-            local_hash = local_doc.get("hash")
-            if local_hash and local_doc["id"] not in seen_local_ids:
-                # A document which has never completed an upload is queued work, not remote
-                # drift. Keep its queue state intact and make sure the worker is awake below.
-                if (not local_doc.get("uploadedAt") and not local_doc.get("error")
-                        and not local_doc.get("tombstonedAt")):
-                    pending_uploads.append(local_doc)
-                else:
-                    remote_missing.append(local_doc)
-
-        total_remote = matched_by_hash + len(local_missing)
-
-        duplicate_docs = [local_doc_ids[id] for id, count in remote_copy_counts.items() if count > 1]
-
-        for d in remote_missing:
-            g_db.update_document(d.get("id"), {"state": "MISSING_FROM_REMOTE"}, user=user)
-        for d in missing_metadata:
-            local_doc = d.get("local")
-            g_db.update_document(local_doc.get("id"), {"state": "MISSING_METADATA"}, user=user)
-        for d in metadata_mismatch:
-            local_doc = d.get("local")
-            g_db.update_document(local_doc.get("id"), {"state": "METADATA_MISMATCH"}, user=user)
-        for d in duplicate_docs:
-            g_db.update_document(d.get("id"), {"state": "DUPLICATE_FILE"}, user=user)
-
-        # Missing remote copies and broken identity metadata can be repaired using the cache.
-        repairs = [*remote_missing, *[d["local"] for d in missing_metadata + metadata_mismatch]]
-        for local_doc in repairs:
-            url = local_doc.get("url") or ""
-            if url.startswith("/~cache/") and os.path.isfile(ctx.get_cache_path(url[len("/~cache/"):])):
-                patch = {"uploadedAt": None, "startedAt": None, "error": None}
-                if local_doc in remote_missing:
-                    patch["name"] = None
-                await g_db.update_document_async(local_doc["id"], patch, user=user)
-                if local_doc not in pending_uploads:
-                    pending_uploads.append(local_doc)
+        local_docs = [doc for doc in g_db.query_documents_all({"filestoreId": int(id)}, user=user)
+                      if not doc.get("tombstonedAt")]
+        remote_documents = await asyncio.to_thread(g_client.file_search_stores.documents.list,
+                                                   parent=filestore.get("name"))
+        repairs = await reconcile.repair_documents(ctx, g_db, g_client, local_docs, remote_documents, user)
+        local_missing = repairs["local_missing"]
+        remote_missing = repairs["remote_missing"]
+        pending_uploads = repairs["pending_uploads"]
+        missing_metadata = repairs["missing_metadata"]
+        metadata_mismatch = repairs["metadata_mismatch"]
+        unmatched = repairs["unmatched"]
+        duplicate_docs = repairs["duplicate_docs"]
+        matched_by_hash = repairs["matched"]
+        remote_docs = total_remote = len(remote_documents)
 
         try:
             store_info = g_client.file_search_stores.get(name=filestore.get("name"))
@@ -1637,6 +1503,7 @@ def install(ctx):
                     "docs": source_changes[:5],
                 },
                 "Source Errors": {"count": len(source_errors), "docs": source_errors},
+                "Repair Errors": {"count": len(repairs["errors"]), "docs": repairs["errors"]},
                 "Saved Imports": {"count": sources_synced, "docs": []},
                 "Pending Uploads": {
                     "count": len(pending_uploads),
@@ -1652,6 +1519,7 @@ def install(ctx):
                     "Local Documents": len(local_docs),
                     "Remote Documents": remote_docs,
                     "Matched Documents": matched_by_hash,
+                    "Removed Remote Copies": repairs["removed"],
                 },
                 "Local Search": {
                     "Indexed Documents": int(search_status.get("indexed") or 0),
@@ -2124,6 +1992,15 @@ def install(ctx):
     # Register static paths before /imports/{name} so aiohttp cannot treat "schema" as a name.
     ctx.add_get("imports/schema", crawl_import_schema)
 
+    async def get_crawl_progress(request):
+        denied = auth_error(request)
+        if denied:
+            return denied
+        return web.json_response(crawl.crawl_progress(ctx, ctx.get_username(request), request.query.get("progressId")))
+
+    # No source-operation lock: this request must run while the crawl is saving files.
+    ctx.add_get("imports/crawl/progress", get_crawl_progress)
+
     async def browse_import_manifests(request):
         denied = auth_error(request)
         if denied:
@@ -2239,6 +2116,7 @@ def install(ctx):
         body = await request.json()
         filestore_id = body.pop("filestoreId", None)
         source_id = body.pop("sourceId", None)
+        progress_id = body.pop("progressId", None)
         settings = body.pop("sourceSettings", None)
         if settings is not None and not isinstance(settings, dict):
             raise ValueError("sourceSettings must be an object")
@@ -2249,9 +2127,9 @@ def install(ctx):
         if source:
             filestore_id = source["filestoreId"]
             body = {**source["importOptions"]["crawl"], **body}
-            result = await crawl.crawl_site(ctx, user, body, target_path=root)
+            result = await crawl.crawl_site(ctx, user, body, target_path=root, **({"progress_id": progress_id} if progress_id else {}))
         else:
-            result = await crawl.crawl_site(ctx, user, body)
+            result = await crawl.crawl_site(ctx, user, body, **({"progress_id": progress_id} if progress_id else {}))
         if settings is not None:
             updated_source = import_manifest.load(os.path.join(result["path"], crawl.MANIFEST))
             updated_source.update({key: value for key, value in settings.items() if key in (*import_manifest.SOURCE_FIELDS, "rules")})
@@ -2460,7 +2338,8 @@ def install(ctx):
         ):
             raise Exception(f"A saved import named '{source_row.get('name')}' already exists")
         result = await run_source_pipeline(source_row, user, dry_run=dry_run, override=body.get("set"),
-                                           confirm_deletes=bool(body.get("confirmDeletes")), request=request)
+                                           confirm_deletes=bool(body.get("confirmDeletes")), request=request,
+                                           refresh_crawl=bool(body.get("refreshCrawl")), progress_id=body.get("progressId"))
         if not dry_run and body.get("saveConfig"):
             source_row = source_dto(g_db.get_source(id, user=user))
             current_source = source_row

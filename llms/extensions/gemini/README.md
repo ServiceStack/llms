@@ -17,6 +17,15 @@ It talks directly to Gemini's documented HTTP API and adds no Python dependencie
 - **Asynchronous Processing**: Automatically processes pending uploads in the background
 - **Auto-start on Upload**: Worker automatically starts when new documents are uploaded
 - **Startup Processing**: Processes any pending uploads from previous sessions on extension startup
+- **Operation Recovery**: Commits accepted operation IDs to SQLite before polling; retries and restarts
+  check the same operation for unchanged content, metadata and store rather than uploading duplicates.
+  Receipts remain internal and are excluded from API DTOs. Successful completion and terminal indexing
+  errors clear them; explicit retry after a terminal error starts a new upload.
+- **Polling Resilience**: Retries transient HTTP/connection errors with backoff (up to
+  `GEMINI_UPLOAD_MAX_RETRIES` consecutive attempts, default 4). Errors identify the operation and HTTP
+  status. Python continues waiting while Gemini reports a valid pending operation; cancellation
+  interrupts polling/backoff and preserves the receipt. Unlike C#, there is no overall indexing deadline.
+  Older failed uploads have no receipt: reconcile the store before retrying to avoid remote duplicates.
 - **Batch Processing**: Efficiently handles multiple documents in batches of 10
 - **Automatic Metadata Updates**: Keeps filestore statistics up-to-date after uploads complete
 

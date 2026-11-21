@@ -1,3 +1,4 @@
+import { CrawlStatus } from './crawl-status.mjs'
 import { ref, computed, inject, onBeforeUnmount, onMounted, onUnmounted, toRef, watch } from 'vue'
 import { appendQueryString, lastLeftPart, leftPart, rightPart } from '@servicestack/client'
 import {
@@ -24,7 +25,7 @@ const FileStoreDetails = lazyComponent(async () => {
     assistants.initAssistants(ext, ctx, { GeminiModelSelector })
     searches.initSearches(ext, ctx)
     Object.assign(FileStoreDetailsView.components, {
-        SourcesPanel: sources.SourcesPanel, RunReport: sources.RunReport, TrustedFolders: sources.TrustedFolders,
+        CrawlStatus, SourcesPanel: sources.SourcesPanel, RunReport: sources.RunReport, TrustedFolders: sources.TrustedFolders,
         ImportPanel: imports.ImportPanel, AssistantsPanel: assistants.AssistantsPanel, SearchesPanel: searches.SearchesPanel,
     })
     return FileStoreDetailsView
@@ -184,7 +185,7 @@ const SyncReport = {
     emits: ['sync', 'prune', 'add-source-documents'],
     template: `
         <div data-tag="SyncReport" class="mb-8">
-            <div class="flex justify-between items-start mb-4">
+            <div class="flex justify-between items-start gap-4 mb-4">
                 <div>
                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Sync Store</h3>
                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Refresh all enabled saved imports using their import.json settings, queue new and changed files, and reconcile with Gemini.</p>
@@ -193,7 +194,7 @@ const SyncReport = {
                     @click="$emit('sync')"
                     :disabled="syncing"
                     :class="[$styles.primaryButton]"
-                    class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium" 
+                    class="inline-flex shrink-0 items-center whitespace-nowrap px-4 py-2 border border-transparent shadow-sm text-sm font-medium"
                 >
                     <span v-if="syncing">Syncing...</span>
                     <span v-else>Sync Store</span>
@@ -242,6 +243,7 @@ const SyncReport = {
                     <IssueCard name="Duplicate Documents" :issue="syncResult['Duplicate Documents']" />
                     <IssueCard name="Source Changes" :issue="syncResult['Source Changes']" />
                     <IssueCard name="Source Errors" :issue="syncResult['Source Errors']" />
+                    <IssueCard name="Repair Errors" :issue="syncResult['Repair Errors']" />
                     <IssueCard name="Pending Uploads" :issue="syncResult['Pending Uploads']" />
                     <IssueCard name="New Source Documents" :issue="syncResult['New Source Documents']" />
                 </div>
@@ -324,6 +326,7 @@ const SyncReport = {
                 (props.syncResult['Duplicate Documents']?.count || 0) > 0 ||
                 (props.syncResult['Source Changes']?.count || 0) > 0 ||
                 (props.syncResult['Source Errors']?.count || 0) > 0 ||
+                (props.syncResult['Repair Errors']?.count || 0) > 0 ||
                 (props.syncResult['Pending Uploads']?.count || 0) > 0 ||
                 (props.syncResult['New Source Documents']?.count || 0) > 0
             )
@@ -368,12 +371,12 @@ export const GeminiModelSelector = {
     },
     emits: ['update:modelValue'],
     template: `<div data-tag="GeminiModelSelector" class="flex items-center gap-2">
-        <ModelPicker provider="google" provider-label="Gemini" :output-modalities="['text']" initial-search="Gemini" trigger-label="Choose Gemini model"
-            :models="models" :model-value="overrideModelName" :placeholder="overrideModelName ? undefined : resolvedDefaultText"
-            :help-text="helpText || 'Select a model for Gemini File Stores requests.'" @select="selectModelOverride" />
         <button v-if="overrideModelName" type="button" @click="clearModelOverride"
             class="px-2.5 py-2 text-xs font-medium text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 border border-gray-300 dark:border-gray-600 rounded-md cursor-pointer shrink-0"
             title="Clear model override">Clear Override</button>
+        <ModelPicker provider="google" provider-label="Gemini" :output-modalities="['text']" initial-search="Gemini" trigger-label="Choose Gemini model"
+            :models="models" :model-value="overrideModelName" :placeholder="overrideModelName ? undefined : resolvedDefaultText"
+            :help-text="helpText || 'Select a model for Gemini File Stores requests.'" @select="selectModelOverride" />
     </div>`,
     setup(props, { emit }) {
         const controlled = computed(() => props.modelValue !== undefined)
@@ -1072,8 +1075,10 @@ const FileStoreDetailsView = {
                     <RunReport :run="importPreview.run" @confirm="confirmImport" @dismiss="dismissImport" />
                 </div>
                 <div class="mb-8">
+                    <CrawlStatus v-if="savedCrawlResult" :result="savedCrawlResult" class="mb-4" />
                     <SourcesPanel :key="sourceListVersion" :storeId="storeId" @imported="onImported" @saved="onImported"
-                        @edit="importPanel?.editSource($event)" @removed="onSourceRemoved" />
+                        @edit="importPanel?.editSource($event)" @removed="onSourceRemoved"
+                        @crawling="savedCrawlResult = null" @crawled="savedCrawlResult = $event" />
                     <TrustedFolders />
                 </div>
             </div>
@@ -1741,6 +1746,7 @@ const FileStoreDetailsView = {
         const assistantCount = ref(0)
         const searchCount = ref(0)
         const sourceListVersion = ref(0)
+        const savedCrawlResult = ref(null)
         const importPanel = ref(null)
         const uploadProgress = ref(null)
         const uploadCounts = computed(() => {
@@ -1785,6 +1791,7 @@ const FileStoreDetailsView = {
         }
 
         function onImportPreviewing() {
+            savedCrawlResult.value = null
             uploadProgress.value = null
             importPreview.value = null
         }
@@ -2298,7 +2305,7 @@ const FileStoreDetailsView = {
             docMeta,
             reload,
             view, routeQuery, selectView, onImportNavigate, onAssistantNavigate, onSearchNavigate,
-            sourceCount, assistantCount, searchCount, sourceListVersion, importPanel, uploadProgress, uploadCounts, uploadStatus,
+            sourceCount, assistantCount, searchCount, sourceListVersion, savedCrawlResult, importPanel, uploadProgress, uploadCounts, uploadStatus,
             importCategory,
             importInto,
             onImported, onUploadImported, onSourceRemoved, viewUploads,

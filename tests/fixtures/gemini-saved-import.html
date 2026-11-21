@@ -22,6 +22,11 @@ const assert = (condition, message) => { if (!condition) throw Error(message) }
 const clone = value => JSON.parse(JSON.stringify(value))
 const flush = async () => { await new Promise(resolve => setTimeout(resolve, 30)); await nextTick() }
 let submitted, preview, imported, lastRun, lastCrawl, error, patched, removed, vm, listVm, saves = 0, runs = 0
+let crawlOutcome = {pages:4,stopReason:'complete',remaining:0,maxPages:44,maxRequests:220}
+let savedCrawlStats = null
+let savedRunRelease = null
+let crawlFailure = false
+let releaseCrawl = null
 const stored = new Map()
 const manifests = new Map()
 const folder = {
@@ -39,6 +44,7 @@ const web = {...clone(folder),name:'Website docs',config:{...folder.config,path:
 const ext = {
     prefs:{}, setPrefs(){}, setError(value){error=value},
     async getJson(path) {
+        if(path.startsWith('/imports/crawl/progress?')) return {response:{running:true,pages:7,failed:1,requests:9}}
         if(path === '/source-types') return {response:[{type:'folder', available:true, roots:{all:['/docs']}, unrestricted:true}]}
         if(path === '/imports') return {response:[]}
         if(path === '/imports/schema') return {response:{}}
@@ -79,18 +85,22 @@ const ext = {
         }
         if(/^\/sources\/\d+\/run$/.test(path)) {
             runs++
-            lastRun={id:Number(path.split('/')[2]),dryRun:body.dryRun}
-            return {response:{added:1,embeds:1,queued:body.dryRun?0:1,dryRun:body.dryRun}}
+            lastRun={id:Number(path.split('/')[2]),...body}
+            if (savedRunRelease) await new Promise(resolve => { savedRunRelease = resolve })
+            return {response:{added:1,embeds:1,queued:body.dryRun?0:1,dryRun:body.dryRun,
+                ...(body.refreshCrawl ? {crawl:crawlOutcome} : {})}}
         }
         if(path === '/imports/crawl') {
             assert(body.filestoreId === 1, 'new crawls must be linked to the active store')
             lastCrawl=clone(body)
+            if (releaseCrawl) await new Promise(resolve => { releaseCrawl = resolve })
+            if (crawlFailure) return {error:{message:'Crawl failed'}}
             if(body.sourceId) {
                 assert(stored.has(body.sourceId) && body.sourceId === 8, 'recrawling must reuse the loaded saved import')
                 assert(patched.importOptions.crawl.maxPages === body.maxPages, 'recrawling must save current settings first')
                 const source=clone(stored.get(body.sourceId))
                 assert(source.config.path === '/user/alice/gemini/imports/example.test', 'recrawling must target the same named workspace')
-                return {response:{path:source.config.path,source}}
+                return {response:{path:source.config.path,source,...crawlOutcome}}
             }
             assert(body.sourceSettings.category.prefix === host.presetCategory, 'new crawls must save their destination category')
             const settings=body.sourceSettings
@@ -99,7 +109,7 @@ const ext = {
             const source = {...clone(web),...clone(settings),config:{...clone(web.config),...settings.config},
                 id:10,name:'New website',importOptions:{crawl,transforms:[]}}
             stored.set(10,source)
-            return {response:{path:source.config.path,source:clone(source)}}
+            return {response:{path:source.config.path,source:clone(source),...crawlOutcome}}
         }
         if(path.startsWith('/imports/') && path.includes('/transform?')) {
             assert(new URLSearchParams(path.split('?')[1]).get('sourceId') === '8', 'transforms must select the saved workspace')
@@ -135,6 +145,7 @@ app.component('JsonSchemaForm', JsonSchemaForm)
 app.config.globalProperties.$styles = {muted:'text-gray-500',chromeBorder:'border-gray-200'}
 app.config.errorHandler = value => {error=value}
 const listApp = createApp(SourcesPanel,{storeId:1,onEdit:source=>vm.editSource(source),
+    onCrawling:()=>savedCrawlStats=null, onCrawled:result=>savedCrawlStats=result,
     onRemoved:id=>{if(vm.loadedManifest?.id === id) vm.finishEditing()}})
 listApp.config.globalProperties.$styles = app.config.globalProperties.$styles
 listApp.config.globalProperties.$fmt = {date:value=>value}
@@ -248,6 +259,47 @@ try {
     button('Crawl website',editor).click()
     await flush()
     assert(lastCrawl.sourceId === 8 && lastCrawl.maxPages === 44 && stored.size === 2 && vm.editingSource.id === 8, 'recrawling must save edits and retain the same import')
+    assert(editor.textContent.includes('Crawled 4 pages.'), 'recrawl must show saved page count after opening the editor')
+    for (const [outcome, expected] of [
+        [{pages:44,stopReason:'maxPages',remaining:12,maxPages:44,maxRequests:220}, 'Max pages limit (44) with 12 queued URLs'],
+        [{pages:1,stopReason:'maxRequests',remaining:1,maxPages:44,maxRequests:88}, 'Max requests limit (88) with 1 queued URL'],
+        [{pages:0,stopReason:'complete',remaining:0}, 'Crawled 0 pages.'],
+        [{pages:2,stopReason:'complete',remaining:0,failed:1,retainedPages:3,
+            errors:[{url:'https://example.test/bad',statusCode:302,message:'HTTP 302'}]}, 'Crawled 2 pages. 1 URL failed. 3 previously crawled pages retained.'],
+    ]) {
+        crawlOutcome = outcome
+        vm.crawlForm.maxRequests = 88
+        releaseCrawl = true
+        const pending = vm.startCrawl()
+        await flush()
+        assert(editor.querySelector('svg.animate-spin') && getComputedStyle(editor.querySelector('svg.animate-spin')).animationName === 'spin', 'crawl editor must show animated loading indicator')
+        assert(vm.crawling && vm.busy && !vm.crawlResult, 'a new crawl must clear stale results and remain busy')
+        assert(editor.textContent.includes('7 pages crawled') && editor.textContent.includes('1 URL failed'), 'editor must show polled page and error counts')
+        const count=editor.querySelector('[data-crawl-progress]')
+        const crawlButton=button('Crawling…',editor)
+        assert(count.getBoundingClientRect().left >= crawlButton.getBoundingClientRect().right, 'live count must sit to the right of the crawling button')
+        assert(!editor.textContent.includes('Crawling website…'), 'editor must omit the separate loading text')
+        releaseCrawl()
+        releaseCrawl = null
+        await pending
+        await flush()
+        assert(editor.textContent.includes(expected), 'crawl completion summary missing: ' + expected)
+        assert(lastCrawl.maxRequests === 88, 'Max requests must be submitted')
+        if (outcome.failed) {
+            const details = editor.querySelector('details')
+            assert(details.textContent.includes('https://example.test/bad') && details.textContent.includes('HTTP 302'), 'per-URL errors must appear in expandable crawl details')
+            assert(!error, 'page errors must not trigger the global error banner')
+        }
+        const status = [...editor.querySelectorAll('[role="status"]')].find(el => el.textContent.includes('Crawled'))
+        assert(status && status.className.includes(outcome.remaining || outcome.failed ? 'amber' : 'emerald'), 'limit results must be visually distinct')
+    }
+    crawlFailure = true
+    await vm.startCrawl()
+    await flush()
+    assert(error.message === 'Crawl failed' && !vm.crawlResult && !vm.busy && !vm.crawling, 'failure must clear success and release busy state')
+    crawlFailure = false
+    error = null
+    crawlOutcome = {pages:1,stopReason:'complete',remaining:0}
     button('Apply & save transforms',editor).click()
     await flush()
     assert(vm.transformMessage.includes('1 page'), 'transforms must work in the private copied workspace')
@@ -275,6 +327,21 @@ try {
     button('Close editor',editor).click()
     await flush()
     assert(!vm.loadedManifest && !vm.selectedImport && !vm.crawlForm.url && !vm.crawlRules.length && !vm.transforms.length, 'closing must clear web crawl settings for a new import')
+    crawlOutcome = {pages:2,stopReason:'maxPages',remaining:5,maxPages:2,maxRequests:10,failed:1,
+        errors:[{url:'https://example.test/bad',message:'HTTP 302',statusCode:302}]}
+    savedRunRelease = true
+    const savedRun = listVm.run(stored.get(8), false)
+    await flush()
+    assert(lastRun.refreshCrawl === true && !lastRun.dryRun, 'saved web crawl Run must request a fresh crawl')
+    assert(list.textContent.includes('7 pages crawled'), 'saved rerun must show polled page count')
+    assert(list.querySelector('svg.animate-spin') && list.textContent.includes('several minutes'), 'saved rerun must show animated loading status')
+    savedRunRelease()
+    savedRunRelease = null
+    await savedRun
+    await flush()
+    assert(savedCrawlStats.pages === 2 && savedCrawlStats.remaining === 5 && savedCrawlStats.errors.length === 1, 'saved rerun must emit full crawl statistics for persistent display')
+    assert(!list.querySelector('svg.animate-spin'), 'saved rerun must stop animating when finished')
+    crawlOutcome = {pages:1,stopReason:'complete',remaining:0}
     const beforeListRun=runs
     button('Run',list).click()
     await flush()
@@ -320,6 +387,7 @@ try {
     button('Crawl website',editor).click()
     await flush()
     assert(vm.editingSource.id === 10 && listVm.sources.length === 3, 'new crawl must automatically save and open its editor')
+    assert(editor.textContent.includes('Crawled 1 page.'), 'new crawl must show singular page count')
     button('Import folder',editor).click()
     await flush()
     assert(vm.tab === 'folder' && vm.config.path === stored.get(10).config.path && button('Run import',editor), 'a new crawl must continue into the folder import form')
