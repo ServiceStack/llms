@@ -540,9 +540,14 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post("/import_codex", headers={"Test-User": "alice"}, json={})
         self.assertEqual(response.status, 400)
 
-    async def test_status_is_private_and_disconnect_keeps_other_users_and_registration(self):
+    async def test_status_is_private_and_disconnect_clears_registration_for_switching_accounts(self):
         alice = self.save_grant()
         self.save_grant("bob")
+        legacy_registration = Path(self.auth.store.path("alice")).with_name("openai_registration.json")
+        legacy_registration.write_text(
+            json.dumps({"issuer": self.options.issuer, "subject": "alice", "client_id": "oaiapp_fixture"}),
+            encoding="utf-8",
+        )
         activate_subscription_provider(self.ctx)
         response = await self.client.get("/status", headers={"Test-User": "alice"})
         body = await response.json()
@@ -558,6 +563,7 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue((await response.json())["remote_revocation_confirmed"])
         self.assertEqual(self.revoked["token_type_hint"], "refresh_token")
         self.assertIsNone(self.auth.store.load("alice"))
+        self.assertFalse(legacy_registration.exists())
         self.assertIsInstance(main.g_handlers["openai"], OpenAiSubscriptionProvider)
         self.assertIsNotNone(self.auth.store.load("bob"))
         alice_status = await (await self.client.get("/status", headers={"Test-User": "alice"})).json()
@@ -565,10 +571,22 @@ class OpenAiAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(alice_status["api_key_active"])
         self.assertFalse(alice_status["api_key_disabled"])
         self.assertTrue(bob_status["api_key_disabled"])
-        query = parse_qs(urlsplit(self.connect()["auth_url"]).query)
-        self.assertEqual(query["client_id"], ["oaiapp_fixture"])
-        self.assertNotIn("access_token", self.auth.store.registration("alice"))
-        self.assertNotIn("id_token", self.auth.store.registration("alice"))
+        # Even if a stale registration file existed from an older release, connect starts fresh.
+        legacy_registration.write_text(
+            json.dumps({"issuer": self.options.issuer, "subject": "alice", "client_id": "oaiapp_fixture"}),
+            encoding="utf-8",
+        )
+        query = parse_qs(urlsplit(self.connect("alice")["auth_url"]).query)
+        self.assertEqual(query["client_id"], ["dynamic_agent_client"])
+        self.assertEqual(query["agent_name_hint"], [self.options.agent_name])
+        # Completing sign-in with a different ChatGPT account and newly issued client_id succeeds.
+        other_claims = self.claims("charlie", nonce=self.nonces["alice"], aud="oaiapp_charlie")
+        self.token_body_override = self.token_response("charlie", id_token=self.jwt(other_claims))
+        await self.auth.callback("alice", self.callback_url("alice", client_id="oaiapp_charlie"))
+        switched = self.auth.store.load("alice")
+        self.assertEqual(switched["subject"], "charlie")
+        self.assertEqual(switched["client_id"], "oaiapp_charlie")
+        self.assertEqual(switched["account"]["email"], "charlie@example.test")
 
     async def test_remote_revocation_failure_still_disconnects_locally(self):
         self.save_grant()

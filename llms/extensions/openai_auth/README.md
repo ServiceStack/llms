@@ -62,12 +62,12 @@ Multiple independent processes sharing rotating credentials are not supported by
 Windows uses the host filesystem's access controls; the Unix mode guarantee does not establish a
 Windows ACL policy.
 
-Disconnect immediately stops local use, removes tokens, and retains only the verified registration
-mapping for a later sign-in. It attempts refresh-token revocation using the issuer's discovery endpoint.
-If remote revocation cannot be confirmed, the UI tells the user to remove app access in ChatGPT Settings.
-It does not automatically retry uncertain revocation calls. A later local sign-in reuses the registration
-and installation host ID. Only one selected registration is supported per local user; there is no
-multi-account picker within that user partition.
+Disconnect immediately stops local use and deletes both tokens and any saved registration so a later
+sign-in starts fresh with `dynamic_agent_client` and can connect a different ChatGPT account or
+workspace. It attempts refresh-token revocation using the issuer's discovery endpoint. If remote
+revocation cannot be confirmed, the UI tells the user to remove app access in ChatGPT Settings. It
+does not automatically retry uncertain revocation calls. Only one active subscription is supported
+per local user; disconnect first to switch accounts.
 
 **Existing private Codex grants require a new public sign-in.** They are not silently converted,
 automatically imported, shared with another user or used with the new endpoints. A present invalid
@@ -104,9 +104,8 @@ Its current backend still has review items that were **not changed in this Pytho
 
 - `OpenAiSubscriptionFlow.Credentials` rejects identity-only sign-in instead of retaining the verified
   identity with plan usage disabled. Python now distinguishes identity from permission.
-- `OpenAiSubscriptionStore.Disconnect` deletes the registration as well as its tokens, and C# disconnect
-  does not attempt remote revocation or report its outcome. Python retains a token-free mapping and
-  reports unconfirmed revocation.
+- `OpenAiSubscriptionStore.Disconnect` in C# does not attempt remote revocation or report its outcome;
+  both implementations clear the saved registration on disconnect so users can switch accounts.
 - C# proactive refresh fallback checks the time captured before the network request. A token that
   expires while a failed refresh is in flight can be returned as valid; Python rechecks the current time.
 - Both implementations use refresh locks within a single process. Neither establishes cross-process

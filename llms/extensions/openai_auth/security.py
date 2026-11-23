@@ -193,18 +193,11 @@ class Store:
             path = self.path(user)
             check_path(path)
             if os.path.exists(path):
-                grant = self.load(user) or {}
-                if grant.get("subject") and grant.get("issuer") and grant.get("client_id") != "dynamic_agent_client":
-                    # Retain only the verified registration, never any tokens.
-                    write_file(
-                        os.path.join(os.path.dirname(path), "openai_registration.json"),
-                        {k: grant[k] for k in ("issuer", "subject", "client_id", "ext_agent_host_id") if k in grant},
-                    )
                 os.remove(path)
-
-    def registration(self, user):
-        with self.state(user).gate:
-            return read_file(os.path.join(os.path.dirname(self.path(user)), "openai_registration.json")) or {}
+            registration = os.path.join(os.path.dirname(path), "openai_registration.json")
+            check_path(registration)
+            if os.path.exists(registration):
+                os.remove(registration)
 
     def host_id(self):
         # A stable installation identity, independent of any user's tokens.
@@ -455,7 +448,7 @@ class Auth:
         if len(self.pending) >= 1024 and user not in self.pending:
             raise SubscriptionError("Too many pending sign-ins. Try later.")
         previous, _, fingerprint = self.store.snapshot(user)
-        previous = previous or self.store.registration(user)
+        previous = previous or {}
         # Legacy Codex grants are deliberately not reused as public registrations.
         client = (
             previous.get("client_id")
