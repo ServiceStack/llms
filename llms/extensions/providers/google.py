@@ -1188,7 +1188,7 @@ def install_google(ctx):
                             "id": slug,
                             "name": display_name,
                             "tool_call": False,
-                            "modalities": {"input": ["text"], "output": ["text"]},
+                            "modalities": {"input": ["text", "image", "audio", "pdf"], "output": ["text"]},
                             "cost": {"input": 0, "output": 0},
                         }
                     )
@@ -1216,7 +1216,38 @@ def install_google(ctx):
             return None
 
         @staticmethod
-        def _extract_text(content):
+        def _mime_to_ext(mime_type, default_ext="bin"):
+            if not mime_type:
+                return default_ext
+            sub = mime_type.split(";", 1)[0].strip().lower().rsplit("/", 1)[-1]
+            return {
+                "jpeg": "jpg",
+                "svg+xml": "svg",
+                "mpeg": "mp3",
+                "x-wav": "wav",
+                "wave": "wav",
+                "x-m4a": "m4a",
+                "mp4": "m4a",
+                "plain": "txt",
+            }.get(sub, re.sub(r"[^a-z0-9]", "", sub) or default_ext)
+
+        @staticmethod
+        def _decode_data_uri(value, default_mime="application/octet-stream"):
+            if not isinstance(value, str) or not value:
+                return None, default_mime
+            if value.startswith("data:") and ";base64," in value:
+                header, b64 = value.split(";base64,", 1)
+                mime = header[5:].strip() or default_mime
+                try:
+                    return base64.b64decode(b64), mime
+                except Exception:
+                    return None, mime
+            try:
+                return base64.b64decode(value), default_mime
+            except Exception:
+                return None, default_mime
+
+        def _extract_content(self, content, workdir, attachments):
             if isinstance(content, str):
                 return content
             if isinstance(content, list):
@@ -1230,15 +1261,48 @@ def install_google(ctx):
                             text = block.get("text", "")
                             if text:
                                 parts.append(text)
+                        elif b_type == "image_url" and isinstance(block.get("image_url"), dict):
+                            raw, mime = self._decode_data_uri(block["image_url"].get("url", ""), "image/png")
+                            if raw is not None and workdir:
+                                ext = self._mime_to_ext(mime, "png")
+                                name = f"attachment_{len(attachments) + 1}.{ext}"
+                                with open(f"{workdir}/{name}", "wb") as f:
+                                    f.write(raw)
+                                attachments.append(name)
+                                parts.append(f"[Attached image: {name} ({mime})]")
+                        elif b_type == "input_audio" and isinstance(block.get("input_audio"), dict):
+                            audio = block["input_audio"]
+                            fmt = (audio.get("format") or "wav").strip().lower().lstrip(".")
+                            raw, mime = self._decode_data_uri(audio.get("data", ""), f"audio/{fmt}")
+                            if raw is not None and workdir:
+                                ext = self._mime_to_ext(mime, fmt or "wav")
+                                name = f"attachment_{len(attachments) + 1}.{ext}"
+                                with open(f"{workdir}/{name}", "wb") as f:
+                                    f.write(raw)
+                                attachments.append(name)
+                                parts.append(f"[Attached audio: {name} ({mime})]")
+                        elif b_type == "file" and isinstance(block.get("file"), dict):
+                            file_info = block["file"]
+                            raw, mime = self._decode_data_uri(file_info.get("file_data", ""), "application/octet-stream")
+                            if raw is not None and workdir:
+                                orig = file_info.get("filename") or ""
+                                ext = orig.rsplit(".", 1)[-1].lower() if "." in orig else self._mime_to_ext(mime, "bin")
+                                ext = re.sub(r"[^a-z0-9]", "", ext) or "bin"
+                                name = f"attachment_{len(attachments) + 1}.{ext}"
+                                with open(f"{workdir}/{name}", "wb") as f:
+                                    f.write(raw)
+                                attachments.append(name)
+                                parts.append(f"[Attached file: {name} ({mime})]")
                 return "\n".join(parts)
             return str(content) if content is not None else ""
 
-        def _build_prompt(self, messages):
+        def _build_prompt(self, messages, workdir=None):
             system_parts = []
             conversation = []
+            attachments = []
             for msg in messages:
                 role = msg.get("role", "user")
-                text = self._extract_text(msg.get("content", "")).strip()
+                text = self._extract_content(msg.get("content", ""), workdir, attachments).strip()
                 if not text:
                     continue
                 if role in ("system", "developer"):
@@ -1271,6 +1335,13 @@ def install_google(ctx):
                 if trailing:
                     sections.append("\n\n".join(f"[{role}]: {text}" for role, text in trailing))
 
+            if attachments:
+                sections.append(
+                    "Attached files are saved in the current working directory ("
+                    + ", ".join(attachments)
+                    + "). Inspect them with read_file before answering."
+                )
+
             return "\n\n".join(sections)
 
         @staticmethod
@@ -1293,7 +1364,6 @@ def install_google(ctx):
             chat = await self.process_chat(chat, provider_id=self.id)
 
             model = chat.get("model", "")
-            prompt = self._build_prompt(chat.get("messages", []))
 
             cmd = [
                 "agy",
@@ -1316,14 +1386,6 @@ def install_google(ctx):
                 if schema:
                     cmd.extend(["--json-schema", json.dumps(schema)])
 
-            json_input = json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
-
-            ctx.log(
-                f"Running: agy --input-format stream-json --output-format stream-json --model {model}"
-                + (f" --effort {effort}" if effort else "")
-            )
-            ctx.log(f"JSON input size: {len(json_input)} bytes")
-
             started_at = time.time()
             writer = (
                 StreamCheckpointWriter(None, None)
@@ -1336,6 +1398,15 @@ def install_google(ctx):
 
             try:
                 with tempfile.TemporaryDirectory(prefix="llms-agy-") as workdir:
+                    prompt = self._build_prompt(chat.get("messages", []), workdir=workdir)
+                    json_input = json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
+
+                    ctx.log(
+                        f"Running: agy --input-format stream-json --output-format stream-json --model {model}"
+                        + (f" --effort {effort}" if effort else "")
+                    )
+                    ctx.log(f"JSON input size: {len(json_input)} bytes")
+
                     process = await asyncio.create_subprocess_exec(
                         *cmd,
                         stdin=asyncio.subprocess.PIPE,

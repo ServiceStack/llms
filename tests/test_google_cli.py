@@ -296,6 +296,139 @@ class GoogleCliProviderTests(unittest.IsolatedAsyncioTestCase):
                     context={"nostore": True},
                 )
 
+    async def test_chat_materializes_image_and_audio_attachments_into_workdir(self):
+        import base64
+        import os
+
+        provider = self._make_provider()
+        png_bytes = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+        )
+        wav_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt "
+        seen_files = {}
+
+        events = [
+            json.dumps(
+                {
+                    "event": "result",
+                    "result": {
+                        "conversation_id": "conv-media",
+                        "status": "SUCCESS",
+                        "response": "Red pixel and audio.\n",
+                        "duration_seconds": 0.4,
+                        "usage": {"input_tokens": 50, "output_tokens": 5, "total_tokens": 55},
+                    },
+                }
+            )
+            + "\n"
+        ]
+        proc = _FakeProcess(stdout_lines=events, returncode=0)
+
+        async def fake_exec(*args, **kwargs):
+            cwd = kwargs.get("cwd")
+            for name in os.listdir(cwd):
+                with open(os.path.join(cwd, name), "rb") as f:
+                    seen_files[name] = f.read()
+            return proc
+
+        chat = {
+            "model": "gemini-4-neon",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Inspect both."},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64," + base64.b64encode(png_bytes).decode()},
+                        },
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": base64.b64encode(wav_bytes).decode(), "format": "wav"},
+                        },
+                    ],
+                }
+            ],
+        }
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            res = await provider.chat(chat, context={"nostore": True})
+
+        self.assertEqual(seen_files["attachment_1.png"], png_bytes)
+        self.assertEqual(seen_files["attachment_2.wav"], wav_bytes)
+        sent = json.loads(proc.stdin.buffer.decode("utf-8"))
+        self.assertIn("[Attached image: attachment_1.png (image/png)]", sent["message"]["content"])
+        self.assertIn("[Attached audio: attachment_2.wav (audio/wav)]", sent["message"]["content"])
+        self.assertIn("read_file", sent["message"]["content"])
+        self.assertEqual(res["choices"][0]["message"]["content"], "Red pixel and audio.")
+
+    async def test_anthropic_cli_handles_image_and_audio_attachments(self):
+        import base64
+        import os
+
+        from llms.extensions.providers.anthropic import install_anthropic
+
+        providers = []
+        ctx = SimpleNamespace(
+            add_provider=providers.append,
+            log=lambda msg: None,
+            dbg=lambda msg: None,
+            log_json=lambda obj: obj,
+            threads=None,
+        )
+        install_anthropic(ctx)
+        cls = next(p for p in providers if p.sdk == "@ai-sdk/anthropic-cli")
+        provider = cls(
+            id="anthropic",
+            name="Anthropic",
+            models={"claude-sonnet": {"id": "claude-sonnet", "name": "Claude Sonnet", "modalities": {"input": ["text"]}}},
+        )
+        self.assertIn("image", provider.models["claude-sonnet"]["modalities"]["input"])
+        self.assertIn("audio", provider.models["claude-sonnet"]["modalities"]["input"])
+
+        png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+        wav_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt "
+        seen = {}
+
+        class _ClaudeProc:
+            returncode = 0
+
+            async def communicate(self, input=None):
+                seen["stdin"] = input.decode("utf-8")
+                out = json.dumps({"type": "result", "result": "ok", "session_id": "s1", "usage": {}}) + "\n"
+                return out.encode("utf-8"), b""
+
+        async def fake_exec(*args, **kwargs):
+            from pathlib import Path
+
+            cwd = kwargs.get("cwd")
+            seen["cwd"] = cwd
+            seen["files"] = {n: (Path(cwd) / n).read_bytes() for n in os.listdir(cwd)}
+            return _ClaudeProc()
+
+        chat = {
+            "model": "claude-sonnet",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Check these"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{png_b64}"}},
+                        {"type": "input_audio", "input_audio": {"data": base64.b64encode(wav_bytes).decode(), "format": "wav"}},
+                    ],
+                }
+            ],
+        }
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            res = await provider.chat(chat, context={"nostore": True})
+
+        self.assertEqual(res["choices"][0]["message"]["content"], "ok")
+        self.assertEqual(seen["files"]["attachment_1.wav"], wav_bytes)
+        sent = json.loads(seen["stdin"])
+        blocks = sent["message"]["content"]
+        self.assertTrue(any(b.get("type") == "image" for b in blocks))
+        self.assertTrue(any("attachment_1.wav" in (b.get("text") or "") for b in blocks))
+
 
 if __name__ == "__main__":
     unittest.main()

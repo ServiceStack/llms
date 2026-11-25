@@ -1,7 +1,10 @@
 import asyncio
 import base64
 import json
+import os
+import re
 import shutil
+import tempfile
 import time
 
 import aiohttp
@@ -549,15 +552,55 @@ def install_anthropic(ctx):
                 kwargs["api"] = "https://api.anthropic.com/v1"
             super().__init__(**kwargs)
             self.chat_url = f"{self.api}/messages"
-            # Disable tool calling as CLI doesn't support it
+            # Disable tool calling as CLI doesn't support it; ensure image & audio input modalities are advertised
             for model in self.models.values():
                 model["tool_call"] = False
+                mods = model.setdefault("modalities", {})
+                inputs = list(mods.get("input") or ["text"])
+                for m in ("image", "audio"):
+                    if m not in inputs:
+                        inputs.append(m)
+                mods["input"] = inputs
             # print(f"Anthropic models = {json.dumps(self.models, indent=2)}")
 
         def validate(self, **kwargs):
             if not shutil.which("claude"):
                 return f"Provider '{self.name}' requires 'claude' in PATH"
             return None
+
+        @staticmethod
+        def _materialize_audio_attachments(messages, workdir):
+            attachments = []
+            for msg in messages:
+                content = msg.get("content")
+                if not isinstance(content, list):
+                    continue
+                for item in content:
+                    if not isinstance(item, dict) or item.get("type") != "input_audio":
+                        continue
+                    audio = item.get("input_audio")
+                    if not isinstance(audio, dict):
+                        continue
+                    raw_data = audio.get("data", "")
+                    if not isinstance(raw_data, str) or not raw_data:
+                        continue
+                    fmt = (audio.get("format") or "wav").strip().lower().lstrip(".")
+                    if raw_data.startswith("data:") and ";base64," in raw_data:
+                        header, b64 = raw_data.split(";base64,", 1)
+                        mime = header[5:].strip() or f"audio/{fmt}"
+                    else:
+                        b64 = raw_data
+                        mime = f"audio/{fmt}"
+                    try:
+                        decoded = base64.b64decode(b64)
+                    except Exception:
+                        continue
+                    ext = re.sub(r"[^a-z0-9]", "", fmt) or "wav"
+                    name = f"attachment_{len(attachments) + 1}.{ext}"
+                    with open(os.path.join(workdir, name), "wb") as f:
+                        f.write(decoded)
+                    attachments.append((name, mime))
+            return attachments
 
         async def chat(self, chat, context=None):
             chat["model"] = self.provider_model(chat["model"]) or chat["model"]
@@ -594,7 +637,6 @@ def install_anthropic(ctx):
             # If there are prior conversation messages, fold them into context
             # The claude CLI stream-json only accepts 'user' and 'control' types
             # So we prepend conversation history as context in the user message
-            conversation = []
             if len(anthropic_messages) > 1:
                 history_parts = []
                 for msg in anthropic_messages[:-1]:
@@ -655,23 +697,34 @@ def install_anthropic(ctx):
             if max_tokens:
                 cmd.extend(["--max-budget-usd", str(max_tokens)])
 
-            # Build the JSON input: single user message with conversation context folded in
-            json_input = json.dumps(stream_json_message)
-
             ctx.log(f"Running: claude -p --input-format stream-json --output-format stream-json --model {model}")
             ctx.log(f"Messages: {len(anthropic_messages)}, System: {'yes' if system_prompt else 'no'}")
 
             started_at = time.time()
-            ctx.log(f"JSON input size: {len(json_input)} bytes")
 
             try:
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await process.communicate(input=json_input.encode("utf-8"))
+                with tempfile.TemporaryDirectory(prefix="llms-claude-") as workdir:
+                    audio_files = self._materialize_audio_attachments(chat.get("messages", []), workdir)
+                    if audio_files:
+                        note = (
+                            "Attached audio file(s) saved in the current working directory: "
+                            + ", ".join(f"{name} ({mime})" for name, mime in audio_files)
+                            + "."
+                        )
+                        stream_json_message["message"]["content"].append({"type": "text", "text": note})
+
+                    # Build the JSON input: single user message with conversation context folded in
+                    json_input = json.dumps(stream_json_message)
+                    ctx.log(f"JSON input size: {len(json_input)} bytes")
+
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=workdir if audio_files else None,
+                    )
+                    stdout, stderr = await process.communicate(input=json_input.encode("utf-8"))
 
                 if process.returncode != 0:
                     stderr_text = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
