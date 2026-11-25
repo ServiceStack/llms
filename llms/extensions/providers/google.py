@@ -1,9 +1,12 @@
 import asyncio
 import base64
+import contextlib
 import copy
 import io
 import json
 import re
+import shutil
+import tempfile
 import time
 import wave
 
@@ -1120,3 +1123,366 @@ def install_google(ctx):
                 return ctx.log_json(self.to_response(response, chat, started_at, context=context))
 
     ctx.add_provider(GoogleProvider)
+
+    _AGY_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+    _AGY_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+    _AGY_EFFORT_SUFFIX_RE = re.compile(r"-(low|medium|high|xhigh|max)$")
+
+    class GoogleProviderCli(OpenAiCompatible):
+        """Google Provider using local agy (Antigravity) CLI to make use of an existing subscription."""
+
+        sdk = "@ai-sdk/google-cli"
+
+        def __init__(self, **kwargs):
+            new_kwargs = {"api": "https://generativelanguage.googleapis.com", **kwargs}
+            super().__init__(**new_kwargs)
+            self.ctx = ctx
+            self._catalog_models = copy.deepcopy(self.models)
+            self._cli_models_loaded = False
+            for model in self.models.values():
+                model["tool_call"] = False
+
+        def validate(self, **kwargs):
+            if not shutil.which("agy"):
+                return f"Provider '{self.name}' requires 'agy' in PATH"
+            return None
+
+        @staticmethod
+        def _parse_models_output(output):
+            models = []
+            for raw_line in output.splitlines():
+                # Strip spinner carriage-return updates and ANSI escape sequences
+                line = _AGY_ANSI_RE.sub("", raw_line.split("\r")[-1]).strip()
+                if not line:
+                    continue
+                match = re.match(r"^([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\t+|\s{2,})(.+)$", line)
+                if match:
+                    models.append((match.group(1), match.group(2).strip()))
+            return models
+
+        async def load(self):
+            if self._cli_models_loaded or not shutil.which("agy"):
+                return
+            self._cli_models_loaded = True
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    "agy",
+                    "models",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await asyncio.wait_for(process.communicate(), timeout=15)
+                if process.returncode != 0:
+                    return
+                discovered = self._parse_models_output(stdout.decode("utf-8", errors="replace"))
+                if not discovered:
+                    return
+                models = {}
+                map_models = {}
+                for slug, display_name in discovered:
+                    base_slug = _AGY_EFFORT_SUFFIX_RE.sub("", slug)
+                    base_info = self._catalog_models.get(slug) or self._catalog_models.get(base_slug) or {}
+                    info = copy.deepcopy(base_info)
+                    info.update(
+                        {
+                            "id": slug,
+                            "name": display_name,
+                            "tool_call": False,
+                            "modalities": {"input": ["text"], "output": ["text"]},
+                            "cost": {"input": 0, "output": 0},
+                        }
+                    )
+                    models[slug] = info
+                    map_models[slug] = slug
+                    map_models[display_name] = slug
+                    if base_slug not in map_models:
+                        map_models[base_slug] = base_slug
+                self.models = models
+                self.map_models = map_models
+                ctx.log(f"Loaded {len(models)} agy models for {self.name}")
+            except Exception as e:
+                ctx.log(f"Failed to load agy models: {e}")
+
+        def provider_model(self, model):
+            resolved = super().provider_model(model)
+            if resolved:
+                return resolved
+            candidate = model.removeprefix(f"{self.id}/")
+            for slug in self.models:
+                if slug == candidate or _AGY_EFFORT_SUFFIX_RE.sub("", slug) == candidate:
+                    return candidate
+            if candidate.lower().startswith("gemini-"):
+                return candidate
+            return None
+
+        @staticmethod
+        def _extract_text(content):
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = []
+                for block in content:
+                    if isinstance(block, str):
+                        parts.append(block)
+                    elif isinstance(block, dict):
+                        b_type = block.get("type")
+                        if b_type in ("text", "input_text"):
+                            text = block.get("text", "")
+                            if text:
+                                parts.append(text)
+                return "\n".join(parts)
+            return str(content) if content is not None else ""
+
+        def _build_prompt(self, messages):
+            system_parts = []
+            conversation = []
+            for msg in messages:
+                role = msg.get("role", "user")
+                text = self._extract_text(msg.get("content", "")).strip()
+                if not text:
+                    continue
+                if role in ("system", "developer"):
+                    system_parts.append(text)
+                else:
+                    conversation.append((role, text))
+
+            last_user_idx = None
+            for i in range(len(conversation) - 1, -1, -1):
+                if conversation[i][0] == "user":
+                    last_user_idx = i
+                    break
+
+            sections = []
+            if system_parts:
+                sections.append("System instructions:\n" + "\n\n".join(system_parts))
+
+            if last_user_idx is None:
+                if conversation:
+                    sections.append("\n\n".join(f"[{role}]: {text}" for role, text in conversation))
+            else:
+                prior = conversation[:last_user_idx]
+                trailing = conversation[last_user_idx + 1 :]
+                if prior:
+                    history = "\n\n".join(f"[{role}]: {text}" for role, text in prior)
+                    sections.append(
+                        f"Previous conversation:\n{history}\n\nContinue the conversation based on the above context."
+                    )
+                sections.append(conversation[last_user_idx][1])
+                if trailing:
+                    sections.append("\n\n".join(f"[{role}]: {text}" for role, text in trailing))
+
+            return "\n\n".join(sections)
+
+        @staticmethod
+        def _resolve_effort(chat, model, default_effort=None):
+            if _AGY_EFFORT_SUFFIX_RE.search(model or ""):
+                return None
+            reasoning = chat.get("reasoning") if isinstance(chat.get("reasoning"), dict) else {}
+            effort = chat.get("reasoning_effort") or reasoning.get("reasoning_effort") or default_effort
+            if isinstance(effort, str) and effort.lower() in _AGY_EFFORT_LEVELS:
+                return effort.lower()
+            return None
+
+        async def chat(self, chat, context=None):
+            from llms.main import StreamCheckpointWriter, should_cancel_thread
+
+            if any(m != "text" for m in chat.get("modalities", [])):
+                raise Exception("Google CLI (agy) supports text responses only.")
+
+            chat["model"] = self.provider_model(chat["model"]) or chat["model"]
+            chat = await self.process_chat(chat, provider_id=self.id)
+
+            model = chat.get("model", "")
+            prompt = self._build_prompt(chat.get("messages", []))
+
+            cmd = [
+                "agy",
+                "--input-format",
+                "stream-json",
+                "--output-format",
+                "stream-json",
+                "--disable-slash-commands",
+            ]
+            if model:
+                cmd.extend(["--model", model])
+
+            effort = self._resolve_effort(chat, model, self.reasoning_effort)
+            if effort:
+                cmd.extend(["--effort", effort])
+
+            response_format = chat.get("response_format")
+            if isinstance(response_format, dict) and response_format.get("type") == "json_schema":
+                schema = (response_format.get("json_schema") or {}).get("schema")
+                if schema:
+                    cmd.extend(["--json-schema", json.dumps(schema)])
+
+            json_input = json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
+
+            ctx.log(
+                f"Running: agy --input-format stream-json --output-format stream-json --model {model}"
+                + (f" --effort {effort}" if effort else "")
+            )
+            ctx.log(f"JSON input size: {len(json_input)} bytes")
+
+            started_at = time.time()
+            writer = (
+                StreamCheckpointWriter(None, None)
+                if (context or {}).get("nostore")
+                else self.stream_writer(context)
+            )
+            content = ""
+            cli_result = None
+            raw_lines = []
+
+            try:
+                with tempfile.TemporaryDirectory(prefix="llms-agy-") as workdir:
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=workdir,
+                    )
+                    try:
+                        assert process.stdin is not None
+                        assert process.stdout is not None
+                        assert process.stderr is not None
+                        process.stdin.write(json_input.encode("utf-8"))
+                        await process.stdin.drain()
+                        process.stdin.close()
+
+                        stderr_task = asyncio.create_task(process.stderr.read())
+                        try:
+                            async for raw_line in process.stdout:
+                                if should_cancel_thread(context):
+                                    raise asyncio.CancelledError()
+                                line = raw_line.decode("utf-8", errors="replace").strip()
+                                if not line:
+                                    continue
+                                raw_lines.append(line)
+                                try:
+                                    obj = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                event = obj.get("event")
+                                if event == "step_update":
+                                    step = obj.get("step_update") or {}
+                                    if step.get("step_type") == "agent_response" and step.get("text_delta"):
+                                        content += step["text_delta"]
+                                        await writer.write(
+                                            {
+                                                "role": "assistant",
+                                                "content": content,
+                                                "model": model,
+                                                "timestamp": int(started_at * 1000),
+                                            }
+                                        )
+                                elif event == "result":
+                                    cli_result = obj.get("result") or {}
+                            await process.wait()
+                            stderr = await stderr_task
+                        except BaseException:
+                            stderr_task.cancel()
+                            with contextlib.suppress(BaseException):
+                                await stderr_task
+                            raise
+                    except BaseException:
+                        if process.returncode is None:
+                            with contextlib.suppress(ProcessLookupError):
+                                process.terminate()
+                            try:
+                                await asyncio.wait_for(process.wait(), timeout=3)
+                            except TimeoutError:
+                                with contextlib.suppress(ProcessLookupError):
+                                    process.kill()
+                                with contextlib.suppress(BaseException):
+                                    await process.wait()
+                        await writer.flush()
+                        raise
+
+                stderr_text = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                if cli_result is not None and cli_result.get("status") not in (None, "SUCCESS"):
+                    error_msg = cli_result.get("error") or stderr_text or f"agy status: {cli_result.get('status')}"
+                    raise Exception(f"agy CLI error: {error_msg}")
+
+                if process.returncode != 0:
+                    error_msg = stderr_text or "\n".join(raw_lines[-5:]) or f"agy exited with code {process.returncode}"
+                    raise Exception(f"agy CLI error: {error_msg}")
+
+                if cli_result is None:
+                    raise Exception("No result found in agy CLI stream-json output")
+
+                final_text = cli_result.get("response")
+                if final_text is None:
+                    final_text = content
+                await writer.write(
+                    {
+                        "role": "assistant",
+                        "content": final_text,
+                        "model": model,
+                        "timestamp": int(started_at * 1000),
+                    },
+                    final=True,
+                )
+            except FileNotFoundError:
+                raise Exception("agy CLI not found in PATH") from None
+
+            return ctx.log_json(self.to_cli_response(cli_result, chat, started_at, content=content, context=context))
+
+        def to_cli_response(self, cli_response, chat, started_at, content="", context=None):
+            """Convert agy CLI result object to OpenAI-compatible format."""
+            if context is not None:
+                context["providerResponse"] = cli_response
+
+            status = cli_response.get("status", "SUCCESS")
+            is_error = status != "SUCCESS"
+            result_text = cli_response.get("response")
+            if result_text is None:
+                result_text = content
+            if isinstance(result_text, str):
+                result_text = result_text.rstrip("\n")
+
+            usage = cli_response.get("usage") or {}
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
+            usage_out = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": total_tokens,
+            }
+            if usage.get("cache_read_tokens"):
+                usage_out["prompt_tokens_details"] = {"cached_tokens": usage["cache_read_tokens"]}
+            if usage.get("thinking_tokens"):
+                usage_out["completion_tokens_details"] = {"reasoning_tokens": usage["thinking_tokens"]}
+
+            duration_seconds = cli_response.get("duration_seconds")
+            duration_ms = (
+                int(duration_seconds * 1000)
+                if isinstance(duration_seconds, (int, float))
+                else int((time.time() - started_at) * 1000)
+            )
+
+            return {
+                "id": cli_response.get("conversation_id", ""),
+                "object": "chat.completion",
+                "created": int(started_at),
+                "model": chat.get("model", ""),
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": result_text,
+                        },
+                        "finish_reason": "error" if is_error else "stop",
+                    }
+                ],
+                "usage": usage_out,
+                "metadata": {
+                    "duration": duration_ms,
+                    "pricing": "0/0",
+                },
+            }
+
+    ctx.add_provider(GoogleProviderCli)
